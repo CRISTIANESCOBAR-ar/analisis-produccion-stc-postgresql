@@ -91,7 +91,7 @@ app.post('/api/uster/status', async (req, res) => {
   }
   try {
     const placeholders = testnrs.map((_, i) => `$${i + 1}`).join(',')
-    const result = await query(`SELECT testnr FROM uster_par WHERE testnr IN (${placeholders})`, testnrs)
+    const result = await query(`SELECT testnr FROM tb_uster_par WHERE testnr IN (${placeholders})`, testnrs)
     res.json({ existing: result.rows.map(row => row.testnr) })
   } catch (err) {
     res.status(500).json({ error: 'Failed to check status' })
@@ -101,7 +101,7 @@ app.post('/api/uster/status', async (req, res) => {
 // USTER: Get PAR
 app.get('/api/uster/par', async (req, res) => {
   try {
-    const result = await query(`SELECT testnr, nomcount, maschnr, lote, laborant, time_stamp, matclass, estiraje, pasador, obs FROM uster_par ORDER BY testnr`)
+    const result = await query(`SELECT testnr, nomcount, maschnr, lote, laborant, time_stamp, matclass, estiraje, pasador, obs FROM tb_uster_par ORDER BY testnr`)
     res.json({ rows: result.rows.map(uppercaseKeys) })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -113,8 +113,8 @@ app.get('/api/uster/tbl', async (req, res) => {
   const testnr = req.query.testnr
   try {
     const sql = testnr 
-      ? `SELECT * FROM uster_tbl WHERE testnr = $1 ORDER BY seqno` 
-      : `SELECT * FROM uster_tbl ORDER BY testnr, seqno`
+      ? `SELECT * FROM tb_uster_tbl WHERE testnr = $1 ORDER BY seqno` 
+      : `SELECT * FROM tb_uster_tbl ORDER BY testnr, seqno`
     const result = await query(sql, testnr ? [testnr] : [])
     res.json({ rows: result.rows.map(uppercaseKeys) })
   } catch (err) {
@@ -127,7 +127,7 @@ app.post('/api/uster/husos', async (req, res) => {
   const { testnr } = req.body
   if (!testnr) return res.status(400).json({ error: 'testnr is required' })
   try {
-    const result = await query(`SELECT no_ FROM uster_tbl WHERE testnr = $1 ORDER BY seqno`, [testnr])
+    const result = await query(`SELECT no_ FROM tb_uster_tbl WHERE testnr = $1 ORDER BY seqno`, [testnr])
     res.json({ husos: result.rows.map(r => r.no_).filter(Boolean) })
   } catch (err) {
     res.status(500).json({ error: 'Failed to get Husos' })
@@ -144,7 +144,7 @@ app.post('/api/uster/upload', async (req, res) => {
     
     // Insert or update PAR
     await client.query(`
-      INSERT INTO uster_par (testnr, nomcount, maschnr, lote, laborant, time_stamp, matclass, estiraje, pasador, obs)
+      INSERT INTO tb_uster_par (testnr, nomcount, maschnr, lote, laborant, time_stamp, matclass, estiraje, pasador, obs)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       ON CONFLICT (testnr) DO UPDATE SET 
         nomcount=EXCLUDED.nomcount, 
@@ -159,14 +159,14 @@ app.post('/api/uster/upload', async (req, res) => {
     `, [par.TESTNR, par.NOMCOUNT, par.MASCHNR, par.LOTE, par.LABORANT, par.TIME_STAMP, par.MATCLASS, par.ESTIRAJE, par.PASADOR, par.OBS])
     
     // Delete existing TBL records
-    await client.query('DELETE FROM uster_tbl WHERE testnr = $1', [par.TESTNR])
+    await client.query('DELETE FROM tb_uster_tbl WHERE testnr = $1', [par.TESTNR])
     
     // Insert new TBL records
     if (Array.isArray(tbl) && tbl.length > 0) {
       for (let i = 0; i < tbl.length; i++) {
         const r = tbl[i]
         await client.query(`
-          INSERT INTO uster_tbl (
+          INSERT INTO tb_uster_tbl (
             testnr, seqno, no_, u_percent, cvm_percent, indice_percent,
             cvm_1m_percent, cvm_3m_percent, cvm_10m_percent, titulo, titulo_rel_perc,
             h, sh, sh_1m, sh_3m, sh_10m, delg_minus30_km, delg_minus40_km,
@@ -205,7 +205,7 @@ app.post('/api/uster/upload', async (req, res) => {
 // USTER: Delete
 app.delete('/api/uster/delete/:testnr', async (req, res) => {
   try {
-    const result = await query('DELETE FROM uster_par WHERE testnr = $1', [req.params.testnr])
+    const result = await query('DELETE FROM tb_uster_par WHERE testnr = $1', [req.params.testnr])
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' })
     res.json({ success: true })
   } catch (err) { 
@@ -225,7 +225,7 @@ app.post('/api/tensorapid/status', async (req, res) => {
   }
   try {
     const placeholders = testnrs.map((_, i) => `$${i + 1}`).join(',')
-    const result = await query(`SELECT testnr FROM tensorapid_par WHERE testnr IN (${placeholders})`, testnrs)
+    const result = await query(`SELECT testnr FROM tb_tensorapid_par WHERE testnr IN (${placeholders})`, testnrs)
     res.json({ existing: result.rows.map(r => r.testnr) })
   } catch (err) { 
     res.status(500).json({ error: 'Failed' }) 
@@ -237,7 +237,7 @@ app.get('/api/tensorapid/par', async (req, res) => {
   try {
     const result = await query(`
       SELECT testnr, ne_titulo, titulo, comment_text, long_prueba, time_stamp, lote, ne_titulo_type 
-      FROM tensorapid_par 
+      FROM tb_tensorapid_par 
       ORDER BY testnr
     `)
     res.json({ rows: result.rows.map(uppercaseKeys) })
@@ -251,8 +251,8 @@ app.get('/api/tensorapid/tbl', async (req, res) => {
   const testnr = req.query.testnr
   try {
     const sql = testnr 
-      ? `SELECT * FROM tensorapid_tbl WHERE testnr = $1 ORDER BY id` 
-      : `SELECT * FROM tensorapid_tbl ORDER BY testnr, id`
+      ? `SELECT * FROM tb_tensorapid_tbl WHERE testnr = $1 ORDER BY id` 
+      : `SELECT * FROM tb_tensorapid_tbl ORDER BY testnr, id`
     const result = await query(sql, testnr ? [testnr] : [])
     res.json({ rows: result.rows.map(uppercaseKeys) })
   } catch (err) { 
@@ -270,7 +270,7 @@ app.post('/api/tensorapid/upload', async (req, res) => {
     
     // Insert or update PAR
     await client.query(`
-      INSERT INTO tensorapid_par (testnr, ne_titulo, titulo, comment_text, long_prueba, time_stamp, lote, ne_titulo_type)
+      INSERT INTO tb_tensorapid_par (testnr, ne_titulo, titulo, comment_text, long_prueba, time_stamp, lote, ne_titulo_type)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) 
       ON CONFLICT (testnr) DO UPDATE SET 
         ne_titulo=EXCLUDED.ne_titulo, 
@@ -283,14 +283,14 @@ app.post('/api/tensorapid/upload', async (req, res) => {
     `, [par.TESTNR, par.NE_TITULO, par.TITULO, par.COMMENT_TEXT, par.LONG_PRUEBA, par.TIME_STAMP, par.LOTE, par.NE_TITULO_TYPE])
     
     // Delete existing TBL records
-    await client.query('DELETE FROM tensorapid_tbl WHERE testnr = $1', [par.TESTNR])
+    await client.query('DELETE FROM tb_tensorapid_tbl WHERE testnr = $1', [par.TESTNR])
     
     // Insert new TBL records
     if (Array.isArray(tbl) && tbl.length > 0) {
       for (let i = 0; i < tbl.length; i++) {
         const r = tbl[i]
         await client.query(`
-          INSERT INTO tensorapid_tbl (
+          INSERT INTO tb_tensorapid_tbl (
             testnr, huso_number, tiempo_rotura, fuerza_b, elongacion, tenacidad, trabajo, huso_ensayos
           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
         `, [
@@ -320,7 +320,7 @@ app.post('/api/tensorapid/upload', async (req, res) => {
 // TENSORAPID: Delete
 app.delete('/api/tensorapid/delete/:testnr', async (req, res) => {
   try {
-    const result = await query('DELETE FROM tensorapid_par WHERE testnr = $1', [req.params.testnr])
+    const result = await query('DELETE FROM tb_tensorapid_par WHERE testnr = $1', [req.params.testnr])
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' })
     res.json({ success: true })
   } catch (err) { 
