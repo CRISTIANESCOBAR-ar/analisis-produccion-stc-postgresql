@@ -144,8 +144,8 @@ import { ref, onMounted, onBeforeUnmount, watch, nextTick, computed } from 'vue'
 // NOTE: require installing echarts: `npm install echarts`
 import * as echarts from 'echarts'
 import VueSelect from 'vue3-select-component'
-import { useRegistroStore } from '../stores/registro.js'
-import { fetchAllStatsData, getDataSource } from '../services/dataService'
+import { useRegistroStore } from '../../stores/registro.js'
+import { fetchAllStatsData, getDataSource } from '../../services/dataService'
 
 const loading = ref(false)
 const rows = ref([])

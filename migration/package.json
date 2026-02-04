@@ -1,0 +1,14 @@
+{
+  "name": "stc-migration",
+  "version": "1.0.0",
+  "description": "Script de migración Oracle a PostgreSQL",
+  "main": "migrate-oracle-to-postgresql.js",
+  "scripts": {
+    "test": "node test-connection.js",
+    "migrate": "node migrate-oracle-to-postgresql.js"
+  },
+  "dependencies": {
+    "oracledb": "^6.3.0",
+    "pg": "^8.11.3"
+  }
+}

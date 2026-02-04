@@ -113,7 +113,7 @@
                   class="hover:bg-blue-50/30 cursor-pointer transition-colors duration-150"
                   @click="item.testnr && selectRow(item.testnr)"
                   :class="{ 'bg-blue-50': selectedTestnr === item.testnr }">
-                  <td class="px-3 py-2 border-b border-slate-200 text-xs text-center col-ensayo">{{ item.testnr || '' }}
+                  <td class="px-3 py-2 border-b border-slate-200 text-xs text-center text-slate-700 col-ensayo">{{ item.testnr || '' }}
                   </td>
                   <td class="px-3 py-2 border-b border-slate-200 text-center text-xs col-par">
                     <svg v-if="item.hasPar" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mx-auto"
@@ -137,9 +137,9 @@
                       </svg>
                     </span>
                   </td>
-                  <td class="px-3 py-2 border-b border-slate-200 text-center font-mono text-xs col-ne">{{ item.nomcount
+                  <td class="px-3 py-2 border-b border-slate-200 text-center font-mono text-xs text-slate-700 col-ne">{{ item.nomcount
                     || '' }}</td>
-                  <td class="px-3 py-2 border-b border-slate-200 text-center font-mono text-xs col-maq">{{ item.maschnr
+                  <td class="px-3 py-2 border-b border-slate-200 text-center font-mono text-xs text-slate-700 col-maq">{{ item.maschnr
                     || '' }}</td>
                 </tr>
               </tbody>
@@ -196,7 +196,7 @@
                 @keydown.down.prevent="focusPasadorAndSelectSi"
                 :class="[
                   'w-16 px-2 py-0.5 text-sm text-center border border-slate-300 rounded focus:outline-none transition-all',
-                  !selectedTestnr ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white hover:bg-slate-50 focus:ring-2 focus:ring-yellow-300 focus:border-yellow-300 focus:bg-yellow-50'
+                  !selectedTestnr ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white text-slate-900 hover:bg-slate-50 focus:ring-2 focus:ring-yellow-300 focus:border-yellow-300 focus:bg-yellow-50'
                 ]"
               />
             </div>
@@ -255,7 +255,7 @@
               <tbody>
                 <tr v-for="(r, idx) in tituloList" :key="idx"
                   class="hover:bg-blue-50/30 transition-colors duration-150">
-                  <td class="px-3 py-2 border-b border-slate-200 text-xs text-center font-mono" style="width:70px">
+                  <td class="px-3 py-2 border-b border-slate-200 text-xs text-center text-slate-700 font-mono" style="width:70px">
                     <div v-if="r.srcIndex !== null">
                       {{ r.nro }}
                     </div>
@@ -269,7 +269,7 @@
                         @input="onTituloInput(r.srcIndex, $event)" @keydown.enter.prevent="focusNextTitulo(r.srcIndex)"
                         @keydown.up.prevent="focusPrevTitulo(r.srcIndex)"
                         @keydown.down.prevent="focusNextTituloWrap(r.srcIndex)"
-                        :class="['w-full box-border px-1 py-0.5 text-sm text-center border border-slate-300 focus:outline-none focus:ring-2 focus:border-blue-500 transition-all', isFocusedIndex === r.srcIndex ? 'bg-yellow-50 ring-2 ring-yellow-400' : 'bg-white hover:bg-slate-50']"
+                        :class="['w-full box-border px-1 py-0.5 text-sm text-center border border-slate-300 text-slate-900 focus:outline-none focus:ring-2 focus:border-blue-500 transition-all', isFocusedIndex === r.srcIndex ? 'bg-yellow-50 ring-2 ring-yellow-400' : 'bg-white hover:bg-slate-50']"
                         style="box-sizing: border-box; margin:0; border-radius:0;" />
                     </div>
                     <div v-else class="text-xs text-slate-400">—</div>
@@ -300,8 +300,8 @@
               </thead>
               <tbody>
                 <tr v-for="c in compactFields" :key="c.code" class="hover:bg-blue-50/30 transition-colors duration-150">
-                  <td class="px-3 py-2 border-b border-slate-200 font-medium text-xs col-dato">{{ c.label }}</td>
-                  <td class="px-3 py-2 border-b border-slate-200 font-mono text-xs col-valor">
+                  <td class="px-3 py-2 border-b border-slate-200 font-medium text-xs text-slate-700 col-dato">{{ c.label }}</td>
+                  <td class="px-3 py-2 border-b border-slate-200 font-mono text-xs text-slate-700 col-valor">
                     <!-- Select para Tipo Material -->
                     <select 
                       v-if="c.code === 'MATCLASS'" 
@@ -356,7 +356,7 @@
               <tr v-for="(r, idx) in tblData" :key="idx" class="hover:bg-blue-50/30 transition-colors duration-150">
                 <td class="px-3 py-2 border-b border-slate-200 text-xs text-center">{{ idx + 1 }}</td>
                 <td v-for="c in tblColumns" :key="c"
-                  class="px-3 py-2 border-b border-slate-200 font-mono text-xs text-center">{{ r[c] }}</td>
+                  class="px-3 py-2 border-b border-slate-200 font-mono text-xs text-center text-slate-700">{{ r[c] }}</td>
               </tr>
             </tbody>
           </table>
@@ -2608,4 +2608,9 @@ table.w-full {
   opacity: 0.7 !important;
 }
 </style>
+
+
+
+
+
 

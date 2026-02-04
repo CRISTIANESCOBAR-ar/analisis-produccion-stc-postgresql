@@ -694,8 +694,8 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
-import { fetchAllStatsData } from '../services/dataService'
-import HusoDetailModal from './uster-stats/HusoDetailModal.vue'
+import { fetchAllStatsData } from '../../services/dataService'
+// import HusoDetailModal from './uster-stats/HusoDetailModal.vue'
 import { toPng } from 'html-to-image'
 import Swal from 'sweetalert2'
 
