@@ -15,7 +15,7 @@
           <select v-model="ne" class="px-1 py-1 border rounded-md text-sm shrink-0"
             style="width:4.5ch;min-width:4.5ch;max-width:4.5ch;">
             <option value="">-</option>
-            <option v-for="opt in neOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+            <option v-for="opt in neOptions" :key="opt.value" :value="opt.value">{{ opt.label.replace('.00', '').replace(/\.50/, '.5') }}</option>
           </select>
           <span class="text-sm text-slate-600 shrink-0">Ver:</span>
           <select v-model="metric"
@@ -206,14 +206,32 @@ const availableOe = computed(() => {
 const availableNe = computed(() => {
   const s = new Set()
   for (const r of rows.value) {
-    const v = r.Ne || r.ne
-    if (v != null && String(v).trim() !== '') s.add(String(v))
+    let v = r.Ne || r.ne
+    if (v != null && String(v).trim() !== '') {
+      // Formatear para eliminar decimales innecesarios: 7.00 → 7, 9.50 → 9.5
+      const strVal = String(v).replace('Flame', '')
+      const numVal = parseFloat(strVal)
+      if (!isNaN(numVal)) {
+        v = String(parseFloat(strVal)) + (String(v).includes('Flame') ? 'Flame' : '')
+      }
+      s.add(String(v))
+    }
   }
   return Array.from(s).sort()
 })
 
 const oeOptions = computed(() => availableOe.value.map(v => ({ label: String(v), value: String(v) })))
-const neOptions = computed(() => availableNe.value.map(v => ({ label: String(v), value: String(v) })))
+const neOptions = computed(() => availableNe.value.map(v => {
+  // Formatear label para eliminar decimales innecesarios
+  let label = String(v)
+  const hasFlame = label.includes('Flame')
+  const cleanVal = label.replace('Flame', '').trim()
+  const num = parseFloat(cleanVal)
+  if (!isNaN(num)) {
+    label = String(parseFloat(cleanVal)) + (hasFlame ? 'Flame' : '')
+  }
+  return { label, value: String(v) }
+}))
 
 const metrics = [
   { value: 'Tenac.', label: 'Tenacidad (Tenac.)' },
@@ -341,9 +359,18 @@ async function loadData() {
     }
 
     // Helper: formatear Ne con 'Flame' si es hilo de fantasía (igual que ResumenEnsayos)
+    // Elimina decimales innecesarios: 7.00 → 7, 9.50 → 9.5, 10.00 → 10
     function formatNe(nomcount, matclass) {
       if (nomcount == null || nomcount === '') return ''
       let ne = String(nomcount).trim()
+      
+      // Si es un número, formatear para eliminar ceros innecesarios
+      const neNum = parseFloat(ne)
+      if (!isNaN(neNum)) {
+        // parseFloat automáticamente elimina ceros: 7.00 → 7, 9.50 → 9.5
+        ne = String(parseFloat(ne))
+      }
+      
       if (matclass && String(matclass).toLowerCase() === 'hilo de fantasia') {
         return ne + 'Flame'
       }

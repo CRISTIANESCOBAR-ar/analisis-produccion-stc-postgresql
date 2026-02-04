@@ -30,10 +30,10 @@
             <label for="searchInput" class="sr-only">Buscar ensayos</label>
             <input id="searchInput" v-model="q" @input="onInput" type="search"
               placeholder="Buscar..." aria-label="Buscar ensayos"
-              class="px-3 py-1.5 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all w-24 @[1150px]:w-auto" />
+              class="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all w-24 @[1150px]:w-auto" />
             <button v-if="q || neQuery || oeQuery" @click="clearSearch"
               v-tippy="{ content: 'Limpiar filtros', placement: 'bottom', theme: 'custom' }"
-              class="inline-flex items-center gap-1 px-1.5 @[1150px]:px-1.5 py-1.5 border border-slate-200 bg-white text-slate-700 rounded-md text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md">
+              class="inline-flex items-center gap-1 px-1.5 @[1150px]:px-1.5 py-1.5 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -50,7 +50,7 @@
               <div class="flex items-center gap-2">
                 <label for="neFilter" class="text-sm text-slate-600">Ne:</label>
                 <select id="neFilter" v-model="neQuery" aria-label="Filtrar por Ne"
-                  class="px-2 py-1 border border-slate-200 rounded-md text-sm"
+                  class="px-2 py-1 border border-slate-200 rounded-lg text-sm text-slate-900"
                   style="width:9.5ch;min-width:9.5ch;max-width:9.5ch;">
                   <option value="">Todos</option>
                   <option v-for="ne in availableNes" :key="ne" :value="ne">
@@ -60,7 +60,7 @@
 
                 <label for="oeFilter" class="text-sm text-slate-600">OE:</label>
                 <select id="oeFilter" v-model="oeQuery" aria-label="Filtrar por OE"
-                  class="px-2 py-1 border border-slate-200 rounded-md text-sm"
+                  class="px-2 py-1 border border-slate-200 rounded-lg text-sm text-slate-900"
                   style="width:9.5ch;min-width:9.5ch;max-width:9.5ch;">
                   <option value="">Todos</option>
                   <option v-for="oe in availableOes" :key="oe" :value="oe">
@@ -75,7 +75,7 @@
                 <button
                   @click="filterAll"
                   v-tippy="{ content: statusFilter === 'all' ? 'Mostrando todos' : 'Mostrar todos los ensayos', placement: 'bottom', theme: 'custom' }"
-                  class="inline-flex items-center gap-1 px-2 @[1150px]:px-1.5 py-1 border border-slate-200 rounded-md text-sm font-medium transition-colors duration-150 shadow-sm hover:shadow-md"
+                  class="inline-flex items-center gap-1 px-2 @[1150px]:px-1.5 py-1 border border-slate-200 rounded-lg text-sm font-medium transition-colors duration-150 shadow-sm hover:shadow-md"
                   :class="statusFilter === 'all' ? 'bg-blue-50 text-blue-700 border-blue-500' : 'bg-white text-slate-700 hover:bg-slate-50'"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -91,7 +91,7 @@
                 <button
                   @click="filterOk"
                   v-tippy="{ content: statusFilter === 'ok' ? 'Clic para quitar filtro' : 'Solo ensayos dentro de ±1.5%', placement: 'bottom', theme: 'custom' }"
-                  class="inline-flex items-center gap-1 px-2 @[1150px]:px-1.5 py-1 border border-slate-200 rounded-md text-sm font-medium transition-colors duration-150 shadow-sm hover:shadow-md"
+                  class="inline-flex items-center gap-1 px-2 @[1150px]:px-1.5 py-1 border border-slate-200 rounded-lg text-sm font-medium transition-colors duration-150 shadow-sm hover:shadow-md"
                   :class="statusFilter === 'ok' ? 'bg-green-50 text-green-700 border-green-500' : 'bg-white text-slate-700 hover:bg-slate-50'"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -105,7 +105,7 @@
                 <button
                   @click="filterOutOfRange"
                   v-tippy="{ content: statusFilter === 'out-of-range' ? 'Clic para quitar filtro' : 'Solo ensayos fuera de ±1.5%', placement: 'bottom', theme: 'custom' }"
-                  class="inline-flex items-center gap-1 px-2 @[1150px]:px-1.5 py-1 border border-slate-200 rounded-md text-sm font-medium transition-colors duration-150 shadow-sm hover:shadow-md"
+                  class="inline-flex items-center gap-1 px-2 @[1150px]:px-1.5 py-1 border border-slate-200 rounded-lg text-sm font-medium transition-colors duration-150 shadow-sm hover:shadow-md"
                   :class="statusFilter === 'out-of-range' ? 'bg-red-50 text-red-700 border-red-500' : 'bg-white text-slate-700 hover:bg-slate-50'"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -125,7 +125,7 @@
 
             <!-- Minimal modern refresh button with icon -->
             <button @click="loadRows" v-tippy="{ content: 'Refrescar datos', placement: 'bottom', theme: 'custom' }"
-              class="inline-flex items-center gap-1 px-2 @[1150px]:px-1.5 py-1 border border-slate-200 bg-white text-slate-700 rounded-md text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md">
+              class="inline-flex items-center gap-1 px-2 @[1150px]:px-1.5 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <path d="M21 12a9 9 0 1 1-3-6.7" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -137,7 +137,7 @@
             <!-- Export to Excel (CSV) button -->
             <button @click="exportToExcel"
               v-tippy="{ content: 'Exportar a Excel (XLSX)', placement: 'bottom', theme: 'custom' }"
-              class="inline-flex items-center gap-1 px-2 @[1150px]:px-1.5 py-1 border border-slate-200 bg-white text-slate-700 rounded-md text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md">
+              class="inline-flex items-center gap-1 px-2 @[1150px]:px-1.5 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round">
@@ -170,7 +170,8 @@
               <colgroup>
                 <col style="width:6%" /> <!-- Ensayo -->
                 <col style="width:6%" /> <!-- Fecha -->
-                <col style="width:12%" /> <!-- OE (doble) -->
+                <col style="width:4%" /> <!-- Lote -->
+                <col style="width:11%" /> <!-- OE (doble) -->
                 <col style="width:5%" /> <!-- Ne -->
                 <col style="width:6%" /> <!-- Desvío % -->
                 <col style="width:11%" /> <!-- Titulo -->
@@ -195,6 +196,8 @@
                   <th class="px-2 py-[0.3rem] text-center font-semibold text-slate-700 border-b border-slate-200">Ensayo
                   </th>
                   <th class="px-2 py-[0.3rem] text-center font-semibold text-slate-700 border-b border-slate-200">Fecha
+                  </th>
+                  <th class="px-2 py-[0.3rem] text-center font-semibold text-slate-700 border-b border-slate-200">Lote
                   </th>
                   <th class="px-2 py-[0.3rem] text-center font-semibold text-slate-700 border-b border-slate-200">OE
                   </th>
@@ -238,6 +241,7 @@
                   <td class="px-2 py-[0.3rem] text-center text-slate-700">{{ row.Ensayo }}</td>
                   <td class="px-2 py-[0.3rem] text-center text-slate-700 whitespace-nowrap">{{
                     displayFecha(getPreferredFecha(row)) }}</td>
+                  <td class="px-2 py-[0.3rem] text-center text-slate-700">{{ row.Lote }}</td>
                   <td class="px-2 py-[0.3rem] text-center text-slate-700">{{ row.OE }}</td>
                   <td class="px-2 py-[0.3rem] text-center text-slate-700">{{ row.Ne }}</td>
                   <td class="px-2 py-[0.3rem] text-center font-semibold" :class="{
@@ -270,7 +274,7 @@
                     <div class="flex items-center justify-center gap-1.5">
                       <button @click="openDetail(row.Ensayo)"
                         v-tippy="{ content: 'Ver el detalle de los ensayos USTER y TENSORAPID', placement: 'bottom', theme: 'custom' }"
-                        class="inline-flex items-center gap-2 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-md text-xs font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm">
+                        class="inline-flex items-center gap-2 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-xs font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-600" viewBox="0 0 24 24"
                           fill="none" stroke="currentColor" stroke-width="2">
                           <path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -281,7 +285,7 @@
 
                       <button @click.stop="openHusoGraph(row.Ensayo)"
                         v-tippy="{ content: 'Ver gráfico por huso (Titulo Ne)', placement: 'bottom', theme: 'custom' }"
-                        class="inline-flex items-center justify-center px-2 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-md text-xs font-medium transition-colors duration-150 shadow-sm">
+                        class="inline-flex items-center justify-center px-2 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-lg text-xs font-medium transition-colors duration-150 shadow-sm">
                         📈
                       </button>
                     </div>
@@ -297,16 +301,16 @@
             <div class="flex items-center gap-2">
               <label class="text-sm text-slate-700">Registros por página:</label>
               <select v-model.number="pageSize"
-                class="text-sm px-2 py-1 border border-slate-200 rounded-md text-slate-700 focus:border-blue-400">
+                class="text-sm px-2 py-1 border border-slate-200 rounded-lg text-slate-700 focus:border-blue-400">
                 <option v-for="s in [10, 25, 50, 100, 0]" :key="s" :value="s">{{ s === 0 ? 'Todos' : s }}</option>
               </select>
 
               <!-- first / prev -->
               <button @click="page = 1" :disabled="page <= 1"
-                class="inline-flex items-center gap-2 px-3 py-1 border border-slate-200 bg-white text-slate-700 rounded-md text-sm font-medium hover:bg-slate-50 transition-colors duration-150 disabled:opacity-50 shadow-sm hover:shadow-md"
+                class="inline-flex items-center gap-2 px-3 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 disabled:opacity-50 shadow-sm hover:shadow-md"
                 title="Primera">« Primera</button>
               <button @click="page = Math.max(1, page - 1)" :disabled="page <= 1"
-                class="inline-flex items-center gap-2 px-3 py-1 border border-slate-200 bg-white text-slate-700 rounded-md text-sm font-medium hover:bg-slate-50 transition-colors duration-150 disabled:opacity-50 shadow-sm hover:shadow-md"
+                class="inline-flex items-center gap-2 px-3 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 disabled:opacity-50 shadow-sm hover:shadow-md"
                 title="Anterior">‹ Anterior</button>
 
               <!-- go to page input -->
@@ -314,19 +318,19 @@
                 <label class="sr-only" for="gotoPage">Ir a página</label>
                 <input id="gotoPage" type="number" min="1" :max="totalPages" v-model.number.lazy="gotoPage"
                   @keydown.enter.prevent="goToPage()"
-                  class="w-20 text-sm px-2 py-1 border border-slate-200 rounded-md text-slate-700 placeholder-slate-400 focus:border-blue-400"
+                  class="w-20 text-sm px-2 py-1 border border-slate-200 rounded-lg text-slate-700 placeholder-slate-400 focus:border-blue-400"
                   placeholder="Página" />
                 <button @click="goToPage()"
-                  class="inline-flex items-center gap-2 px-3 py-1 border border-slate-200 bg-white text-slate-700 rounded-md text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md">Ir</button>
+                  class="inline-flex items-center gap-2 px-3 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md">Ir</button>
               </div>
 
               <!-- page indicator and next/last -->
               <span class="text-sm text-slate-600">Página {{ page }} / {{ totalPages }}</span>
               <button @click="page = Math.min(totalPages, page + 1)" :disabled="page >= totalPages"
-                class="inline-flex items-center gap-2 px-3 py-1 border border-slate-200 bg-white text-slate-700 rounded-md text-sm font-medium hover:bg-slate-50 transition-colors duration-150 disabled:opacity-50 shadow-sm hover:shadow-md"
+                class="inline-flex items-center gap-2 px-3 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 disabled:opacity-50 shadow-sm hover:shadow-md"
                 title="Siguiente">Siguiente ›</button>
               <button @click="page = totalPages" :disabled="page >= totalPages"
-                class="inline-flex items-center gap-2 px-3 py-1 border border-slate-200 bg-white text-slate-700 rounded-md text-sm font-medium hover:bg-slate-50 transition-colors duration-150 disabled:opacity-50 shadow-sm hover:shadow-md"
+                class="inline-flex items-center gap-2 px-3 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 disabled:opacity-50 shadow-sm hover:shadow-md"
                 title="Última">Última »</button>
             </div>
           </div>
@@ -959,13 +963,47 @@ function getPreferredFecha(row) {
 }
 
 // Formatea Ne: usa NOMCOUNT y agrega 'Flame' si MATCLASS es 'Hilo de fantasia'
+// Elimina decimales innecesarios: 9.50 → 9.5, 10.00 → 10, 12.50 → 12.5
 function formatNe(nomcount, matclass) {
   if (nomcount == null || nomcount === '') return ''
   let ne = String(nomcount).trim()
+  
+  // Si es un número, formatear para eliminar ceros innecesarios
+  const neNum = parseFloat(ne)
+  if (!isNaN(neNum)) {
+    // parseFloat automáticamente elimina ceros: 9.50 → 9.5, 10.00 → 10
+    ne = String(parseFloat(ne))
+  }
+  
   if (matclass && String(matclass).toLowerCase() === 'hilo de fantasia') {
     return ne + 'Flame'
   }
   return ne
+}
+
+// Formatea Estiraje: elimina ceros a la derecha (ej: 5.30 → 5.3, 6.00 → 6)
+function formatEstiraje(estiraje) {
+  if (estiraje == null || estiraje === '') return null
+  const val = String(estiraje).trim()
+  const num = parseFloat(val)
+  if (!isNaN(num)) {
+    // parseFloat elimina automáticamente ceros: 5.30 → 5.3, 6.00 → 6
+    return String(parseFloat(val))
+  }
+  return val
+}
+
+// Formatea Lote: extrae el número del medio (ej: HD-107-26 → 107, HV 56-25 → 56)
+function formatLote(lote) {
+  if (!lote || lote === '') return ''
+  const str = String(lote).trim()
+  // Buscar patrón: separador (- o espacio) + dígitos + separador (- o espacio)
+  const match = str.match(/[\s-](\d+)[\s-]/)
+  if (match && match[1]) {
+    return match[1]
+  }
+  // Si no hay match, devolver el valor original
+  return str
 }
 
 // Formatea una celda de datos (números con decimales o valores vacíos)
@@ -2107,11 +2145,12 @@ async function loadRows() {
         Ensayo: testnr,
         TIME_STAMP: timeStamp,  // Guardar el timestamp original
         Fecha: row.Fecha || row.fecha || row.FECHA || '',  // Mantener Fecha si existe, pero priorizar TIME_STAMP
+        Lote: formatLote(row.LOTE || row.Lote || row.lote || ''),
         OE: formatOE(row.MASCHNR ?? row.OE ?? row.OE_NRO ?? row.OE_NRO_1 ?? row.oe ?? row.OE_NRO_PAR ?? ''),
         Ne: formatNe(row.NOMCOUNT ?? row.Ne ?? row.NE ?? row.titulo ?? row.TITULO ?? '', row.MATCLASS),
         'Desvío %': desvioPercent,
         Titulo: calcAvg(tblRows, 'TITULO'),
-        Estiraje: row.ESTIRAJE || null,
+        Estiraje: formatEstiraje(row.ESTIRAJE),
         Pasador: row.PASADOR || null,
         'CVm %': calcAvg(tblRows, 'CVM_PERCENT') || calcAvg(tblRows, 'CVM_%'),
         'Delg -30%': calcAvg(tblRows, 'DELG_MINUS30_KM') || calcAvg(tblRows, 'DELG_-30%'),
@@ -2195,6 +2234,7 @@ async function exportToExcel() {
     // Headers for export: move Uster (Ensayo) after OBS and add TensoRapid
     const headers = [
       'Fecha',
+      'Lote',
       'OE',
       'Ne',
       'Desvío %',
@@ -2232,6 +2272,7 @@ async function exportToExcel() {
     // Build body rows in the new order (with OBS, Uster, TensoRapid at the end)
     const bodyRows = filteredRows.value.map(r => [
       displayFecha(getPreferredFecha(r)),
+      r['Lote'] || '',
       r['OE'] || '',
       r['Ne'] || '',
       // Convertir el decimal a coma para que Excel (locale ES) lo trate como número

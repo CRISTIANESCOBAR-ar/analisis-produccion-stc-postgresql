@@ -65,7 +65,12 @@
 					</div>
 					<!-- Título Datos .TBL alineado a la derecha en la misma línea -->
 					<div v-if="parsedTblData.length" class="ml-4">
-						<h5 class="font-semibold text-lg text-slate-800 mb-0">Datos .TBL — TESTNR: {{ tblTestnr }}</h5>
+						<h5 class="font-semibold text-lg text-slate-800 mb-0">
+							Datos .TBL — TESTNR: {{ tblTestnr }}
+							<span v-if="formattedTime" class="ml-3 text-base font-normal text-slate-600">
+								Fecha: {{ formattedTime }}
+							</span>
+						</h5>
 					</div>
 				</div>
 
@@ -155,7 +160,7 @@
 												@keydown.enter="focusActionButtons(item)"
 												@keydown.right.prevent="focusActionButtons(item)" :class="[
 													'w-full px-2 py-1 text-xs text-center border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-400 font-mono transition-colors',
-													item.saved && !item.isEditing ? 'bg-slate-100 text-slate-600 cursor-default' : '',
+													item.saved && !item.isEditing ? 'bg-slate-100 text-slate-900 cursor-default' : 'text-slate-900',
 													selectedTensoTestnr === item.testnr ? 'bg-yellow-50 ring-2 ring-yellow-400' : 'hover:bg-slate-50 focus:bg-yellow-50'
 												]" />
 										</td>
@@ -1156,6 +1161,30 @@ const selectedTblName = ref('')
 const tblTestnr = ref('')
 const parsedTblData = ref([])
 const parsedParData = ref({})
+
+// Format TIME field to dd/mm/yyyy
+const formattedTime = computed(() => {
+	if (!parsedParData.value.TIME) return ''
+	const timeStr = String(parsedParData.value.TIME)
+	
+	// Check if it's a Unix timestamp (numeric string)
+	if (/^\d+$/.test(timeStr)) {
+		const timestamp = parseInt(timeStr, 10)
+		const date = new Date(timestamp * 1000) // Convert seconds to milliseconds
+		const day = String(date.getDate()).padStart(2, '0')
+		const month = String(date.getMonth() + 1).padStart(2, '0')
+		const year = date.getFullYear()
+		return `${day}/${month}/${year}`
+	}
+	
+	// If already in dd/mm/yyyy format, extract just the date part
+	const match = timeStr.match(/(\d{2})\/(\d{2})\/(\d{4})/)
+	if (match) {
+		return `${match[1]}/${match[2]}/${match[3]}`
+	}
+	
+	return timeStr
+})
 
 // Prepared TBL data as it will be sent to the backend (matching saveToOracle mapping)
 const preparedTblPreview = computed(() => {

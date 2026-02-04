@@ -32,7 +32,7 @@ async function query(text, params) {
 
 // Helper: obtener cliente para transacciones
 async function getClient() {
-  return await pool.getClient()
+  return await pool.connect()
 }
 
 // Helper: convertir claves a mayúsculas (compatibilidad Oracle/carga-datos-docker)
@@ -102,7 +102,18 @@ app.post('/api/uster/status', async (req, res) => {
 app.get('/api/uster/par', async (req, res) => {
   try {
     const result = await query(`SELECT testnr, nomcount, maschnr, lote, laborant, time_stamp, matclass, estiraje, pasador, obs FROM tb_uster_par ORDER BY testnr`)
-    res.json({ rows: result.rows.map(uppercaseKeys) })
+    // Formatear nomcount para eliminar decimales innecesarios
+    const rows = result.rows.map(row => {
+      const formatted = uppercaseKeys(row)
+      if (formatted.NOMCOUNT != null) {
+        const num = parseFloat(formatted.NOMCOUNT)
+        if (!isNaN(num)) {
+          formatted.NOMCOUNT = parseFloat(num.toFixed(2)) // Elimina .00 y .50 innecesarios
+        }
+      }
+      return formatted
+    })
+    res.json({ rows })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -138,6 +149,10 @@ app.post('/api/uster/husos', async (req, res) => {
 app.post('/api/uster/upload', async (req, res) => {
   const { par, tbl } = req.body
   if (!par?.TESTNR) return res.status(400).json({ error: 'Missing PAR data or TESTNR' })
+  
+  // Support both TIME (from frontend) and TIME_STAMP (legacy)
+  const timeStamp = par.TIME_STAMP || par.TIME || null
+  
   const client = await getClient()
   try {
     await client.query('BEGIN')
@@ -156,7 +171,7 @@ app.post('/api/uster/upload', async (req, res) => {
         estiraje=EXCLUDED.estiraje, 
         pasador=EXCLUDED.pasador, 
         obs=EXCLUDED.obs
-    `, [par.TESTNR, par.NOMCOUNT, par.MASCHNR, par.LOTE, par.LABORANT, par.TIME_STAMP, par.MATCLASS, par.ESTIRAJE, par.PASADOR, par.OBS])
+    `, [par.TESTNR, par.NOMCOUNT, par.MASCHNR, par.LOTE, par.LABORANT, timeStamp, par.MATCLASS, par.ESTIRAJE, par.PASADOR, par.OBS])
     
     // Delete existing TBL records
     await client.query('DELETE FROM tb_uster_tbl WHERE testnr = $1', [par.TESTNR])
@@ -176,16 +191,16 @@ app.post('/api/uster/upload', async (req, res) => {
             $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28
           )`,
           [
-            par.TESTNR, i+1, r.NO_, 
-            parseFloat(r.U_PERCENT)||null, parseFloat(r.CVM_PERCENT)||null, parseFloat(r.INDICE_PERCENT)||null,
-            parseFloat(r.CVM_1M_PERCENT)||null, parseFloat(r.CVM_3M_PERCENT)||null, parseFloat(r.CVM_10M_PERCENT)||null,
-            parseFloat(r.TITULO)||null, parseFloat(r.TITULO_REL_PERC)||null,
+            par.TESTNR, i+1, r.NO, 
+            parseFloat(r['U%_%'])||null, parseFloat(r['CVM_%'])||null, parseFloat(r['INDICE_%'])||null,
+            parseFloat(r['CVM_1M_%'])||null, parseFloat(r['CVM_3M_%'])||null, parseFloat(r['CVM_10M_%'])||null,
+            parseFloat(r.TITULO)||null, parseFloat(r['TITULO_REL_±_%'])||null,
             parseFloat(r.H)||null, parseFloat(r.SH)||null, parseFloat(r.SH_1M)||null, parseFloat(r.SH_3M)||null, parseFloat(r.SH_10M)||null,
-            parseFloat(r.DELG_MINUS30_KM)||null, parseFloat(r.DELG_MINUS40_KM)||null,
-            parseFloat(r.DELG_MINUS50_KM)||null, parseFloat(r.DELG_MINUS60_KM)||null,
-            parseFloat(r.GRUE_35_KM)||null, parseFloat(r.GRUE_50_KM)||null, parseFloat(r.GRUE_70_KM)||null,
-            parseFloat(r.GRUE_100_KM)||null,
-            parseFloat(r.NEPS_140_KM)||null, parseFloat(r.NEPS_200_KM)||null, parseFloat(r.NEPS_280_KM)||null, parseFloat(r.NEPS_400_KM)||null
+            parseFloat(r['DELG_-30%_KM'])||null, parseFloat(r['DELG_-40%_KM'])||null,
+            parseFloat(r['DELG_-50%_KM'])||null, parseFloat(r['DELG_-60%_KM'])||null,
+            parseFloat(r['GRUE_35%_KM'])||null, parseFloat(r['GRUE_50%_KM'])||null, parseFloat(r['GRUE_70%_KM'])||null,
+            parseFloat(r['GRUE_100%_KM'])||null,
+            parseFloat(r['NEPS_140%_KM'])||null, parseFloat(r['NEPS_200%_KM'])||null, parseFloat(r['NEPS_280%_KM'])||null, parseFloat(r['NEPS_400%_KM'])||null
           ]
         )
       }
@@ -236,11 +251,23 @@ app.post('/api/tensorapid/status', async (req, res) => {
 app.get('/api/tensorapid/par', async (req, res) => {
   try {
     const result = await query(`
-      SELECT testnr, ne_titulo, titulo, comment_text, long_prueba, time_stamp, lote, ne_titulo_type 
+      SELECT testnr, ne_titulo, titulo, comment_text, long_prueba, time_stamp, lote, ne_titulo_type,
+             uster_testnr, nomcount, maschnr, laborant, matclass
       FROM tb_tensorapid_par 
       ORDER BY testnr
     `)
-    res.json({ rows: result.rows.map(uppercaseKeys) })
+    // Formatear nomcount para eliminar decimales innecesarios
+    const rows = result.rows.map(row => {
+      const formatted = uppercaseKeys(row)
+      if (formatted.NOMCOUNT != null) {
+        const num = parseFloat(formatted.NOMCOUNT)
+        if (!isNaN(num)) {
+          formatted.NOMCOUNT = parseFloat(num.toFixed(2))
+        }
+      }
+      return formatted
+    })
+    res.json({ rows })
   } catch (err) { 
     res.status(500).json({ error: err.message }) 
   }
@@ -264,14 +291,20 @@ app.get('/api/tensorapid/tbl', async (req, res) => {
 app.post('/api/tensorapid/upload', async (req, res) => {
   const { par, tbl } = req.body
   if (!par?.TESTNR) return res.status(400).json({ error: 'Missing data' })
+  
+  // Support both TIME (from frontend) and TIME_STAMP (legacy)
+  const timeStamp = par.TIME_STAMP || par.TIME || null
+  // Support USTER_TESTNR for linking with Uster tests
+  const usterTestnr = par.USTER_TESTNR || par.USTER_TESTLOT || null
+  
   const client = await getClient()
   try {
     await client.query('BEGIN')
     
-    // Insert or update PAR
+    // Insert or update PAR (including uster_testnr)
     await client.query(`
-      INSERT INTO tb_tensorapid_par (testnr, ne_titulo, titulo, comment_text, long_prueba, time_stamp, lote, ne_titulo_type)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8) 
+      INSERT INTO tb_tensorapid_par (testnr, ne_titulo, titulo, comment_text, long_prueba, time_stamp, lote, ne_titulo_type, uster_testnr, nomcount, maschnr, laborant)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) 
       ON CONFLICT (testnr) DO UPDATE SET 
         ne_titulo=EXCLUDED.ne_titulo, 
         titulo=EXCLUDED.titulo, 
@@ -279,8 +312,12 @@ app.post('/api/tensorapid/upload', async (req, res) => {
         long_prueba=EXCLUDED.long_prueba, 
         time_stamp=EXCLUDED.time_stamp, 
         lote=EXCLUDED.lote, 
-        ne_titulo_type=EXCLUDED.ne_titulo_type
-    `, [par.TESTNR, par.NE_TITULO, par.TITULO, par.COMMENT_TEXT, par.LONG_PRUEBA, par.TIME_STAMP, par.LOTE, par.NE_TITULO_TYPE])
+        ne_titulo_type=EXCLUDED.ne_titulo_type,
+        uster_testnr=EXCLUDED.uster_testnr,
+        nomcount=EXCLUDED.nomcount,
+        maschnr=EXCLUDED.maschnr,
+        laborant=EXCLUDED.laborant
+    `, [par.TESTNR, par.NE_TITULO, par.TITULO, par.COMMENT_TEXT, par.LONG_PRUEBA, timeStamp, par.LOTE, par.NE_TITULO_TYPE, usterTestnr, par.NOMCOUNT, par.MASCHNR, par.LABORANT])
     
     // Delete existing TBL records
     await client.query('DELETE FROM tb_tensorapid_tbl WHERE testnr = $1', [par.TESTNR])
@@ -331,11 +368,25 @@ app.delete('/api/tensorapid/delete/:testnr', async (req, res) => {
 // =====================================================
 // INICIAR SERVIDOR
 // =====================================================
-app.listen(PORT, '0.0.0.0', () => {
-  console.log('🚀 ========================================')
-  console.log(`🚀 STC Backend API v2 - PostgreSQL`)
-  console.log(`🚀 Servidor corriendo en puerto ${PORT}`)
-  console.log(`🚀 Database: ${process.env.PG_DATABASE || 'stc_produccion'}`)
-  console.log(`🚀 Health check: http://localhost:${PORT}/api/health`)
-  console.log('🚀 ========================================')
-})
+async function startServer() {
+  try {
+    // Test database connection
+    const client = await pool.connect()
+    console.log('✓ Conexión a PostgreSQL exitosa')
+    client.release()
+    
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log('🚀 ========================================')
+      console.log(`🚀 STC Backend API v2 - PostgreSQL`)
+      console.log(`🚀 Servidor corriendo en puerto ${PORT}`)
+      console.log(`🚀 Database: ${process.env.PG_DATABASE || 'stc_produccion'}`)
+      console.log(`🚀 Health check: http://localhost:${PORT}/api/health`)
+      console.log('🚀 ========================================')
+    })
+  } catch (err) {
+    console.error('❌ Error conectando a la base de datos:', err.message)
+    process.exit(1)
+  }
+}
+
+startServer()
