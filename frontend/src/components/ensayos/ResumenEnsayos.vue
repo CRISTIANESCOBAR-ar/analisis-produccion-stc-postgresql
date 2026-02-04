@@ -274,13 +274,13 @@
                     <div class="flex items-center justify-center gap-1.5">
                       <button @click="openDetail(row.Ensayo)"
                         v-tippy="{ content: 'Ver el detalle de los ensayos USTER y TENSORAPID', placement: 'bottom', theme: 'custom' }"
-                        class="inline-flex items-center gap-2 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-xs font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm">
+                        class="inline-flex items-center gap-1 px-1 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-xs font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-600" viewBox="0 0 24 24"
                           fill="none" stroke="currentColor" stroke-width="2">
                           <path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z" stroke-linecap="round" stroke-linejoin="round"></path>
                           <path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7z" stroke-linecap="round" stroke-linejoin="round"></path>
                         </svg>
-                        <span class="whitespace-nowrap">Ver detalle</span>
+                        <span class="whitespace-nowrap">Ver</span>
                       </button>
 
                       <button @click.stop="openHusoGraph(row.Ensayo)"
