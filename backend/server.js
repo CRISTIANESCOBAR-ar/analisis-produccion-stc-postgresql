@@ -3,10 +3,6 @@ import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import pg from 'pg'
-import { parse } from 'csv-parse/sync'
-import fs from 'fs/promises'
-import fsSync from 'fs'
-import path from 'path'
 
 const { Pool } = pg
 const app = express()
@@ -58,11 +54,18 @@ function formatNumber(val) {
   return String(parseFloat(num.toFixed(2)))
 }
 
+// Helper: convertir fecha ISO (YYYY-MM-DD) a formato local (DD/MM/YYYY)
+function isoToLocal(isoDate) {
+  if (!isoDate) return null
+  const [year, month, day] = isoDate.split('-')
+  return `${day}/${month}/${year}`
+}
+
 // =====================================================
 // MIDDLEWARE
 // =====================================================
 const corsOptions = {
-  origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'],
+  origin: process.env.FRONTEND_ORIGIN || /^http:\/\/localhost(:\d+)?$/,
   credentials: true
 }
 app.use(cors(corsOptions))
@@ -106,18 +109,7 @@ app.post('/api/uster/status', async (req, res) => {
 app.get('/api/uster/par', async (req, res) => {
   try {
     const result = await query(`SELECT testnr, nomcount, maschnr, lote, laborant, time_stamp, matclass, estiraje, pasador, obs FROM tb_uster_par ORDER BY testnr`)
-    // Formatear nomcount para eliminar decimales innecesarios
-    const rows = result.rows.map(row => {
-      const formatted = uppercaseKeys(row)
-      if (formatted.NOMCOUNT != null) {
-        const num = parseFloat(formatted.NOMCOUNT)
-        if (!isNaN(num)) {
-          formatted.NOMCOUNT = parseFloat(num.toFixed(2)) // Elimina .00 y .50 innecesarios
-        }
-      }
-      return formatted
-    })
-    res.json({ rows })
+    res.json({ rows: result.rows.map(uppercaseKeys) })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -153,10 +145,6 @@ app.post('/api/uster/husos', async (req, res) => {
 app.post('/api/uster/upload', async (req, res) => {
   const { par, tbl } = req.body
   if (!par?.TESTNR) return res.status(400).json({ error: 'Missing PAR data or TESTNR' })
-  
-  // Support both TIME (from frontend) and TIME_STAMP (legacy)
-  const timeStamp = par.TIME_STAMP || par.TIME || null
-  
   const client = await getClient()
   try {
     await client.query('BEGIN')
@@ -175,7 +163,7 @@ app.post('/api/uster/upload', async (req, res) => {
         estiraje=EXCLUDED.estiraje, 
         pasador=EXCLUDED.pasador, 
         obs=EXCLUDED.obs
-    `, [par.TESTNR, par.NOMCOUNT, par.MASCHNR, par.LOTE, par.LABORANT, timeStamp, par.MATCLASS, par.ESTIRAJE, par.PASADOR, par.OBS])
+    `, [par.TESTNR, par.NOMCOUNT, par.MASCHNR, par.LOTE, par.LABORANT, par.TIME_STAMP, par.MATCLASS, par.ESTIRAJE, par.PASADOR, par.OBS])
     
     // Delete existing TBL records
     await client.query('DELETE FROM tb_uster_tbl WHERE testnr = $1', [par.TESTNR])
@@ -195,16 +183,16 @@ app.post('/api/uster/upload', async (req, res) => {
             $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28
           )`,
           [
-            par.TESTNR, i+1, r.NO, 
-            parseFloat(r['U%_%'])||null, parseFloat(r['CVM_%'])||null, parseFloat(r['INDICE_%'])||null,
-            parseFloat(r['CVM_1M_%'])||null, parseFloat(r['CVM_3M_%'])||null, parseFloat(r['CVM_10M_%'])||null,
-            parseFloat(r.TITULO)||null, parseFloat(r['TITULO_REL_±_%'])||null,
+            par.TESTNR, i+1, r.NO_, 
+            parseFloat(r.U_PERCENT)||null, parseFloat(r.CVM_PERCENT)||null, parseFloat(r.INDICE_PERCENT)||null,
+            parseFloat(r.CVM_1M_PERCENT)||null, parseFloat(r.CVM_3M_PERCENT)||null, parseFloat(r.CVM_10M_PERCENT)||null,
+            parseFloat(r.TITULO)||null, parseFloat(r.TITULO_REL_PERC)||null,
             parseFloat(r.H)||null, parseFloat(r.SH)||null, parseFloat(r.SH_1M)||null, parseFloat(r.SH_3M)||null, parseFloat(r.SH_10M)||null,
-            parseFloat(r['DELG_-30%_KM'])||null, parseFloat(r['DELG_-40%_KM'])||null,
-            parseFloat(r['DELG_-50%_KM'])||null, parseFloat(r['DELG_-60%_KM'])||null,
-            parseFloat(r['GRUE_35%_KM'])||null, parseFloat(r['GRUE_50%_KM'])||null, parseFloat(r['GRUE_70%_KM'])||null,
-            parseFloat(r['GRUE_100%_KM'])||null,
-            parseFloat(r['NEPS_140%_KM'])||null, parseFloat(r['NEPS_200%_KM'])||null, parseFloat(r['NEPS_280%_KM'])||null, parseFloat(r['NEPS_400%_KM'])||null
+            parseFloat(r.DELG_MINUS30_KM)||null, parseFloat(r.DELG_MINUS40_KM)||null,
+            parseFloat(r.DELG_MINUS50_KM)||null, parseFloat(r.DELG_MINUS60_KM)||null,
+            parseFloat(r.GRUE_35_KM)||null, parseFloat(r.GRUE_50_KM)||null, parseFloat(r.GRUE_70_KM)||null,
+            parseFloat(r.GRUE_100_KM)||null,
+            parseFloat(r.NEPS_140_KM)||null, parseFloat(r.NEPS_200_KM)||null, parseFloat(r.NEPS_280_KM)||null, parseFloat(r.NEPS_400_KM)||null
           ]
         )
       }
@@ -255,23 +243,11 @@ app.post('/api/tensorapid/status', async (req, res) => {
 app.get('/api/tensorapid/par', async (req, res) => {
   try {
     const result = await query(`
-      SELECT testnr, ne_titulo, titulo, comment_text, long_prueba, time_stamp, lote, ne_titulo_type,
-             uster_testnr, nomcount, maschnr, laborant, matclass
+      SELECT testnr, ne_titulo, titulo, comment_text, long_prueba, time_stamp, lote, ne_titulo_type 
       FROM tb_tensorapid_par 
       ORDER BY testnr
     `)
-    // Formatear nomcount para eliminar decimales innecesarios
-    const rows = result.rows.map(row => {
-      const formatted = uppercaseKeys(row)
-      if (formatted.NOMCOUNT != null) {
-        const num = parseFloat(formatted.NOMCOUNT)
-        if (!isNaN(num)) {
-          formatted.NOMCOUNT = parseFloat(num.toFixed(2))
-        }
-      }
-      return formatted
-    })
-    res.json({ rows })
+    res.json({ rows: result.rows.map(uppercaseKeys) })
   } catch (err) { 
     res.status(500).json({ error: err.message }) 
   }
@@ -295,20 +271,14 @@ app.get('/api/tensorapid/tbl', async (req, res) => {
 app.post('/api/tensorapid/upload', async (req, res) => {
   const { par, tbl } = req.body
   if (!par?.TESTNR) return res.status(400).json({ error: 'Missing data' })
-  
-  // Support both TIME (from frontend) and TIME_STAMP (legacy)
-  const timeStamp = par.TIME_STAMP || par.TIME || null
-  // Support USTER_TESTNR for linking with Uster tests
-  const usterTestnr = par.USTER_TESTNR || par.USTER_TESTLOT || null
-  
   const client = await getClient()
   try {
     await client.query('BEGIN')
     
-    // Insert or update PAR (including uster_testnr)
+    // Insert or update PAR
     await client.query(`
-      INSERT INTO tb_tensorapid_par (testnr, ne_titulo, titulo, comment_text, long_prueba, time_stamp, lote, ne_titulo_type, uster_testnr, nomcount, maschnr, laborant)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) 
+      INSERT INTO tb_tensorapid_par (testnr, ne_titulo, titulo, comment_text, long_prueba, time_stamp, lote, ne_titulo_type)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8) 
       ON CONFLICT (testnr) DO UPDATE SET 
         ne_titulo=EXCLUDED.ne_titulo, 
         titulo=EXCLUDED.titulo, 
@@ -316,12 +286,8 @@ app.post('/api/tensorapid/upload', async (req, res) => {
         long_prueba=EXCLUDED.long_prueba, 
         time_stamp=EXCLUDED.time_stamp, 
         lote=EXCLUDED.lote, 
-        ne_titulo_type=EXCLUDED.ne_titulo_type,
-        uster_testnr=EXCLUDED.uster_testnr,
-        nomcount=EXCLUDED.nomcount,
-        maschnr=EXCLUDED.maschnr,
-        laborant=EXCLUDED.laborant
-    `, [par.TESTNR, par.NE_TITULO, par.TITULO, par.COMMENT_TEXT, par.LONG_PRUEBA, timeStamp, par.LOTE, par.NE_TITULO_TYPE, usterTestnr, par.NOMCOUNT, par.MASCHNR, par.LABORANT])
+        ne_titulo_type=EXCLUDED.ne_titulo_type
+    `, [par.TESTNR, par.NE_TITULO, par.TITULO, par.COMMENT_TEXT, par.LONG_PRUEBA, par.TIME_STAMP, par.LOTE, par.NE_TITULO_TYPE])
     
     // Delete existing TBL records
     await client.query('DELETE FROM tb_tensorapid_tbl WHERE testnr = $1', [par.TESTNR])
@@ -370,847 +336,8 @@ app.delete('/api/tensorapid/delete/:testnr', async (req, res) => {
 })
 
 // =====================================================
-// ENDPOINTS PRODUCCIÓN (ImportControl)
+// ENDPOINTS CONTROL DE CALIDAD - MESA DE TEST
 // =====================================================
-
-// Definición de tablas y archivos CSV
-const TABLE_DEFINITIONS = [
-  { table: 'tb_FICHAS', filename: 'fichaArtigo.csv' },
-  { table: 'tb_RESIDUOS_INDIGO', filename: 'RelResIndigo.csv' },
-  { table: 'tb_RESIDUOS_POR_SECTOR', filename: 'rptResiduosPorSetor.csv' },
-  { table: 'tb_TESTES', filename: 'rptPrdTestesFisicos.csv' },
-  { table: 'tb_PARADAS', filename: 'rptParadaMaquinaPRD.csv' },
-  { table: 'tb_PRODUCCION', filename: 'rptProducaoMaquina.csv' },
-  { table: 'tb_CALIDAD', filename: 'rptAcompDiarioPBI.csv' },
-  { table: 'tb_PROCESO', filename: 'rpsPosicaoEstoquePRD.csv' },
-  { table: 'tb_DEFECTOS', filename: 'rptDefPeca.csv' },
-  { table: 'tb_CALIDAD_FIBRA', filename: 'rptMovimMP.csv' },
-  { table: 'tb_PRODUCCION_OE', filename: 'rptProducaoOE.csv' }
-]
-
-// Helper: Leer y parsear archivo CSV
-async function readCSV(filePath) {
-  try {
-    const content = await fs.readFile(filePath, 'utf-8')
-    const records = parse(content, {
-      columns: true,
-      skip_empty_lines: true,
-      trim: true,
-      relax_quotes: true,
-      relax_column_count: true
-    })
-    return records
-  } catch (err) {
-    console.error(`Error reading CSV ${filePath}:`, err.message)
-    throw err
-  }
-}
-
-// Helper: Obtener columnas de una tabla PostgreSQL
-async function getTableColumns(tableName) {
-  const result = await query(
-    `SELECT column_name 
-     FROM information_schema.columns 
-     WHERE table_name = $1 
-     AND table_schema = 'public'
-     ORDER BY ordinal_position`,
-    [tableName.toLowerCase()]
-  )
-  return result.rows.map(r => r.column_name)
-}
-
-// Helper: Importar datos CSV a tabla PostgreSQL
-async function importCSVToTable(tableName, csvPath) {
-  const startTime = Date.now()
-  console.log(`📥 Importando ${tableName} desde ${csvPath}...`)
-  
-  // Leer CSV
-  const records = await readCSV(csvPath)
-  if (records.length === 0) {
-    console.log(`⚠️  ${tableName}: CSV vacío`)
-    return { success: true, rows: 0, duration: Date.now() - startTime }
-  }
-  
-  // Obtener columnas de la tabla
-  const tableColumns = await getTableColumns(tableName)
-  
-  // Filtrar columnas: solo las que existen en la tabla (excluir id, created_at, updated_at)
-  const dataColumns = tableColumns.filter(col => !['id', 'created_at', 'updated_at'].includes(col))
-  
-  // Obtener columnas del CSV (normalizar a lowercase)
-  const csvColumns = Object.keys(records[0]).map(col => col.toLowerCase())
-  
-  console.log(`📋 ${tableName}: CSV columnas:`, Object.keys(records[0]).slice(0, 10), '...')
-  console.log(`📋 ${tableName}: Tabla columnas:`, dataColumns.slice(0, 10), '...')
-  
-  // Mapear columnas CSV → Tabla (comparar en lowercase)
-  const mappedColumns = dataColumns.filter(col => csvColumns.includes(col.toLowerCase()))
-  
-  if (mappedColumns.length === 0) {
-    throw new Error(`No se encontraron columnas coincidentes entre CSV y tabla ${tableName}`)
-  }
-  
-  console.log(`📋 ${tableName}: ${records.length} registros, ${mappedColumns.length} columnas mapeadas`)
-  
-  // Escapar nombres de columnas con comillas dobles para manejar espacios y caracteres especiales
-  const escapedColumns = mappedColumns.map(col => `"${col}"`)
-  
-  // Dividir en lotes para evitar límite de parámetros de PostgreSQL (~65K)
-  const BATCH_SIZE = 100
-  const batches = []
-  for (let i = 0; i < records.length; i += BATCH_SIZE) {
-    batches.push(records.slice(i, i + BATCH_SIZE))
-  }
-  
-  console.log(`📦 Dividiendo en ${batches.length} lotes de máximo ${BATCH_SIZE} registros`)
-  
-  // Ejecutar transacción
-  const client = await getClient()
-  try {
-    await client.query('BEGIN')
-    
-    // Truncar tabla antes de insertar (importación limpia)
-    await client.query(`TRUNCATE TABLE ${tableName} RESTART IDENTITY CASCADE`)
-    
-    let totalInserted = 0
-    
-    // Insertar cada lote
-    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
-      const batch = batches[batchIndex]
-      const placeholderRows = []
-      const values = []
-      let paramIndex = 1
-      
-      for (const record of batch) {
-        const rowPlaceholders = []
-        for (const col of mappedColumns) {
-          rowPlaceholders.push(`$${paramIndex}`)
-          // Obtener valor del CSV (case-insensitive)
-          const csvKey = Object.keys(record).find(k => k.toLowerCase() === col.toLowerCase())
-          let value = record[csvKey]
-          
-          // Convertir valores vacíos a NULL
-          if (value === '' || value === undefined || value === null) {
-            value = null
-          }
-          
-          values.push(value)
-          paramIndex++
-        }
-        placeholderRows.push(`(${rowPlaceholders.join(', ')})`)
-      }
-      
-      // Construir query INSERT para este lote
-      const insertQuery = `
-        INSERT INTO ${tableName} (${escapedColumns.join(', ')})
-        VALUES ${placeholderRows.join(', ')}
-        ON CONFLICT DO NOTHING
-      `
-      
-      // Insertar lote
-      const result = await client.query(insertQuery, values)
-      totalInserted += result.rowCount
-      
-      if ((batchIndex + 1) % 10 === 0) {
-        console.log(`  ⏳ Lote ${batchIndex + 1}/${batches.length} completado (${totalInserted} registros)`)
-      }
-    }
-    
-    await client.query('COMMIT')
-    
-    const duration = Date.now() - startTime
-    console.log(`✓ ${tableName}: ${totalInserted} registros importados en ${duration}ms`)
-    
-    // Guardar metadatos de importación
-    await query(`
-      INSERT INTO import_metadata (table_name, last_import_date, rows_imported, import_duration_ms, updated_at)
-      VALUES ($1, NOW(), $2, $3, NOW())
-      ON CONFLICT (table_name) DO UPDATE SET
-        last_import_date = NOW(),
-        rows_imported = $2,
-        import_duration_ms = $3,
-        updated_at = NOW()
-    `, [tableName, totalInserted, duration])
-    
-    return { success: true, rows: totalInserted, duration, timeMs: duration }
-  } catch (err) {
-    await client.query('ROLLBACK')
-    console.error(`❌ Error importando ${tableName}:`, err.message)
-    throw err
-  } finally {
-    client.release()
-  }
-}
-
-// GET: Estado de importación
-app.get('/api/produccion/import-status', async (req, res) => {
-  try {
-    const csvFolder = req.query.csvFolder || 'C:\\STC'
-    
-    // Obtener metadatos de todas las tablas de una vez
-    const metadataResult = await query(`
-      SELECT table_name, last_import_date, rows_imported 
-      FROM import_metadata
-    `)
-    const metadataMap = new Map()
-    metadataResult.rows.forEach(row => {
-      metadataMap.set(row.table_name, {
-        lastImportDate: row.last_import_date,
-        rows: row.rows_imported
-      })
-    })
-    
-    const statusList = []
-    
-    for (const def of TABLE_DEFINITIONS) {
-      const filePath = path.join(csvFolder, def.filename)
-      let fileModified = null
-      let fileExists = false
-      
-      try {
-        const stats = await fs.stat(filePath)
-        fileModified = stats.mtime
-        fileExists = true
-      } catch (err) {
-        // Archivo no encontrado
-      }
-      
-      // Obtener metadatos de esta tabla
-      const metadata = metadataMap.get(def.table)
-      const lastImportDate = metadata?.lastImportDate || null
-      const rowCount = metadata?.rows || 0
-      
-      // Determinar estado comparando fechas
-      let status = 'NOT_IMPORTED'
-      
-      if (!fileExists) {
-        status = 'MISSING_FILE'
-      } else if (!lastImportDate) {
-        // Nunca se ha importado
-        status = 'NOT_IMPORTED'
-      } else {
-        // Comparar fecha del archivo con fecha de última importación
-        const fileDate = new Date(fileModified)
-        const importDate = new Date(lastImportDate)
-        
-        if (fileDate > importDate) {
-          status = 'OUTDATED'
-        } else {
-          status = 'UP_TO_DATE'
-        }
-      }
-      
-      statusList.push({
-        table: def.table,
-        file: filePath,
-        filename: def.filename,
-        status,
-        file_modified: fileModified ? fileModified.toISOString() : null,
-        last_import_date: lastImportDate ? new Date(lastImportDate).toISOString() : null,
-        rows_imported: rowCount
-      })
-    }
-    
-    res.json(statusList)
-  } catch (err) {
-    console.error('Error getting import status:', err)
-    res.status(500).json({ error: err.message })
-  }
-})
-
-// POST: Forzar importación de una tabla
-app.post('/api/produccion/import/force-table', async (req, res) => {
-  try {
-    const { table, csvFolder } = req.body
-    
-    if (!table) {
-      return res.status(400).json({ error: 'Missing table parameter' })
-    }
-    
-    const tableDef = TABLE_DEFINITIONS.find(t => t.table === table)
-    if (!tableDef) {
-      return res.status(404).json({ error: 'Table not found in definitions' })
-    }
-    
-    const folder = csvFolder || 'C:\\STC'
-    const csvPath = path.join(folder, tableDef.filename)
-    
-    // Ejecutar importación
-    const result = await importCSVToTable(table, csvPath)
-    
-    res.json({ 
-      success: result.success, 
-      message: `${table} importada correctamente`,
-      rows: result.rows,
-      duration: result.duration
-    })
-  } catch (err) {
-    console.error('Error forcing table import:', err)
-    res.status(500).json({ error: err.message })
-  }
-})
-
-// POST: Forzar importación de TODAS las tablas
-app.post('/api/produccion/import/force-all', async (req, res) => {
-  try {
-    const { csvFolder } = req.body
-    const folder = csvFolder || 'C:\\STC'
-    const startTime = Date.now()
-    const results = []
-    
-    for (const tableDef of TABLE_DEFINITIONS) {
-      const csvPath = path.join(folder, tableDef.filename)
-      
-      try {
-        const result = await importCSVToTable(tableDef.table, csvPath)
-        results.push({ table: tableDef.table, ...result })
-      } catch (err) {
-        console.error(`❌ Error importando ${tableDef.table}:`, err.message)
-        results.push({ table: tableDef.table, success: false, error: err.message })
-      }
-    }
-    
-    const totalDuration = Date.now() - startTime
-    const successCount = results.filter(r => r.success).length
-    
-    res.json({ 
-      success: successCount === TABLE_DEFINITIONS.length,
-      message: `${successCount}/${TABLE_DEFINITIONS.length} tablas importadas correctamente`,
-      timings: { totalMs: totalDuration },
-      results
-    })
-  } catch (err) {
-    console.error('Error forcing all tables import:', err)
-    res.status(500).json({ error: err.message })
-  }
-})
-
-// GET: Estado de la base de datos
-app.get('/api/produccion/status', async (req, res) => {
-  try {
-    // Obtener tamaño de la base de datos
-    const sizeResult = await query(`
-      SELECT pg_size_pretty(pg_database_size(current_database())) as size,
-             pg_database_size(current_database()) / (1024 * 1024) as size_mb
-    `)
-    
-    const sizeMB = sizeResult.rows[0]?.size_mb || 0
-    
-    res.json({
-      sizeMB: Math.round(sizeMB),
-      size: sizeResult.rows[0]?.size || 'N/A',
-      database: 'stc_produccion'
-    })
-  } catch (err) {
-    console.error('Error getting DB status:', err)
-    res.status(500).json({ error: err.message })
-  }
-})
-
-// GET: Historial de importaciones
-app.get('/api/produccion/import-history', async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit) || 100
-    
-    const result = await query(`
-      SELECT id, table_name, last_import_date, rows_imported, import_duration_ms
-      FROM import_metadata
-      ORDER BY last_import_date DESC
-      LIMIT $1
-    `, [limit])
-    
-    res.json({ history: result.rows })
-  } catch (err) {
-    console.error('Error getting import history:', err)
-    res.status(500).json({ error: err.message })
-  }
-})
-
-// POST: Actualizar tablas desactualizadas
-app.post('/api/produccion/import/update-outdated', async (req, res) => {
-  try {
-    const { tables, csvFolder } = req.body
-    
-    if (!Array.isArray(tables) || tables.length === 0) {
-      return res.status(400).json({ error: 'Missing tables parameter' })
-    }
-    
-    const folder = csvFolder || 'C:\\STC'
-    const startTime = Date.now()
-    const results = []
-    
-    for (const tableName of tables) {
-      const tableDef = TABLE_DEFINITIONS.find(t => t.table === tableName)
-      if (!tableDef) {
-        console.warn(`⚠️  Tabla ${tableName} no encontrada en definiciones`)
-        continue
-      }
-      
-      const csvPath = path.join(folder, tableDef.filename)
-      
-      try {
-        const result = await importCSVToTable(tableName, csvPath)
-        results.push({ table: tableName, ...result })
-      } catch (err) {
-        console.error(`❌ Error importando ${tableName}:`, err.message)
-        results.push({ table: tableName, success: false, error: err.message })
-      }
-    }
-    
-    const totalDuration = Date.now() - startTime
-    const successCount = results.filter(r => r.success).length
-    
-    res.json({ 
-      success: successCount === tables.length,
-      message: `${successCount}/${tables.length} tablas importadas correctamente`,
-      timings: { totalMs: totalDuration },
-      results
-    })
-  } catch (err) {
-    console.error('Error updating outdated tables:', err)
-    res.status(500).json({ error: err.message })
-  }
-})
-
-// =====================================================
-// HISTORIAL DE COLUMNAS Y SINCRONIZACIONES
-// =====================================================
-
-// GET: Obtener warnings de columnas (diferencias CSV vs DB)
-app.get('/api/produccion/import/column-warnings', async (req, res) => {
-  try {
-    const result = await query(`
-      SELECT id, table_name, extra_columns, missing_columns, detected_at, csv_path
-      FROM column_warnings
-      WHERE resolved = false
-      ORDER BY detected_at DESC
-      LIMIT 50
-    `)
-    
-    // Transformar al formato esperado por el frontend
-    const warnings = result.rows.map(row => ({
-      id: row.id,
-      table: row.table_name,
-      extraColumns: row.extra_columns || [],
-      missingColumns: row.missing_columns || [],
-      timestamp: row.detected_at,
-      csvPath: row.csv_path,
-      hasDifferences: (row.extra_columns?.length > 0) || (row.missing_columns?.length > 0)
-    }))
-    
-    res.json({ warnings })
-  } catch (err) {
-    // Si la tabla no existe aún, devolver array vacío
-    if (err.code === '42P01') {
-      return res.json({ warnings: [] })
-    }
-    console.error('Error getting column warnings:', err)
-    res.status(500).json({ error: err.message })
-  }
-})
-
-// GET: Historial de warnings de columnas
-app.get('/api/produccion/import/warnings-history', async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit) || 100
-    
-    const result = await query(`
-      SELECT id, table_name, extra_columns, missing_columns, detected_at
-      FROM column_warnings
-      ORDER BY detected_at DESC
-      LIMIT $1
-    `, [limit])
-    
-    res.json({ history: result.rows })
-  } catch (err) {
-    if (err.code === '42P01') {
-      return res.json({ history: [] })
-    }
-    console.error('Error getting warnings history:', err)
-    res.status(500).json({ error: err.message })
-  }
-})
-
-// POST: Sincronizar columnas (agregar columnas nuevas del CSV a PostgreSQL)
-app.post('/api/produccion/schema/sync-columns', async (req, res) => {
-  try {
-    const { table, csvFolder, reimport } = req.body
-    
-    if (!table) {
-      return res.status(400).json({ error: 'Missing table parameter' })
-    }
-    
-    // Buscar la definición de la tabla
-    const tableDef = TABLE_DEFINITIONS.find(t => t.table === table)
-    if (!tableDef) {
-      return res.status(400).json({ error: `Tabla ${table} no encontrada en TABLE_DEFINITIONS` })
-    }
-    
-    // Construir path del CSV
-    const folder = csvFolder || 'C:\\STC\\CSV'
-    const csvPath = path.join(folder, tableDef.filename)
-    
-    // Verificar que existe el archivo
-    try {
-      await fs.access(csvPath)
-    } catch (err) {
-      return res.status(404).json({ error: `CSV no encontrado: ${csvPath}` })
-    }
-    
-    // Obtener columnas del CSV
-    const csvColumns = await getCSVColumns(csvPath)
-    
-    // Obtener columnas actuales de la tabla
-    const dbColumnsResult = await query(`
-      SELECT column_name 
-      FROM information_schema.columns 
-      WHERE table_name = $1 AND table_schema = 'public'
-    `, [table.toLowerCase()])
-    
-    const dbColumns = dbColumnsResult.rows.map(r => r.column_name.toLowerCase())
-    
-    // Encontrar columnas que faltan en la DB
-    const columnsToAdd = csvColumns.filter(col => !dbColumns.includes(col.toLowerCase()))
-    
-    const addedColumns = []
-    const errors = []
-    
-    // Agregar cada columna nueva
-    for (const col of columnsToAdd) {
-      try {
-        const sanitizedCol = col.replace(/[^a-zA-Z0-9_]/g, '_')
-        await query(`ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS "${sanitizedCol}" TEXT`)
-        addedColumns.push(sanitizedCol)
-      } catch (err) {
-        errors.push({ column: col, error: err.message })
-      }
-    }
-    
-    // Registrar el cambio en el historial
-    if (addedColumns.length > 0) {
-      await query(`
-        INSERT INTO schema_changes (table_name, change_type, columns_added, reimported, applied_at)
-        VALUES ($1, 'ADD_COLUMNS', $2, $3, NOW())
-      `, [table, addedColumns, reimport || false])
-      
-      // Marcar warning como resuelto
-      await query(`
-        UPDATE column_warnings SET resolved = true WHERE table_name = $1 AND resolved = false
-      `, [table])
-    }
-    
-    // Re-importar si se solicitó
-    let reimportResult = null
-    if (reimport && addedColumns.length > 0) {
-      try {
-        const tableDef = TABLE_DEFINITIONS.find(t => t.table === table)
-        if (tableDef) {
-          const folder = path.dirname(csvPath)
-          const result = await importCSVToTable(table, csvPath)
-          reimportResult = { success: result.success, rows: result.rows }
-        }
-      } catch (err) {
-        reimportResult = { success: false, error: err.message }
-      }
-    }
-    
-    res.json({
-      success: errors.length === 0,
-      columnsAdded: addedColumns.length,
-      addedColumns,
-      errors,
-      reimportResult
-    })
-  } catch (err) {
-    console.error('Error syncing columns:', err)
-    res.status(500).json({ error: err.message })
-  }
-})
-
-// GET: Historial de cambios de esquema (sincronizaciones aplicadas)
-app.get('/api/produccion/schema/changes-log', async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit) || 100
-    
-    const result = await query(`
-      SELECT id, table_name, change_type, columns_added, reimported, applied_at
-      FROM schema_changes
-      ORDER BY applied_at DESC
-      LIMIT $1
-    `, [limit])
-    
-    res.json({ changes: result.rows })
-  } catch (err) {
-    if (err.code === '42P01') {
-      return res.json({ changes: [] })
-    }
-    console.error('Error getting schema changes log:', err)
-    res.status(500).json({ error: err.message })
-  }
-})
-
-// =====================================================
-// ENDPOINTS CALIDAD - CONTROL DE CALIDAD
-// =====================================================
-
-// Helper: Convertir fecha ISO (YYYY-MM-DD) a DD/MM/YYYY
-function isoToLocal(isoDate) {
-  if (!isoDate) return null
-  if (isoDate.includes('/')) return isoDate // Ya está en formato local
-  const [year, month, day] = isoDate.split('-')
-  return `${day}/${month}/${year}`
-}
-
-// GET: Revisión CQ - Resumen por revisor
-app.get('/api/produccion/calidad/revision-cq', async (req, res) => {
-  try {
-    const { startDate, endDate, tramas } = req.query
-    
-    if (!startDate || !endDate) {
-      return res.status(400).json({ error: 'startDate y endDate son requeridos' })
-    }
-    
-    // Convertir fechas a formato DD/MM/YYYY para comparar con la tabla
-    const startDateLocal = isoToLocal(startDate)
-    const endDateLocal = isoToLocal(endDate)
-    
-    let tramaFilter = ''
-    const params = [startDateLocal, endDateLocal]
-    
-    // Filtro por trama basado en primer carácter de ARTIGO:
-    // A = ALG 100%, Y = P + E, P = POL 100%
-    if (tramas && tramas !== 'Todas') {
-      const tramaMap = { 'ALG 100%': 'A', 'P + E': 'Y', 'POL 100%': 'P' }
-      const artigoPrefix = tramaMap[tramas]
-      if (artigoPrefix) {
-        tramaFilter = ' AND LEFT("ARTIGO", 1) = $3'
-        params.push(artigoPrefix)
-      }
-    }
-    
-    const sql = `
-      SELECT 
-        "REVISOR FINAL" as "Revisor",
-        COUNT(DISTINCT "ETIQUETA") as "Rollos_1era",
-        SUM(CAST(REPLACE(COALESCE(NULLIF("METRAGEM", ''), '0'), ',', '.') AS NUMERIC)) as "Mts_Total",
-        COUNT(DISTINCT CASE WHEN CAST(REPLACE(COALESCE(NULLIF("PONTUACAO", ''), '0'), ',', '.') AS NUMERIC) = 0 THEN "ETIQUETA" END) as "Rollos_Sin_Pts",
-        CASE 
-          WHEN COUNT(DISTINCT "ETIQUETA") > 0 
-          THEN ROUND(COUNT(DISTINCT CASE WHEN CAST(REPLACE(COALESCE(NULLIF("PONTUACAO", ''), '0'), ',', '.') AS NUMERIC) = 0 THEN "ETIQUETA" END)::NUMERIC / 
-               COUNT(DISTINCT "ETIQUETA") * 100, 2)
-          ELSE 0 
-        END as "Perc_Sin_Pts",
-        CASE 
-          WHEN SUM(CAST(REPLACE(COALESCE(NULLIF("METRAGEM", ''), '0'), ',', '.') AS NUMERIC)) > 0
-          THEN ROUND(SUM(CAST(REPLACE(COALESCE(NULLIF("PONTUACAO", ''), '0'), ',', '.') AS NUMERIC)) / 
-               (SUM(CAST(REPLACE(COALESCE(NULLIF("METRAGEM", ''), '0'), ',', '.') AS NUMERIC)) / 100), 2)
-          ELSE 0 
-        END as "Pts_100m2",
-        CASE 
-          WHEN COUNT(DISTINCT CASE WHEN "QUALIDADE" = 'PRIMEIRA' THEN "ETIQUETA" END) > 0
-          THEN ROUND(COUNT(DISTINCT CASE WHEN "QUALIDADE" = 'PRIMEIRA' THEN "ETIQUETA" END)::NUMERIC / 
-               COUNT(DISTINCT "ETIQUETA") * 100, 2)
-          ELSE 0 
-        END as "Calidad_Perc"
-      FROM tb_calidad
-      WHERE "DAT_PROD" >= $1 
-        AND "DAT_PROD" <= $2
-        AND "REVISOR FINAL" IS NOT NULL 
-        AND "REVISOR FINAL" != ''
-        ${tramaFilter}
-      GROUP BY "REVISOR FINAL"
-      ORDER BY "Mts_Total" DESC
-    `
-    
-    const result = await query(sql, params)
-    res.json(result.rows)
-  } catch (err) {
-    console.error('Error en revision-cq:', err)
-    res.status(500).json({ error: err.message })
-  }
-})
-
-// GET: Detalle por revisor
-app.get('/api/produccion/calidad/revisor-detalle', async (req, res) => {
-  try {
-    const { startDate, endDate, revisor, tramas } = req.query
-    
-    if (!startDate || !revisor) {
-      return res.status(400).json({ error: 'startDate y revisor son requeridos' })
-    }
-    
-    // Convertir fechas a formato DD/MM/YYYY
-    const startDateLocal = isoToLocal(startDate)
-    const endDateLocal = isoToLocal(endDate || startDate)
-    
-    let tramaFilter = ''
-    const params = [startDateLocal, endDateLocal, revisor]
-    
-    // Filtro por trama basado en primer carácter de ARTIGO
-    if (tramas && tramas !== 'Todas') {
-      const tramaMap = { 'ALG 100%': 'A', 'P + E': 'Y', 'POL 100%': 'P' }
-      const artigoPrefix = tramaMap[tramas]
-      if (artigoPrefix) {
-        tramaFilter = ' AND LEFT("ARTIGO", 1) = $4'
-        params.push(artigoPrefix)
-      }
-    }
-    
-    const sql = `
-      SELECT 
-        "PARTIDA" as "Partidas",
-        MIN("HORA") as "HoraInicio",
-        "NM MERC" as "NombreArticulo",
-        "ARTIGO",
-        "COR",
-        "TEAR" as "Telar",
-        COUNT(DISTINCT "ETIQUETA") as "TotalRollos",
-        SUM(CAST(REPLACE(COALESCE(NULLIF("METRAGEM", ''), '0'), ',', '.') AS NUMERIC)) as "MetrosRevisados",
-        COUNT(DISTINCT CASE WHEN CAST(REPLACE(COALESCE(NULLIF("PONTUACAO", ''), '0'), ',', '.') AS NUMERIC) = 0 THEN "ETIQUETA" END) as "SinPuntos",
-        CASE 
-          WHEN COUNT(DISTINCT "ETIQUETA") > 0 
-          THEN ROUND(COUNT(DISTINCT CASE WHEN CAST(REPLACE(COALESCE(NULLIF("PONTUACAO", ''), '0'), ',', '.') AS NUMERIC) = 0 THEN "ETIQUETA" END)::NUMERIC / 
-               COUNT(DISTINCT "ETIQUETA") * 100, 2)
-          ELSE 0 
-        END as "SinPuntosPct",
-        CASE 
-          WHEN SUM(CAST(REPLACE(COALESCE(NULLIF("METRAGEM", ''), '0'), ',', '.') AS NUMERIC)) > 0
-          THEN ROUND(SUM(CAST(REPLACE(COALESCE(NULLIF("PONTUACAO", ''), '0'), ',', '.') AS NUMERIC)) / 
-               (SUM(CAST(REPLACE(COALESCE(NULLIF("METRAGEM", ''), '0'), ',', '.') AS NUMERIC)) / 100), 2)
-          ELSE 0 
-        END as "Pts100m2",
-        CASE 
-          WHEN COUNT(DISTINCT "ETIQUETA") > 0
-          THEN ROUND(COUNT(DISTINCT CASE WHEN "QUALIDADE" = 'PRIMEIRA' THEN "ETIQUETA" END)::NUMERIC / 
-               COUNT(DISTINCT "ETIQUETA") * 100, 2)
-          ELSE 0 
-        END as "CalidadPct",
-        0 as "EficienciaPct",
-        0 as "RU105",
-        0 as "RT105"
-      FROM tb_calidad
-      WHERE "DAT_PROD" >= $1 
-        AND "DAT_PROD" <= $2
-        AND "REVISOR FINAL" = $3
-        ${tramaFilter}
-      GROUP BY "PARTIDA", "NM MERC", "ARTIGO", "COR", "TEAR"
-      ORDER BY MIN("HORA")
-    `
-    
-    const result = await query(sql, params)
-    res.json(result.rows)
-  } catch (err) {
-    console.error('Error en revisor-detalle:', err)
-    res.status(500).json({ error: err.message })
-  }
-})
-
-// GET: Detalle de partida
-app.get('/api/produccion/calidad/partida-detalle', async (req, res) => {
-  try {
-    const { fecha, partida, revisor } = req.query
-    
-    if (!partida) {
-      return res.status(400).json({ error: 'partida es requerido' })
-    }
-    
-    const params = [partida]
-    let dateFilter = ''
-    let revisorFilter = ''
-    
-    if (fecha) {
-      dateFilter = ' AND "DAT_PROD" = $2'
-      params.push(isoToLocal(fecha))
-    }
-    
-    if (revisor) {
-      revisorFilter = ` AND "REVISOR FINAL" = $${params.length + 1}`
-      params.push(revisor)
-    }
-    
-    const sql = `
-      SELECT 
-        "GRP_DEF",
-        "COD_DE",
-        "DEFEITO",
-        "METRAGEM",
-        "QUALIDADE",
-        "HORA",
-        "EMENDAS",
-        "PEÇA" as "PEÇA",
-        "ETIQUETA",
-        "LARGURA",
-        "PONTUACAO",
-        "ARTIGO",
-        "COR",
-        "NM MERC",
-        "TRAMA",
-        "PARTIDA"
-      FROM tb_calidad
-      WHERE "PARTIDA" = $1
-        ${dateFilter}
-        ${revisorFilter}
-      ORDER BY "HORA", "PEÇA"
-    `
-    
-    const result = await query(sql, params)
-    res.json(result.rows)
-  } catch (err) {
-    console.error('Error en partida-detalle:', err)
-    res.status(500).json({ error: err.message })
-  }
-})
-
-// GET: Defectos detallados de una pieza (por etiqueta)
-app.get('/api/produccion/calidad/defectos-detalle', async (req, res) => {
-  try {
-    const { etiqueta } = req.query
-    
-    if (!etiqueta) {
-      return res.status(400).json({ error: 'etiqueta es requerido' })
-    }
-    
-    // Query tb_DEFECTOS (from rptDefPeca.csv) - tabla específica de defectos
-    const sql = `
-      SELECT 
-        "PARTIDA",
-        "PECA",
-        "ETIQUETA",
-        "COD_DEF",
-        "DESC_DEFEITO",
-        "PONTOS",
-        "QUALIDADE",
-        "DATA_PROD"
-      FROM tb_DEFECTOS
-      WHERE TRIM("ETIQUETA") = TRIM($1)
-      ORDER BY "COD_DEF"
-    `
-    
-    const result = await query(sql, [etiqueta])
-    res.json(result.rows)
-  } catch (err) {
-    console.error('Error en defectos-detalle:', err)
-    res.status(500).json({ error: err.message })
-  }
-})
-
-// GET: Fechas disponibles con datos de calidad
-app.get('/api/produccion/calidad/available-dates', async (req, res) => {
-  try {
-    const sql = `
-      SELECT DISTINCT DAT_PROD 
-      FROM tb_CALIDAD 
-      WHERE DAT_PROD IS NOT NULL
-      ORDER BY DAT_PROD DESC
-      LIMIT 365
-    `
-    const result = await query(sql)
-    res.json(result.rows.map(r => r.dat_prod))
-  } catch (err) {
-    console.error('Error en available-dates:', err)
-    res.status(500).json({ error: err.message })
-  }
-})
 
 // GET: Lista de artículos para Mesa de Test
 app.get('/api/produccion/calidad/articulos-mesa-test', async (req, res) => {
@@ -1234,8 +361,9 @@ app.get('/api/produccion/calidad/articulos-mesa-test', async (req, res) => {
           "ARTIGO",
           ROUND(SUM(CAST(REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.') AS NUMERIC)), 0) AS METROS_REV
         FROM tb_CALIDAD
-        WHERE TO_DATE("DAT_PROD", 'DD/MM/YYYY') >= TO_DATE($1, 'DD/MM/YYYY HH24:MI:SS') 
-          AND TO_DATE("DAT_PROD", 'DD/MM/YYYY') <= TO_DATE($2, 'DD/MM/YYYY HH24:MI:SS')
+        WHERE "DAT_PROD" ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}$'
+          AND TO_DATE("DAT_PROD", 'DD/MM/YYYY') >= TO_DATE($1, 'DD/MM/YYYY') 
+          AND TO_DATE("DAT_PROD", 'DD/MM/YYYY') <= TO_DATE($2, 'DD/MM/YYYY')
           AND "TRAMA" IS NOT NULL
         GROUP BY "ARTIGO"
       ),
@@ -1251,9 +379,13 @@ app.get('/api/produccion/calidad/articulos-mesa-test', async (req, res) => {
             "PARTIDA",
             AVG(CAST(REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.') AS NUMERIC)) AS METRAGEM_AVG
           FROM tb_TESTES
-          WHERE TO_DATE("DT_PROD", 'DD/MM/YYYY') >= TO_DATE($3, 'DD/MM/YYYY') 
+          WHERE "DT_PROD" ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}$'
+            AND TO_DATE("DT_PROD", 'DD/MM/YYYY') >= TO_DATE($3, 'DD/MM/YYYY') 
             AND TO_DATE("DT_PROD", 'DD/MM/YYYY') <= TO_DATE($4, 'DD/MM/YYYY')
             AND "ARTIGO" IS NOT NULL
+            AND "ARTIGO" != 'ARTIGO'
+            AND "PARTIDA" IS NOT NULL
+            AND "PARTIDA" !~ '^[A-Z]'
           GROUP BY "ARTIGO", "PARTIDA"
         ) sub
         GROUP BY "ARTIGO"
@@ -1271,7 +403,7 @@ app.get('/api/produccion/calidad/articulos-mesa-test', async (req, res) => {
         SUBSTRING(AU."ARTIGO", 7, 2) AS "Id",
         F."COR" AS "Color",
         F."NOME DE MERCADO" AS "Nombre",
-        F."TRAMA REDUZIDO" AS "Trama",
+        F."TRAMA" AS "Trama",
         F."PRODUCAO" AS "Prod",
         COALESCE(MT.METROS_TEST, 0) AS "Metros_TEST",
         COALESCE(MC.METROS_REV, 0) AS "Metros_REV"
@@ -1284,7 +416,7 @@ app.get('/api/produccion/calidad/articulos-mesa-test', async (req, res) => {
     `
 
     const result = await query(sql, [
-      fechaInicioFull, fechaFinFull,
+      fechaInicioShort, fechaFinShort,
       fechaInicioShort, fechaFinShort
     ])
     res.json(result.rows)
@@ -1306,9 +438,6 @@ app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
       return res.status(400).json({ error: 'Parámetro "fecha_inicial" requerido' })
     }
 
-    const fechaInicio = `${isoToLocal(fecha_inicial)} 00:00:00`
-    const fechaFin = fecha_final ? `${isoToLocal(fecha_final)} 23:59:59` : '31/12/9999 23:59:59'
-    
     const fechaInicioShort = isoToLocal(fecha_inicial)
     const fechaFinShort = fecha_final ? isoToLocal(fecha_final) : '31/12/9999'
 
@@ -1338,8 +467,11 @@ app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
           "%_SKM"
         FROM tb_TESTES
         WHERE "ARTIGO" = $1
+          AND "DT_PROD" ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}$'
           AND TO_DATE("DT_PROD", 'DD/MM/YYYY') >= TO_DATE($2, 'DD/MM/YYYY')
           AND TO_DATE("DT_PROD", 'DD/MM/YYYY') <= TO_DATE($3, 'DD/MM/YYYY')
+          AND "PARTIDA" IS NOT NULL
+          AND "PARTIDA" !~ '^[A-Z]'
       ),
       
       CALIDAD AS (
@@ -1352,6 +484,7 @@ app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
           ROUND(AVG("GR/M2"), 1) AS "GR/M2"
         FROM tb_CALIDAD
         WHERE "ARTIGO" = $4
+          AND "DAT_PROD" ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}$'
           AND "DAT_PROD" >= $5
           AND "DAT_PROD" <= $6
         GROUP BY "ARTIGO", "PARTIDA"
@@ -1372,7 +505,7 @@ app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
         SELECT 
           "ARTIGO CODIGO",
           "URDUME",
-          "TRAMA REDUZIDO",
+          "TRAMA",
           "BATIDA",
           "Oz/jd2",
           "Peso/m2",
@@ -1402,7 +535,7 @@ app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
       SELECT 
         CAST(TC.MAQUINA AS INTEGER) AS "Maquina",
         TC.ART_TEST AS "Articulo",
-        E."TRAMA REDUZIDO" AS "Trama",
+        E."TRAMA" AS "Trama",
         TC.PARTIDA AS "Partida",
         TC.TESTES AS "C",
         TC.DT_PROD AS "Fecha",
@@ -1479,7 +612,7 @@ app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
       ORDER BY TC.DT_PROD
     `
 
-    const result = await query(sql, [articulo, fechaInicioShort, fechaFinShort, articulo, fechaInicio, fechaFin, articulo])
+    const result = await query(sql, [articulo, fechaInicioShort, fechaFinShort, articulo, fechaInicioShort, fechaFinShort, articulo])
     res.json(result.rows)
   } catch (err) {
     console.error('Error en analisis-mesa-test:', err)
@@ -1487,90 +620,693 @@ app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
   }
 })
 
-// Función auxiliar para obtener columnas de un CSV
-async function getCSVColumns(csvPath) {
+// =====================================================
+// ENDPOINTS DE CONTROL DE IMPORTACIONES
+// =====================================================
+
+import fs from 'fs'
+import path from 'path'
+
+// Mapeo de archivos CSV a tablas PostgreSQL
+const CSV_TABLE_MAPPING = {
+  'fichaArtigo.csv': 'tb_FICHAS',
+  'rptProducaoMaquina.csv': 'tb_PRODUCCION',
+  'rptAcompDiarioPBI.csv': 'tb_CALIDAD',
+  'rptPrdTestesFisicos.csv': 'tb_TESTES',
+  'rptDefPeca.csv': 'tb_DEFECTOS',
+  'rptProducaoOE.csv': 'tb_PRODUCCION_OE',
+  'rptParadaMaquinaPRD.csv': 'tb_PARADAS',
+  'RelResIndigo.csv': 'tb_RESIDUOS_INDIGO',
+  'rptResiduosPorSetor.csv': 'tb_RESIDUOS_POR_SECTOR',
+  'rpsPosicaoEstoquePRD.csv': 'tb_PROCESO',
+  'rptMovimMP.csv': 'tb_CALIDAD_FIBRA'
+}
+
+// Mapeo de tablas a información de hoja Excel (basado en analisis-produccion-stc)
+const TABLE_SHEET_MAPPING = {
+  'tb_FICHAS': 'lista de tecidos',
+  'tb_PRODUCCION': 'rptProdMaq',
+  'tb_CALIDAD': 'report5',
+  'tb_TESTES': 'report2',
+  'tb_DEFECTOS': 'rptDefPeca',
+  'tb_PRODUCCION_OE': 'rptProducaoOE',
+  'tb_PARADAS': 'rptpm',
+  'tb_RESIDUOS_INDIGO': 'rptResiduosIndigo',
+  'tb_RESIDUOS_POR_SECTOR': 'rptResiduosPorSetor',
+  'tb_PROCESO': 'rptStock',
+  'tb_CALIDAD_FIBRA': 'rptMovimMP'
+}
+
+// GET /api/produccion/import-status - Estado de archivos CSV vs tablas
+app.get('/api/produccion/import-status', async (req, res) => {
   try {
-    // Leer solo la primera línea del archivo
-    const content = await fs.readFile(csvPath, 'utf-8')
-    const lines = content.split('\n')
-    if (lines.length === 0) {
-      throw new Error('Archivo CSV vacío')
+    const csvFolder = req.query.csvFolder || 'C:\\STC\\CSV'
+    
+    // Verificar que la carpeta existe
+    if (!fs.existsSync(csvFolder)) {
+      return res.status(400).json({ 
+        error: 'Carpeta CSV no encontrada',
+        path: csvFolder 
+      })
+    }
+
+    const statusList = []
+
+    for (const [csvFile, tableName] of Object.entries(CSV_TABLE_MAPPING)) {
+      const csvPath = path.join(csvFolder, csvFile)
+      const status = {
+        table: tableName,
+        csv_file: csvFile,
+        xlsx_sheet: TABLE_SHEET_MAPPING[tableName] || '-',
+        csv_path: csvPath,
+        csv_exists: false,
+        csv_modified: null,
+        csv_size_bytes: 0,
+        rows_imported: 0,
+        last_import_date: null,
+        status: 'NOT_IMPORTED'
+      }
+
+      // Verificar si el archivo CSV existe
+      if (fs.existsSync(csvPath)) {
+        const stats = fs.statSync(csvPath)
+        status.csv_exists = true
+        status.csv_modified = stats.mtime.toISOString()
+        status.csv_size_bytes = stats.size
+      } else {
+        status.status = 'MISSING_FILE'
+        statusList.push(status)
+        continue
+      }
+
+      // Obtener estadísticas de la tabla en PostgreSQL
+      try {
+        const tableQuery = `
+          SELECT 
+            n_live_tup as row_count,
+            last_vacuum,
+            last_autovacuum,
+            last_analyze
+          FROM pg_stat_user_tables
+          WHERE schemaname = 'public' 
+            AND relname = $1
+        `
+        const tableResult = await query(tableQuery, [tableName.toLowerCase()])
+        
+        if (tableResult.rows.length > 0) {
+          status.rows_imported = tableResult.rows[0].row_count || 0
+          
+          // Usar la fecha más reciente disponible
+          const lastVacuum = tableResult.rows[0].last_vacuum
+          const lastAutovacuum = tableResult.rows[0].last_autovacuum
+          const lastAnalyze = tableResult.rows[0].last_analyze
+          
+          const dates = [lastVacuum, lastAutovacuum, lastAnalyze].filter(d => d)
+          if (dates.length > 0) {
+            const mostRecent = dates.reduce((a, b) => a > b ? a : b)
+            status.last_import_date = mostRecent.toISOString()
+          }
+          
+          // Determinar si está actualizado comparando fechas
+          if (status.last_import_date && status.csv_modified) {
+            const csvDate = new Date(status.csv_modified)
+            const importDate = new Date(status.last_import_date)
+            
+            if (csvDate > importDate) {
+              status.status = 'OUTDATED'
+            } else {
+              status.status = 'UP_TO_DATE'
+            }
+          } else {
+            status.status = 'OUTDATED'
+          }
+        }
+      } catch (err) {
+        console.error(`Error consultando tabla ${tableName}:`, err.message)
+        status.status = 'NOT_IMPORTED'
+      }
+
+      statusList.push(status)
+    }
+
+    res.json(statusList)
+  } catch (err) {
+    console.error('Error en import-status:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/produccion/status - Info general de la base de datos
+app.get('/api/produccion/status', async (req, res) => {
+  try {
+    // Obtener tamaño de la base de datos
+    const sizeQuery = `
+      SELECT 
+        pg_database.datname as database_name,
+        pg_size_pretty(pg_database_size(pg_database.datname)) as size_pretty,
+        pg_database_size(pg_database.datname) as size_bytes
+      FROM pg_database
+      WHERE datname = current_database()
+    `
+    const sizeResult = await query(sizeQuery, [])
+    
+    // Obtener número total de tablas
+    const tablesQuery = `
+      SELECT COUNT(*) as table_count
+      FROM information_schema.tables
+      WHERE table_schema = 'public' 
+        AND table_type = 'BASE TABLE'
+        AND table_name LIKE 'tb_%'
+    `
+    const tablesResult = await query(tablesQuery, [])
+    
+    // Obtener información de conexiones
+    const connectionsQuery = `
+      SELECT 
+        count(*) as total_connections,
+        count(*) FILTER (WHERE state = 'active') as active_connections
+      FROM pg_stat_activity
+      WHERE datname = current_database()
+    `
+    const connectionsResult = await query(connectionsQuery, [])
+
+    const dbInfo = {
+      database: sizeResult.rows[0]?.database_name || 'stc_produccion',
+      sizePretty: sizeResult.rows[0]?.size_pretty || '0 bytes',
+      sizeBytes: parseInt(sizeResult.rows[0]?.size_bytes || 0),
+      sizeMB: parseFloat((parseInt(sizeResult.rows[0]?.size_bytes || 0) / (1024 * 1024)).toFixed(2)),
+      tableCount: parseInt(tablesResult.rows[0]?.table_count || 0),
+      totalConnections: parseInt(connectionsResult.rows[0]?.total_connections || 0),
+      activeConnections: parseInt(connectionsResult.rows[0]?.active_connections || 0),
+      serverTime: new Date().toISOString()
+    }
+
+    res.json(dbInfo)
+  } catch (err) {
+    console.error('Error en status:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/produccion/import/column-warnings - Detectar columnas nuevas en CSV
+app.get('/api/produccion/import/column-warnings', async (req, res) => {
+  try {
+    const warnings = []
+    const csvFolder = 'C:\\STC\\CSV'
+    
+    // Mapeo conocido para tb_FICHAS (caracteres especiales y duplicados)
+    const FICHAS_COLUMN_MAPPING = {
+      'PRODUÇÃO': 'PRODUCAO',
+      'COD. RETALHO': 'COD# RETALHO',
+      'DESCRIÇÃO': 'DESCRICAO',
+      'CONS.TR/m': 'CONS#TR/m',
+      'QT.FIOS': 'QT#FIOS',
+      'CONS.URD/m': 'CONS#URD/m',
+      'LARG.PENTE': 'LARG#PENTE',
+      'LARG.CRU': 'LARG#CRU',
+      'URD.MIN': 'URD#MIN',
+      'URD.MAX': 'URD#MAX',
+      'VAR STR.MIN TRAMA': 'VAR STR#MIN TRAMA',
+      'VAR STR.MAX TRAMA': 'VAR STR#MAX TRAMA',
+      'VAR STR.MIN URD': 'VAR STR#MIN URD',
+      'VAR STR.MAX URD': 'VAR STR#MAX URD',
+      'ENC.TEC.URDUME': 'ENC#TEC#URDUME',
+      'ENC. TEC.TRAMA': 'ENC# TEC#TRAMA',
+      'ENC.ACAB URD': 'ENC#ACAB URD',
+      'ENC.ACAB TRAMA': 'ENC#ACAB TRAMA',
+      'LAV.AMAC.URD': 'LAV#AMAC#URD',
+      'LAV.AMAC.TRM': 'LAV#AMAC#TRM',
+      'COMPOSIÇÃO': 'COMPOSICAO',
+      // Duplicados renombrados
+      'SAP_2': 'SAP1',
+      'TRAMA REDUZIDO_2': 'TRAMA REDUZIDO1',
+      'SGS_2': 'SGS1',
+      'SGS_3': 'SGS2',
+      'SGS_4': 'SGS3',
+      'DESCRIÇÃO_2': 'DESCRICAO1',
+      'BATIDAS/FIO_2': 'BATIDAS/FIO1',
+      'NE RESULTANTE_2': 'NE RESULTANTE1',
+      'NE RESULTANTE_3': 'NE RESULTANTE2',
+      'QT.FIOS_2': 'QT#FIOS1',
+      'NE RESULTANTE_4': 'NE RESULTANTE3',
+      'LAV STONE_2': 'LAV STONE 1'
+    }
+
+    // Mapeo conocido para tb_PRODUCCION (columnas duplicadas y doble espacio)
+    const PRODUCCION_COLUMN_MAPPING = {
+      // Doble espacio en CSV
+      'MAQ  FIACAO': 'MAQ FIACAO',
+      // Columnas duplicadas: TOTAL MINUTOS TUR aparece 3 veces en CSV
+      'TOTAL MINUTOS TUR_2': 'TOTAL MINUTOS TUR 1',
+      'TOTAL MINUTOS TUR_3': 'TOTAL MINUTOS TUR 2'
+    }
+
+    // Mapeo conocido para tb_CALIDAD (transformaciones y duplicados)
+    const CALIDAD_COLUMN_MAPPING = {
+      // Transformación de caracteres especiales
+      'G.PR': 'G#PR',
+      // Espacios al final añadidos en SQLite (compatibilidad)
+      'TURNO LAVAD': 'TURNO LAVAD ',
+      'TURNO PESAGEM': 'TURNO PESAGEM ',
+      // Columnas duplicadas: TURNO LAVAD aparece 2 veces
+      'TURNO LAVAD_2': 'TURNO LAVAD 1'
+    }
+
+    // Mapeo conocido para tb_PARADAS (columnas duplicadas)
+    // NOTA: PostgreSQL convirtió MOTIVO1 y COR1 a lowercase porque no tienen comillas en schema
+    const PARADAS_COLUMN_MAPPING = {
+      // Columnas duplicadas: MOTIVO aparece 2 veces en CSV
+      'MOTIVO_2': 'motivo1',  // lowercase porque PG las convirtió
+      // Columnas duplicadas: COR aparece 2 veces en CSV
+      'COR_2': 'cor1'  // lowercase porque PG las convirtió
+    }
+
+    // Mapeo conocido para tb_RESIDUOS_INDIGO (normalización de caracteres)
+    const RESIDUOS_INDIGO_COLUMN_MAPPING = {
+      // CSV usa punto, PostgreSQL usa almohadilla
+      'DEVOL TEC.': 'DEVOL TEC#'
+    }
+
+    // Mapeo conocido para tb_CALIDAD_FIBRA (normalización y duplicados)
+    const CALIDAD_FIBRA_COLUMN_MAPPING = {
+      // Normalización de espacios a guiones bajos
+      'TP MIC': 'TP_MIC',
+      'LOTE INTERNO': 'LOTE_INTERNO',
+      'TIPO MP': 'TIPO_MP',
+      'TP SELO': 'TP_SELO',
+      'NUM SELO': 'NUM_SELO',
+      'FARDOS TESTADOS': 'FARDOS_TESTADOS',
+      'DOC VENDA': 'DOC_VENDA',
+      'DT EMIS DOC VENDA': 'DT_EMIS_DOC_VENDA',
+      'USU LIBEROU': 'USU_LIBEROU',
+      // Normalización de caracteres especiales
+      '+b': 'PLUS_B',
+      'OBSERVACAO (DO TESTE)': 'OBSERVACAO',
+      // Columna duplicada: FORNECEDOR aparece 2 veces
+      'FORNECEDOR_2': 'FORNECEDOR_2'  // El duplicado se renombra
+    }
+
+    for (const [csvFile, tableName] of Object.entries(CSV_TABLE_MAPPING)) {
+      const csvPath = path.join(csvFolder, csvFile)
+      
+      if (!fs.existsSync(csvPath)) continue
+
+      try {
+        // Leer primera línea del CSV para obtener columnas
+        const fileContent = fs.readFileSync(csvPath, 'utf-8')
+        const firstLine = fileContent.split('\n')[0]
+        let csvColumns = firstLine.split(',').map(col => col.trim().replace(/"/g, ''))
+        
+        // Renombrar duplicados en el CSV (simular lo que hace import-fichas.js)
+        const seenColumns = {}
+        csvColumns = csvColumns.map(header => {
+          if (seenColumns[header]) {
+            seenColumns[header]++
+            return `${header}_${seenColumns[header]}`
+          } else {
+            seenColumns[header] = 1
+            return header
+          }
+        })
+
+        // Obtener columnas de PostgreSQL
+        const pgColumnsQuery = `
+          SELECT column_name
+          FROM information_schema.columns
+          WHERE table_schema = 'public' 
+            AND table_name = $1
+          ORDER BY ordinal_position
+        `
+        const pgResult = await query(pgColumnsQuery, [tableName.toLowerCase()])
+        const pgColumns = pgResult.rows.map(r => r.column_name)
+
+        // Aplicar mapeo si es tb_FICHAS
+        let extraColumns, missingColumns
+        
+        if (tableName === 'tb_FICHAS') {
+          // Comparar con mapeo aplicado
+          extraColumns = csvColumns.filter(csvCol => {
+            if (!csvCol) return false
+            
+            // Si está en el mapeo, verificar que exista la columna mapeada
+            const mappedCol = FICHAS_COLUMN_MAPPING[csvCol]
+            if (mappedCol) {
+              return !pgColumns.some(pgCol => pgCol.toLowerCase() === mappedCol.toLowerCase())
+            }
+            
+            // Si no está en el mapeo, buscar coincidencia exacta
+            return !pgColumns.some(pgCol => pgCol.toLowerCase() === csvCol.toLowerCase())
+          })
+          
+          // Solo reportar columnas en PG que no tienen equivalente en CSV
+          missingColumns = pgColumns.filter(pgCol => {
+            // Buscar en mapeo inverso
+            const csvEquivalent = Object.entries(FICHAS_COLUMN_MAPPING).find(
+              ([csv, pg]) => pg.toLowerCase() === pgCol.toLowerCase()
+            )
+            if (csvEquivalent) {
+              return !csvColumns.some(c => c.toLowerCase() === csvEquivalent[0].toLowerCase())
+            }
+            return !csvColumns.some(csvCol => csvCol.toLowerCase() === pgCol.toLowerCase())
+          })
+        } else if (tableName === 'tb_PRODUCCION') {
+          // Comparar con mapeo aplicado (similar a tb_FICHAS)
+          extraColumns = csvColumns.filter(csvCol => {
+            if (!csvCol) return false
+            
+            // Si está en el mapeo, verificar que exista la columna mapeada
+            const mappedCol = PRODUCCION_COLUMN_MAPPING[csvCol]
+            if (mappedCol) {
+              return !pgColumns.some(pgCol => pgCol.toLowerCase() === mappedCol.toLowerCase())
+            }
+            
+            // Si no está en el mapeo, buscar coincidencia exacta
+            return !pgColumns.some(pgCol => pgCol.toLowerCase() === csvCol.toLowerCase())
+          })
+          
+          // Solo reportar columnas en PG que no tienen equivalente en CSV
+          missingColumns = pgColumns.filter(pgCol => {
+            // Buscar en mapeo inverso
+            const csvEquivalent = Object.entries(PRODUCCION_COLUMN_MAPPING).find(
+              ([csv, pg]) => pg.toLowerCase() === pgCol.toLowerCase()
+            )
+            if (csvEquivalent) {
+              return !csvColumns.some(c => c.toLowerCase() === csvEquivalent[0].toLowerCase())
+            }
+            return !csvColumns.some(csvCol => csvCol.toLowerCase() === pgCol.toLowerCase())
+          })
+        } else if (tableName === 'tb_CALIDAD') {
+          // Comparar con mapeo aplicado (similar a tb_FICHAS)
+          extraColumns = csvColumns.filter(csvCol => {
+            if (!csvCol) return false
+            
+            // Si está en el mapeo, verificar que exista la columna mapeada
+            const mappedCol = CALIDAD_COLUMN_MAPPING[csvCol]
+            if (mappedCol) {
+              return !pgColumns.some(pgCol => pgCol.toLowerCase() === mappedCol.toLowerCase())
+            }
+            
+            // Si no está en el mapeo, buscar coincidencia exacta
+            return !pgColumns.some(pgCol => pgCol.toLowerCase() === csvCol.toLowerCase())
+          })
+          
+          // Solo reportar columnas en PG que no tienen equivalente en CSV
+          missingColumns = pgColumns.filter(pgCol => {
+            // Buscar en mapeo inverso
+            const csvEquivalent = Object.entries(CALIDAD_COLUMN_MAPPING).find(
+              ([csv, pg]) => pg.toLowerCase() === pgCol.toLowerCase()
+            )
+            if (csvEquivalent) {
+              return !csvColumns.some(c => c.toLowerCase() === csvEquivalent[0].toLowerCase())
+            }
+            return !csvColumns.some(csvCol => csvCol.toLowerCase() === pgCol.toLowerCase())
+          })
+        } else if (tableName === 'tb_PARADAS') {
+          // Comparar con mapeo aplicado (similar a tb_FICHAS)
+          extraColumns = csvColumns.filter(csvCol => {
+            if (!csvCol) return false
+            
+            // Si está en el mapeo, verificar que exista la columna mapeada
+            const mappedCol = PARADAS_COLUMN_MAPPING[csvCol]
+            if (mappedCol) {
+              // El mapeo ya tiene el case correcto (lowercase)
+              return !pgColumns.some(pgCol => pgCol === mappedCol)
+            }
+            
+            // Si no está en el mapeo, buscar coincidencia case-insensitive
+            return !pgColumns.some(pgCol => pgCol.toLowerCase() === csvCol.toLowerCase())
+          })
+          
+          // Solo reportar columnas en PG que no tienen equivalente en CSV
+          missingColumns = pgColumns.filter(pgCol => {
+            // Buscar en mapeo inverso
+            const csvEquivalent = Object.entries(PARADAS_COLUMN_MAPPING).find(
+              ([csv, pg]) => pg === pgCol  // Comparación exacta, el mapeo tiene el case correcto
+            )
+            if (csvEquivalent) {
+              return !csvColumns.some(c => c === csvEquivalent[0])
+            }
+            return !csvColumns.some(csvCol => csvCol.toLowerCase() === pgCol.toLowerCase())
+          })
+        } else if (tableName === 'tb_RESIDUOS_INDIGO') {
+          // Comparar con mapeo para normalización de caracteres
+          extraColumns = csvColumns.filter(csvCol => {
+            if (!csvCol) return false
+            
+            // Si está en el mapeo, verificar que exista la columna mapeada
+            const mappedCol = RESIDUOS_INDIGO_COLUMN_MAPPING[csvCol]
+            if (mappedCol) {
+              return !pgColumns.some(pgCol => pgCol === mappedCol)
+            }
+            
+            // Si no está en el mapeo, buscar coincidencia case-insensitive
+            return !pgColumns.some(pgCol => pgCol.toLowerCase() === csvCol.toLowerCase())
+          })
+          
+          // Solo reportar columnas en PG que no tienen equivalente en CSV
+          missingColumns = pgColumns.filter(pgCol => {
+            // Buscar en mapeo inverso
+            const csvEquivalent = Object.entries(RESIDUOS_INDIGO_COLUMN_MAPPING).find(
+              ([csv, pg]) => pg === pgCol
+            )
+            if (csvEquivalent) {
+              return !csvColumns.some(c => c === csvEquivalent[0])
+            }
+            return !csvColumns.some(csvCol => csvCol.toLowerCase() === pgCol.toLowerCase())
+          })
+        } else if (tableName === 'tb_CALIDAD_FIBRA') {
+          // Comparar con mapeo para normalización y duplicados
+          extraColumns = csvColumns.filter(csvCol => {
+            if (!csvCol) return false
+            
+            // Si está en el mapeo, verificar que exista la columna mapeada
+            const mappedCol = CALIDAD_FIBRA_COLUMN_MAPPING[csvCol]
+            if (mappedCol) {
+              return !pgColumns.some(pgCol => pgCol === mappedCol)
+            }
+            
+            // Si no está en el mapeo, buscar coincidencia case-insensitive
+            return !pgColumns.some(pgCol => pgCol.toLowerCase() === csvCol.toLowerCase())
+          })
+          
+          // Solo reportar columnas en PG que no tienen equivalente en CSV
+          missingColumns = pgColumns.filter(pgCol => {
+            // Buscar en mapeo inverso
+            const csvEquivalent = Object.entries(CALIDAD_FIBRA_COLUMN_MAPPING).find(
+              ([csv, pg]) => pg === pgCol
+            )
+            if (csvEquivalent) {
+              return !csvColumns.some(c => c === csvEquivalent[0])
+            }
+            return !csvColumns.some(csvCol => csvCol.toLowerCase() === pgCol.toLowerCase())
+          })
+        } else {
+          // Para otras tablas, comparación simple
+          extraColumns = csvColumns.filter(col => 
+            col && !pgColumns.some(pgCol => pgCol.toLowerCase() === col.toLowerCase())
+          )
+          
+          missingColumns = pgColumns.filter(col => 
+            !csvColumns.some(csvCol => csvCol.toLowerCase() === col.toLowerCase())
+          )
+        }
+
+        const hasDifferences = extraColumns.length > 0 || missingColumns.length > 0
+
+        if (hasDifferences) {
+          warnings.push({
+            id: `${tableName}_${Date.now()}`,
+            table: tableName,
+            csvPath: csvPath,
+            extraColumns: extraColumns,
+            missingColumns: missingColumns,
+            hasDifferences: true,
+            timestamp: new Date().toISOString()
+          })
+        }
+      } catch (err) {
+        console.error(`Error verificando columnas de ${tableName}:`, err.message)
+      }
+    }
+
+    res.json({ warnings })
+  } catch (err) {
+    console.error('Error en column-warnings:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/produccion/schema/sync-columns - Sincronizar columnas nuevas del CSV
+app.post('/api/produccion/schema/sync-columns', async (req, res) => {
+  const client = await getClient();
+  
+  try {
+    const { table, csvPath, reimport } = req.body;
+    
+    if (!table || !csvPath) {
+      return res.status(400).json({ error: 'Faltan parámetros: table, csvPath' });
     }
     
-    // La primera línea contiene los headers
-    const headerLine = lines[0]
-    // Usar separador de coma (estándar en CSVs)
-    const columns = headerLine.split(',').map(col => col.trim())
+    const startTime = Date.now();
     
-    console.log(`📋 CSV tiene ${columns.length} columnas`)
-    return columns
+    await client.query('BEGIN');
+    
+    // Leer CSV
+    if (!fs.existsSync(csvPath)) {
+      throw new Error(`Archivo CSV no encontrado: ${csvPath}`);
+    }
+    
+    const csvContent = fs.readFileSync(csvPath, 'utf-8');
+    const firstLine = csvContent.split('\\n')[0];
+    const csvHeaders = firstLine.split(',').map(h => h.trim().replace(/"/g, ''));
+    
+    // Renombrar headers duplicados
+    const seenColumns = {};
+    const renamedHeaders = [];
+    for (const header of csvHeaders) {
+      if (seenColumns[header]) {
+        seenColumns[header]++;
+        renamedHeaders.push(`${header}_${seenColumns[header]}`);
+      } else {
+        seenColumns[header] = 1;
+        renamedHeaders.push(header);
+      }
+    }
+    
+    // Obtener columnas de PostgreSQL
+    const pgColumnsQuery = `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = $1
+      ORDER BY ordinal_position
+    `;
+    const pgResult = await client.query(pgColumnsQuery, [table.toLowerCase()]);
+    const pgColumns = pgResult.rows.map(r => r.column_name);
+    
+    // Encontrar columnas extra en CSV
+    const extraColumns = renamedHeaders.filter(h => 
+      h && !pgColumns.some(pg => pg.toLowerCase() === h.toLowerCase())
+    );
+    
+    // Agregar columnas nuevas
+    const addedColumns = [];
+    for (const col of extraColumns) {
+      if (!col || col.trim() === '') continue;
+      
+      try {
+        const alterQuery = `ALTER TABLE ${table.toLowerCase()} ADD COLUMN IF NOT EXISTS "${col}" TEXT`;
+        await client.query(alterQuery);
+        addedColumns.push(col);
+      } catch (err) {
+        console.error(`Error agregando columna ${col}:`, err.message);
+      }
+    }
+    
+    const executionTime = Date.now() - startTime;
+    
+    // Registrar en historial
+    const historyInsert = `
+      INSERT INTO tb_sync_history (
+        operation_type, table_name, description, columns_added,
+        columns_count, rows_affected, success, execution_time_ms, user_action
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `;
+    await client.query(historyInsert, [
+      'COLUMN_SYNC',
+      table,
+      `Sincronización de columnas desde CSV`,
+      addedColumns,
+      addedColumns.length,
+      0,
+      true,
+      executionTime,
+      'MANUAL'
+    ]);
+    
+    await client.query('COMMIT');
+    
+    res.json({
+      success: true,
+      table,
+      columnsAdded: addedColumns.length,
+      addedColumns,
+      executionTime
+    });
+    
   } catch (err) {
-    console.error('Error leyendo columnas CSV:', err)
-    throw err
+    await client.query('ROLLBACK');
+    console.error('Error en sync-columns:', err);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
-}
+});
+
+// GET /api/produccion/history/warnings - Historial de warnings de columnas
+app.get('/api/produccion/history/warnings', async (req, res) => {
+  try {
+    const historyQuery = `
+      SELECT 
+        id,
+        timestamp,
+        operation_type,
+        table_name as table,
+        description,
+        columns_added as "extraColumns",
+        success
+      FROM tb_sync_history
+      WHERE operation_type = 'COLUMN_SYNC'
+      ORDER BY timestamp DESC
+      LIMIT 50
+    `;
+    
+    const result = await query(historyQuery, []);
+    res.json({ history: result.rows });
+  } catch (err) {
+    console.error('Error en history/warnings:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/produccion/history/changes - Historial de cambios/sincronizaciones
+app.get('/api/produccion/history/changes', async (req, res) => {
+  try {
+    const historyQuery = `
+      SELECT 
+        id,
+        timestamp,
+        operation_type,
+        table_name as table,
+        description,
+        columns_added,
+        columns_count,
+        rows_affected,
+        success,
+        error_message,
+        execution_time_ms,
+        user_action
+      FROM tb_sync_history
+      ORDER BY timestamp DESC
+      LIMIT 100
+    `;
+    
+    const result = await query(historyQuery, []);
+    res.json({ history: result.rows });
+  } catch (err) {
+    console.error('Error en history/changes:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // =====================================================
 // INICIAR SERVIDOR
 // =====================================================
-
-// Crear tabla de metadatos de importación si no existe
-async function initImportMetadata() {
-  try {
-    // Tabla de metadatos de importación
-    await query(`
-      CREATE TABLE IF NOT EXISTS import_metadata (
-        id SERIAL PRIMARY KEY,
-        table_name VARCHAR(100) UNIQUE NOT NULL,
-        last_import_date TIMESTAMP WITH TIME ZONE,
-        rows_imported INTEGER DEFAULT 0,
-        import_duration_ms INTEGER DEFAULT 0,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-      )
-    `)
-    console.log('✓ Tabla import_metadata verificada')
-    
-    // Tabla de warnings de columnas (diferencias CSV vs DB)
-    await query(`
-      CREATE TABLE IF NOT EXISTS column_warnings (
-        id SERIAL PRIMARY KEY,
-        table_name VARCHAR(100) NOT NULL,
-        extra_columns TEXT[] DEFAULT '{}',
-        missing_columns TEXT[] DEFAULT '{}',
-        csv_path TEXT,
-        detected_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        resolved BOOLEAN DEFAULT false
-      )
-    `)
-    console.log('✓ Tabla column_warnings verificada')
-    
-    // Tabla de historial de cambios de esquema
-    await query(`
-      CREATE TABLE IF NOT EXISTS schema_changes (
-        id SERIAL PRIMARY KEY,
-        table_name VARCHAR(100) NOT NULL,
-        change_type VARCHAR(50) NOT NULL,
-        columns_added TEXT[] DEFAULT '{}',
-        reimported BOOLEAN DEFAULT false,
-        applied_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-      )
-    `)
-    console.log('✓ Tabla schema_changes verificada')
-  } catch (err) {
-    console.error('Error creando tablas de metadatos:', err.message)
-  }
-}
-
 async function startServer() {
   try {
     // Test database connection
     const client = await pool.connect()
     console.log('✓ Conexión a PostgreSQL exitosa')
     client.release()
-    
-    // Inicializar tabla de metadatos
-    await initImportMetadata()
     
     app.listen(PORT, '0.0.0.0', () => {
       console.log('🚀 ========================================')

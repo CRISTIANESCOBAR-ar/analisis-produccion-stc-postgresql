@@ -338,8 +338,8 @@
                 <div class="text-sm font-medium text-gray-900">{{ item.table }}</div>
               </td>
               <td class="px-3 py-2 whitespace-nowrap">
-                <div class="text-sm text-gray-500" :title="item.file">{{ getFileName(item.file) }}</div>
-                <div class="text-xs text-gray-400">Hoja: {{ item.sheet }}</div>
+                <div class="text-sm text-gray-500" :title="item.csv_file">{{ getFileName(item.csv_file) }}</div>
+                <div class="text-xs text-gray-400">Hoja: {{ item.xlsx_sheet || '-' }}</div>
               </td>
               <td class="px-3 py-2 whitespace-nowrap">
                 <div v-if="importing && currentImportTable === item.table" class="space-y-2">
@@ -1091,7 +1091,7 @@ async function forceImportAll() {
 async function forceImportTable(item) {
   const result = await Swal.fire({
     title: `¿Forzar ${item.table}?`,
-    html: `Se re-importará la tabla <strong>${item.table}</strong> desde:<br><code>${getFileName(item.file)}</code>`,
+    html: `Se re-importará la tabla <strong>${item.table}</strong> desde:<br><code>${getFileName(item.csv_file)}</code>`,
     icon: 'question',
     showCancelButton: true,
     confirmButtonColor: '#ea580c',

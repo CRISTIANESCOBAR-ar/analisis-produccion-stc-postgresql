@@ -11,7 +11,7 @@ const pool = new Pool({
   password: 'stc_password_2026'
 });
 
-// Mapeo de columnas CSV → SQLite
+// Mapeo de columnas CSV → PostgreSQL
 const columnMapping = {
   'ARTIGO CODIGO': 'ARTIGO CODIGO',
   'ARTIGO': 'ARTIGO',
@@ -28,7 +28,7 @@ const columnMapping = {
   'SARJA': 'SARJA',
   'COD. RETALHO': 'COD# RETALHO',
   'SAP': 'SAP',
-  'TRAMA REDUZIDO': 'TRAMA REDUZIDO',
+  'TRAMA REDUZIDO': 'TRAMA REDUZIDO',  // Columna 16 del CSV
   'SGS': 'SGS',
   'SGS UN 1': 'SGS UN 1',
   'DESCRIÇÃO': 'DESCRICAO',
@@ -79,7 +79,7 @@ const columnMapping = {
   'LAV STONE_2': 'LAV STONE 1',
   'STRET LAV STONE': 'STRET LAV STONE',
   'COMPOSIÇÃO': 'COMPOSICAO',
-  'TRAMA': 'TRAMA'
+  'TRAMA': 'TRAMA'  // Columna 67 del CSV → columna TRAMA de PostgreSQL
 };
 
 async function importFichas() {
@@ -89,18 +89,11 @@ async function importFichas() {
     console.log('Leyendo CSV...');
     const csvContent = fs.readFileSync('C:\\STC\\CSV\\fichaArtigo.csv', 'utf-8');
     
-    const records = parse(csvContent, {
-      columns: true,
-      skip_empty_lines: true,
-      trim: true,
-      relax_column_count: true
-    });
+    // Leer headers de la primera línea y renombrar duplicados
+    const lines =csvContent.split('\n');
+    const originalHeaders = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
     
-    console.log(`CSV leído: ${records.length} registros`);
-    
-    // Renombrar columnas duplicadas en los headers originales
-    const firstRecord = records[0];
-    const originalHeaders = Object.keys(firstRecord);
+    // Renombrar headers duplicados
     const seenColumns = {};
     const renamedHeaders = [];
     
@@ -114,25 +107,43 @@ async function importFichas() {
       }
     }
     
-    console.log('Renombrando columnas duplicadas...');
-    const processedRecords = records.map(record => {
-      const newRecord = {};
-      originalHeaders.forEach((oldHeader, index) => {
-        const newHeader = renamedHeaders[index];
-        newRecord[newHeader] = record[oldHeader];
-      });
-      return newRecord;
+    // Reemplazar primera línea con headers renombrados
+    lines[0] = renamedHeaders.join(',');
+    const csvContentWithRenamedHeaders = lines.join('\n');
+    
+    // Ahora parsear con headers únicos
+    const records = parse(csvContentWithRenamedHeaders, {
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
+      relax_column_count: true
     });
+    
+    console.log(`CSV leído: ${records.length} registros`);
+    console.log(`Headers renombrados: ${renamedHeaders.length} columnas`);
     
     console.log('Iniciando importación...');
     await client.query('BEGIN');
     
+    // Limpiar tabla antes de importar
+    console.log('Limpiando tabla tb_FICHAS...');
+    await client.query('TRUNCATE TABLE tb_FICHAS');
+    
     let imported = 0;
-    for (const record of processedRecords) {
-      // Mapear valores CSV a columnas SQLite
+    let skipped = 0;
+    
+    for (const record of records) {
+      // Filtrar filas que son encabezados duplicados
+      const artigoCodigo = record['ARTIGO CODIGO'] || '';
+      if (artigoCodigo === 'ARTIGO CODIGO' || artigoCodigo.trim() === '') {
+        skipped++;
+        continue;
+      }
+      
+      // Mapear valores CSV a columnas PostgreSQL
       const values = {};
-      for (const [csvCol, sqliteCol] of Object.entries(columnMapping)) {
-        values[sqliteCol] = record[csvCol] || null;
+      for (const [csvCol, pgCol] of Object.entries(columnMapping)) {
+        values[pgCol] = record[csvCol] || null;
       }
       
       // Construir query
@@ -151,14 +162,14 @@ async function importFichas() {
         }
       } catch (err) {
         console.error(`\nError en registro ${imported + 1}:`);
-        console.error('Query:', query.substring(0, 200));
-        console.error('Error completo:', err);
-        throw err; // Detener para ver el primer error
+        console.error('ARTIGO CODIGO:', artigoCodigo);
+        console.error('Error:', err.message);
+        throw err;
       }
     }
     
     await client.query('COMMIT');
-    console.log(`\n✓ Importación completada: ${imported} de ${records.length} registros`);
+    console.log(`\n✓ Importación completada: ${imported} registros importados, ${skipped} omitidos`);
     
   } catch (error) {
     await client.query('ROLLBACK');
