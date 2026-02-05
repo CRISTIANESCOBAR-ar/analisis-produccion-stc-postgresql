@@ -8,13 +8,20 @@
     "start": "node server.js",
     "dev": "node --watch server.js"
   },
-  "keywords": ["express", "postgresql", "api", "stc", "produccion"],
+  "keywords": [
+    "express",
+    "postgresql",
+    "api",
+    "stc",
+    "produccion"
+  ],
   "author": "STC Team",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
     "cors": "^2.8.5",
-    "pg": "^8.11.3",
-    "dotenv": "^16.3.1"
+    "csv-parse": "^5.6.0",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "pg": "^8.11.3"
   }
 }

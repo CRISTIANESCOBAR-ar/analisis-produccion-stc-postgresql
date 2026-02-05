@@ -29,6 +29,21 @@ const routes = [
     path: '/stats', 
     component: () => import('./components/UsterStatsPage.vue'), 
     meta: { title: 'Gráficos Ensayos' } 
+  },
+  { 
+    path: '/import-control', 
+    component: () => import('./components/produccion/ImportControl.vue'), 
+    meta: { title: 'Control de Importaciones' } 
+  },
+  { 
+    path: '/importaciones', 
+    component: () => import('./components/produccion/ImportControl.vue'), 
+    meta: { title: 'Control de Importaciones' } 
+  },
+  { 
+    path: '/revision-cq', 
+    component: () => import('./components/produccion/RevisionCQ.vue'), 
+    meta: { title: 'Metros por Revisor - Control de Calidad' } 
   }
 ]
 

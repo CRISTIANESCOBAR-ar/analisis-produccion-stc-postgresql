@@ -841,7 +841,7 @@ import Swal from 'sweetalert2'
 import { toPng } from 'html-to-image'
 import ExcelJS from 'exceljs'
 import { fetchAllStatsData, getDataSource } from '../../services/dataService'
-// import HusoDetailModal from './uster-stats/HusoDetailModal.vue'
+import HusoDetailModal from './uster-stats/HusoDetailModal.vue'
 
 const loading = ref(false)
 const rows = ref([])

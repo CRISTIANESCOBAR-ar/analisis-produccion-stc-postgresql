@@ -1,0 +1,511 @@
+-- =====================================================
+-- RECREAR TABLAS DE PRODUCCIÓN CON SCHEMA CORRECTO DE SQLITE
+-- =====================================================
+
+-- Eliminar tablas existentes incorrectas
+DROP TABLE IF EXISTS tb_FICHAS CASCADE;
+DROP TABLE IF EXISTS tb_RESIDUOS_INDIGO CASCADE;
+DROP TABLE IF EXISTS tb_RESIDUOS_POR_SECTOR CASCADE;
+DROP TABLE IF EXISTS tb_TESTES CASCADE;
+DROP TABLE IF EXISTS tb_PARADAS CASCADE;
+DROP TABLE IF EXISTS tb_PRODUCCION CASCADE;
+DROP TABLE IF EXISTS tb_CALIDAD CASCADE;
+DROP TABLE IF EXISTS tb_PROCESO CASCADE;
+DROP TABLE IF EXISTS tb_DEFECTOS CASCADE;
+DROP TABLE IF EXISTS tb_CALIDAD_FIBRA CASCADE;
+DROP TABLE IF EXISTS tb_PRODUCCION_OE CASCADE;
+
+-- =====================================================
+-- tb_FICHAS
+-- =====================================================
+CREATE TABLE tb_FICHAS (
+    "ARTIGO CODIGO" TEXT,
+    "ARTIGO" TEXT,
+    "COR" TEXT,
+    "NCM" TEXT,
+    "BASE" TEXT,
+    "UnP" TEXT,
+    "VENDA" TEXT,
+    "PRODUÇÃO" TEXT,
+    "NOME REDUZIDO" TEXT,
+    "NOME DE MERCADO" TEXT,
+    "COMPOSIÇÃO" TEXT,
+    "LARGURA cm" TEXT,
+    "g/m2" TEXT,
+    "TRAMA" TEXT,
+    "URDUME" TEXT,
+    "RENDIMENTO" TEXT,
+    "CLIENTE" TEXT,
+    "OBS" TEXT,
+    "ESTAMPARIA" TEXT
+);
+
+-- =====================================================
+-- tb_RESIDUOS_INDIGO
+-- =====================================================
+CREATE TABLE tb_RESIDUOS_INDIGO (
+    "FILIAL" TEXT,
+    "SETOR" TEXT,
+    "DESC_SETOR" TEXT,
+    "DT_MOV" TEXT,
+    "TURNO" TEXT,
+    "SUBPRODUTO" TEXT,
+    "DESCRICAO" TEXT,
+    "ID" TEXT,
+    "PESO LIQUIDO (KG)" TEXT,
+    "LOTE" TEXT,
+    "PARTIDA" TEXT,
+    "ROLADA" TEXT,
+    "MOTIVO" TEXT,
+    "DESC_MOTIVO" TEXT,
+    "OPERADOR" TEXT,
+    "NOME_OPER" TEXT,
+    "PE DE ROLO" TEXT,
+    "INDIGO" TEXT,
+    "URDUME" TEXT,
+    "TURNO CORTE" TEXT,
+    "GAIOLA" TEXT,
+    "OBS" TEXT,
+    "PESO ROLO 01" TEXT,
+    "PESO ROLO 02" TEXT,
+    "PESO ROLO 03" TEXT,
+    "PESO ROLO 04" TEXT,
+    "PESO ROLO 05" TEXT,
+    "PESO ROLO 06" TEXT,
+    "PESO ROLO 07" TEXT,
+    "PESO ROLO 08" TEXT,
+    "PESO ROLO 09" TEXT,
+    "PESO ROLO 10" TEXT,
+    "PESO ROLO 11" TEXT,
+    "PESO ROLO 12" TEXT,
+    "PESO ROLO 13" TEXT,
+    "PESO ROLO 14" TEXT,
+    "PESO ROLO 15" TEXT,
+    "PESO ROLO 16" TEXT,
+    "DEVOL TEC#" TEXT
+);
+
+-- =====================================================
+-- tb_RESIDUOS_POR_SECTOR
+-- =====================================================
+CREATE TABLE tb_RESIDUOS_POR_SECTOR (
+    "FILIAL" TEXT,
+    "SETOR" TEXT,
+    "DESC_SETOR" TEXT,
+    "DT_MOV" TEXT,
+    "TURNO" TEXT,
+    "SUBPRODUTO" TEXT,
+    "DESCRICAO" TEXT,
+    "ID" TEXT,
+    "PESO LIQUIDO (KG)" TEXT,
+    "LOTE" TEXT,
+    "OPERADOR" TEXT,
+    "NOME_OPER" TEXT,
+    "OBS" TEXT
+);
+
+-- =====================================================
+-- tb_TESTES
+-- =====================================================
+CREATE TABLE tb_TESTES (
+    "MAQUINA" TEXT,
+    "ARTIGO" TEXT,
+    "NM_MERC" TEXT,
+    "PARTIDA" TEXT,
+    "METRAGEM" TEXT,
+    "DT_PROD" TEXT,
+    "HORA_PROD" TEXT,
+    "TURNO" TEXT,
+    "LARG_AL" TEXT,
+    "GRAMAT" TEXT,
+    "POTEN" TEXT,
+    "%_ENC_URD" TEXT,
+    "%_ENC_TRAMA" TEXT,
+    "%_SK1" TEXT,
+    "%_SK2" TEXT,
+    "%_SK3" TEXT,
+    "%_SK4" TEXT,
+    "%_SKE" TEXT,
+    "%_STT" TEXT,
+    "%_SKM" TEXT,
+    "APROV" TEXT,
+    "COD_ART" TEXT,
+    "COR_ART" TEXT,
+    "OBS" TEXT,
+    "REPROCESSO" TEXT,
+    "SEQ TESTE" TEXT
+);
+
+-- =====================================================
+-- tb_PARADAS
+-- =====================================================
+CREATE TABLE tb_PARADAS (
+    "FILIAL" TEXT,
+    "MAQUINA" TEXT,
+    "TP_MAQ" TEXT,
+    "PROCESSO" TEXT,
+    "DATA_BASE" TEXT,
+    "HORA_INICIO" TEXT,
+    "HORA_FINAL" TEXT,
+    "TURNO" TEXT,
+    "DURACAO" TEXT,
+    "NUM OCORREN" TEXT,
+    "OPERADOR" TEXT,
+    "NOME_OPER" TEXT,
+    "MOTIVO" TEXT,
+    "DESC_MOTIVO" TEXT,
+    "GRUPO" TEXT,
+    "DESC_GRP_MOTIVO" TEXT,
+    "CAUSA" TEXT,
+    "DESC_CAUSA" TEXT,
+    "LADO" TEXT,
+    "POSICAO" TEXT,
+    "PARTIDA" TEXT,
+    "URDUME" TEXT,
+    "INDIGO" TEXT,
+    "DATA_TINGIMENT" TEXT,
+    "TURNO_TING" TEXT,
+    "STATUS_INDIG" TEXT,
+    "OPER_TING" TEXT,
+    "NOME_OPER_TING" TEXT,
+    "GRUPO_MAQ" TEXT,
+    "OBS" TEXT,
+    "PARTIDA_ORIGINAL" TEXT,
+    "CV_ORIG" TEXT,
+    "ST_ORIG" TEXT,
+    "OBS_ORIG" TEXT,
+    "PARTIDA_ANTERIOR" TEXT,
+    "CV_ANT" TEXT,
+    "ST_ANT" TEXT,
+    "OBS_ANT" TEXT,
+    "PARTIDA_POSTERIOR" TEXT,
+    "CV_POS" TEXT,
+    "ST_POS" TEXT,
+    "OBS_POS" TEXT,
+    "ROLADA" TEXT,
+    "ID TROCA ROLADA" TEXT,
+    "MOTIVO1" TEXT,
+    "DESCRICAO MOTIVO" TEXT,
+    "ROLADA INICIAL" TEXT,
+    "COR" TEXT,
+    "ROLADA FINAL" TEXT,
+    "COR1" TEXT,
+    "OBS TROCA ROLADA" TEXT,
+    "TEMPO PREVISTO" TEXT,
+    "SUB-GRUPO" TEXT,
+    "DESC SUB-GRUPO" TEXT
+);
+
+-- =====================================================
+-- tb_PRODUCCION
+-- =====================================================
+CREATE TABLE tb_PRODUCCION (
+    "FILIAL" TEXT,
+    "DT_INICIO" TEXT,
+    "HORA_INICIO" TEXT,
+    "DT_FINAL" TEXT,
+    "HORA_FINAL" TEXT,
+    "DT_BASE_PRODUCAO" TEXT,
+    "TURNO" TEXT,
+    "PARTIDA" TEXT,
+    "PARTIDA_DUPLA" TEXT,
+    "R" TEXT,
+    "ARTIGO" TEXT,
+    "COR" TEXT,
+    "METRAGEM" TEXT,
+    "METRAGEM ENCOLH" TEXT,
+    "TEMPO" TEXT,
+    "VELOC CALC" TEXT,
+    "VELOC" TEXT,
+    "EFICIENCIA" TEXT,
+    "NUM_FIOS" TEXT,
+    "S" TEXT,
+    "MAQUINA" TEXT,
+    "RUPTURAS" TEXT,
+    "CAVALOS" TEXT,
+    "OPERADOR" TEXT,
+    "NM OPERADOR" TEXT,
+    "NM MERCADO" TEXT,
+    "LARG PAD" TEXT,
+    "LARG INI" TEXT,
+    "LARG FIM" TEXT,
+    "TRAMA REDUZIDA 1" TEXT,
+    "TRAMA REDUZIDA 2" TEXT,
+    "RUP FIACAO" TEXT,
+    "RUP URD" TEXT,
+    "RUP OPER" TEXT,
+    "LOTE FIACAO" TEXT,
+    "MAQ  FIACAO" TEXT,
+    "ROLADA" TEXT,
+    "SELETOR" TEXT,
+    "QTDE_RUPTURA" TEXT,
+    "COD_RUP" TEXT,
+    "MOTIVO_RUP" TEXT,
+    "TIPO_RUP" TEXT,
+    "DESC_TP_RUPTURA" TEXT,
+    "COD_CAVALO" TEXT,
+    "DESC_CAVALO" TEXT,
+    "OBS" TEXT,
+    "TURNO_INDIGO" TEXT
+);
+
+-- =====================================================
+-- tb_CALIDAD
+-- =====================================================
+CREATE TABLE tb_CALIDAD (
+    "EMP" TEXT,
+    "DAT_PROD" TEXT,
+    "GRP_DEF" TEXT,
+    "COD_DE" TEXT,
+    "DEFEITO" TEXT,
+    "INDIGO" TEXT,
+    "CC" TEXT,
+    "GRP_TEAR" TEXT,
+    "TEAR" TEXT,
+    "ARTIGO" TEXT,
+    "COR" TEXT,
+    "PARTIDA" TEXT,
+    "G_CMEST" TEXT,
+    "ACONDIC" TEXT,
+    "GRP_TEC" TEXT,
+    "TRAMA" TEXT,
+    "ROLADA" TEXT,
+    "METRAGEM" TEXT,
+    "QUALIDADE" TEXT,
+    "PESO BRUTO" TEXT,
+    "REVISOR FINAL" TEXT,
+    "HORA" TEXT,
+    "NM MERC" TEXT,
+    "TUR TEC" TEXT,
+    "T TEC1" TEXT,
+    "T TEC2" TEXT,
+    "EMENDAS" TEXT,
+    "PEÇA" TEXT,
+    "ETIQUETA" TEXT,
+    "PESO LIQUIDO" TEXT,
+    "LARGURA" TEXT,
+    "GR/M2" TEXT,
+    "T INDIGO" TEXT,
+    "PONTUACAO" TEXT,
+    "REPROCESSO" TEXT,
+    "COD DIREC" TEXT,
+    "DESC DIREC" TEXT,
+    "DT INI TEC" TEXT,
+    "HR INI TEC" TEXT,
+    "DT FIM TEC" TEXT,
+    "HR FIM TEC" TEXT,
+    "RPM TECEL" TEXT,
+    "GRUPO CMESTR" TEXT,
+    "URDUME" TEXT,
+    "MODELO TEAR" TEXT,
+    "ST IND" TEXT,
+    "G#PR" TEXT,
+    "DT  TINGIMENTO" TEXT,
+    "TURNO INDIGO" TEXT,
+    "OPER INDIGO" TEXT,
+    "LAVADEIRA 01" TEXT,
+    "TURNO LAVAD" TEXT,
+    "LAVADEIRA 02" TEXT,
+    "TURNO LAVAD 1" TEXT,
+    "LAVADEIRA 03" TEXT,
+    "TURNO LAVAD 03" TEXT,
+    "INTEGRADA" TEXT,
+    "TURNO INTEGR" TEXT,
+    "SANFOR 01" TEXT,
+    "TURNO SANF 01" TEXT,
+    "SANFOR 02" TEXT,
+    "TURNO SANF 02" TEXT,
+    "CALANDRA" TEXT,
+    "TURNO CALAND" TEXT,
+    "ESTAMAPRIA" TEXT,
+    "TURNO ESTAMP" TEXT,
+    "MERCERZ 01" TEXT,
+    "TURNO MERC 01" TEXT,
+    "MERCERZ 02" TEXT,
+    "TURNO MERC 02" TEXT,
+    "DATA PESAGEM" TEXT,
+    "HORA PESAGEM" TEXT,
+    "TURNO PESAGEM" TEXT,
+    "LOCAL TECEL" TEXT,
+    "DEF EMENDA" TEXT,
+    "DESC DEF EMENDA" TEXT,
+    "HORARIO_REVISAO" TEXT,
+    "TURNO_HORARIO_REVISAO" TEXT,
+    "TURNO_REVISAO" TEXT,
+    "DATA_REVISAO" TEXT,
+    "REVISOR EMENDA" TEXT,
+    "HORA PECA FINAL" TEXT,
+    "TURNO PECA FINAL" TEXT,
+    "G.PR" TEXT,
+    "DEFEITO MANCHA" TEXT
+);
+
+-- =====================================================
+-- tb_PROCESO
+-- =====================================================
+CREATE TABLE tb_PROCESO (
+    "FILIAL" TEXT,
+    "PROCESSO" TEXT,
+    "PARTIDA" TEXT,
+    "ARTIGO" TEXT,
+    "COR" TEXT,
+    "DESC_NM_MERC" TEXT,
+    "MT_DISPONIV" TEXT,
+    "DT_PROD" TEXT,
+    "NUM_FIOS" TEXT,
+    "FLANGE" TEXT,
+    "BOBINA" TEXT,
+    "COD_BOBINA" TEXT,
+    "MISTURA_BOBINA" TEXT,
+    "OBS_PROCESSO" TEXT,
+    "OBS_BOBINA" TEXT,
+    "PRODUCAO_ANUAL_KG" TEXT,
+    "ITEM" TEXT,
+    "DESC_ITEM" TEXT,
+    "QTD_BOB" TEXT,
+    "MT_BOB" TEXT,
+    "KG_BOB" TEXT
+);
+
+-- =====================================================
+-- tb_DEFECTOS
+-- =====================================================
+CREATE TABLE tb_DEFECTOS (
+    "FILIAL" TEXT,
+    "PARTIDA" TEXT,
+    "PECA" TEXT,
+    "ETIQUETA" TEXT,
+    "ARTIGO" TEXT,
+    "NM_MERC" TEXT,
+    "COD_DEF" TEXT,
+    "DESC_DEFEITO" TEXT,
+    "PONTOS" TEXT,
+    "QUALIDADE" TEXT,
+    "DATA_PROD" TEXT
+);
+
+-- =====================================================
+-- tb_CALIDAD_FIBRA
+-- =====================================================
+CREATE TABLE tb_CALIDAD_FIBRA (
+    "ITEM" TEXT,
+    "DESC_ITEM" TEXT,
+    "ID" TEXT,
+    "DATA_MOVIMENTO" TEXT,
+    "TIPO_MOV" TEXT,
+    "PRODUTOR" TEXT,
+    "PROCED" TEXT,
+    "LOTE" TEXT,
+    "PILHA" TEXT,
+    "DESTINO" TEXT,
+    "MISTURA" TEXT,
+    "MIC" TEXT,
+    "MAT" TEXT,
+    "STR" TEXT,
+    "UHM" TEXT,
+    "UI" TEXT,
+    "SFI" TEXT,
+    "ELG" TEXT,
+    "RD" TEXT,
+    "+B" TEXT,
+    "TrashCount" TEXT,
+    "TrashArea" TEXT,
+    "SCN" TEXT,
+    "TRASHGRADE" TEXT,
+    "COL_GRA" TEXT,
+    "COLOR" TEXT,
+    "COMP" TEXT,
+    "RESIST" TEXT,
+    "UMIDADE" TEXT,
+    "POR_FIB" TEXT,
+    "PESO_BR" TEXT,
+    "PESO_LIQ" TEXT,
+    "EMBALAGEM" TEXT,
+    "QTDE" TEXT,
+    "PRE_FAT" TEXT,
+    "FAT_DTINI" TEXT,
+    "FATURA" TEXT,
+    "NF" TEXT,
+    "DT_NF" TEXT,
+    "LIM" TEXT,
+    "PRECO" TEXT,
+    "ORIGEM" TEXT,
+    "ALGODAO" TEXT,
+    "INSPECAO" TEXT,
+    "CONTAINER" TEXT,
+    "LACRE" TEXT,
+    "PALETE" TEXT,
+    "UPC" TEXT,
+    "HVI_MIC" TEXT,
+    "HVI_MAT" TEXT,
+    "HVI_STR" TEXT,
+    "HVI_UHM" TEXT,
+    "HVI_UI" TEXT,
+    "HVI_ELG" TEXT,
+    "HVI_RD" TEXT,
+    "HVI_PLUS_B" TEXT,
+    "HVI_TRASHCOUNT" TEXT,
+    "HVI_TRASHAREA" TEXT,
+    "HVI_COL_GRA" TEXT,
+    "HVI_COLOR" TEXT,
+    "HVI_UMIDADE" TEXT
+);
+
+-- =====================================================
+-- tb_PRODUCCION_OE
+-- =====================================================
+CREATE TABLE tb_PRODUCCION_OE (
+    "FILIAL" TEXT,
+    "LOC. FISICO" TEXT,
+    "MAQUINA" TEXT,
+    "NOME_MAQUINA" TEXT,
+    "DATA_PRODUCAO" TEXT,
+    "TURNO" TEXT,
+    "LADO" TEXT,
+    "ITEM" TEXT,
+    "DESC ITEM" TEXT,
+    "HORA INICIAL" TEXT,
+    "HORA FINAL" TEXT,
+    "RPM" TEXT,
+    "NUM FUSOS" TEXT,
+    "ALFA" TEXT,
+    "LOTE PRODUC" TEXT,
+    "TÍTULO" TEXT,
+    "TEMPO" TEXT,
+    "TORCAO P POLEG" TEXT,
+    "TORCAO P METRO" TEXT,
+    "PROD MT/MIN" TEXT,
+    "PROD KG/HR" TEXT,
+    "PROD CALCULADA" TEXT,
+    "PROD INFORMADA" TEXT,
+    "EFIC CALCULADA" TEXT,
+    "EFIC INFORMADA" TEXT,
+    "OPERADOR" TEXT,
+    "T.BOB." TEXT,
+    "RPM CARD" TEXT,
+    "N" TEXT,
+    "S" TEXT,
+    "L" TEXT,
+    "T" TEXT,
+    "MO" TEXT,
+    "CP V+ SL+" TEXT,
+    "CM V- SL-" TEXT,
+    "CCp C+" TEXT,
+    "CCm C-" TEXT,
+    "JP (P+)" TEXT,
+    "JM (P-)" TEXT,
+    "CVP" TEXT,
+    "CVM" TEXT,
+    "CORT NAT" TEXT,
+    "% ROB 01" TEXT,
+    "% ROB 02" TEXT,
+    "% ROB 03" TEXT
+);
+
+-- Crear índices básicos
+CREATE INDEX IF NOT EXISTS idx_produccion_fecha ON tb_PRODUCCION("DT_BASE_PRODUCAO");
+CREATE INDEX IF NOT EXISTS idx_produccion_maquina ON tb_PRODUCCION("MAQUINA");
+CREATE INDEX IF NOT EXISTS idx_calidad_fecha ON tb_CALIDAD("DAT_PROD");
+CREATE INDEX IF NOT EXISTS idx_paradas_fecha ON tb_PARADAS("DATA_BASE");
+CREATE INDEX IF NOT EXISTS idx_fichas_artigo ON tb_FICHAS("ARTIGO");
+CREATE INDEX IF NOT EXISTS idx_produccion_oe_fecha ON tb_PRODUCCION_OE("DATA_PRODUCAO");
