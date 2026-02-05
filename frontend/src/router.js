@@ -44,6 +44,11 @@ const routes = [
     path: '/revision-cq', 
     component: () => import('./components/produccion/RevisionCQ.vue'), 
     meta: { title: 'Metros por Revisor - Control de Calidad' } 
+  },
+  { 
+    path: '/analisis-mesa-test', 
+    component: () => import('./components/produccion/AnalisisMesaTest.vue'), 
+    meta: { title: 'Mesa de Test - Control de Calidad' } 
   }
 ]
 

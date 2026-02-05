@@ -5,6 +5,7 @@ import cors from 'cors'
 import pg from 'pg'
 import { parse } from 'csv-parse/sync'
 import fs from 'fs/promises'
+import fsSync from 'fs'
 import path from 'path'
 
 const { Pool } = pg
@@ -61,7 +62,7 @@ function formatNumber(val) {
 // MIDDLEWARE
 // =====================================================
 const corsOptions = {
-  origin: process.env.FRONTEND_ORIGIN || /^http:\/\/localhost(:\d+)?$/,
+  origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'],
   credentials: true
 }
 app.use(cors(corsOptions))
@@ -833,10 +834,27 @@ app.get('/api/produccion/import/warnings-history', async (req, res) => {
 // POST: Sincronizar columnas (agregar columnas nuevas del CSV a PostgreSQL)
 app.post('/api/produccion/schema/sync-columns', async (req, res) => {
   try {
-    const { table, csvPath, reimport } = req.body
+    const { table, csvFolder, reimport } = req.body
     
     if (!table) {
       return res.status(400).json({ error: 'Missing table parameter' })
+    }
+    
+    // Buscar la definición de la tabla
+    const tableDef = TABLE_DEFINITIONS.find(t => t.table === table)
+    if (!tableDef) {
+      return res.status(400).json({ error: `Tabla ${table} no encontrada en TABLE_DEFINITIONS` })
+    }
+    
+    // Construir path del CSV
+    const folder = csvFolder || 'C:\\STC\\CSV'
+    const csvPath = path.join(folder, tableDef.filename)
+    
+    // Verificar que existe el archivo
+    try {
+      await fs.access(csvPath)
+    } catch (err) {
+      return res.status(404).json({ error: `CSV no encontrado: ${csvPath}` })
     }
     
     // Obtener columnas del CSV
@@ -1194,30 +1212,302 @@ app.get('/api/produccion/calidad/available-dates', async (req, res) => {
   }
 })
 
+// GET: Lista de artículos para Mesa de Test
+app.get('/api/produccion/calidad/articulos-mesa-test', async (req, res) => {
+  try {
+    const { fecha_inicial, fecha_final } = req.query
+
+    if (!fecha_inicial) {
+      return res.status(400).json({ error: 'Parámetro "fecha_inicial" requerido' })
+    }
+
+    const fechaInicioFull = `${isoToLocal(fecha_inicial)} 00:00:00`
+    const fechaFinFull = fecha_final ? `${isoToLocal(fecha_final)} 23:59:59` : '31/12/2099 23:59:59'
+    
+    const fechaInicioShort = isoToLocal(fecha_inicial)
+    const fechaFinShort = fecha_final ? isoToLocal(fecha_final) : '31/12/2099'
+
+    const sql = `
+      -- Métricas de CALIDAD
+      WITH MetricasCalidad AS (
+        SELECT 
+          "ARTIGO",
+          ROUND(SUM(CAST(REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.') AS NUMERIC)), 0) AS METROS_REV
+        FROM tb_CALIDAD
+        WHERE TO_DATE("DAT_PROD", 'DD/MM/YYYY') >= TO_DATE($1, 'DD/MM/YYYY HH24:MI:SS') 
+          AND TO_DATE("DAT_PROD", 'DD/MM/YYYY') <= TO_DATE($2, 'DD/MM/YYYY HH24:MI:SS')
+          AND "TRAMA" IS NOT NULL
+        GROUP BY "ARTIGO"
+      ),
+      
+      -- Métricas de TESTES (AVG por PARTIDA primero)
+      MetricasTestes AS (
+        SELECT 
+          "ARTIGO",
+          ROUND(SUM(METRAGEM_AVG), 0) AS METROS_TEST
+        FROM (
+          SELECT 
+            "ARTIGO",
+            "PARTIDA",
+            AVG(CAST(REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.') AS NUMERIC)) AS METRAGEM_AVG
+          FROM tb_TESTES
+          WHERE TO_DATE("DT_PROD", 'DD/MM/YYYY') >= TO_DATE($3, 'DD/MM/YYYY') 
+            AND TO_DATE("DT_PROD", 'DD/MM/YYYY') <= TO_DATE($4, 'DD/MM/YYYY')
+            AND "ARTIGO" IS NOT NULL
+          GROUP BY "ARTIGO", "PARTIDA"
+        ) sub
+        GROUP BY "ARTIGO"
+      ),
+
+      AllArtigos AS (
+        SELECT "ARTIGO" FROM MetricasCalidad
+        UNION 
+        SELECT "ARTIGO" FROM MetricasTestes
+      )
+      
+      SELECT 
+        AU."ARTIGO" AS "ARTIGO_COMPLETO",
+        SUBSTRING(AU."ARTIGO", 1, 10) AS "Articulo",
+        SUBSTRING(AU."ARTIGO", 7, 2) AS "Id",
+        F."COR" AS "Color",
+        F."NOME DE MERCADO" AS "Nombre",
+        F."TRAMA REDUZIDO" AS "Trama",
+        F."PRODUCAO" AS "Prod",
+        COALESCE(MT.METROS_TEST, 0) AS "Metros_TEST",
+        COALESCE(MC.METROS_REV, 0) AS "Metros_REV"
+      FROM AllArtigos AU
+      LEFT JOIN MetricasTestes MT ON AU."ARTIGO" = MT."ARTIGO"
+      LEFT JOIN MetricasCalidad MC ON AU."ARTIGO" = MC."ARTIGO"
+      LEFT JOIN tb_FICHAS F ON AU."ARTIGO" = F."ARTIGO CODIGO"
+      WHERE F."ARTIGO CODIGO" IS NOT NULL
+      ORDER BY AU."ARTIGO"
+    `
+
+    const result = await query(sql, [
+      fechaInicioFull, fechaFinFull,
+      fechaInicioShort, fechaFinShort
+    ])
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en articulos-mesa-test:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET: Análisis detallado de Mesa de Test para un artículo
+app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
+  try {
+    const { articulo, fecha_inicial, fecha_final } = req.query
+
+    if (!articulo) {
+      return res.status(400).json({ error: 'Parámetro "articulo" requerido' })
+    }
+    if (!fecha_inicial) {
+      return res.status(400).json({ error: 'Parámetro "fecha_inicial" requerido' })
+    }
+
+    const fechaInicio = `${isoToLocal(fecha_inicial)} 00:00:00`
+    const fechaFin = fecha_final ? `${isoToLocal(fecha_final)} 23:59:59` : '31/12/9999 23:59:59'
+    
+    const fechaInicioShort = isoToLocal(fecha_inicial)
+    const fechaFinShort = fecha_final ? isoToLocal(fecha_final) : '31/12/9999'
+
+    const sql = `
+      WITH TESTES AS (
+        SELECT 
+          "MAQUINA",
+          "ARTIGO" AS ART_TEST,
+          CAST("PARTIDA" AS INTEGER) AS PARTIDA,
+          "ARTIGO" AS TESTES,
+          "DT_PROD",
+          "APROV",
+          "OBS",
+          "REPROCESSO",
+          CAST(REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.') AS NUMERIC) AS METRAGEM,
+          "LARG_AL",
+          "GRAMAT",
+          "POTEN",
+          "%_ENC_URD",
+          "%_ENC_TRAMA",
+          "%_SK1",
+          "%_SK2",
+          "%_SK3",
+          "%_SK4",
+          "%_SKE",
+          "%_STT",
+          "%_SKM"
+        FROM tb_TESTES
+        WHERE "ARTIGO" = $1
+          AND TO_DATE("DT_PROD", 'DD/MM/YYYY') >= TO_DATE($2, 'DD/MM/YYYY')
+          AND TO_DATE("DT_PROD", 'DD/MM/YYYY') <= TO_DATE($3, 'DD/MM/YYYY')
+      ),
+      
+      CALIDAD AS (
+        SELECT 
+          MIN("DAT_PROD") AS DAT_PROD,
+          "ARTIGO" AS ART_CAL,
+          CAST("PARTIDA" AS INTEGER) AS PARTIDA,
+          ROUND(SUM(CAST(REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.') AS NUMERIC)), 0) AS METRAGEM,
+          ROUND(AVG("LARGURA"), 1) AS LARGURA,
+          ROUND(AVG("GR/M2"), 1) AS "GR/M2"
+        FROM tb_CALIDAD
+        WHERE "ARTIGO" = $4
+          AND "DAT_PROD" >= $5
+          AND "DAT_PROD" <= $6
+        GROUP BY "ARTIGO", "PARTIDA"
+      ),
+      
+      TESTES_CALIDAD AS (
+        SELECT 
+          T.*,
+          C.DAT_PROD,
+          C.METRAGEM AS CALIDAD_METRAGEM,
+          C.LARGURA AS CALIDAD_LARGURA,
+          C."GR/M2" AS CALIDAD_GRM2
+        FROM TESTES T
+        LEFT JOIN CALIDAD C ON T.PARTIDA = C.PARTIDA
+      ),
+      
+      ESPECIFICACION AS (
+        SELECT 
+          "ARTIGO CODIGO",
+          "URDUME",
+          "TRAMA REDUZIDO",
+          "BATIDA",
+          "Oz/jd2",
+          "Peso/m2",
+          CAST(REPLACE("LARGURA MIN", ',', '.') AS NUMERIC) AS LARGURA_MIN_VAL,
+          CAST(REPLACE("LARGURA", ',', '.') AS NUMERIC) AS ANCHO,
+          CAST(REPLACE("LARGURA MAX", ',', '.') AS NUMERIC) AS LARGURA_MAX_VAL,
+          "SKEW MIN",
+          ("SKEW MIN" + "SKEW MAX") / 2.0 AS "SKEW STD",
+          "SKEW MAX",
+          "URD#MIN",
+          ("URD#MIN" + "URD#MAX") / 2.0 AS "URD#STD",
+          "URD#MAX",
+          "TRAMA MIN",
+          ("TRAMA MIN" + "TRAMA MAX") / 2.0 AS "TRAMA STD",
+          "TRAMA MAX",
+          "VAR STR#MIN TRAMA",
+          ("VAR STR#MIN TRAMA" + "VAR STR#MAX TRAMA") / 2.0 AS "VAR STR#STD TRAMA",
+          "VAR STR#MAX TRAMA",
+          "VAR STR#MIN URD",
+          ("VAR STR#MIN URD" + "VAR STR#MAX URD") / 2.0 AS "VAR STR#STD URD",
+          "VAR STR#MAX URD",
+          "ENC#ACAB URD"
+        FROM tb_FICHAS
+        WHERE "ARTIGO CODIGO" = $7
+      )
+      
+      SELECT 
+        CAST(TC.MAQUINA AS INTEGER) AS "Maquina",
+        TC.ART_TEST AS "Articulo",
+        E."TRAMA REDUZIDO" AS "Trama",
+        TC.PARTIDA AS "Partida",
+        TC.TESTES AS "C",
+        TC.DT_PROD AS "Fecha",
+        TC.APROV AS "Ap",
+        TC.OBS AS "Obs",
+        TC.REPROCESSO AS "R",
+        ROUND(TC.METRAGEM, 0) AS "Metros_TEST",
+        ROUND(TC.CALIDAD_METRAGEM, 0) AS "Metros_MESA",
+        
+        ROUND(TC.CALIDAD_LARGURA, 1) AS "Ancho_MESA",
+        
+        ROUND(CASE 
+          WHEN E.LARGURA_MIN_VAL < (E.ANCHO * 0.5) THEN E.ANCHO - E.LARGURA_MIN_VAL
+          ELSE E.LARGURA_MIN_VAL
+        END, 1) AS "Ancho_MIN",
+        
+        ROUND(E.ANCHO, 1) AS "Ancho_STD",
+        
+        ROUND(CASE 
+          WHEN E.LARGURA_MAX_VAL < (E.ANCHO * 0.5) THEN E.ANCHO + E.LARGURA_MAX_VAL
+          ELSE E.LARGURA_MAX_VAL
+        END, 1) AS "Ancho_MAX",
+        
+        ROUND(TC.LARG_AL, 1) AS "Ancho_TEST",
+        
+        ROUND(TC.CALIDAD_GRM2, 1) AS "Peso_MESA",
+        E."Peso/m2" * 0.95 AS "Peso_MIN",
+        ROUND(E."Peso/m2", 1) AS "Peso_STD",
+        E."Peso/m2" * 1.05 AS "Peso_MAX",
+        ROUND(TC.GRAMAT, 1) AS "Peso_TEST",
+        
+        TC.POTEN AS "Potencial",
+        E."ENC#ACAB URD" AS "Potencial_STD",
+        
+        TC."%_ENC_URD" AS "ENC_URD_%",
+        E."URD#MIN" AS "ENC_URD_MIN_%",
+        E."URD#STD" AS "ENC_URD_STD_%",
+        E."URD#MAX" AS "ENC_URD_MAX_%",
+        -1.5 AS "%_ENC_URD_MIN_Meta",
+        -1.0 AS "%_ENC_URD_MAX_Meta",
+        
+        TC."%_ENC_TRAMA" AS "ENC_TRA_%",
+        E."TRAMA MIN" AS "ENC_TRA_MIN_%",
+        E."TRAMA STD" AS "ENC_TRA_STD_%",
+        E."TRAMA MAX" AS "ENC_TRA_MAX_%",
+        
+        TC."%_SK1" AS "%_SK1",
+        TC."%_SK2" AS "%_SK2",
+        TC."%_SK3" AS "%_SK3",
+        TC."%_SK4" AS "%_SK4",
+        TC."%_SKE" AS "%_SKE",
+        
+        E."SKEW MIN" AS "Skew_MIN",
+        E."SKEW STD" AS "Skew_STD",
+        E."SKEW MAX" AS "Skew_MAX",
+        
+        CAST(TC."%_STT" AS NUMERIC) AS "%_STT",
+        E."VAR STR#MIN TRAMA" AS "%_STT_MIN",
+        E."VAR STR#STD TRAMA" AS "%_STT_STD",
+        E."VAR STR#MAX TRAMA" AS "%_STT_MAX",
+        
+        TC."%_SKM" AS "Pasadas_Terminadas",
+        E."VAR STR#MIN URD" AS "Pasadas_MIN",
+        E."VAR STR#STD URD" AS "Pasadas_STD",
+        E."VAR STR#MAX URD" AS "Pasadas_MAX",
+        
+        ROUND(TC.CALIDAD_GRM2 * 0.0295, 1) AS "Peso_MESA_OzYd²",
+        ROUND(E."Peso/m2" * 0.95 * 0.0295, 1) AS "Peso_MIN_OzYd²",
+        ROUND(E."Peso/m2" * 0.0295, 1) AS "Peso_STD_OzYd²",
+        ROUND(E."Peso/m2" * 1.05 * 0.0295, 1) AS "Peso_MAX_OzYd²"
+        
+      FROM TESTES_CALIDAD TC
+      LEFT JOIN ESPECIFICACION E ON TC.ART_TEST = E."ARTIGO CODIGO"
+      ORDER BY TC.DT_PROD
+    `
+
+    const result = await query(sql, [articulo, fechaInicioShort, fechaFinShort, articulo, fechaInicio, fechaFin, articulo])
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en analisis-mesa-test:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // Función auxiliar para obtener columnas de un CSV
 async function getCSVColumns(csvPath) {
-  return new Promise((resolve, reject) => {
-    const columns = []
-    fs.createReadStream(csvPath)
-      .pipe(csv({ separator: ';', headers: false }))
-      .on('data', (row) => {
-        // La primera fila contiene los headers
-        const headers = Object.values(row)
-        columns.push(...headers)
-      })
-      .once('data', () => {
-        // Solo necesitamos la primera fila
-      })
-      .on('error', reject)
-      .on('end', () => resolve(columns))
+  try {
+    // Leer solo la primera línea del archivo
+    const content = await fs.readFile(csvPath, 'utf-8')
+    const lines = content.split('\n')
+    if (lines.length === 0) {
+      throw new Error('Archivo CSV vacío')
+    }
     
-    // Timeout por si el archivo es muy grande
-    setTimeout(() => {
-      if (columns.length === 0) {
-        reject(new Error('Timeout leyendo headers del CSV'))
-      }
-    }, 5000)
-  })
+    // La primera línea contiene los headers
+    const headerLine = lines[0]
+    // Usar separador de coma (estándar en CSVs)
+    const columns = headerLine.split(',').map(col => col.trim())
+    
+    console.log(`📋 CSV tiene ${columns.length} columnas`)
+    return columns
+  } catch (err) {
+    console.error('Error leyendo columnas CSV:', err)
+    throw err
+  }
 }
 
 // =====================================================
