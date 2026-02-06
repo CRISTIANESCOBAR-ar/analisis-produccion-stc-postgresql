@@ -238,7 +238,7 @@ app.post('/api/tensorapid/status', async (req, res) => {
 app.get('/api/tensorapid/par', async (req, res) => {
   try {
     const result = await query(`
-      SELECT testnr, ne_titulo, titulo, comment_text, long_prueba, time_stamp, lote, ne_titulo_type 
+      SELECT testnr, ne_titulo, titulo, comment_text, long_prueba, time_stamp, lote, ne_titulo_type, uster_testnr, laborant 
       FROM tb_tensorapid_par 
       ORDER BY testnr
     `)
@@ -272,8 +272,8 @@ app.post('/api/tensorapid/upload', async (req, res) => {
     
     // Insert or update PAR
     await client.query(`
-      INSERT INTO tb_tensorapid_par (testnr, ne_titulo, titulo, comment_text, long_prueba, time_stamp, lote, ne_titulo_type)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8) 
+      INSERT INTO tb_tensorapid_par (testnr, ne_titulo, titulo, comment_text, long_prueba, time_stamp, lote, ne_titulo_type, uster_testnr, laborant)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) 
       ON CONFLICT (testnr) DO UPDATE SET 
         ne_titulo=EXCLUDED.ne_titulo, 
         titulo=EXCLUDED.titulo, 
@@ -281,8 +281,10 @@ app.post('/api/tensorapid/upload', async (req, res) => {
         long_prueba=EXCLUDED.long_prueba, 
         time_stamp=EXCLUDED.time_stamp, 
         lote=EXCLUDED.lote, 
-        ne_titulo_type=EXCLUDED.ne_titulo_type
-    `, [par.TESTNR, par.NE_TITULO, par.TITULO, par.COMMENT_TEXT, par.LONG_PRUEBA, par.TIME_STAMP, par.LOTE, par.NE_TITULO_TYPE])
+        ne_titulo_type=EXCLUDED.ne_titulo_type,
+        uster_testnr=EXCLUDED.uster_testnr,
+        laborant=EXCLUDED.laborant
+    `, [par.TESTNR, par.NE_TITULO, par.TITULO, par.COMMENT_TEXT, par.LONG_PRUEBA, par.TIME_STAMP, par.LOTE, par.NE_TITULO_TYPE, par.USTER_TESTNR, par.LABORANT])
     
     // Delete existing TBL records
     await client.query('DELETE FROM tb_tensorapid_tbl WHERE testnr = $1', [par.TESTNR])

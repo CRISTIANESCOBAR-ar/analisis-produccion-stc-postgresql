@@ -67,18 +67,16 @@
 					<div v-if="parsedTblData.length" class="ml-4">
 						<h5 class="font-semibold text-lg text-slate-800 mb-0">
 							Datos .TBL — TESTNR: {{ tblTestnr }}
-							<span v-if="formattedTime" class="ml-3 text-base font-normal text-slate-600">
-								Fecha: {{ formattedTime }}
-							</span>
+							<span v-if="formattedTimeDate" class="ml-2 text-slate-600">• {{ formattedTimeDate }}</span>
 						</h5>
 					</div>
 				</div>
 
 				<!-- Grid de dos columnas: tabla de ensayos a la izquierda y datos TBL a la derecha -->
 				<!-- Left column fixed, right column flexible to avoid TBL dropping below -->
-				<div class="flex-1 min-h-0 mt-4 grid grid-cols-1 xl:grid-cols-2 gap-4 items-stretch tenso-grid">
+				<div class="flex-1 min-h-0 mt-4 flex flex-col xl:flex-row gap-4 tenso-grid">
 					<!-- Columna izquierda: Tabla de ensayos encontrados -->
-					<div class="flex flex-col h-full min-h-0">
+					<div class="flex flex-col h-full min-h-0 xl:w-[60%] flex-shrink-0">
 						<div class="flex-1 min-h-0 overflow-y-auto _minimal-scroll">
 							<table class="text-xs border-collapse fixed-table scan-table w-full">
 								<colgroup>
@@ -256,9 +254,9 @@
 					<!-- Fin columna izquierda -->
 
 					<!-- Columna derecha: Tabla TBL (sin contenedor exterior) -->
-					<div v-show="parsedTblData.length">
-						<div class="overflow-auto _minimal-scroll max-h-96">
-							<table class="w-full text-sm border-collapse tbl-centered">
+					<div v-show="parsedTblData.length" class="flex flex-col min-w-0 xl:w-[40%] flex-shrink">
+						<div class="overflow-x-auto overflow-y-auto _minimal-scroll max-h-96 min-w-0">
+							<table class="min-w-full text-sm border-collapse tbl-centered">
 								<colgroup>
 									<!-- Reduced by 40% from 40px -> 24px -->
 									<col style="width:24px" />
@@ -1162,28 +1160,26 @@ const tblTestnr = ref('')
 const parsedTblData = ref([])
 const parsedParData = ref({})
 
-// Format TIME field to dd/mm/yyyy
-const formattedTime = computed(() => {
-	if (!parsedParData.value.TIME) return ''
-	const timeStr = String(parsedParData.value.TIME)
+// Computed property para formatear la fecha del campo TIME a dd/mm/yyyy
+const formattedTimeDate = computed(() => {
+	if (!parsedParData.value || !parsedParData.value.TIME) return ''
+	const timeStr = parsedParData.value.TIME.trim()
+	if (!timeStr) return ''
 	
-	// Check if it's a Unix timestamp (numeric string)
-	if (/^\d+$/.test(timeStr)) {
-		const timestamp = parseInt(timeStr, 10)
-		const date = new Date(timestamp * 1000) // Convert seconds to milliseconds
-		const day = String(date.getDate()).padStart(2, '0')
-		const month = String(date.getMonth() + 1).padStart(2, '0')
-		const year = date.getFullYear()
-		return `${day}/${month}/${year}`
+	// El formato TIME de TensoRapid .PAR es "dd.mm.yyyy" (columna 8 de la línea TIME)
+	try {
+		const parts = timeStr.split('.')
+		
+		if (parts.length === 3) {
+			const day = parts[0].padStart(2, '0')
+			const month = parts[1].padStart(2, '0')
+			const year = parts[2]
+			return `${day}/${month}/${year}`
+		}
+	} catch (err) {
+		console.warn('Error formateando fecha TIME:', err)
 	}
-	
-	// If already in dd/mm/yyyy format, extract just the date part
-	const match = timeStr.match(/(\d{2})\/(\d{2})\/(\d{4})/)
-	if (match) {
-		return `${match[1]}/${match[2]}/${match[3]}`
-	}
-	
-	return timeStr
+	return ''
 })
 
 // Prepared TBL data as it will be sent to the backend (matching saveToOracle mapping)
@@ -1219,7 +1215,7 @@ const preparedTblPreview = computed(() => {
 const tensoParFields = [
 	{ field: 'CATALOG', row: 3, col: 1 },
 	{ field: 'TESTNR', row: 8, col: 5 },
-	{ field: 'TIME', row: 9, col: 5 },
+	{ field: 'TIME', row: 9, col: 8 },
 	{ field: 'SORTIMENT', row: 10, col: 5 },
 	{ field: 'ARTICLE', row: 11, col: 5 },
 	{ field: 'MASCHNR', row: 12, col: 5 },
