@@ -3,6 +3,7 @@ import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import pg from 'pg'
+import { getImportStatus, importCSV, importAll } from './import-manager.js'
 
 const { Pool } = pg
 const app = express()
@@ -330,6 +331,91 @@ app.delete('/api/tensorapid/delete/:testnr', async (req, res) => {
   } catch (err) { 
     res.status(500).json({ error: err.message }) 
   }
+})
+
+// =====================================================
+// ENDPOINTS PRODUCCION (Sistema de importación CSV)
+// =====================================================
+
+// PRODUCCION: Import status (estado de todos los CSVs)
+app.get('/api/produccion/import-status', async (req, res) => {
+  try {
+    const csvFolder = req.query.csvFolder || 'C:\\STC\\CSV'
+    const status = await getImportStatus(pool, csvFolder)
+    res.json(status)
+  } catch (err) {
+    console.error('Error en import-status:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PRODUCCION: DB status (información básica de la base de datos)
+app.get('/api/produccion/status', async (req, res) => {
+  try {
+    // Obtener tamaño de la base de datos
+    const sizeResult = await query(`
+      SELECT pg_size_pretty(pg_database_size(current_database())) as size,
+             pg_database_size(current_database()) / (1024 * 1024) as size_mb
+    `)
+    
+    res.json({
+      database: process.env.PG_DATABASE || 'stc_produccion',
+      sizeMB: Math.round(sizeResult.rows[0].size_mb),
+      sizeFormatted: sizeResult.rows[0].size,
+      connected: true
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PRODUCCION: Importar una tabla específica
+app.post('/api/produccion/import/:table', async (req, res) => {
+  try {
+    const { table } = req.params
+    const { csvPath } = req.body
+    
+    if (!csvPath) {
+      return res.status(400).json({ error: 'csvPath requerido' })
+    }
+    
+    const result = await importCSV(pool, table, csvPath)
+    res.json(result)
+  } catch (err) {
+    console.error(`Error importando ${req.params.table}:`, err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PRODUCCION: Importar todos los CSVs desactualizados
+app.post('/api/produccion/import-all', async (req, res) => {
+  try {
+    const csvFolder = req.body.csvFolder || 'C:\\STC\\CSV'
+    const results = await importAll(pool, csvFolder)
+    res.json({ results })
+  } catch (err) {
+    console.error('Error en import-all:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PRODUCCION: Column warnings (devuelve lista vacía - funcionalidad opcional)
+app.get('/api/produccion/import/column-warnings', async (req, res) => {
+  try {
+    res.json({ warnings: [] })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PRODUCCION: Pick folder (no implementado - funcionalidad opcional)
+app.post('/api/produccion/system/pick-folder', async (req, res) => {
+  res.status(501).json({ error: 'Funcionalidad no implementada' })
+})
+
+// PRODUCCION: Sync columns (no implementado - funcionalidad opcional)
+app.post('/api/produccion/schema/sync-columns', async (req, res) => {
+  res.status(501).json({ error: 'Funcionalidad no implementada' })
 })
 
 // =====================================================
