@@ -161,8 +161,12 @@ async function importCalidad() {
     let imported = 0;
     let skipped = 0;
     
+    // PASO 1: Filtrar y preparar registros válidos
+    console.log('Preparando datos...');
+    const validRecords = [];
+    
     for (const record of records) {
-      // Filtrar filas vacías o encabezados duplicados (usar DAT_PROD como referencia)
+      // Filtrar filas vacías o encabezados duplicados
       const datProd = record['DAT_PROD'] || '';
       if (datProd === 'DAT_PROD' || datProd.trim() === '' || !datProd.match(/\d{2}\/\d{2}\/\d{4}/)) {
         skipped++;
@@ -175,20 +179,61 @@ async function importCalidad() {
         values[pgCol] = record[csvCol] || null;
       }
       
-      // Construir query
-      const columns = Object.keys(values).map(c => `"${c}"`).join(', ');
-      const placeholders = Object.keys(values).map((_, i) => `$${i + 1}`).join(', ');
-      const valueArray = Object.values(values);
+      validRecords.push(values);
+    }
+    
+    console.log(`Registros válidos: ${validRecords.length}`);
+    console.log(`Registros omitidos: ${skipped}`);
+    
+    if (validRecords.length === 0) {
+      console.log('\n⚠️  No hay registros válidos para importar');
+      await client.query('COMMIT');
+      return;
+    }
+    
+    // PASO 2: Insertar en batches (ajustado por número de columnas)
+    // PostgreSQL tiene límite de ~32,767 parámetros por query
+    // Con 87 columnas: usar batch conservador de 150 filas = 13,050 parámetros
+    const numColumns = Object.keys(validRecords[0]).length;
+    const BATCH_SIZE = 150; // Batch conservador para muchas columnas
+    const numBatches = Math.ceil(validRecords.length / BATCH_SIZE);
+    
+    console.log(`\nInsertando en ${numBatches} batches de ${BATCH_SIZE} registros (${numColumns} columnas)...`);
+    
+    for (let i = 0; i < validRecords.length; i += BATCH_SIZE) {
+      const batch = validRecords.slice(i, i + BATCH_SIZE);
       
-      const query = `INSERT INTO tb_CALIDAD (${columns}) VALUES (${placeholders})`;
+      if (batch.length === 0) continue;
       
-      await client.query(query, valueArray);
-      imported++;
+      // Obtener columnas del primer registro
+      const columns = Object.keys(batch[0]).map(c => `"${c}"`).join(', ');
+      const batchCols = Object.keys(batch[0]).length;
       
-      if (imported % 1000 === 0) {
-        console.log(`  Importados ${imported} registros...`);
+      // Construir placeholders para múltiples registros
+      const valuePlaceholders = [];
+      const allValues = [];
+      
+      batch.forEach((record, idx) => {
+        const offset = idx * batchCols;
+        const placeholders = Array.from({ length: batchCols }, (_, colIdx) => `$${offset + colIdx + 1}`);
+        valuePlaceholders.push(`(${placeholders.join(', ')})`);
+        allValues.push(...Object.values(record));
+      });
+      
+      // Ejecutar INSERT con múltiples VALUES
+      const query = `INSERT INTO tb_CALIDAD (${columns}) VALUES ${valuePlaceholders.join(', ')}`;
+      
+      await client.query(query, allValues);
+      imported += batch.length;
+      
+      // Mostrar progreso cada 5 batches
+      const currentBatch = Math.floor(i / BATCH_SIZE) + 1;
+      if (currentBatch % 5 === 0 || currentBatch === numBatches) {
+        console.log(`  ⏳ Batch ${currentBatch}/${numBatches} - ${imported} registros insertados...`);
       }
     }
+    
+    console.log(`  ✓ ${imported} registros insertados...`);
     
     await client.query('COMMIT');
     console.log(`\n✅ Importación completada:`);

@@ -244,6 +244,7 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch, nextTick, computed } from 'vue'
 import { Chart, registerables } from 'chart.js'
+import { formatNumber as formatNum } from '@/utils/formatters'
 
 Chart.register(...registerables)
 
@@ -352,14 +353,17 @@ const articulosFiltrados = computed(() => {
 const toggleSort = (key) => {
   const idx = sortState.value.findIndex(s => s.key === key)
   if (idx === -1) {
-    sortState.value.push({ key, dir: 'asc' })
+    // No estaba ordenado, agregar ASC
+    sortState.value = [{ key, dir: 'asc' }]
     return
   }
   const current = sortState.value[idx]
   if (current.dir === 'asc') {
-    sortState.value[idx] = { key, dir: 'desc' }
+    // Cambiar a DESC
+    sortState.value = [{ key, dir: 'desc' }]
   } else {
-    sortState.value.splice(idx, 1)
+    // Quitar ordenamiento (triple estado)
+    sortState.value = []
   }
 }
 
@@ -387,10 +391,7 @@ const formatFechaCorta = (iso) => {
   return `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${y.slice(-2)}`
 }
 
-const formatNumber = (num) => {
-  if (!num && num !== 0) return '-'
-  return num.toLocaleString('es-ES')
-}
+const formatNumber = formatNum
 
 const cargarListaArticulos = async () => {
   if (!fechaInicial.value) {

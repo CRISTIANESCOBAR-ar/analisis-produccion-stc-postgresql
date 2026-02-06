@@ -3,6 +3,13 @@ import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import pg from 'pg'
+import { spawn } from 'child_process'
+import path from 'path'
+import fs from 'fs'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 const { Pool } = pg
 const app = express()
@@ -65,7 +72,30 @@ function isoToLocal(isoDate) {
 // MIDDLEWARE
 // =====================================================
 const corsOptions = {
-  origin: process.env.FRONTEND_ORIGIN || /^http:\/\/localhost(:\d+)?$/,
+  origin: function (origin, callback) {
+    const allowedOrigins = [
+      'http://localhost:5173',
+      'http://localhost:5174',
+      /^http:\/\/localhost(:\d+)?$/
+    ];
+    
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Check if origin matches any allowed pattern
+    const isAllowed = allowedOrigins.some(pattern => {
+      if (pattern instanceof RegExp) {
+        return pattern.test(origin);
+      }
+      return pattern === origin;
+    });
+    
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }
 app.use(cors(corsOptions))
@@ -369,38 +399,39 @@ app.get('/api/produccion/calidad/articulos-mesa-test', async (req, res) => {
       ),
       
       -- Métricas de TESTES (AVG por PARTIDA primero)
+      -- NOTA: tb_TESTES tiene columnas en minúsculas
       MetricasTestes AS (
         SELECT 
-          "ARTIGO",
+          artigo,
           ROUND(SUM(METRAGEM_AVG), 0) AS METROS_TEST
         FROM (
           SELECT 
-            "ARTIGO",
-            "PARTIDA",
-            AVG(CAST(REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.') AS NUMERIC)) AS METRAGEM_AVG
+            artigo,
+            partida,
+            AVG(CAST(REPLACE(REPLACE(metragem, '.', ''), ',', '.') AS NUMERIC)) AS METRAGEM_AVG
           FROM tb_TESTES
-          WHERE "DT_PROD" ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}$'
-            AND TO_DATE("DT_PROD", 'DD/MM/YYYY') >= TO_DATE($3, 'DD/MM/YYYY') 
-            AND TO_DATE("DT_PROD", 'DD/MM/YYYY') <= TO_DATE($4, 'DD/MM/YYYY')
-            AND "ARTIGO" IS NOT NULL
-            AND "ARTIGO" != 'ARTIGO'
-            AND "PARTIDA" IS NOT NULL
-            AND "PARTIDA" !~ '^[A-Z]'
-          GROUP BY "ARTIGO", "PARTIDA"
+          WHERE dt_prod ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}$'
+            AND TO_DATE(dt_prod, 'DD/MM/YYYY') >= TO_DATE($3, 'DD/MM/YYYY') 
+            AND TO_DATE(dt_prod, 'DD/MM/YYYY') <= TO_DATE($4, 'DD/MM/YYYY')
+            AND artigo IS NOT NULL
+            AND artigo != 'ARTIGO'
+            AND partida IS NOT NULL
+            AND partida !~ '^[A-Z]'
+          GROUP BY artigo, partida
         ) sub
-        GROUP BY "ARTIGO"
+        GROUP BY artigo
       ),
 
       AllArtigos AS (
-        SELECT "ARTIGO" FROM MetricasCalidad
+        SELECT "ARTIGO" AS artigo FROM MetricasCalidad
         UNION 
-        SELECT "ARTIGO" FROM MetricasTestes
+        SELECT artigo FROM MetricasTestes
       )
       
       SELECT 
-        AU."ARTIGO" AS "ARTIGO_COMPLETO",
-        SUBSTRING(AU."ARTIGO", 1, 10) AS "Articulo",
-        SUBSTRING(AU."ARTIGO", 7, 2) AS "Id",
+        AU.artigo AS "ARTIGO_COMPLETO",
+        SUBSTRING(AU.artigo, 1, 10) AS "Articulo",
+        SUBSTRING(AU.artigo, 7, 2) AS "Id",
         F."COR" AS "Color",
         F."NOME DE MERCADO" AS "Nombre",
         F."TRAMA" AS "Trama",
@@ -408,11 +439,11 @@ app.get('/api/produccion/calidad/articulos-mesa-test', async (req, res) => {
         COALESCE(MT.METROS_TEST, 0) AS "Metros_TEST",
         COALESCE(MC.METROS_REV, 0) AS "Metros_REV"
       FROM AllArtigos AU
-      LEFT JOIN MetricasTestes MT ON AU."ARTIGO" = MT."ARTIGO"
-      LEFT JOIN MetricasCalidad MC ON AU."ARTIGO" = MC."ARTIGO"
-      LEFT JOIN tb_FICHAS F ON AU."ARTIGO" = F."ARTIGO CODIGO"
+      LEFT JOIN MetricasTestes MT ON AU.artigo = MT.artigo
+      LEFT JOIN MetricasCalidad MC ON AU.artigo = MC."ARTIGO"
+      LEFT JOIN tb_FICHAS F ON AU.artigo = F."ARTIGO CODIGO"
       WHERE F."ARTIGO CODIGO" IS NOT NULL
-      ORDER BY AU."ARTIGO"
+      ORDER BY AU.artigo
     `
 
     const result = await query(sql, [
@@ -444,34 +475,34 @@ app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
     const sql = `
       WITH TESTES AS (
         SELECT 
-          "MAQUINA",
-          "ARTIGO" AS ART_TEST,
-          CAST("PARTIDA" AS INTEGER) AS PARTIDA,
-          "ARTIGO" AS TESTES,
-          "DT_PROD",
-          "APROV",
-          "OBS",
-          "REPROCESSO",
-          CAST(REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.') AS NUMERIC) AS METRAGEM,
-          "LARG_AL",
-          "GRAMAT",
-          "POTEN",
-          "%_ENC_URD",
-          "%_ENC_TRAMA",
-          "%_SK1",
-          "%_SK2",
-          "%_SK3",
-          "%_SK4",
-          "%_SKE",
-          "%_STT",
-          "%_SKM"
+          maquina,
+          artigo AS ART_TEST,
+          CAST(partida AS INTEGER) AS PARTIDA,
+          artigo AS TESTES,
+          dt_prod,
+          aprov,
+          obs,
+          reprocesso,
+          CAST(REPLACE(REPLACE(metragem, '.', ''), ',', '.') AS NUMERIC) AS METRAGEM,
+          CAST(REPLACE(REPLACE(larg_al, '.', ''), ',', '.') AS NUMERIC) AS larg_al,
+          CAST(REPLACE(REPLACE(gramat, '.', ''), ',', '.') AS NUMERIC) AS gramat,
+          CAST(REPLACE(REPLACE(poten, '.', ''), ',', '.') AS NUMERIC) AS poten,
+          CAST(REPLACE(REPLACE("%_ENC_URD", '.', ''), ',', '.') AS NUMERIC) AS "%_ENC_URD",
+          CAST(REPLACE(REPLACE("%_ENC_TRAMA", '.', ''), ',', '.') AS NUMERIC) AS "%_ENC_TRAMA",
+          CAST(REPLACE(REPLACE("%_SK1", '.', ''), ',', '.') AS NUMERIC) AS "%_SK1",
+          CAST(REPLACE(REPLACE("%_SK2", '.', ''), ',', '.') AS NUMERIC) AS "%_SK2",
+          CAST(REPLACE(REPLACE("%_SK3", '.', ''), ',', '.') AS NUMERIC) AS "%_SK3",
+          CAST(REPLACE(REPLACE("%_SK4", '.', ''), ',', '.') AS NUMERIC) AS "%_SK4",
+          CAST(REPLACE(REPLACE("%_SKE", '.', ''), ',', '.') AS NUMERIC) AS "%_SKE",
+          CAST(REPLACE(REPLACE("%_STT", '.', ''), ',', '.') AS NUMERIC) AS "%_STT",
+          CAST(REPLACE(REPLACE("%_SKM", '.', ''), ',', '.') AS NUMERIC) AS "%_SKM"
         FROM tb_TESTES
-        WHERE "ARTIGO" = $1
-          AND "DT_PROD" ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}$'
-          AND TO_DATE("DT_PROD", 'DD/MM/YYYY') >= TO_DATE($2, 'DD/MM/YYYY')
-          AND TO_DATE("DT_PROD", 'DD/MM/YYYY') <= TO_DATE($3, 'DD/MM/YYYY')
-          AND "PARTIDA" IS NOT NULL
-          AND "PARTIDA" !~ '^[A-Z]'
+        WHERE artigo = $1
+          AND dt_prod ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}$'
+          AND TO_DATE(dt_prod, 'DD/MM/YYYY') >= TO_DATE($2, 'DD/MM/YYYY')
+          AND TO_DATE(dt_prod, 'DD/MM/YYYY') <= TO_DATE($3, 'DD/MM/YYYY')
+          AND partida IS NOT NULL
+          AND partida !~ '^[A-Z]'
       ),
       
       CALIDAD AS (
@@ -480,8 +511,8 @@ app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
           "ARTIGO" AS ART_CAL,
           CAST("PARTIDA" AS INTEGER) AS PARTIDA,
           ROUND(SUM(CAST(REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.') AS NUMERIC)), 0) AS METRAGEM,
-          ROUND(AVG("LARGURA"), 1) AS LARGURA,
-          ROUND(AVG("GR/M2"), 1) AS "GR/M2"
+          ROUND(AVG(CAST(REPLACE(REPLACE("LARGURA", '.', ''), ',', '.') AS NUMERIC)), 1) AS LARGURA,
+          ROUND(AVG(CAST(REPLACE(REPLACE("GR/M2", '.', ''), ',', '.') AS NUMERIC)), 1) AS "GR/M2"
         FROM tb_CALIDAD
         WHERE "ARTIGO" = $4
           AND "DAT_PROD" ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}$'
@@ -507,41 +538,41 @@ app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
           "URDUME",
           "TRAMA",
           "BATIDA",
-          "Oz/jd2",
-          "Peso/m2",
+          CAST(REPLACE("Oz/jd2", ',', '.') AS NUMERIC) AS "Oz/jd2",
+          CAST(REPLACE("Peso/m2", ',', '.') AS NUMERIC) AS "Peso/m2",
           CAST(REPLACE("LARGURA MIN", ',', '.') AS NUMERIC) AS LARGURA_MIN_VAL,
           CAST(REPLACE("LARGURA", ',', '.') AS NUMERIC) AS ANCHO,
           CAST(REPLACE("LARGURA MAX", ',', '.') AS NUMERIC) AS LARGURA_MAX_VAL,
-          "SKEW MIN",
-          ("SKEW MIN" + "SKEW MAX") / 2.0 AS "SKEW STD",
-          "SKEW MAX",
-          "URD#MIN",
-          ("URD#MIN" + "URD#MAX") / 2.0 AS "URD#STD",
-          "URD#MAX",
-          "TRAMA MIN",
-          ("TRAMA MIN" + "TRAMA MAX") / 2.0 AS "TRAMA STD",
-          "TRAMA MAX",
-          "VAR STR#MIN TRAMA",
-          ("VAR STR#MIN TRAMA" + "VAR STR#MAX TRAMA") / 2.0 AS "VAR STR#STD TRAMA",
-          "VAR STR#MAX TRAMA",
-          "VAR STR#MIN URD",
-          ("VAR STR#MIN URD" + "VAR STR#MAX URD") / 2.0 AS "VAR STR#STD URD",
-          "VAR STR#MAX URD",
-          "ENC#ACAB URD"
+          CAST(REPLACE("SKEW MIN", ',', '.') AS NUMERIC) AS "SKEW MIN",
+          (CAST(REPLACE("SKEW MIN", ',', '.') AS NUMERIC) + CAST(REPLACE("SKEW MAX", ',', '.') AS NUMERIC)) / 2.0 AS "SKEW STD",
+          CAST(REPLACE("SKEW MAX", ',', '.') AS NUMERIC) AS "SKEW MAX",
+          CAST(REPLACE("URD#MIN", ',', '.') AS NUMERIC) AS "URD#MIN",
+          (CAST(REPLACE("URD#MIN", ',', '.') AS NUMERIC) + CAST(REPLACE("URD#MAX", ',', '.') AS NUMERIC)) / 2.0 AS "URD#STD",
+          CAST(REPLACE("URD#MAX", ',', '.') AS NUMERIC) AS "URD#MAX",
+          CAST(REPLACE("TRAMA MIN", ',', '.') AS NUMERIC) AS "TRAMA MIN",
+          (CAST(REPLACE("TRAMA MIN", ',', '.') AS NUMERIC) + CAST(REPLACE("TRAMA MAX", ',', '.') AS NUMERIC)) / 2.0 AS "TRAMA STD",
+          CAST(REPLACE("TRAMA MAX", ',', '.') AS NUMERIC) AS "TRAMA MAX",
+          CAST(REPLACE("VAR STR#MIN TRAMA", ',', '.') AS NUMERIC) AS "VAR STR#MIN TRAMA",
+          (CAST(REPLACE("VAR STR#MIN TRAMA", ',', '.') AS NUMERIC) + CAST(REPLACE("VAR STR#MAX TRAMA", ',', '.') AS NUMERIC)) / 2.0 AS "VAR STR#STD TRAMA",
+          CAST(REPLACE("VAR STR#MAX TRAMA", ',', '.') AS NUMERIC) AS "VAR STR#MAX TRAMA",
+          CAST(REPLACE("VAR STR#MIN URD", ',', '.') AS NUMERIC) AS "VAR STR#MIN URD",
+          (CAST(REPLACE("VAR STR#MIN URD", ',', '.') AS NUMERIC) + CAST(REPLACE("VAR STR#MAX URD", ',', '.') AS NUMERIC)) / 2.0 AS "VAR STR#STD URD",
+          CAST(REPLACE("VAR STR#MAX URD", ',', '.') AS NUMERIC) AS "VAR STR#MAX URD",
+          CAST(REPLACE("ENC#ACAB URD", ',', '.') AS NUMERIC) AS "ENC#ACAB URD"
         FROM tb_FICHAS
         WHERE "ARTIGO CODIGO" = $7
       )
       
       SELECT 
-        CAST(TC.MAQUINA AS INTEGER) AS "Maquina",
+        CAST(TC.maquina AS INTEGER) AS "Maquina",
         TC.ART_TEST AS "Articulo",
         E."TRAMA" AS "Trama",
         TC.PARTIDA AS "Partida",
         TC.TESTES AS "C",
-        TC.DT_PROD AS "Fecha",
-        TC.APROV AS "Ap",
-        TC.OBS AS "Obs",
-        TC.REPROCESSO AS "R",
+        TC.dt_prod AS "Fecha",
+        TC.aprov AS "Ap",
+        TC.obs AS "Obs",
+        TC.reprocesso AS "R",
         ROUND(TC.METRAGEM, 0) AS "Metros_TEST",
         ROUND(TC.CALIDAD_METRAGEM, 0) AS "Metros_MESA",
         
@@ -559,15 +590,15 @@ app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
           ELSE E.LARGURA_MAX_VAL
         END, 1) AS "Ancho_MAX",
         
-        ROUND(TC.LARG_AL, 1) AS "Ancho_TEST",
+        ROUND(TC.larg_al, 1) AS "Ancho_TEST",
         
         ROUND(TC.CALIDAD_GRM2, 1) AS "Peso_MESA",
         E."Peso/m2" * 0.95 AS "Peso_MIN",
         ROUND(E."Peso/m2", 1) AS "Peso_STD",
         E."Peso/m2" * 1.05 AS "Peso_MAX",
-        ROUND(TC.GRAMAT, 1) AS "Peso_TEST",
+        ROUND(TC.gramat, 1) AS "Peso_TEST",
         
-        TC.POTEN AS "Potencial",
+        TC.poten AS "Potencial",
         E."ENC#ACAB URD" AS "Potencial_STD",
         
         TC."%_ENC_URD" AS "ENC_URD_%",
@@ -592,7 +623,7 @@ app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
         E."SKEW STD" AS "Skew_STD",
         E."SKEW MAX" AS "Skew_MAX",
         
-        CAST(TC."%_STT" AS NUMERIC) AS "%_STT",
+        TC."%_STT" AS "%_STT",
         E."VAR STR#MIN TRAMA" AS "%_STT_MIN",
         E."VAR STR#STD TRAMA" AS "%_STT_STD",
         E."VAR STR#MAX TRAMA" AS "%_STT_MAX",
@@ -609,7 +640,7 @@ app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
         
       FROM TESTES_CALIDAD TC
       LEFT JOIN ESPECIFICACION E ON TC.ART_TEST = E."ARTIGO CODIGO"
-      ORDER BY TC.DT_PROD
+      ORDER BY TC.dt_prod
     `
 
     const result = await query(sql, [articulo, fechaInicioShort, fechaFinShort, articulo, fechaInicioShort, fechaFinShort, articulo])
@@ -620,12 +651,251 @@ app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
   }
 })
 
+// GET: Revisión CQ - Resumen por revisor
+app.get('/api/produccion/calidad/revision-cq', async (req, res) => {
+  try {
+    const { startDate, endDate, tramas } = req.query
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({ error: 'Parámetros "startDate" y "endDate" requeridos' })
+    }
+
+    const fechaInicio = isoToLocal(startDate)
+    const fechaFin = isoToLocal(endDate)
+
+    const sql = `
+      SELECT 
+        "REVISOR FINAL" AS "Revisor",
+        ROUND(SUM(CAST(REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.') AS NUMERIC)), 0) AS "Mts_Total",
+        ROUND(
+          (COUNT(CASE WHEN "QUALIDADE" = 'PRIMEIRA' THEN 1 END)::NUMERIC * 100.0 / 
+           NULLIF(COUNT(*), 0)),
+          1
+        ) AS "Calidad_Perc",
+        ROUND(
+          CASE 
+            WHEN SUM(CAST(REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.') AS NUMERIC)) > 0 
+            THEN (
+              SUM(
+                CASE 
+                  WHEN "PONTUACAO" ~ '^[0-9]+([,.][0-9]+)?$'
+                  THEN CAST(REPLACE(REPLACE("PONTUACAO", '.', ''), ',', '.') AS NUMERIC)
+                  ELSE 0
+                END
+              ) / SUM(CAST(REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.') AS NUMERIC))
+            ) * 10000
+            ELSE 0
+          END,
+          1
+        ) AS "Pts_100m2",
+        COUNT(CASE WHEN "QUALIDADE" = 'PRIMEIRA' THEN 1 END) AS "Rollos_1era",
+        COUNT(
+          CASE 
+            WHEN "PONTUACAO" ~ '^[0-9]+([,.][0-9]+)?$' AND 
+                 CAST(REPLACE(REPLACE("PONTUACAO", '.', ''), ',', '.') AS NUMERIC) = 0 
+            THEN 1 
+          END
+        ) AS "Rollos_Sin_Pts",
+        ROUND(
+          (
+            COUNT(
+              CASE 
+                WHEN "PONTUACAO" ~ '^[0-9]+([,.][0-9]+)?$' AND 
+                     CAST(REPLACE(REPLACE("PONTUACAO", '.', ''), ',', '.') AS NUMERIC) = 0 
+                THEN 1 
+              END
+            )::NUMERIC * 100.0 / 
+            NULLIF(COUNT(CASE WHEN "QUALIDADE" = 'PRIMEIRA' THEN 1 END), 0)
+          ), 
+          1
+        ) AS "Perc_Sin_Pts"
+      FROM tb_CALIDAD
+      WHERE "DAT_PROD" ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}$'
+        AND TO_DATE("DAT_PROD", 'DD/MM/YYYY') >= TO_DATE($1, 'DD/MM/YYYY')
+        AND TO_DATE("DAT_PROD", 'DD/MM/YYYY') <= TO_DATE($2, 'DD/MM/YYYY')
+        AND ($3 = 'Todas' OR "TRAMA" = $3)
+        AND "REVISOR FINAL" IS NOT NULL
+        AND "REVISOR FINAL" != ''
+      GROUP BY "REVISOR FINAL"
+      ORDER BY "Revisor"
+    `
+
+    const result = await query(sql, [fechaInicio, fechaFin, tramas || 'Todas'])
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en revision-cq:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET: Detalle de revisor - Partidas revisadas por un revisor específico
+app.get('/api/produccion/calidad/revisor-detalle', async (req, res) => {
+  try {
+    const { startDate, endDate, revisor, tramas } = req.query
+
+    if (!startDate || !endDate || !revisor) {
+      return res.status(400).json({ error: 'Parámetros "startDate", "endDate" y "revisor" requeridos' })
+    }
+
+    const fechaInicio = isoToLocal(startDate)
+    const fechaFin = isoToLocal(endDate)
+
+    const sql = `
+      SELECT 
+        MIN("HORA") AS "HoraInicio",
+        MIN("NM MERC") AS "NombreArticulo",
+        "PARTIDA" AS "Partidas",
+        ROUND(SUM(CAST(REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.') AS NUMERIC)), 0) AS "MetrosRevisados",
+        ROUND(
+          (COUNT(CASE WHEN "QUALIDADE" = 'PRIMEIRA' THEN 1 END)::NUMERIC * 100.0 / 
+           NULLIF(COUNT(*), 0)),
+          1
+        ) AS "CalidadPct",
+        ROUND(
+          CASE 
+            WHEN SUM(CAST(REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.') AS NUMERIC)) > 0 
+            THEN (
+              SUM(
+                CASE 
+                  WHEN "PONTUACAO" ~ '^[0-9]+([,.][0-9]+)?$'
+                  THEN CAST(REPLACE(REPLACE("PONTUACAO", '.', ''), ',', '.') AS NUMERIC)
+                  ELSE 0
+                END
+              ) / SUM(CAST(REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.') AS NUMERIC))
+            ) * 10000
+            ELSE 0
+          END,
+          1
+        ) AS "Pts100m2",
+        COUNT(*) AS "TotalRollos",
+        COUNT(
+          CASE 
+            WHEN "PONTUACAO" ~ '^[0-9]+([,.][0-9]+)?$' AND 
+                 CAST(REPLACE(REPLACE("PONTUACAO", '.', ''), ',', '.') AS NUMERIC) = 0 
+            THEN 1 
+          END
+        ) AS "SinPuntos",
+        ROUND(
+          (
+            COUNT(
+              CASE 
+                WHEN "PONTUACAO" ~ '^[0-9]+([,.][0-9]+)?$' AND 
+                     CAST(REPLACE(REPLACE("PONTUACAO", '.', ''), ',', '.') AS NUMERIC) = 0 
+                THEN 1 
+              END
+            )::NUMERIC * 100.0 / 
+            NULLIF(COUNT(*), 0)
+          ), 
+          1
+        ) AS "SinPuntosPct",
+        MIN("TEAR") AS "Telar",
+        0 AS "EficienciaPct",
+        0 AS "RU105",
+        0 AS "RT105"
+      FROM tb_CALIDAD
+      WHERE "DAT_PROD" ~ '^[0-9]{2}/[0-9]{2}/[0-9]{4}$'
+        AND TO_DATE("DAT_PROD", 'DD/MM/YYYY') >= TO_DATE($1, 'DD/MM/YYYY')
+        AND TO_DATE("DAT_PROD", 'DD/MM/YYYY') <= TO_DATE($2, 'DD/MM/YYYY')
+        AND "REVISOR FINAL" = $3
+        AND ($4 = 'Todas' OR "TRAMA" = $4)
+        AND "PARTIDA" IS NOT NULL
+        AND "PARTIDA" != ''
+      GROUP BY "PARTIDA"
+      ORDER BY MIN("HORA")
+    `
+
+    const result = await query(sql, [fechaInicio, fechaFin, revisor, tramas || 'Todas'])
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en revisor-detalle:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET: Detalle de partida - Piezas de una partida específica
+app.get('/api/produccion/calidad/partida-detalle', async (req, res) => {
+  try {
+    const { fecha, partida, revisor } = req.query
+
+    if (!fecha || !partida || !revisor) {
+      return res.status(400).json({ error: 'Parámetros "fecha", "partida" y "revisor" requeridos' })
+    }
+
+    const fechaLocal = isoToLocal(fecha)
+
+    const sql = `
+      SELECT 
+        "GRP_DEF",
+        "COD_DE",
+        "DEFEITO",
+        "METRAGEM",
+        "QUALIDADE",
+        "HORA",
+        "EMENDAS",
+        "PEÇA",
+        "ETIQUETA",
+        "LARGURA",
+        "PONTUACAO",
+        "ARTIGO",
+        "COR",
+        "NM MERC" AS "NM_MERC",
+        "TRAMA",
+        "PARTIDA"
+      FROM tb_CALIDAD
+      WHERE "DAT_PROD" = $1
+        AND "PARTIDA" = $2
+        AND "REVISOR FINAL" = $3
+      ORDER BY "HORA", "PEÇA"
+    `
+
+    const result = await query(sql, [fechaLocal, partida, revisor])
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en partida-detalle:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET: Defectos de una pieza específica
+app.get('/api/produccion/calidad/defectos-detalle', async (req, res) => {
+  try {
+    const { etiqueta } = req.query
+
+    if (!etiqueta) {
+      return res.status(400).json({ error: 'Parámetro "etiqueta" requerido' })
+    }
+
+    const sql = `
+      SELECT 
+        partida AS "PARTIDA",
+        peca AS "PECA",
+        etiqueta AS "ETIQUETA",
+        cod_def AS "COD_DEF",
+        desc_defeito AS "DESC_DEFEITO",
+        pontos AS "PONTOS",
+        CASE 
+          WHEN qualidade = '1' THEN 'PRIMEIRA'
+          WHEN qualidade = '2' THEN 'SEGUNDA'
+          WHEN qualidade = '3' THEN 'TERCEIRA'
+          ELSE qualidade
+        END AS "QUALIDADE",
+        data_prod AS "DATA_PROD"
+      FROM tb_DEFECTOS
+      WHERE etiqueta = $1
+      ORDER BY cod_def
+    `
+
+    const result = await query(sql, [etiqueta])
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en defectos-detalle:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // =====================================================
 // ENDPOINTS DE CONTROL DE IMPORTACIONES
 // =====================================================
-
-import fs from 'fs'
-import path from 'path'
 
 // Mapeo de archivos CSV a tablas PostgreSQL
 const CSV_TABLE_MAPPING = {
@@ -701,12 +971,9 @@ app.get('/api/produccion/import-status', async (req, res) => {
 
       // Obtener estadísticas de la tabla en PostgreSQL
       try {
+        // Primero obtener el conteo de filas
         const tableQuery = `
-          SELECT 
-            n_live_tup as row_count,
-            last_vacuum,
-            last_autovacuum,
-            last_analyze
+          SELECT n_live_tup as row_count
           FROM pg_stat_user_tables
           WHERE schemaname = 'public' 
             AND relname = $1
@@ -715,31 +982,48 @@ app.get('/api/produccion/import-status', async (req, res) => {
         
         if (tableResult.rows.length > 0) {
           status.rows_imported = tableResult.rows[0].row_count || 0
+        }
+        
+        // Obtener fecha de última importación desde tb_sync_history
+        try {
+          const historyQuery = `
+            SELECT timestamp, rows_affected
+            FROM tb_sync_history
+            WHERE table_name = $1 
+              AND operation_type = 'import'
+              AND success = true
+            ORDER BY timestamp DESC
+            LIMIT 1
+          `
+          const historyResult = await query(historyQuery, [tableName])
           
-          // Usar la fecha más reciente disponible
-          const lastVacuum = tableResult.rows[0].last_vacuum
-          const lastAutovacuum = tableResult.rows[0].last_autovacuum
-          const lastAnalyze = tableResult.rows[0].last_analyze
-          
-          const dates = [lastVacuum, lastAutovacuum, lastAnalyze].filter(d => d)
-          if (dates.length > 0) {
-            const mostRecent = dates.reduce((a, b) => a > b ? a : b)
-            status.last_import_date = mostRecent.toISOString()
-          }
-          
-          // Determinar si está actualizado comparando fechas
-          if (status.last_import_date && status.csv_modified) {
-            const csvDate = new Date(status.csv_modified)
-            const importDate = new Date(status.last_import_date)
-            
-            if (csvDate > importDate) {
-              status.status = 'OUTDATED'
-            } else {
-              status.status = 'UP_TO_DATE'
+          if (historyResult.rows.length > 0) {
+            status.last_import_date = historyResult.rows[0].timestamp.toISOString()
+            // Si el history tiene rows_affected, usarlo en lugar del conteo de pg_stat
+            if (historyResult.rows[0].rows_affected > 0) {
+              status.rows_imported = historyResult.rows[0].rows_affected
             }
-          } else {
-            status.status = 'OUTDATED'
           }
+        } catch (histErr) {
+          // Si tb_sync_history no existe o hay error, continuar sin fecha
+          console.log(`No hay historial de importación para ${tableName}`)
+        }
+        
+        // Determinar si está actualizado comparando fechas
+        if (status.last_import_date && status.csv_modified) {
+          const csvDate = new Date(status.csv_modified)
+          const importDate = new Date(status.last_import_date)
+          
+          if (csvDate > importDate) {
+            status.status = 'OUTDATED'
+          } else {
+            status.status = 'UP_TO_DATE'
+          }
+        } else if (status.rows_imported > 0) {
+          // Si hay filas pero no fecha de importación, asumir desactualizado
+          status.status = 'OUTDATED'
+        } else {
+          status.status = 'NOT_IMPORTED'
         }
       } catch (err) {
         console.error(`Error consultando tabla ${tableName}:`, err.message)
@@ -1136,6 +1420,72 @@ app.get('/api/produccion/import/column-warnings', async (req, res) => {
   }
 })
 
+// GET /api/produccion/import/warnings-history - Historial de detección de columnas
+app.get('/api/produccion/import/warnings-history', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100
+    
+    // TODO: Implementar tabla de historial en PostgreSQL
+    // Por ahora devolvemos array vacío para evitar error 404
+    const history = []
+    
+    res.json({ 
+      history,
+      total: history.length,
+      message: 'Historial de detección de columnas (pendiente de implementar)'
+    })
+  } catch (err) {
+    console.error('Error en warnings-history:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/produccion/schema/changes-log - Historial de sincronizaciones
+app.get('/api/produccion/schema/changes-log', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100
+    
+    // Consultar tabla de sincronizaciones si existe
+    const sql = `
+      SELECT 
+        id,
+        timestamp,
+        operation_type,
+        table_name,
+        description,
+        columns_added,
+        columns_count,
+        rows_affected,
+        success,
+        error_message,
+        execution_time_ms
+      FROM tb_sync_history
+      ORDER BY timestamp DESC
+      LIMIT $1
+    `
+    
+    const result = await query(sql, [limit])
+    
+    res.json({ 
+      changes: result.rows,
+      total: result.rows.length
+    })
+  } catch (err) {
+    // Si la tabla no existe, devolver array vacío
+    if (err.code === '42P01') { // undefined_table
+      console.log('Tabla tb_sync_history no existe aún')
+      res.json({ 
+        changes: [],
+        total: 0,
+        message: 'Historial de sincronizaciones vacío'
+      })
+    } else {
+      console.error('Error en changes-log:', err)
+      res.status(500).json({ error: err.message })
+    }
+  }
+})
+
 // POST /api/produccion/schema/sync-columns - Sincronizar columnas nuevas del CSV
 app.post('/api/produccion/schema/sync-columns', async (req, res) => {
   const client = await getClient();
@@ -1297,6 +1647,374 @@ app.get('/api/produccion/history/changes', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// POST /api/produccion/import/update-outdated - Actualizar tablas desactualizadas
+app.post('/api/produccion/import/update-outdated', async (req, res) => {
+  try {
+    const { tables, csvFolder } = req.body;
+    
+    if (!tables || !Array.isArray(tables) || tables.length === 0) {
+      return res.status(400).json({ success: false, error: 'Parámetro "tables" (array) requerido' });
+    }
+    
+    const tableScriptMap = {
+      'tb_FICHAS': 'import-fichas.js',
+      'tb_PRODUCCION': 'import-produccion.js',
+      'tb_CALIDAD': 'import-calidad.js',
+      'tb_DEFECTOS': 'import-defectos.js',
+      'tb_TESTES': 'import-testes.js',
+      'tb_PARADAS': 'import-paradas.js',
+      'tb_PARTIDAS': 'import-partidas.js',
+      'tb_EFICIENCIA_MAQUINAS': 'import-eficiencia.js',
+      'tb_OPCIONES': 'import-opciones.js',
+      'tb_ENSAYOS': 'import-ensayos.js',
+      'tb_PRODUCCION_OE': 'import-produccion-oe.js',
+      'tb_RESIDUOS_INDIGO': 'import-residuos-indigo.js',
+      'tb_RESIDUOS_POR_SECTOR': 'import-residuos-por-sector.js',
+      'tb_PROCESO': 'import-proceso.js',
+      'tb_CALIDAD_FIBRA': 'import-calidad-fibra.js'
+    };
+    
+    const results = [];
+    const timings = {};
+    let totalRows = 0;
+    
+    for (const table of tables) {
+      const scriptName = tableScriptMap[table];
+      
+      if (!scriptName) {
+        results.push({ table, success: false, error: 'Tabla no reconocida' });
+        continue;
+      }
+      
+      const scriptPath = path.join(__dirname, '..', 'migration', scriptName);
+      
+      if (!fs.existsSync(scriptPath)) {
+        results.push({ table, success: false, error: 'Script no encontrado' });
+        continue;
+      }
+      
+      const startTime = Date.now();
+      
+      try {
+        await new Promise((resolve, reject) => {
+          const child = spawn('node', [scriptPath], {
+            cwd: path.join(__dirname, '..', 'migration'),
+            env: { ...process.env, CSV_FOLDER: csvFolder || process.env.CSV_FOLDER }
+          });
+          
+          let output = '';
+          let rows = 0;
+          
+          child.stdout.on('data', (data) => {
+            const text = data.toString();
+            output += text;
+            
+            const match = text.match(/(\d+)\s+(filas|registros|rows)/i);
+            if (match) {
+              rows = parseInt(match[1], 10);
+            }
+          });
+          
+          child.stderr.on('data', (data) => {
+            output += data.toString();
+          });
+          
+          child.on('close', async (code) => {
+            const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+            timings[table] = parseFloat(elapsed);
+            
+            if (code === 0) {
+              try {
+                await query(
+                  `INSERT INTO tb_sync_history (operation_type, table_name, rows_affected, description)
+                   VALUES ('IMPORT', $1, $2, 'Actualización automática')`,
+                  [table, rows]
+                );
+              } catch (dbErr) {
+                console.error(`Error registrando en tb_sync_history para ${table}:`, dbErr);
+              }
+              
+              totalRows += rows;
+              results.push({ table, success: true, rows, time: elapsed });
+              resolve();
+            } else {
+              results.push({ table, success: false, error: `Proceso terminó con código ${code}`, output });
+              reject(new Error(`Proceso falló para ${table}`));
+            }
+          });
+          
+          child.on('error', (err) => {
+            results.push({ table, success: false, error: err.message });
+            reject(err);
+          });
+        });
+      } catch (err) {
+        // Error ya registrado en results
+        console.error(`Error importando ${table}:`, err.message);
+      }
+    }
+    
+    const successCount = results.filter(r => r.success).length;
+    const failCount = results.filter(r => !r.success).length;
+    
+    res.json({
+      success: failCount === 0,
+      results,
+      timings,
+      summary: {
+        total: tables.length,
+        success: successCount,
+        failed: failCount,
+        totalRows
+      }
+    });
+    
+  } catch (err) {
+    console.error('Error en update-outdated:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/produccion/import/force-all - Forzar importación de todas las tablas
+app.post('/api/produccion/import/force-all', async (req, res) => {
+  try {
+    const { csvFolder } = req.body;
+    
+    const allTables = [
+      'tb_FICHAS',
+      'tb_PRODUCCION',
+      'tb_CALIDAD',
+      'tb_DEFECTOS',
+      'tb_TESTES',
+      'tb_PARADAS',
+      'tb_PARTIDAS',
+      'tb_EFICIENCIA_MAQUINAS',
+      'tb_OPCIONES',
+      'tb_ENSAYOS'
+    ];
+    
+    // Reutilizar la lógica de update-outdated
+    req.body.tables = allTables;
+    
+    const tableScriptMap = {
+      'tb_FICHAS': 'import-fichas.js',
+      'tb_PRODUCCION': 'import-produccion.js',
+      'tb_CALIDAD': 'import-calidad.js',
+      'tb_DEFECTOS': 'import-defectos.js',
+      'tb_TESTES': 'import-testes.js',
+      'tb_PARADAS': 'import-paradas.js',
+      'tb_PARTIDAS': 'import-partidas.js',
+      'tb_EFICIENCIA_MAQUINAS': 'import-eficiencia.js',
+      'tb_OPCIONES': 'import-opciones.js',
+      'tb_ENSAYOS': 'import-ensayos.js',
+      'tb_PRODUCCION_OE': 'import-produccion-oe.js',
+      'tb_RESIDUOS_INDIGO': 'import-residuos-indigo.js',
+      'tb_RESIDUOS_POR_SECTOR': 'import-residuos-por-sector.js',
+      'tb_PROCESO': 'import-proceso.js',
+      'tb_CALIDAD_FIBRA': 'import-calidad-fibra.js'
+    };
+    
+    const results = [];
+    const timings = {};
+    let totalRows = 0;
+    
+    for (const table of allTables) {
+      const scriptName = tableScriptMap[table];
+      const scriptPath = path.join(__dirname, '..', 'migration', scriptName);
+      
+      if (!fs.existsSync(scriptPath)) {
+        results.push({ table, success: false, error: 'Script no encontrado' });
+        continue;
+      }
+      
+      const startTime = Date.now();
+      
+      try {
+        await new Promise((resolve, reject) => {
+          const child = spawn('node', [scriptPath], {
+            cwd: path.join(__dirname, '..', 'migration'),
+            env: { ...process.env, CSV_FOLDER: csvFolder || process.env.CSV_FOLDER }
+          });
+          
+          let output = '';
+          let rows = 0;
+          
+          child.stdout.on('data', (data) => {
+            const text = data.toString();
+            output += text;
+            
+            const match = text.match(/(\d+)\s+(filas|registros|rows)/i);
+            if (match) {
+              rows = parseInt(match[1], 10);
+            }
+          });
+          
+          child.stderr.on('data', (data) => {
+            output += data.toString();
+          });
+          
+          child.on('close', async (code) => {
+            const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+            timings[table] = parseFloat(elapsed);
+            
+            if (code === 0) {
+              try {
+                await query(
+                  `INSERT INTO tb_sync_history (operation_type, table_name, rows_affected, description)
+                   VALUES ('IMPORT', $1, $2, 'Forzar importación todas las tablas')`,
+                  [table, rows]
+                );
+              } catch (dbErr) {
+                console.error(`Error registrando en tb_sync_history para ${table}:`, dbErr);
+              }
+              
+              totalRows += rows;
+              results.push({ table, success: true, rows, time: elapsed });
+              resolve();
+            } else {
+              results.push({ table, success: false, error: `Proceso terminó con código ${code}`, output });
+              reject(new Error(`Proceso falló para ${table}`));
+            }
+          });
+          
+          child.on('error', (err) => {
+            results.push({ table, success: false, error: err.message });
+            reject(err);
+          });
+        });
+      } catch (err) {
+        console.error(`Error importando ${table}:`, err.message);
+      }
+    }
+    
+    const successCount = results.filter(r => r.success).length;
+    const failCount = results.filter(r => !r.success).length;
+    
+    res.json({
+      success: failCount === 0,
+      results,
+      timings,
+      summary: {
+        total: allTables.length,
+        success: successCount,
+        failed: failCount,
+        totalRows
+      }
+    });
+    
+  } catch (err) {
+    console.error('Error en force-all:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/produccion/import/force-table - Forzar importación de una tabla desde CSV
+app.post('/api/produccion/import/force-table', async (req, res) => {
+  try {
+    const { table } = req.body
+    
+    if (!table) {
+      return res.status(400).json({ success: false, error: 'Parámetro "table" requerido' })
+    }
+    
+    // Mapeo de tablas a scripts de importación
+    const tableScriptMap = {
+      'tb_FICHAS': 'import-fichas.js',
+      'tb_PRODUCCION': 'import-produccion.js',
+      'tb_CALIDAD': 'import-calidad.js',
+      'tb_DEFECTOS': 'import-defectos.js',
+      'tb_TESTES': 'import-testes.js',
+      'tb_PARADAS': 'import-paradas.js',
+      'tb_PROCESO': 'import-proceso.js',
+      'tb_RESIDUOS_INDIGO': 'import-residuos-indigo.js',
+      'tb_CALIDAD_FIBRA': 'import-calidad-fibra.js',
+      'tb_PRODUCCION_OE': 'import-produccion-oe.js'
+    }
+    
+    const scriptName = tableScriptMap[table]
+    
+    if (!scriptName) {
+      return res.status(400).json({ 
+        success: false, 
+        error: `No hay script de importación para la tabla: ${table}` 
+      })
+    }
+    
+    const scriptPath = path.join(__dirname, '..', 'migration', scriptName)
+    
+    console.log(`📦 Iniciando importación de ${table} usando ${scriptName}`)
+    
+    // Ejecutar script como child process
+    const child = spawn('node', [scriptPath], {
+      cwd: path.join(__dirname, '..', 'migration'),
+      env: process.env
+    })
+    
+    let stdout = ''
+    let stderr = ''
+    let rows = 0
+    
+    child.stdout.on('data', (data) => {
+      const output = data.toString()
+      stdout += output
+      console.log(output.trim())
+      
+      // Intentar extraer número de filas del output
+      const match = output.match(/(\d+)\s+(filas|registros|rows)/i)
+      if (match) {
+        rows = parseInt(match[1])
+      }
+    })
+    
+    child.stderr.on('data', (data) => {
+      stderr += data.toString()
+      console.error(data.toString())
+    })
+    
+    child.on('error', (err) => {
+      console.error(`Error ejecutando ${scriptName}:`, err)
+      res.status(500).json({ 
+        success: false, 
+        error: `Error ejecutando script: ${err.message}` 
+      })
+    })
+    
+    child.on('close', async (code) => {
+      if (code === 0) {
+        // Registrar en historial
+        try {
+          await query(`
+            INSERT INTO tb_sync_history (
+              timestamp, operation_type, table_name, description, 
+              rows_affected, success, execution_time_ms
+            ) VALUES (NOW(), 'import', $1, 'Importación forzada desde UI', $2, true, 0)
+          `, [table, rows])
+        } catch (histErr) {
+          console.error('Error registrando en historial:', histErr)
+        }
+        
+        res.json({ 
+          success: true, 
+          rows, 
+          message: `Tabla ${table} importada exitosamente`,
+          output: stdout
+        })
+      } else {
+        res.status(500).json({ 
+          success: false, 
+          error: `Script terminó con código ${code}`,
+          stderr,
+          stdout
+        })
+      }
+    })
+    
+  } catch (err) {
+    console.error('Error en force-table:', err)
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
 
 // =====================================================
 // INICIAR SERVIDOR

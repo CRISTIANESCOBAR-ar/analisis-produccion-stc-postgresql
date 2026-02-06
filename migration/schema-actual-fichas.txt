@@ -1,0 +1,73 @@
+                 Table "public.tb_fichas"
+      Column       | Type | Collation | Nullable | Default 
+-------------------+------+-----------+----------+---------
+ ARTIGO CODIGO     | text |           |          | 
+ ARTIGO            | text |           |          | 
+ COR               | text |           |          | 
+ NCM               | text |           |          | 
+ BASE              | text |           |          | 
+ UnP               | text |           |          | 
+ VENDA             | text |           |          | 
+ PRODUCAO          | text |           |          | 
+ NOME REDUZIDO     | text |           |          | 
+ NOME DE MERCADO   | text |           |          | 
+ LINHA             | text |           |          | 
+ URDUME            | text |           |          | 
+ SARJA             | text |           |          | 
+ COD# RETALHO      | text |           |          | 
+ SAP               | text |           |          | 
+ TRAMA REDUZIDO    | text |           |          | 
+ SGS               | text |           |          | 
+ SGS UN 1          | text |           |          | 
+ DESCRICAO         | text |           |          | 
+ BATIDAS/FIO       | text |           |          | 
+ NE RESULTANTE     | text |           |          | 
+ SAP1              | text |           |          | 
+ TRAMA REDUZIDO1   | text |           |          | 
+ SGS1              | text |           |          | 
+ SGS UN 2          | text |           |          | 
+ DESCRICAO1        | text |           |          | 
+ BATIDAS/FIO1      | text |           |          | 
+ NE RESULTANTE1    | text |           |          | 
+ CONS#TR/m         | text |           |          | 
+ SGS2              | text |           |          | 
+ QT#FIOS           | text |           |          | 
+ NE RESULTANTE2    | text |           |          | 
+ SGS3              | text |           |          | 
+ QT#FIOS1          | text |           |          | 
+ NE RESULTANTE3    | text |           |          | 
+ CONS#URD/m        | text |           |          | 
+ BATIDA            | text |           |          | 
+ LARG#PENTE        | text |           |          | 
+ LARG#CRU          | text |           |          | 
+ PESO/m CRU        | text |           |          | 
+ Oz/jd2            | text |           |          | 
+ Peso/m2           | text |           |          | 
+ LARGURA MIN       | text |           |          | 
+ LARGURA           | text |           |          | 
+ LARGURA MAX       | text |           |          | 
+ SKEW MIN          | text |           |          | 
+ SKEW MAX          | text |           |          | 
+ URD#MIN           | text |           |          | 
+ URD#MAX           | text |           |          | 
+ TRAMA MIN         | text |           |          | 
+ TRAMA MAX         | text |           |          | 
+ VAR STR#MIN TRAMA | text |           |          | 
+ VAR STR#MAX TRAMA | text |           |          | 
+ VAR STR#MIN URD   | text |           |          | 
+ VAR STR#MAX URD   | text |           |          | 
+ PONTOS            | text |           |          | 
+ ENC#TEC#URDUME    | text |           |          | 
+ ENC# TEC#TRAMA    | text |           |          | 
+ ENC#ACAB URD      | text |           |          | 
+ ENC#ACAB TRAMA    | text |           |          | 
+ LAV#AMAC#URD      | text |           |          | 
+ LAV#AMAC#TRM      | text |           |          | 
+ LAV STONE         | text |           |          | 
+ LAV STONE 1       | text |           |          | 
+ STRET LAV STONE   | text |           |          | 
+ COMPOSICAO        | text |           |          | 
+ TRAMA             | text |           |          | 
+Indexes:
+    "idx_fichas_artigo" btree ("ARTIGO")
+

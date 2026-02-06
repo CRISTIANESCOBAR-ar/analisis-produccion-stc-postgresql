@@ -365,7 +365,7 @@
                 </span>
               </td>
               <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
-                {{ formatDate(item.file_modified || item.xlsx_last_modified) }}
+                {{ formatDate(item.csv_modified) }}
               </td>
               <td class="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
                 <div v-if="item.last_import_date">
@@ -579,6 +579,10 @@ const syncOptions = ref({
   reimport: true
 })
 
+// Resultados de importación (para modal de resumen)
+const importResults = ref([])
+let importSessionStart = null
+
 // Historial de logs
 const showHistoryModal = ref(false)
 const historyTab = ref('warnings')
@@ -644,6 +648,88 @@ function openSyncModal() {
   syncResult.value = null
   syncInProgress.value = false
   syncOptions.value.reimport = true
+}
+
+// Mostrar modal con resumen de importaciones
+function showImportSummaryModal() {
+  if (importResults.value.length === 0) return
+  
+  const totalTime = importSessionStart ? ((performance.now() - importSessionStart) / 1000).toFixed(2) : '0'
+  const totalRows = importResults.value.reduce((sum, r) => sum + (r.rows || 0), 0)
+  const successCount = importResults.value.filter(r => r.success).length
+  const failCount = importResults.value.filter(r => !r.success).length
+  
+  // Construir tabla HTML
+  let tableRows = ''
+  importResults.value.forEach(result => {
+    const statusIcon = result.success ? '✅' : '❌'
+    const statusColor = result.success ? 'text-green-600' : 'text-red-600'
+    const timeText = result.time ? `${result.time}s` : '-'
+    const rowsText = result.rows ? result.rows.toLocaleString() : '-'
+    
+    tableRows += `
+      <tr class="border-b hover:bg-gray-50">
+        <td class="px-4 py-2 text-center ${statusColor}">${statusIcon}</td>
+        <td class="px-4 py-2 font-mono text-sm">${result.table}</td>
+        <td class="px-4 py-2 text-right font-semibold">${rowsText}</td>
+        <td class="px-4 py-2 text-right text-gray-600">${timeText}</td>
+      </tr>
+    `
+  })
+  
+  Swal.fire({
+    title: '📊 Resumen de Importaciones',
+    html: `
+      <div class="text-left">
+        <div class="grid grid-cols-3 gap-3 mb-4">
+          <div class="bg-blue-50 p-3 rounded-lg">
+            <div class="text-xs text-gray-600 mb-1">Total Tablas</div>
+            <div class="text-2xl font-bold text-blue-600">${importResults.value.length}</div>
+          </div>
+          <div class="bg-green-50 p-3 rounded-lg">
+            <div class="text-xs text-gray-600 mb-1">Total Registros</div>
+            <div class="text-2xl font-bold text-green-600">${totalRows.toLocaleString()}</div>
+          </div>
+          <div class="bg-purple-50 p-3 rounded-lg">
+            <div class="text-xs text-gray-600 mb-1">Tiempo Total</div>
+            <div class="text-2xl font-bold text-purple-600">${totalTime}s</div>
+          </div>
+        </div>
+        
+        ${failCount > 0 ? `
+          <div class="bg-red-50 border-l-4 border-red-500 p-3 mb-4 rounded">
+            <p class="text-sm text-red-700">⚠️ ${failCount} tabla(s) con errores</p>
+          </div>
+        ` : ''}
+        
+        <div class="overflow-auto" style="max-height: 400px;">
+          <table class="w-full text-sm border-collapse">
+            <thead class="bg-gray-100 sticky top-0">
+              <tr>
+                <th class="px-4 py-2 text-center">Estado</th>
+                <th class="px-4 py-2 text-left">Tabla</th>
+                <th class="px-4 py-2 text-right">Registros</th>
+                <th class="px-4 py-2 text-right">Tiempo</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRows}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `,
+    icon: failCount > 0 ? 'warning' : 'success',
+    confirmButtonText: 'Cerrar',
+    width: '700px',
+    customClass: {
+      htmlContainer: 'text-left'
+    }
+  })
+  
+  // Limpiar resultados después de mostrar
+  importResults.value = []
+  importSessionStart = null
 }
 
 function closeSyncModal() {
@@ -785,14 +871,17 @@ async function triggerImport() {
   if (result.isConfirmed) {
     importing.value = true
     importOutput.value = null
-    forceAllRunning.value = true
     
-    importQueue.value = new Set(outdatedTables.map(t => t.table))
+    // Iniciar sesión de importación
+    importSessionStart = performance.now()
+    importResults.value = []
     
-    outdatedTables.forEach(item => {
-      item.status = 'PENDING'
-    })
+    // Configurar polling para ver progreso en tiempo real
+    const outdatedTablesNames = outdatedTables.map(t => t.table);
+    importQueue.value = new Set(outdatedTablesNames)
+    completedTables.value = new Set()
     
+    // Guardar baseline para detectar cambios
     const snapshot = {}
     outdatedTables.forEach((s) => {
       snapshot[s.table] = {
@@ -801,20 +890,30 @@ async function triggerImport() {
       }
     })
     baselineImports.value = snapshot
-    completedTables.value = new Set()
-    currentImportTable.value = outdatedTables[0]?.table || null
+    
+    // Marcar tablas como pendientes en la UI
+    statusList.value.forEach(item => {
+      if (outdatedTablesNames.includes(item.table)) {
+        item.status = 'IMPORTING'
+      }
+    })
+    
+    // Establecer primera tabla como actual
+    currentImportTable.value = outdatedTablesNames[0] || null
+    
+    // Iniciar polling para monitorear progreso
     startPolling()
-    const t0 = performance.now()
 
     try {
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 120000)
+      // 10 minutos timeout - suficiente para múltiples tablas grandes
+      const timeoutId = setTimeout(() => controller.abort(), 600000)
 
       const res = await fetch(`${API_URL}/import/update-outdated`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          tables: outdatedTables.map(t => t.table),
+          tables: outdatedTablesNames,
           csvFolder: csvFolder.value
         }),
         signal: controller.signal
@@ -830,65 +929,53 @@ async function triggerImport() {
 
       stopPolling()
       importing.value = false
-      forceAllRunning.value = false
+      importQueue.value = new Set()
       completedTables.value = new Set()
       currentImportTable.value = null
-      importQueue.value = new Set()
+      baselineImports.value = {}
 
-      if (data.success) {
-        const elapsedUI = Math.round(performance.now() - t0)
-        const elapsedServer = data?.timings?.totalMs || 0
-        const secondsUI = (elapsedUI / 1000).toFixed(2)
-        const secondsServer = (elapsedServer / 1000).toFixed(2)
+      if (data.success || (data.results && data.results.length > 0)) {
+        // Registrar resultados usando la respuesta del backend
+        if (data.results && Array.isArray(data.results)) {
+          data.results.forEach(result => {
+            importResults.value.push({
+              table: result.table,
+              rows: result.rows || 0,
+              time: result.time || '-',
+              success: result.success
+            })
+          })
+        }
         
+        // Refrescar estado de las tablas
         await fetchStatus()
         await fetchColumnWarnings()
         
-        const dataRows = outdatedTables.reduce((sum, t) => {
-          const updated = statusList.value.find(s => s.table === t.table)
-          return sum + (updated?.rows_imported || 0)
-        }, 0)
-        
-        Swal.fire({
-          icon: 'success',
-          title: '✓ Actualización Completa',
-          html: `
-            <div style="text-align: left; padding: 10px;">
-              <div style="font-size: 1.1em; margin-bottom: 15px;">
-                <strong>${outdatedTables.length} tabla(s)</strong> • <strong>${dataRows.toLocaleString()}</strong> registros importados
-              </div>
-              <div style="background: #f3f4f6; padding: 12px; border-radius: 8px; font-family: monospace;">
-                <div style="margin-bottom: 8px;">
-                  <span style="color: #059669; font-weight: bold;">⏱️ Servidor:</span> 
-                  <span style="font-size: 1.2em; font-weight: bold;">${secondsServer}s</span>
-                </div>
-                <div>
-                  <span style="color: #3b82f6; font-weight: bold;">🖥️ UI:</span> 
-                  <span style="font-size: 1.2em; font-weight: bold;">${secondsUI}s</span>
-                </div>
-              </div>
-            </div>
-          `,
-          confirmButtonText: 'Entendido',
-          confirmButtonColor: '#059669',
-          allowOutsideClick: false
-        })
+        // Mostrar modal con resumen
+        showImportSummaryModal()
       } else {
-        throw new Error(data.error || 'Error desconocido')
+        throw new Error(data.error || 'Error en la importación')
       }
     } catch (err) {
       stopPolling()
       importing.value = false
-      forceAllRunning.value = false
+      importQueue.value = new Set()
       completedTables.value = new Set()
       currentImportTable.value = null
-      importQueue.value = new Set()
+      baselineImports.value = {}
+      
       if (err.name === 'AbortError') {
-        toast.fire({ icon: 'warning', title: 'Timeout', text: 'La actualización tomó demasiado tiempo' })
+        toastError.fire({ 
+          title: 'Timeout', 
+          text: 'La actualización tomó más de 10 minutos. Verifica el estado de las tablas.' 
+        })
       } else {
         console.error(err)
         toastError.fire({ title: err.message || 'Falló la actualización' })
       }
+      
+      // Refrescar estado incluso si falla
+      await fetchStatus()
     }
   }
 }
@@ -946,14 +1033,20 @@ async function forceImportAll() {
   if (result.isConfirmed) {
     importing.value = true
     importOutput.value = null
+    importing.value = true
+    importOutput.value = null
     forceAllRunning.value = true
     
-    importQueue.value = new Set(statusList.value.map(s => s.table))
+    // Iniciar sesión de importación
+    importSessionStart = performance.now()
+    importResults.value = []
     
-    statusList.value.forEach(item => {
-      item.status = 'PENDING'
-    })
+    // Configurar polling para ver progreso
+    const allTablesNames = statusList.value.map(s => s.table);
+    importQueue.value = new Set(allTablesNames)
+    completedTables.value = new Set()
     
+    // Guardar baseline para detectar cambios
     const snapshot = {}
     statusList.value.forEach((s) => {
       snapshot[s.table] = {
@@ -962,14 +1055,22 @@ async function forceImportAll() {
       }
     })
     baselineImports.value = snapshot
-    completedTables.value = new Set()
-    currentImportTable.value = statusList.value[0]?.table || null
+    
+    // Marcar todas como importando en la UI
+    statusList.value.forEach(item => {
+      item.status = 'IMPORTING'
+    })
+    
+    // Establecer primera tabla como actual
+    currentImportTable.value = allTablesNames[0] || null
+    
+    // Iniciar polling para monitorear progreso
     startPolling()
-    const t0 = performance.now()
 
     try {
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 330000)
+      // 15 minutos para todas las tablas
+      const timeoutId = setTimeout(() => controller.abort(), 900000)
 
       const res = await fetch(`${API_URL}/import/force-all`, {
         method: 'POST',
@@ -989,101 +1090,54 @@ async function forceImportAll() {
       stopPolling()
       importing.value = false
       forceAllRunning.value = false
+      importQueue.value = new Set()
       completedTables.value = new Set()
       currentImportTable.value = null
-      importQueue.value = new Set()
+      baselineImports.value = {}
 
-      if (data.success) {
-        const elapsedUI = Math.round(performance.now() - t0)
-        const elapsedServer = data?.timings?.totalMs || 0
-        const secondsUI = (elapsedUI / 1000).toFixed(2)
-        const secondsServer = (elapsedServer / 1000).toFixed(2)
-        
-        await fetchStatus().catch(err => console.error('Error refreshing status:', err))
-        await fetchColumnWarnings()
-        
-        const tablesWithErrors = statusList.value.filter(s => 
-          s.status === 'MISSING' || 
-          s.status === 'ERRORED' || 
-          s.last_import_date === 'Archivo No Encontrado' ||
-          s.last_import_date === 'Error en importación'
-        )
-        
-        const successfulTables = statusList.value.filter(s => 
-          s.status !== 'MISSING' && 
-          s.status !== 'ERRORED' && 
-          s.last_import_date !== 'Archivo No Encontrado' &&
-          s.last_import_date !== 'Error en importación'
-        )
-        
-        const dataRows = successfulTables
-          .filter(s => s.table !== 'tb_FICHAS')
-          .reduce((sum, s) => sum + (s.rows_imported || 0), 0)
-        
-        const hasErrors = tablesWithErrors.length > 0
-        const icon = hasErrors ? 'warning' : 'success'
-        const title = hasErrors 
-          ? '⚠️ Importación Completada con Advertencias' 
-          : '✓ Importación Completa'
-        
-        let warningsHtml = ''
-        if (hasErrors) {
-          const errorList = tablesWithErrors.map(t => 
-            `<li><strong>${t.table}</strong>: ${t.last_import_date || t.status}</li>`
-          ).join('')
-          warningsHtml = `
-            <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 12px; margin-top: 15px; border-radius: 4px; text-align: left;">
-              <div style="font-weight: bold; color: #92400e; margin-bottom: 8px;">⚠️ Problemas detectados:</div>
-              <ul style="margin: 0; padding-left: 20px; color: #78350f; font-size: 0.9em;">
-                ${errorList}
-              </ul>
-            </div>
-          `
+      if (data.success || (data.results && data.results.length > 0)) {
+        // Registrar resultados usando la respuesta del backend
+        if (data.results && Array.isArray(data.results)) {
+          data.results.forEach(result => {
+            importResults.value.push({
+              table: result.table,
+              rows: result.rows || 0,
+              time: result.time || '-',
+              success: result.success
+            })
+          })
         }
         
-        await Swal.fire({
-          icon: icon,
-          title: title,
-          html: `
-            <div style="text-align: left; padding: 10px;">
-              <div style="font-size: 1.1em; margin-bottom: 15px;">
-                <strong>${successfulTables.length} tablas</strong> • <strong>${dataRows.toLocaleString()}</strong> registros importados
-              </div>
-              <div style="background: #f3f4f6; padding: 12px; border-radius: 8px; font-family: monospace;">
-                <div style="margin-bottom: 8px;">
-                  <span style="color: #059669; font-weight: bold;">⏱️ Servidor:</span> 
-                  <span style="font-size: 1.2em; font-weight: bold;">${secondsServer}s</span>
-                </div>
-                <div>
-                  <span style="color: #3b82f6; font-weight: bold;">🖥️ UI:</span> 
-                  <span style="font-size: 1.2em; font-weight: bold;">${secondsUI}s</span>
-                </div>
-              </div>
-              ${warningsHtml}
-            </div>
-          `,
-          confirmButtonText: 'Entendido',
-          confirmButtonColor: hasErrors ? '#f59e0b' : '#059669',
-          allowOutsideClick: false
-        })
-        
+        // Refrescar estado
         await fetchStatus()
+        await fetchColumnWarnings()
+        
+        // Mostrar modal con resumen
+        showImportSummaryModal()
       } else {
-        throw new Error(data.error || 'Error desconocido')
+        throw new Error(data.error || 'Error en la importación')
       }
     } catch (err) {
       stopPolling()
       importing.value = false
       forceAllRunning.value = false
+      importQueue.value = new Set()
       completedTables.value = new Set()
       currentImportTable.value = null
-      importQueue.value = new Set()
+      baselineImports.value = {}
+      
       if (err.name === 'AbortError') {
-        toast.fire({ icon: 'warning', title: 'Timeout', text: 'La importación completa tomó demasiado tiempo' })
+        toastError.fire({ 
+          title: 'Timeout', 
+          text: 'La importación tomó más de 15 minutos. Verifica el estado manualmente.' 
+        })
       } else {
         console.error(err)
-        toastError.fire({ title: err.message || 'Falló la ejecución del script' })
+        toastError.fire({ title: err.message || 'Falló la importación' })
       }
+      
+      // Refrescar estado incluso si falla
+      await fetchStatus()
     }
   }
 }
@@ -1091,7 +1145,11 @@ async function forceImportAll() {
 async function forceImportTable(item) {
   const result = await Swal.fire({
     title: `¿Forzar ${item.table}?`,
-    html: `Se re-importará la tabla <strong>${item.table}</strong> desde:<br><code>${getFileName(item.csv_file)}</code>`,
+    html: `
+      Se re-importará la tabla <strong>${item.table}</strong> desde:<br>
+      <code>${getFileName(item.csv_file)}</code><br><br>
+      <small class="text-gray-500">⏱️ Esto puede tomar varios minutos para tablas grandes.</small>
+    `,
     icon: 'question',
     showCancelButton: true,
     confirmButtonColor: '#ea580c',
@@ -1106,6 +1164,12 @@ async function forceImportTable(item) {
     currentImportTable.value = item.table
     forceAllRunning.value = false
     
+    // Iniciar sesión de importación si no existe
+    if (!importSessionStart) {
+      importSessionStart = performance.now()
+      importResults.value = []
+    }
+    
     item.status = 'IMPORTING'
     
     const t0 = performance.now()
@@ -1113,7 +1177,7 @@ async function forceImportTable(item) {
     
     try {
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 90000)
+      const timeoutId = setTimeout(() => controller.abort(), 300000)
       
       const res = await fetch(`${API_URL}/import/force-table`, {
         method: 'POST',
@@ -1137,14 +1201,18 @@ async function forceImportTable(item) {
         await fetchStatus()
         await fetchColumnWarnings()
         
-        const elapsed = Math.round(performance.now() - t0)
-        const seconds = (elapsed / 1000).toFixed(2)
-        toast.fire({
-          icon: 'success',
-          title: `✓ ${item.table} importada`,
-          text: `${data.rows?.toLocaleString() || 0} filas • ${seconds}s`,
-          timer: 4000
+        const elapsed = (performance.now() - t0) / 1000
+        
+        // Registrar resultado
+        importResults.value.push({
+          table: item.table,
+          rows: data.rows || 0,
+          time: elapsed.toFixed(2),
+          success: true
         })
+        
+        // Mostrar modal con resumen
+        showImportSummaryModal()
       } else {
         throw new Error(data.error || 'Error desconocido')
       }
@@ -1153,20 +1221,74 @@ async function forceImportTable(item) {
       importing.value = false
       
       if (err.name === 'AbortError') {
-        console.error('Timeout después de 90 segundos')
+        console.log('⏱️ Timeout después de 5 minutos - Verificando si completó...')
+        
+        // Esperar un poco para que el backend registre en tb_sync_history
+        await new Promise(resolve => setTimeout(resolve, 2000))
         await fetchStatus()
+        
         const updated = statusList.value.find(i => i.table === item.table)
-        if (updated && updated.last_import_date && updated.last_import_date !== initialTimestamp) {
-          toast.fire({
-            icon: 'success',
-            title: `${item.table} importada`,
-            text: `${updated.rows_imported?.toLocaleString() || 0} filas (detectado por estado)`
+        console.log('Estado anterior:', { table: item.table, timestamp: initialTimestamp })
+        console.log('Estado actualizado:', { 
+          table: updated?.table, 
+          timestamp: updated?.last_import_date,
+          rows: updated?.rows_imported,
+          status: updated?.status
+        })
+        
+        // Verificar si completó comparando timestamps o estado UP_TO_DATE
+        const timestampChanged = updated?.last_import_date && updated.last_import_date !== initialTimestamp
+        const isUpToDate = updated?.status === 'UP_TO_DATE'
+        
+        if (timestampChanged || isUpToDate) {
+          console.log('✅ Importación completada detectada')
+          
+          const elapsed = (performance.now() - t0) / 1000
+          
+          // Registrar resultado
+          importResults.value.push({
+            table: item.table,
+            rows: updated.rows_imported || 0,
+            time: elapsed.toFixed(2),
+            success: true
           })
+          
+          // Mostrar modal con resumen
+          showImportSummaryModal()
+          
+          // Actualizar el item con los datos nuevos
+          Object.assign(item, updated)
         } else {
-          toast.fire({ icon: 'warning', title: 'Timeout', text: 'La importación tomó demasiado tiempo (>90s)' })
+          console.log('⚠️ No se detectó cambio - puede estar ejecutándose aún')
+          
+          // Registrar como fallido
+          importResults.value.push({
+            table: item.table,
+            rows: 0,
+            time: '-',
+            success: false
+          })
+          
+          showImportSummaryModal()
+          
+          toast.fire({ 
+            icon: 'warning', 
+            title: 'Timeout de respuesta', 
+            text: 'La importación puede seguir ejecutándose. Usa "Refrescar" para verificar.' 
+          })
         }
       } else {
         console.error('Error en importación:', err)
+        
+        // Registrar como fallido
+        importResults.value.push({
+          table: item.table,
+          rows: 0,
+          time: '-',
+          success: false
+        })
+        
+        showImportSummaryModal()
         toastError.fire({ title: err.message || 'Falló la importación' })
       }
     }
@@ -1238,7 +1360,7 @@ function startPolling() {
     }
     await fetchStatus()
     updateProgressPointers()
-  }, 500)
+  }, 2000) // Cada 2 segundos en lugar de 500ms
 }
 
 function stopPolling() {
@@ -1250,23 +1372,27 @@ function stopPolling() {
 
 function updateProgressPointers() {
   if (!importing.value) return
-  if (forceAllRunning.value) {
-    const updatedSet = new Set(completedTables.value)
-    statusList.value.forEach((s) => {
-      const base = baselineImports.value[s.table]
-      if (!base) return
-      const changed = (base.last !== s.last_import_date) || (base.rows !== s.rows_imported)
-      if (changed) {
-        updatedSet.add(s.table)
-      }
-    })
-    completedTables.value = updatedSet
-    const tablesInBaseline = Object.keys(baselineImports.value)
-    const next = tablesInBaseline.find((table) => !completedTables.value.has(table))
-    currentImportTable.value = next || null
-  } else {
-    const next = statusList.value.find((s) => s.status !== 'UP_TO_DATE')
-    currentImportTable.value = next ? next.table : null
-  }
+  
+  // Actualizar conjunto de tablas completadas comparando con baseline
+  const updatedSet = new Set(completedTables.value)
+  
+  statusList.value.forEach((s) => {
+    const base = baselineImports.value[s.table]
+    if (!base) return
+    
+    // Detectar cambio por timestamp o número de filas
+    const changed = (base.last !== s.last_import_date) || (base.rows !== s.rows_imported)
+    if (changed) {
+      updatedSet.add(s.table)
+    }
+  })
+  
+  completedTables.value = updatedSet
+  
+  // Encontrar siguiente tabla en importQueue que no esté completada
+  const tablesInQueue = Array.from(importQueue.value)
+  const next = tablesInQueue.find((table) => !completedTables.value.has(table))
+  
+  currentImportTable.value = next || null
 }
 </script>

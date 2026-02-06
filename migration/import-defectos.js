@@ -92,74 +92,78 @@ async function importDefectos() {
         await client.query('DELETE FROM tb_DEFECTOS');
         console.log('✓ Tabla limpiada');
         
-        // 7. Preparar inserción (orden fiel a CSV y SQLite)
-        const insertSQL = `
-            INSERT INTO tb_DEFECTOS (
-                FILIAL, PARTIDA, PECA, ETIQUETA, ARTIGO, NM_MERC,
-                COD_DEF, DESC_DEFEITO, PONTOS, QUALIDADE, DATA_PROD
-            ) VALUES (
-                $1, $2, $3, $4, $5, $6,
-                $7, $8, $9, $10, $11
-            )
-        `;
-        
-        // 8. Importar datos
-        console.log('\n--- Importando datos ---');
-        let imported = 0;
-        let skipped = 0;
+        // 7. Preparar datos en batches
+        console.log('\n--- Preparando datos ---');
+        const validRecords = [];
         let withDate = 0;
         let withDefect = 0;
-        let errors = [];
         
-        for (let i = 0; i < records.length; i++) {
-            const record = records[i];
-            
-            try {
-                // Validar fecha
-                const dataProd = record['DATA_PROD'] || null;
-                if (dataProd && isValidDate(dataProd)) {
-                    withDate++;
-                }
-                
-                // Contar registros con código de defecto
-                if (record['COD_DEF']) {
-                    withDefect++;
-                }
-                
-                const values = [
-                    record['FILIAL'] || null,
-                    record['PARTIDA'] || null,
-                    record['PECA'] || null,
-                    record['ETIQUETA'] || null,
-                    record['ARTIGO'] || null,
-                    record['NM_MERC'] || null,
-                    record['COD_DEF'] || null,
-                    record['DESC_DEFEITO'] || null,
-                    record['PONTOS'] || null,
-                    record['QUALIDADE'] || null,
-                    dataProd
-                ];
-                
-                await client.query(insertSQL, values);
-                imported++;
-                
-                if (imported % 200 === 0) {
-                    process.stdout.write(`\rProcesados: ${imported}/${records.length}`);
-                }
-                
-            } catch (err) {
-                skipped++;
-                errors.push({
-                    row: i + 2,
-                    error: err.message,
-                    partida: record['PARTIDA'],
-                    cod_def: record['COD_DEF']
-                });
-                
-                if (errors.length <= 5) {
-                    console.log(`\n⚠️  Error en fila ${i + 2}: ${err.message}`);
-                }
+        for (const record of records) {
+            const dataProd = record['DATA_PROD'] || null;
+            if (dataProd && isValidDate(dataProd)) {
+                withDate++;
             }
+            
+            if (record['COD_DEF']) {
+                withDefect++;
+            }
+            
+            validRecords.push([
+                record['FILIAL'] || null,
+                record['PARTIDA'] || null,
+                record['PECA'] || null,
+                record['ETIQUETA'] || null,
+                record['ARTIGO'] || null,
+                record['NM_MERC'] || null,
+                record['COD_DEF'] || null,
+                record['DESC_DEFEITO'] || null,
+                record['PONTOS'] || null,
+                record['QUALIDADE'] || null,
+                dataProd
+            ]);
+        }
+        
+        console.log(`✓ Registros válidos: ${validRecords.length}`);
+        console.log(`✓ Con fecha: ${withDate}`);
+        console.log(`✓ Con defecto: ${withDefect}`);
+        
+        if (validRecords.length === 0) {
+            console.log('\n⚠️  No hay registros válidos para importar');
+            return;
+        }
+        
+        // 8. Importar en batches de 500
+        console.log('\n--- Importando datos ---');
+        const BATCH_SIZE = 500;
+        let imported = 0;
+        
+        for (let i = 0; i < validRecords.length; i += BATCH_SIZE) {
+            const batch = validRecords.slice(i, i + BATCH_SIZE);
+            
+            if (batch.length === 0) continue;
+            
+            // Construir query con múltiples VALUES
+            const valuePlaceholders = [];
+            const allValues = [];
+            
+            batch.forEach((values, idx) => {
+                const offset = idx * 11; // 11 columnas
+                const placeholders = Array.from({ length: 11 }, (_, colIdx) => `$${offset + colIdx + 1}`);
+                valuePlaceholders.push(`(${placeholders.join(', ')})`);
+                allValues.push(...values);
+            });
+            
+            const insertSQL = `
+                INSERT INTO tb_DEFECTOS (
+                    FILIAL, PARTIDA, PECA, ETIQUETA, ARTIGO, NM_MERC,
+                    COD_DEF, DESC_DEFEITO, PONTOS, QUALIDADE, DATA_PROD
+                ) VALUES ${valuePlaceholders.join(', ')}
+            `;
+            
+            await client.query(insertSQL, allValues);
+            imported += batch.length;
+            
+            process.stdout.write(`\rImportados: ${imported}/${validRecords.length}`);
         }
         
         console.log(`\n\n===========================================`);
@@ -169,21 +173,6 @@ async function importDefectos() {
         console.log(`✓ Registros importados: ${imported}`);
         console.log(`✓ Con fecha DATA_PROD válida: ${withDate}`);
         console.log(`✓ Con código de defecto: ${withDefect}`);
-        console.log(`✗ Registros omitidos: ${skipped}`);
-        
-        if (errors.length > 0) {
-            console.log(`\n⚠️  Errores encontrados: ${errors.length}`);
-            if (errors.length <= 10) {
-                errors.forEach(err => {
-                    console.log(`  Fila ${err.row}: ${err.error} (PARTIDA: ${err.partida})`);
-                });
-            } else {
-                console.log(`  (Mostrando primeros 10)`);
-                errors.slice(0, 10).forEach(err => {
-                    console.log(`  Fila ${err.row}: ${err.error}`);
-                });
-            }
-        }
         
         // 9. Verificar datos importados
         console.log('\n--- Verificación de datos ---');

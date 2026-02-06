@@ -132,6 +132,10 @@ async function importFichas() {
     let imported = 0;
     let skipped = 0;
     
+    // PASO 1: Filtrar y preparar registros válidos
+    console.log('Preparando datos...');
+    const validRecords = [];
+    
     for (const record of records) {
       // Filtrar filas que son encabezados duplicados
       const artigoCodigo = record['ARTIGO CODIGO'] || '';
@@ -146,25 +150,52 @@ async function importFichas() {
         values[pgCol] = record[csvCol] || null;
       }
       
-      // Construir query
-      const columns = Object.keys(values).map(c => `"${c}"`).join(', ');
-      const placeholders = Object.keys(values).map((_, i) => `$${i + 1}`).join(', ');
-      const valuesList = Object.values(values);
+      validRecords.push(values);
+    }
+    
+    console.log(`Registros válidos: ${validRecords.length}`);
+    console.log(`Registros omitidos: ${skipped}`);
+    
+    if (validRecords.length === 0) {
+      console.log('\n⚠️  No hay registros válidos para importar');
+      await client.query('COMMIT');
+      return;
+    }
+    
+    // PASO 2: Insertar en batches de 500
+    const BATCH_SIZE = 500;
+    const numBatches = Math.ceil(validRecords.length / BATCH_SIZE);
+    
+    console.log(`\nInsertando en ${numBatches} batches de ${BATCH_SIZE} registros...`);
+    
+    for (let i = 0; i < validRecords.length; i += BATCH_SIZE) {
+      const batch = validRecords.slice(i, i + BATCH_SIZE);
       
-      const query = `INSERT INTO tb_fichas (${columns}) VALUES (${placeholders})`;
+      if (batch.length === 0) continue;
       
-      try {
-        await client.query(query, valuesList);
-        imported++;
-        
-        if (imported % 100 === 0) {
-          console.log(`  Importados ${imported} registros...`);
-        }
-      } catch (err) {
-        console.error(`\nError en registro ${imported + 1}:`);
-        console.error('ARTIGO CODIGO:', artigoCodigo);
-        console.error('Error:', err.message);
-        throw err;
+      // Obtener columnas del primer registro
+      const columns = Object.keys(batch[0]).map(c => `"${c}"`).join(', ');
+      const numColumns = Object.keys(batch[0]).length;
+      
+      // Construir placeholders para múltiples registros
+      const valuePlaceholders = [];
+      const allValues = [];
+      
+      batch.forEach((record, idx) => {
+        const offset = idx * numColumns;
+        const placeholders = Array.from({ length: numColumns }, (_, colIdx) => `$${offset + colIdx + 1}`);
+        valuePlaceholders.push(`(${placeholders.join(', ')})`);
+        allValues.push(...Object.values(record));
+      });
+      
+      // Ejecutar INSERT con múltiples VALUES
+      const query = `INSERT INTO tb_fichas (${columns}) VALUES ${valuePlaceholders.join(', ')}`;
+      
+      await client.query(query, allValues);
+      imported += batch.length;
+      
+      if ((i + batch.length) % 500 === 0 || i + batch.length >= validRecords.length) {
+        console.log(`  ✓ ${imported} registros insertados...`);
       }
     }
     
