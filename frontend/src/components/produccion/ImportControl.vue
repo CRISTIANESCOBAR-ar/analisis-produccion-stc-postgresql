@@ -614,6 +614,7 @@ const saveFolder = () => {
   localStorage.setItem('csvFolder', csvFolder.value)
   toast.fire({ icon: 'success', title: 'Carpeta guardada' })
   fetchStatus()
+  fetchColumnWarnings()
 }
 
 onMounted(() => {
@@ -623,7 +624,8 @@ onMounted(() => {
 
 async function fetchColumnWarnings() {
   try {
-    const res = await fetch(`${API_URL}/import/column-warnings`)
+    const folderParam = csvFolder.value ? `?csvFolder=${encodeURIComponent(csvFolder.value)}` : ''
+    const res = await fetch(`${API_URL}/import/column-warnings${folderParam}`)
     if (!res.ok) return
     const data = await res.json()
     if (data.warnings && data.warnings.length > 0) {
@@ -632,6 +634,9 @@ async function fetchColumnWarnings() {
         const warnDate = new Date(w.timestamp)
         return warnDate > oneDayAgo && w.hasDifferences
       })
+      showColumnWarnings.value = true
+    } else {
+      columnWarnings.value = []
     }
   } catch (err) {
     console.error('Error al obtener warnings de columnas:', err)
@@ -650,6 +655,15 @@ function openSyncModal() {
   syncOptions.value.reimport = true
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 // Mostrar modal con resumen de importaciones
 function showImportSummaryModal() {
   if (importResults.value.length === 0) return
@@ -666,12 +680,21 @@ function showImportSummaryModal() {
     const statusColor = result.success ? 'text-green-600' : 'text-red-600'
     const timeText = result.time ? `${result.time}s` : '-'
     const rowsText = result.rows ? result.rows.toLocaleString() : '-'
+    const modeText = escapeHtml(result.mode || '-')
+    const modeReasonText = escapeHtml(result.modeReason || '')
+    const modeReasonHtml = modeReasonText
+      ? `<div class="text-xs text-gray-500 leading-snug mt-1">${modeReasonText}</div>`
+      : ''
     
     tableRows += `
       <tr class="border-b hover:bg-gray-50">
         <td class="px-4 py-2 text-center ${statusColor}">${statusIcon}</td>
-        <td class="px-4 py-2 font-mono text-sm">${result.table}</td>
+        <td class="px-4 py-2 font-mono text-sm">${escapeHtml(result.table)}</td>
         <td class="px-4 py-2 text-right font-semibold">${rowsText}</td>
+        <td class="px-4 py-2 text-left">
+          <div class="font-mono text-xs">${modeText}</div>
+          ${modeReasonHtml}
+        </td>
         <td class="px-4 py-2 text-right text-gray-600">${timeText}</td>
       </tr>
     `
@@ -709,6 +732,7 @@ function showImportSummaryModal() {
                 <th class="px-4 py-2 text-center">Estado</th>
                 <th class="px-4 py-2 text-left">Tabla</th>
                 <th class="px-4 py-2 text-right">Registros</th>
+                <th class="px-4 py-2 text-left">Modo</th>
                 <th class="px-4 py-2 text-right">Tiempo</th>
               </tr>
             </thead>
@@ -942,7 +966,9 @@ async function triggerImport() {
               table: result.table,
               rows: result.rows || 0,
               time: result.time || '-',
-              success: result.success
+              success: result.success,
+              mode: result.mode || '-',
+              modeReason: result.modeReason || ''
             })
           })
         }
@@ -1103,7 +1129,9 @@ async function forceImportAll() {
               table: result.table,
               rows: result.rows || 0,
               time: result.time || '-',
-              success: result.success
+              success: result.success,
+              mode: result.mode || '-',
+              modeReason: result.modeReason || ''
             })
           })
         }
@@ -1208,7 +1236,9 @@ async function forceImportTable(item) {
           table: item.table,
           rows: data.rows || 0,
           time: elapsed.toFixed(2),
-          success: true
+          success: true,
+          mode: data.mode || '-',
+          modeReason: data.modeReason || ''
         })
         
         // Mostrar modal con resumen

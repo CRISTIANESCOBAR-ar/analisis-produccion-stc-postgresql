@@ -3,7 +3,8 @@ import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import pg from 'pg'
-import { getImportStatus, importCSV, importAll } from './import-manager.js'
+import fs from 'fs'
+import { getImportStatus, importCSV, importAll, importSpecificTables, importForceAll, renameduplicateHeaders, getTableColumns, compareColumns, addColumnsToTable } from './import-manager.js'
 
 const { Pool } = pg
 const app = express()
@@ -58,8 +59,26 @@ function formatNumber(val) {
 // =====================================================
 // MIDDLEWARE
 // =====================================================
+const allowedOriginRegexes = [
+  /^http:\/\/localhost(:\d+)?$/,
+  /^http:\/\/127\.0\.0\.1(:\d+)?$/
+]
+
+const allowedOriginList = (process.env.FRONTEND_ORIGIN || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)
+
 const corsOptions = {
-  origin: process.env.FRONTEND_ORIGIN || /^http:\/\/localhost(:\d+)?$/,
+  origin(origin, cb) {
+    // Permitir requests sin Origin (curl, health checks)
+    if (!origin) return cb(null, true)
+
+    if (allowedOriginList.includes(origin)) return cb(null, true)
+    if (allowedOriginRegexes.some((re) => re.test(origin))) return cb(null, true)
+
+    return cb(new Error(`CORS: Origin no permitido: ${origin}`))
+  },
   credentials: true
 }
 app.use(cors(corsOptions))
@@ -67,6 +86,96 @@ app.options('*', cors(corsOptions))
 app.use(express.json({ limit: '10mb' }))
 
 const PORT = process.env.PORT || 3001
+
+// =====================================================
+// PRODUCCION: helpers de diferencias / historial
+// =====================================================
+function readCsvHeaderLine(csvPath) {
+  const fd = fs.openSync(csvPath, 'r')
+  try {
+    const buffer = Buffer.alloc(64 * 1024)
+    const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, 0)
+    const chunk = buffer.toString('utf-8', 0, bytesRead)
+    const nl = chunk.indexOf('\n')
+    const line = (nl === -1 ? chunk : chunk.slice(0, nl)).replace(/\r$/u, '')
+    return line
+  } finally {
+    fs.closeSync(fd)
+  }
+}
+
+async function ensureSyncHistoryTables() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS tb_column_warnings_history (
+      id BIGSERIAL PRIMARY KEY,
+      table_name TEXT NOT NULL,
+      csv_path TEXT,
+      detected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      extra_columns TEXT[] NOT NULL DEFAULT '{}',
+      missing_columns TEXT[] NOT NULL DEFAULT '{}'
+    )
+  `)
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_tb_column_warnings_history_detected_at
+      ON tb_column_warnings_history(detected_at DESC)
+  `)
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_tb_column_warnings_history_table
+      ON tb_column_warnings_history(table_name)
+  `)
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS tb_schema_changes_log (
+      id BIGSERIAL PRIMARY KEY,
+      table_name TEXT NOT NULL,
+      change_type TEXT NOT NULL DEFAULT 'ADD_COLUMNS',
+      applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      columns_added TEXT[] NOT NULL DEFAULT '{}',
+      reimported BOOLEAN NOT NULL DEFAULT false,
+      success BOOLEAN NOT NULL DEFAULT true,
+      error_message TEXT
+    )
+  `)
+
+  await query(`
+    CREATE INDEX IF NOT EXISTS idx_tb_schema_changes_log_applied_at
+      ON tb_schema_changes_log(applied_at DESC)
+  `)
+}
+
+function arraysEqualCaseSensitive(a, b) {
+  const aa = Array.isArray(a) ? a : []
+  const bb = Array.isArray(b) ? b : []
+  if (aa.length !== bb.length) return false
+  for (let i = 0; i < aa.length; i++) {
+    if (aa[i] !== bb[i]) return false
+  }
+  return true
+}
+
+async function maybeInsertWarningHistory({ tableName, csvPath, extraColumns, missingColumns }) {
+  // Evita spam: solo inserta si cambió respecto al último registro de esa tabla.
+  const last = await query(
+    `SELECT extra_columns, missing_columns FROM tb_column_warnings_history WHERE table_name = $1 ORDER BY detected_at DESC LIMIT 1`,
+    [tableName]
+  )
+
+  const prev = last.rows?.[0]
+  const sameAsPrev =
+    prev &&
+    arraysEqualCaseSensitive(prev.extra_columns || [], extraColumns || []) &&
+    arraysEqualCaseSensitive(prev.missing_columns || [], missingColumns || [])
+
+  if (sameAsPrev) return
+
+  await query(
+    `INSERT INTO tb_column_warnings_history (table_name, csv_path, extra_columns, missing_columns)
+     VALUES ($1, $2, $3, $4)`,
+    [tableName, csvPath || null, extraColumns || [], missingColumns || []]
+  )
+}
 
 // =====================================================
 // HEALTH CHECK
@@ -369,7 +478,186 @@ app.get('/api/produccion/status', async (req, res) => {
   }
 })
 
+// PRODUCCION: Importar tablas específicas desactualizadas (llamado por botón "Actualizar")
+// IMPORTANTE: Esta ruta debe estar ANTES de /import/:table para que Express no la confunda
+app.post('/api/produccion/import/update-outdated', async (req, res) => {
+  try {
+    const { tables, csvFolder } = req.body
+    
+    if (!tables || !Array.isArray(tables)) {
+      return res.status(400).json({ error: 'Se requiere un array de nombres de tablas' })
+    }
+    
+    const csvPath = csvFolder || 'C:\\STC\\CSV'
+    console.log(`[IMPORT] Importando tablas específicas: ${tables.join(', ')}`)
+    
+    const results = await importSpecificTables(pool, tables, csvPath)
+    
+    res.json({ 
+      success: true,
+      results 
+    })
+  } catch (err) {
+    console.error('Error en update-outdated:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PRODUCCION: Forzar importación de una tabla específica (ignora estado)
+// IMPORTANTE: Esta ruta debe estar ANTES de /import/:table para que Express no la confunda
+app.post('/api/produccion/import/force-table', async (req, res) => {
+  try {
+    const { table, csvPath: csvPathRaw, csvFolder } = req.body
+    
+    if (!table) {
+      return res.status(400).json({ error: 'Se requiere el nombre de la tabla' })
+    }
+    
+    let csvPath = csvPathRaw
+    if (!csvPath) {
+      // Compatibilidad con la UI: envía { table, csvFolder }
+      const folder = csvFolder || 'C:\\STC\\CSV'
+      const status = await getImportStatus(pool, folder)
+      const match = status.find(s => s.table === table)
+      csvPath = match?.csvPath
+    }
+
+    if (!csvPath) {
+      return res.status(400).json({ error: 'No se pudo resolver csvPath para la tabla solicitada' })
+    }
+
+    console.log(`[IMPORT] Forzando importación de ${table} desde ${csvPath}`)
+
+    const result = await importCSV(pool, table, csvPath)
+    
+    res.json(result)
+  } catch (err) {
+    console.error(`Error forzando importación:`, err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PRODUCCION: Importar todos los CSVs desactualizados
+app.post('/api/produccion/import-all', async (req, res) => {
+  try {
+    const csvFolder = req.body.csvFolder || 'C:\\STC\\CSV'
+    const results = await importAll(pool, csvFolder)
+    res.json({ results })
+  } catch (err) {
+    console.error('Error en import-all:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PRODUCCION: Forzar importación de TODAS las tablas (botón "Forzar")
+// IMPORTANTE: Esta ruta debe estar ANTES de /import/:table para que Express no la confunda
+app.post('/api/produccion/import/force-all', async (req, res) => {
+  try {
+    const csvFolder = req.body.csvFolder || 'C:\\STC\\CSV'
+    console.log(`[IMPORT] Forzando importación de todas las tablas desde ${csvFolder}`)
+
+    const results = await importForceAll(pool, csvFolder)
+    const errors = results.filter((r) => r && r.success === false)
+
+    res.json({
+      success: errors.length === 0,
+      results,
+      errors,
+      summary: {
+        total: results.length,
+        successful: results.length - errors.length,
+        failed: errors.length
+      }
+    })
+  } catch (err) {
+    console.error('Error en force-all:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PRODUCCION: Column warnings (devuelve lista vacía - funcionalidad opcional)
+app.get('/api/produccion/import/column-warnings', async (req, res) => {
+  try {
+    const csvFolder = req.query.csvFolder || 'C:\\STC\\CSV'
+
+    await ensureSyncHistoryTables()
+
+    const status = await getImportStatus(pool, csvFolder)
+    const client = await pool.connect()
+
+    try {
+      const warnings = []
+      const nowIso = new Date().toISOString()
+
+      for (const item of status) {
+        if (!item?.csvPath) continue
+        if (item.status === 'MISSING_FILE' || item.status === 'ERROR') continue
+        if (!fs.existsSync(item.csvPath)) continue
+
+        let rawLine
+        try {
+          rawLine = readCsvHeaderLine(item.csvPath)
+        } catch (e) {
+          console.warn(`[WARNINGS] No se pudo leer header de ${item.csvPath}: ${e.message}`)
+          continue
+        }
+
+        const rawHeaders = rawLine.split(',')
+        const csvHeaders = renameduplicateHeaders(rawHeaders)
+
+        const pgColumns = await getTableColumns(client, item.table)
+        const diff = compareColumns(csvHeaders, pgColumns)
+
+        if (!diff.hasDifferences) continue
+
+        const warning = {
+          id: `${item.table}-${Date.now()}`,
+          table: item.table,
+          csvPath: item.csvPath,
+          timestamp: nowIso,
+          extraColumns: diff.extraInCSV,
+          missingColumns: diff.missingInCSV,
+          hasDifferences: true
+        }
+        warnings.push(warning)
+
+        await maybeInsertWarningHistory({
+          tableName: item.table,
+          csvPath: item.csvPath,
+          extraColumns: diff.extraInCSV,
+          missingColumns: diff.missingInCSV
+        })
+      }
+
+      res.json({ warnings })
+    } finally {
+      client.release()
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PRODUCCION: Historial de diferencias detectadas
+app.get('/api/produccion/import/warnings-history', async (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(parseInt(req.query.limit || '100', 10), 500))
+    await ensureSyncHistoryTables()
+    const r = await query(
+      `SELECT id, table_name, csv_path, detected_at, extra_columns, missing_columns
+       FROM tb_column_warnings_history
+       ORDER BY detected_at DESC
+       LIMIT $1`,
+      [limit]
+    )
+    res.json({ history: r.rows })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // PRODUCCION: Importar una tabla específica
+// IMPORTANTE: Esta ruta con parámetro :table debe estar DESPUÉS de TODAS las rutas específicas
 app.post('/api/produccion/import/:table', async (req, res) => {
   try {
     const { table } = req.params
@@ -387,27 +675,6 @@ app.post('/api/produccion/import/:table', async (req, res) => {
   }
 })
 
-// PRODUCCION: Importar todos los CSVs desactualizados
-app.post('/api/produccion/import-all', async (req, res) => {
-  try {
-    const csvFolder = req.body.csvFolder || 'C:\\STC\\CSV'
-    const results = await importAll(pool, csvFolder)
-    res.json({ results })
-  } catch (err) {
-    console.error('Error en import-all:', err)
-    res.status(500).json({ error: err.message })
-  }
-})
-
-// PRODUCCION: Column warnings (devuelve lista vacía - funcionalidad opcional)
-app.get('/api/produccion/import/column-warnings', async (req, res) => {
-  try {
-    res.json({ warnings: [] })
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-})
-
 // PRODUCCION: Pick folder (no implementado - funcionalidad opcional)
 app.post('/api/produccion/system/pick-folder', async (req, res) => {
   res.status(501).json({ error: 'Funcionalidad no implementada' })
@@ -415,7 +682,89 @@ app.post('/api/produccion/system/pick-folder', async (req, res) => {
 
 // PRODUCCION: Sync columns (no implementado - funcionalidad opcional)
 app.post('/api/produccion/schema/sync-columns', async (req, res) => {
-  res.status(501).json({ error: 'Funcionalidad no implementada' })
+  const { table, csvPath, reimport } = req.body || {}
+
+  if (!table) return res.status(400).json({ error: 'table requerido' })
+  if (!csvPath) return res.status(400).json({ error: 'csvPath requerido' })
+
+  try {
+    await ensureSyncHistoryTables()
+
+    const client = await pool.connect()
+    let addedColumns = []
+
+    try {
+      const rawLine = readCsvHeaderLine(csvPath)
+      const rawHeaders = rawLine.split(',')
+      const csvHeaders = renameduplicateHeaders(rawHeaders)
+      const pgColumns = await getTableColumns(client, table)
+      const diff = compareColumns(csvHeaders, pgColumns)
+
+      const toAdd = diff.extraInCSV || []
+      const addRes = await addColumnsToTable(client, table, toAdd)
+      addedColumns = addRes.columns || []
+
+      await query(
+        `INSERT INTO tb_schema_changes_log (table_name, change_type, columns_added, reimported, success)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [table, 'ADD_COLUMNS', addedColumns, Boolean(reimport), true]
+      )
+
+      // Registrar también como diferencia detectada (para historial) si aún había diferencias
+      if (diff.hasDifferences) {
+        await maybeInsertWarningHistory({
+          tableName: table,
+          csvPath,
+          extraColumns: diff.extraInCSV,
+          missingColumns: diff.missingInCSV
+        })
+      }
+    } finally {
+      client.release()
+    }
+
+    let reimportResult = null
+    if (reimport) {
+      reimportResult = await importCSV(pool, table, csvPath)
+    }
+
+    res.json({
+      success: true,
+      columnsAdded: addedColumns.length,
+      addedColumns,
+      reimportResult
+    })
+  } catch (err) {
+    try {
+      await ensureSyncHistoryTables()
+      await query(
+        `INSERT INTO tb_schema_changes_log (table_name, change_type, columns_added, reimported, success, error_message)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [table, 'ADD_COLUMNS', [], Boolean(reimport), false, err.message]
+      )
+    } catch (e2) {
+      console.error('Error registrando tb_schema_changes_log:', e2.message)
+    }
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PRODUCCION: Historial de sincronizaciones aplicadas
+app.get('/api/produccion/schema/changes-log', async (req, res) => {
+  try {
+    const limit = Math.max(1, Math.min(parseInt(req.query.limit || '100', 10), 500))
+    await ensureSyncHistoryTables()
+    const r = await query(
+      `SELECT id, table_name, change_type, applied_at, columns_added, reimported, success, error_message
+       FROM tb_schema_changes_log
+       ORDER BY applied_at DESC
+       LIMIT $1`,
+      [limit]
+    )
+    res.json({ changes: r.rows })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
 // =====================================================
