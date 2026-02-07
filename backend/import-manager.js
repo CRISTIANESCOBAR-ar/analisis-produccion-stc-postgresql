@@ -78,10 +78,13 @@ async function scanCsvDistinctDates(csvPath, desiredDateColumn) {
     headers.find((h) => h.toLowerCase() === String(desiredDateColumn).toLowerCase());
 
   if (!csvHeader) {
-    return { dates: new Set(), csvHeader: null, headers };
+    return { dates: new Set(), csvHeader: null, headers, overflow: false, minDate: null, maxDate: null };
   }
 
   const dates = new Set();
+  let overflow = false;
+  let minDate = null;
+  let maxDate = null;
 
   const parser = parseStream({
     columns: headers,
@@ -99,18 +102,22 @@ async function scanCsvDistinctDates(csvPath, desiredDateColumn) {
     if (raw === csvHeader) return;
     const iso = parseDateToISO(raw);
     if (!iso) return;
-    dates.add(iso);
-    if (dates.size > MAX_DISTINCT_DATES_FOR_DELETE) {
-      parser.destroy(
-        new Error(
-          `Demasiadas fechas distintas (${dates.size}) en ${path.basename(csvPath)} para date_delete (límite ${MAX_DISTINCT_DATES_FOR_DELETE})`
-        )
-      );
+
+    if (!minDate || iso < minDate) minDate = iso;
+    if (!maxDate || iso > maxDate) maxDate = iso;
+
+    if (!overflow) {
+      dates.add(iso);
+      if (dates.size > MAX_DISTINCT_DATES_FOR_DELETE) {
+        overflow = true;
+        // Liberar memoria: ya no usaremos la lista exacta.
+        dates.clear();
+      }
     }
   });
 
   await pipeline(fs.createReadStream(csvPath), parser);
-  return { dates, csvHeader, headers };
+  return { dates, csvHeader, headers, overflow, minDate, maxDate };
 }
 
 async function applyImportStrategy(client, tableName, csvPath) {
@@ -157,15 +164,18 @@ async function applyImportStrategy(client, tableName, csvPath) {
     };
   }
 
-  const { dates } = await scanCsvDistinctDates(csvPath, resolvedDateColumn);
-  const deleteDates = Array.from(dates).sort();
-  if (deleteDates.length === 0) {
+  const scan = await scanCsvDistinctDates(csvPath, resolvedDateColumn);
+  const deleteDates = Array.from(scan.dates || []).sort();
+  const hasAnyDate = Boolean(scan.minDate && scan.maxDate);
+  if (!hasAnyDate) {
     return {
       strategy: 'date_delete',
+      deleteMode: scan.overflow ? 'range' : 'list',
       dateColumn: resolvedDateColumn,
       deletedDates: 0,
       deletedRows: 0,
-      deleteDates
+      deleteDates,
+      deleteRange: null
     };
   }
 
@@ -189,15 +199,35 @@ async function applyImportStrategy(client, tableName, csvPath) {
     )`;
   }
 
-  const delSql = `DELETE FROM ${safeTable} WHERE ${dateExpr} = ANY($1::date[])`;
-  const delRes = await client.query(delSql, [deleteDates]);
+  if (!scan.overflow) {
+    const delSql = `DELETE FROM ${safeTable} WHERE ${dateExpr} = ANY($1::date[])`;
+    const delRes = await client.query(delSql, [deleteDates]);
+
+    return {
+      strategy: 'date_delete',
+      deleteMode: 'list',
+      dateColumn: resolvedDateColumn,
+      deletedDates: deleteDates.length,
+      deletedRows: delRes?.rowCount ?? null,
+      deleteDates,
+      deleteRange: null
+    };
+  }
+
+  // Muchos días (ej. 1 año): borrar por rango para evitar duplicados sin explotar el límite.
+  const from = scan.minDate;
+  const to = scan.maxDate;
+  const delSql = `DELETE FROM ${safeTable} WHERE ${dateExpr} BETWEEN $1::date AND $2::date`;
+  const delRes = await client.query(delSql, [from, to]);
 
   return {
     strategy: 'date_delete',
+    deleteMode: 'range',
     dateColumn: resolvedDateColumn,
-    deletedDates: deleteDates.length,
+    deletedDates: null,
     deletedRows: delRes?.rowCount ?? null,
-    deleteDates
+    deleteDates: [],
+    deleteRange: { from, to }
   };
 }
 
@@ -827,7 +857,9 @@ export async function importCSV(pool, tableName, csvPath) {
 
     const strategySuffix =
       strategyInfo.strategy === 'date_delete'
-        ? `; strategy=date_delete(${strategyInfo.dateColumn}) fechas=${strategyInfo.deletedDates} rows_deleted=${strategyInfo.deletedRows ?? 'NA'}`
+        ? (strategyInfo.deleteMode === 'range'
+          ? `; strategy=date_delete_range(${strategyInfo.dateColumn}) from=${strategyInfo.deleteRange?.from ?? 'NA'} to=${strategyInfo.deleteRange?.to ?? 'NA'} rows_deleted=${strategyInfo.deletedRows ?? 'NA'}`
+          : `; strategy=date_delete(${strategyInfo.dateColumn}) fechas=${strategyInfo.deletedDates} rows_deleted=${strategyInfo.deletedRows ?? 'NA'}`)
         : `; strategy=truncate`
 
     modeReason = (modeReason ? `${modeReason} | ` : '') + strategySuffix
