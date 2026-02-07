@@ -49,6 +49,11 @@ const routes = [
     path: '/analisis-mesa-test', 
     component: () => import('./components/produccion/AnalisisMesaTest.vue'), 
     meta: { title: 'Mesa de Test - Control de Calidad' } 
+  },
+  {
+    path: '/calidad-sectores',
+    component: () => import('./components/produccion/CalidadSectoresTabla.vue'),
+    meta: { title: 'Metros por Sector - Control de Calidad' }
   }
 ]
 

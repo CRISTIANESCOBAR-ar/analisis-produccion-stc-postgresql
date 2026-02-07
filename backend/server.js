@@ -131,11 +131,16 @@ function sqlParseNumberIntl(colIdent) {
   return `(
     CASE
       WHEN ${colIdent} IS NULL OR ${colIdent} = '' THEN NULL
-      WHEN ${colIdent} ~ '^-?[0-9]{1,3}(\\.[0-9]{3})+(,[0-9]+)?$' THEN replace(replace(${colIdent}, '.', ''), ',', '.')::numeric
+      WHEN ${colIdent} ~ '^-?[0-9]{1,3}(\.[0-9]{3})+(,[0-9]+)?$' THEN replace(replace(${colIdent}, '.', ''), ',', '.')::numeric
       WHEN ${colIdent} ~ '^-?[0-9]+([.,][0-9]+)?$' THEN replace(${colIdent}, ',', '.')::numeric
       ELSE NULL
     END
   )`
+}
+
+async function tableExists(tableName) {
+  const res = await query('SELECT to_regclass($1) AS reg', [`public.${tableName}`])
+  return Boolean(res.rows?.[0]?.reg)
 }
 
 // =====================================================
@@ -1115,6 +1120,843 @@ app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
     )
   } catch (err) {
     console.error('Error en /calidad/analisis-mesa-test:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// =====================================================
+// ENDPOINTS CALIDAD/PRODUCCION (Calidad Sectores)
+// =====================================================
+
+// GET /api/calidad/available-dates - Fechas disponibles en tb_calidad
+app.get('/api/calidad/available-dates', async (req, res) => {
+  try {
+    const datProdDate = sqlParseDate('c."DAT_PROD"')
+    const sql = `
+      SELECT DISTINCT
+        to_char(${datProdDate}, 'YYYY-MM-DD') AS fecha,
+        to_char(${datProdDate}, 'YYYY') AS year,
+        to_char(${datProdDate}, 'MM') AS month,
+        to_char(${datProdDate}, 'DD') AS day
+      FROM tb_calidad c
+      WHERE c."DAT_PROD" IS NOT NULL
+        AND c."DAT_PROD" <> ''
+        AND ${datProdDate} IS NOT NULL
+      ORDER BY fecha DESC
+    `
+
+    const result = await query(sql, [], 'calidad/available-dates')
+    const rows = result.rows || []
+
+    const dateStructure = { years: {}, minDate: null, maxDate: null }
+    if (rows.length > 0) {
+      dateStructure.minDate = rows[rows.length - 1].fecha
+      dateStructure.maxDate = rows[0].fecha
+      for (const row of rows) {
+        const { year, month, day, fecha } = row
+        if (!dateStructure.years[year]) dateStructure.years[year] = {}
+        if (!dateStructure.years[year][month]) dateStructure.years[year][month] = []
+        dateStructure.years[year][month].push({ day, fecha })
+      }
+    }
+
+    res.json(dateStructure)
+  } catch (err) {
+    console.error('Error en /api/calidad/available-dates:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/calidad/sectores-resumen - Metros revisados por sector
+app.get('/api/calidad/sectores-resumen', async (req, res) => {
+  try {
+    const { date, monthStart, monthEnd } = req.query
+    if (!date) {
+      return res.status(400).json({ error: 'Se requiere parámetro "date" (YYYY-MM-DD)' })
+    }
+
+    const datePattern = String(date).split('T')[0]
+    const [year, month] = datePattern.split('-')
+    const mesInicio = monthStart || `${year}-${month}-01`
+    const mesFin = monthEnd || datePattern
+
+    const datProdDate = sqlParseDate('c."DAT_PROD"')
+    const metragemNum = sqlParseNumberIntl('c."METRAGEM"')
+
+    const sql = `
+      WITH sectores(sector, nro, meta_pct) AS (
+        VALUES
+          ('S/ Def.', 1, 95.5),
+          ('FIACAO', 2, 0.15),
+          ('INDIGO', 3, 1.4),
+          ('TECELAGEM', 4, 2.5),
+          ('ACABMTO', 5, 0.3),
+          ('GERAL', 6, 0.15)
+      ),
+      calidad_dia AS (
+        SELECT
+          c."GRP_DEF" AS sector,
+          SUM(${metragemNum}) AS metros
+        FROM tb_calidad c
+        WHERE c."EMP" = 'STC'
+          AND ${datProdDate} = $1::date
+        GROUP BY c."GRP_DEF"
+      ),
+      calidad_mes AS (
+        SELECT
+          c."GRP_DEF" AS sector,
+          SUM(${metragemNum}) AS metros
+        FROM tb_calidad c
+        WHERE c."EMP" = 'STC'
+          AND ${datProdDate} >= $2::date
+          AND ${datProdDate} <= $3::date
+        GROUP BY c."GRP_DEF"
+      )
+      SELECT
+        s.sector AS "SECTOR",
+        COALESCE(d.metros, 0) AS "metrosDia",
+        COALESCE(m.metros, 0) AS "metrosMes",
+        s.meta_pct AS "metaPct"
+      FROM sectores s
+      LEFT JOIN calidad_dia d ON s.sector = d.sector
+      LEFT JOIN calidad_mes m ON s.sector = m.sector
+      ORDER BY s.nro
+    `
+
+    const result = await query(sql, [datePattern, mesInicio, mesFin], 'calidad/sectores-resumen')
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en /api/calidad/sectores-resumen:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/metas/resumen/:fecha - Meta del dia y acumulado del mes
+app.get('/api/metas/resumen/:fecha', async (req, res) => {
+  try {
+    const { fecha } = req.params
+    if (!fecha) {
+      return res.status(400).json({ error: 'Se requiere parámetro "fecha" (YYYY-MM-DD)' })
+    }
+
+    const datePattern = String(fecha).split('T')[0]
+    const [year, month] = datePattern.split('-')
+    const monthStart = `${year}-${month}-01`
+
+    const metasExists = await tableExists('tb_metas')
+    if (!metasExists) {
+      return res.json({ day: 0, month: 0, fecha: datePattern })
+    }
+
+    const metaDia = await query(
+      `SELECT
+         COALESCE(fiacao_meta, 0)
+       + COALESCE(indigo_meta, 0)
+       + COALESCE(tecelagem_meta, 0)
+       + COALESCE(acabamento_meta, 0) AS total
+       FROM tb_metas WHERE fecha = $1`,
+      [datePattern],
+      'metas/resumen-dia'
+    )
+    const metaMes = await query(
+      `SELECT
+         SUM(
+           COALESCE(fiacao_meta, 0)
+         + COALESCE(indigo_meta, 0)
+         + COALESCE(tecelagem_meta, 0)
+         + COALESCE(acabamento_meta, 0)
+         ) AS total
+       FROM tb_metas WHERE fecha >= $1 AND fecha <= $2`,
+      [monthStart, datePattern],
+      'metas/resumen-mes'
+    )
+
+    res.json({
+      day: Number(metaDia.rows?.[0]?.total || 0),
+      month: Number(metaMes.rows?.[0]?.total || 0),
+      fecha: datePattern
+    })
+  } catch (err) {
+    console.error('Error en /api/metas/resumen/:fecha:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/calidad/pts100m2 - Puntos por 100m2
+app.get('/api/calidad/pts100m2', async (req, res) => {
+  try {
+    const { date, monthStart, monthEnd } = req.query
+    if (!date) {
+      return res.status(400).json({ error: 'Se requiere parámetro "date" (YYYY-MM-DD)' })
+    }
+
+    const datePattern = String(date).split('T')[0]
+    const [year, month] = datePattern.split('-')
+    const mesInicio = monthStart || `${year}-${month}-01`
+    const mesFin = monthEnd || datePattern
+
+    const datProdDate = sqlParseDate('c."DAT_PROD"')
+    const metragemNum = sqlParseNumberIntl('c."METRAGEM"')
+    const pontuacaoNum = sqlParseNumberIntl('c."PONTUACAO"')
+    const larguraNum = sqlParseNumberIntl('c."LARGURA"')
+
+    const sqlDia = `
+      WITH pts AS (
+        SELECT
+          dat_prod,
+          SUM(pontuacao_avg) AS pontuacao
+        FROM (
+          SELECT
+            c."EMP",
+            ${datProdDate} AS dat_prod,
+            btrim(c."QUALIDADE") AS qualidade,
+            c."PEÇA" AS peca,
+            AVG(${pontuacaoNum}) AS pontuacao_avg
+          FROM tb_calidad c
+          WHERE ${datProdDate} = $1::date
+            AND btrim(c."QUALIDADE") = 'PRIMEIRA'
+          GROUP BY c."EMP", ${datProdDate}, btrim(c."QUALIDADE"), c."PEÇA"
+        ) sub
+        GROUP BY dat_prod
+      ),
+      ancho AS (
+        SELECT
+          ${datProdDate} AS fecha,
+          SUM(${metragemNum}) AS metros,
+          SUM(${metragemNum} * ${larguraNum}) / NULLIF(SUM(${metragemNum}), 0) AS ancho_pond
+        FROM tb_calidad c
+        WHERE ${datProdDate} = $1::date
+          AND btrim(c."QUALIDADE") = 'PRIMEIRA'
+        GROUP BY ${datProdDate}
+      )
+      SELECT
+        CASE
+          WHEN ancho.metros > 0 AND ancho.ancho_pond > 0 THEN
+            (pts.pontuacao * 100) / (ancho.metros * ancho.ancho_pond) * 100
+          ELSE 0
+        END AS pts1002
+      FROM ancho
+      LEFT JOIN pts ON ancho.fecha = pts.dat_prod
+    `
+
+    const sqlMes = `
+      WITH pts AS (
+        SELECT
+          SUM(pontuacao_avg) AS pontuacao
+        FROM (
+          SELECT
+            c."EMP",
+            ${datProdDate} AS dat_prod,
+            btrim(c."QUALIDADE") AS qualidade,
+            c."PEÇA" AS peca,
+            AVG(${pontuacaoNum}) AS pontuacao_avg
+          FROM tb_calidad c
+          WHERE ${datProdDate} >= $1::date
+            AND ${datProdDate} <= $2::date
+            AND btrim(c."QUALIDADE") = 'PRIMEIRA'
+          GROUP BY c."EMP", ${datProdDate}, btrim(c."QUALIDADE"), c."PEÇA"
+        ) sub
+      ),
+      ancho AS (
+        SELECT
+          SUM(${metragemNum}) AS metros,
+          SUM(${metragemNum} * ${larguraNum}) / NULLIF(SUM(${metragemNum}), 0) AS ancho_pond
+        FROM tb_calidad c
+        WHERE ${datProdDate} >= $1::date
+          AND ${datProdDate} <= $2::date
+          AND btrim(c."QUALIDADE") = 'PRIMEIRA'
+      )
+      SELECT
+        CASE
+          WHEN ancho.metros > 0 AND ancho.ancho_pond > 0 THEN
+            (pts.pontuacao * 100) / (ancho.metros * ancho.ancho_pond) * 100
+          ELSE 0
+        END AS pts1002
+      FROM ancho, pts
+    `
+
+    const resultDia = await query(sqlDia, [datePattern], 'calidad/pts100m2-dia')
+    const resultMes = await query(sqlMes, [mesInicio, mesFin], 'calidad/pts100m2-mes')
+
+    res.json({
+      day: Number(resultDia.rows?.[0]?.pts1002 || 0),
+      month: Number(resultMes.rows?.[0]?.pts1002 || 0),
+      date: datePattern
+    })
+  } catch (err) {
+    console.error('Error en /api/calidad/pts100m2:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/produccion/indigo-resumen
+app.get('/api/produccion/indigo-resumen', async (req, res) => {
+  try {
+    const { date, monthStart, monthEnd } = req.query
+    if (!date) {
+      return res.status(400).json({ error: 'Se requiere parámetro "date" (YYYY-MM-DD)' })
+    }
+
+    const datePattern = String(date).split('T')[0]
+    const [year, month] = datePattern.split('-')
+    const mesInicio = monthStart || `${year}-${month}-01`
+    const mesFin = monthEnd || datePattern
+
+    const dtBaseDate = sqlParseDate('p."DT_BASE_PRODUCAO"')
+    const metragemNum = sqlParseNumberIntl('p."METRAGEM"')
+    const rupturasNum = sqlParseNumberIntl('p."RUPTURAS"')
+
+    const sqlDia = `
+      SELECT
+        COALESCE(SUM(${metragemNum}), 0) AS metros,
+        CASE
+          WHEN SUM(${metragemNum}) > 0 THEN SUM(${rupturasNum}) * 1000 / NULLIF(SUM(${metragemNum}), 0)
+          ELSE 0
+        END AS rot_103
+      FROM tb_produccion p
+      WHERE ${dtBaseDate} = $1::date
+        AND p."SELETOR" = 'INDIGO'
+    `
+
+    const sqlMes = `
+      SELECT
+        COALESCE(SUM(${metragemNum}), 0) AS metros,
+        CASE
+          WHEN SUM(${metragemNum}) > 0 THEN SUM(${rupturasNum}) * 1000 / NULLIF(SUM(${metragemNum}), 0)
+          ELSE 0
+        END AS rot_103
+      FROM tb_produccion p
+      WHERE ${dtBaseDate} >= $1::date
+        AND ${dtBaseDate} <= $2::date
+        AND p."SELETOR" = 'INDIGO'
+    `
+
+    const resultDia = await query(sqlDia, [datePattern], 'produccion/indigo-dia')
+    const resultMes = await query(sqlMes, [mesInicio, mesFin], 'produccion/indigo-mes')
+
+    let metaDia = 0
+    let metaMes = 0
+    if (await tableExists('tb_metas')) {
+      const metaDiaRes = await query(
+        'SELECT indigo_meta FROM tb_metas WHERE fecha = $1',
+        [datePattern],
+        'metas/indigo-dia'
+      )
+      const metaMesRes = await query(
+        'SELECT SUM(indigo_meta) AS total FROM tb_metas WHERE fecha >= $1 AND fecha <= $2',
+        [mesInicio, mesFin],
+        'metas/indigo-mes'
+      )
+      metaDia = Number(metaDiaRes.rows?.[0]?.indigo_meta || 0)
+      metaMes = Number(metaMesRes.rows?.[0]?.total || 0)
+    }
+
+    res.json({
+      day: {
+        metros: Number(resultDia.rows?.[0]?.metros || 0),
+        rot103: Number(resultDia.rows?.[0]?.rot_103 || 0),
+        meta: metaDia
+      },
+      month: {
+        metros: Number(resultMes.rows?.[0]?.metros || 0),
+        rot103: Number(resultMes.rows?.[0]?.rot_103 || 0),
+        metaAcumulada: metaMes
+      },
+      date: datePattern
+    })
+  } catch (err) {
+    console.error('Error en /api/produccion/indigo-resumen:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/produccion/estopa-azul
+app.get('/api/produccion/estopa-azul', async (req, res) => {
+  try {
+    const { date, monthStart, monthEnd } = req.query
+    if (!date) {
+      return res.status(400).json({ error: 'Se requiere parámetro "date" (YYYY-MM-DD)' })
+    }
+
+    const datePattern = String(date).split('T')[0]
+    const [year, month] = datePattern.split('-')
+    const mesInicio = monthStart || `${year}-${month}-01`
+    const mesFin = monthEnd || datePattern
+
+    const dtBaseDate = sqlParseDate('p."DT_BASE_PRODUCAO"')
+    const dtMovDate = sqlParseDate('r."DT_MOV"')
+    const metragemNum = sqlParseNumberIntl('p."METRAGEM"')
+    const pesoMantaNum = sqlParseNumberIntl('f."CONS#URD/m"')
+    const estopaKgNum = sqlParseNumberIntl('r."PESO LIQUIDO (KG)"')
+
+    const sqlDia = `
+      WITH bases AS (
+        SELECT DISTINCT
+          f."URDUME" AS artigo,
+          ${pesoMantaNum} AS peso_manta
+        FROM tb_fichas f
+        WHERE f."URDUME" IS NOT NULL
+          AND f."URDUME" <> ''
+          AND f."CONS#URD/m" IS NOT NULL
+          AND f."CONS#URD/m" <> ''
+          AND f."CONS#URD/m" <> '0'
+          AND f."CONS#URD/m" <> '0,00'
+      ),
+      metros_base AS (
+        SELECT
+          p."BASE URDUME" AS base,
+          SUM(${metragemNum}) AS metros
+        FROM tb_produccion p
+        WHERE ${dtBaseDate} = $1::date
+          AND p."SELETOR" = 'INDIGO'
+        GROUP BY p."BASE URDUME"
+      ),
+      peso_dia AS (
+        SELECT
+          SUM(mb.metros * COALESCE(b.peso_manta, 0)) / 1000 * 0.98 AS suma_producto
+        FROM metros_base mb
+        LEFT JOIN bases b ON mb.base = b.artigo
+      ),
+      estopa_azul AS (
+        SELECT
+          SUM(${estopaKgNum}) AS estopa
+        FROM tb_residuos_indigo r
+        WHERE ${dtMovDate} = $2::date
+          AND r."SUBPRODUTO" = '1746437'
+      )
+      SELECT
+        ea.estopa,
+        pd.suma_producto,
+        CASE WHEN pd.suma_producto > 0 THEN (ea.estopa / pd.suma_producto) * 100 ELSE 0 END AS porcentaje
+      FROM peso_dia pd, estopa_azul ea
+    `
+
+    const sqlMes = `
+      WITH bases AS (
+        SELECT DISTINCT
+          f."URDUME" AS artigo,
+          ${pesoMantaNum} AS peso_manta
+        FROM tb_fichas f
+        WHERE f."URDUME" IS NOT NULL
+          AND f."URDUME" <> ''
+          AND f."CONS#URD/m" IS NOT NULL
+          AND f."CONS#URD/m" <> ''
+          AND f."CONS#URD/m" <> '0'
+          AND f."CONS#URD/m" <> '0,00'
+      ),
+      metros_base AS (
+        SELECT
+          p."BASE URDUME" AS base,
+          SUM(${metragemNum}) AS metros
+        FROM tb_produccion p
+        WHERE ${dtBaseDate} >= $1::date
+          AND ${dtBaseDate} <= $2::date
+          AND p."SELETOR" = 'INDIGO'
+        GROUP BY p."BASE URDUME"
+      ),
+      peso_mes AS (
+        SELECT
+          SUM(mb.metros * COALESCE(b.peso_manta, 0)) / 1000 * 0.98 AS suma_producto
+        FROM metros_base mb
+        LEFT JOIN bases b ON mb.base = b.artigo
+      ),
+      estopa_azul AS (
+        SELECT
+          SUM(${estopaKgNum}) AS estopa
+        FROM tb_residuos_indigo r
+        WHERE ${dtMovDate} >= $3::date
+          AND ${dtMovDate} <= $4::date
+          AND r."SUBPRODUTO" = '1746437'
+      )
+      SELECT
+        ea.estopa,
+        pm.suma_producto,
+        CASE WHEN pm.suma_producto > 0 THEN (ea.estopa / pm.suma_producto) * 100 ELSE 0 END AS porcentaje
+      FROM peso_mes pm, estopa_azul ea
+    `
+
+    const resultDia = await query(sqlDia, [datePattern, datePattern], 'produccion/estopa-azul-dia')
+    const resultMes = await query(sqlMes, [mesInicio, mesFin, mesInicio, mesFin], 'produccion/estopa-azul-mes')
+
+    res.json({
+      day: {
+        estopaKg: Number(resultDia.rows?.[0]?.estopa || 0),
+        pesoProducto: Number(resultDia.rows?.[0]?.suma_producto || 0),
+        porcentaje: Number(resultDia.rows?.[0]?.porcentaje || 0)
+      },
+      month: {
+        estopaKg: Number(resultMes.rows?.[0]?.estopa || 0),
+        pesoProducto: Number(resultMes.rows?.[0]?.suma_producto || 0),
+        porcentaje: Number(resultMes.rows?.[0]?.porcentaje || 0)
+      },
+      date: datePattern
+    })
+  } catch (err) {
+    console.error('Error en /api/produccion/estopa-azul:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/produccion/tecelagem-resumen
+app.get('/api/produccion/tecelagem-resumen', async (req, res) => {
+  try {
+    const { date, monthStart, monthEnd } = req.query
+    if (!date) {
+      return res.status(400).json({ error: 'Se requiere parámetro "date" (YYYY-MM-DD)' })
+    }
+
+    const datePattern = String(date).split('T')[0]
+    const [year, month] = datePattern.split('-')
+    const mesInicio = monthStart || `${year}-${month}-01`
+    const mesFin = monthEnd || datePattern
+
+    const dtBaseDate = sqlParseDate('p."DT_BASE_PRODUCAO"')
+    const metragemEncNum = sqlParseNumberIntl('p."METRAGEM ENCOLH"')
+    const paradaTramaNum = sqlParseNumberIntl('p."PARADA TEC TRAMA"')
+    const paradaUrdNum = sqlParseNumberIntl('p."PARADA TEC URDUME"')
+    const pontosLidosNum = sqlParseNumberIntl('p."PONTOS_LIDOS"')
+    const pontos100Num = sqlParseNumberIntl('p."PONTOS_100%"')
+
+    const sqlDia = `
+      SELECT
+        COALESCE(SUM(${metragemEncNum}), 0) AS metros,
+        CASE
+          WHEN SUM(${pontosLidosNum}) > 0 THEN SUM(${paradaTramaNum}) * 100000.0 /
+            (SUM(${pontosLidosNum}) * 1000)
+          ELSE 0
+        END AS rot_tra_105,
+        CASE
+          WHEN SUM(${pontosLidosNum}) > 0 THEN SUM(${paradaUrdNum}) * 100000.0 /
+            (SUM(${pontosLidosNum}) * 1000)
+          ELSE 0
+        END AS rot_urd_105,
+        CASE
+          WHEN SUM(${pontos100Num}) > 0 THEN SUM(${pontosLidosNum}) * 100.0 / SUM(${pontos100Num})
+          ELSE 0
+        END AS eficiencia
+      FROM tb_produccion p
+      WHERE ${dtBaseDate} = $1::date
+        AND p."SELETOR" = 'TECELAGEM'
+    `
+
+    const sqlMes = `
+      SELECT
+        COALESCE(SUM(${metragemEncNum}), 0) AS metros,
+        CASE
+          WHEN SUM(${pontosLidosNum}) > 0 THEN SUM(${paradaTramaNum}) * 100000.0 /
+            (SUM(${pontosLidosNum}) * 1000)
+          ELSE 0
+        END AS rot_tra_105,
+        CASE
+          WHEN SUM(${pontosLidosNum}) > 0 THEN SUM(${paradaUrdNum}) * 100000.0 /
+            (SUM(${pontosLidosNum}) * 1000)
+          ELSE 0
+        END AS rot_urd_105,
+        CASE
+          WHEN SUM(${pontos100Num}) > 0 THEN SUM(${pontosLidosNum}) * 100.0 / SUM(${pontos100Num})
+          ELSE 0
+        END AS eficiencia
+      FROM tb_produccion p
+      WHERE ${dtBaseDate} >= $1::date
+        AND ${dtBaseDate} <= $2::date
+        AND p."SELETOR" = 'TECELAGEM'
+    `
+
+    const resultDia = await query(sqlDia, [datePattern], 'produccion/tecelagem-dia')
+    const resultMes = await query(sqlMes, [mesInicio, mesFin], 'produccion/tecelagem-mes')
+
+    let metaDia = {}
+    let metaMes = {}
+    if (await tableExists('tb_metas')) {
+      const metaDiaRes = await query(
+        `SELECT tecelagem_meta AS meta_dia, tecelagem_enc_urd AS meta_enc_urd
+         FROM tb_metas WHERE fecha = $1`,
+        [datePattern],
+        'metas/tecelagem-dia'
+      )
+      const metaMesRes = await query(
+        `SELECT SUM(tecelagem_meta) AS meta_acumulada,
+                AVG(tecelagem_enc_urd) AS meta_enc_urd
+         FROM tb_metas WHERE fecha >= $1 AND fecha <= $2`,
+        [mesInicio, mesFin],
+        'metas/tecelagem-mes'
+      )
+      metaDia = metaDiaRes.rows?.[0] || {}
+      metaMes = metaMesRes.rows?.[0] || {}
+    }
+
+    // Estopa azul tejeduria (residuos por sector)
+    const dtMovDate = sqlParseDate('r."DT_MOV"')
+    const pesoMantaNum = sqlParseNumberIntl('f."CONS#URD/m"')
+    const encUrdNum = sqlParseNumberIntl('f."ENC#TEC#URDUME"')
+    const metragemNum = sqlParseNumberIntl('p."METRAGEM"')
+    const estopaKgNum = sqlParseNumberIntl('r."PESO LIQUIDO (KG)"')
+
+    const sqlEstopaDiaPeso = `
+      WITH tej AS (
+        SELECT
+          p."ARTIGO" AS articulo,
+          p."BASE URDUME" AS base,
+          SUM(${metragemNum}) AS metragem
+        FROM tb_produccion p
+        WHERE ${dtBaseDate} = $1::date
+          AND p."SELETOR" = 'TECELAGEM'
+        GROUP BY p."ARTIGO", p."BASE URDUME"
+      ),
+      fic AS (
+        SELECT
+          f."ARTIGO CODIGO" AS articulo,
+          ${pesoMantaNum} AS peso_manta,
+          ${encUrdNum} AS enc_urd
+        FROM tb_fichas f
+        WHERE f."ARTIGO CODIGO" IS NOT NULL AND f."ARTIGO CODIGO" <> ''
+      )
+      SELECT
+        SUM(tej.metragem * ((100 + COALESCE(fic.enc_urd, 0)) / 100) * (COALESCE(fic.peso_manta, 0) / 1000)) AS peso_urd
+      FROM tej
+      LEFT JOIN fic ON tej.articulo = fic.articulo
+    `
+
+    const sqlEstopaDiaResiduo = `
+      SELECT SUM(${estopaKgNum}) AS estopa
+      FROM tb_residuos_por_sector r
+      WHERE ${dtMovDate} = $1::date
+        AND r."SUBPRODUTO" = '1785582'
+    `
+
+    const sqlEstopaMesPeso = `
+      WITH tej AS (
+        SELECT
+          p."ARTIGO" AS articulo,
+          p."BASE URDUME" AS base,
+          SUM(${metragemNum}) AS metragem
+        FROM tb_produccion p
+        WHERE ${dtBaseDate} >= $1::date
+          AND ${dtBaseDate} <= $2::date
+          AND p."SELETOR" = 'TECELAGEM'
+        GROUP BY p."ARTIGO", p."BASE URDUME"
+      ),
+      fic AS (
+        SELECT
+          f."ARTIGO CODIGO" AS articulo,
+          ${pesoMantaNum} AS peso_manta,
+          ${encUrdNum} AS enc_urd
+        FROM tb_fichas f
+        WHERE f."ARTIGO CODIGO" IS NOT NULL AND f."ARTIGO CODIGO" <> ''
+      )
+      SELECT
+        SUM(tej.metragem * ((100 + COALESCE(fic.enc_urd, 0)) / 100) * (COALESCE(fic.peso_manta, 0) / 1000)) AS peso_urd
+      FROM tej
+      LEFT JOIN fic ON tej.articulo = fic.articulo
+    `
+
+    const sqlEstopaMesResiduo = `
+      SELECT SUM(${estopaKgNum}) AS estopa
+      FROM tb_residuos_por_sector r
+      WHERE ${dtMovDate} >= $1::date
+        AND ${dtMovDate} <= $2::date
+        AND r."SUBPRODUTO" = '1785582'
+    `
+
+    let pesoProductoDia = 0
+    let pesoProductoMes = 0
+    let estopaDia = 0
+    let estopaMes = 0
+
+    try {
+      const estopaDiaPeso = await query(sqlEstopaDiaPeso, [datePattern], 'tecelagem/estopa-peso-dia')
+      const estopaDiaRes = await query(sqlEstopaDiaResiduo, [datePattern], 'tecelagem/estopa-residuo-dia')
+      const estopaMesPeso = await query(sqlEstopaMesPeso, [mesInicio, mesFin], 'tecelagem/estopa-peso-mes')
+      const estopaMesRes = await query(sqlEstopaMesResiduo, [mesInicio, mesFin], 'tecelagem/estopa-residuo-mes')
+
+      pesoProductoDia = Number(estopaDiaPeso.rows?.[0]?.peso_urd || 0)
+      pesoProductoMes = Number(estopaMesPeso.rows?.[0]?.peso_urd || 0)
+      estopaDia = Number(estopaDiaRes.rows?.[0]?.estopa || 0)
+      estopaMes = Number(estopaMesRes.rows?.[0]?.estopa || 0)
+    } catch (err) {
+      console.warn('No se pudo calcular estopa azul tejeduria:', err.message)
+    }
+
+    const estopaAzulPctDia = pesoProductoDia > 0 ? (estopaDia / pesoProductoDia) * 100 : 0
+    const estopaAzulPctMes = pesoProductoMes > 0 ? (estopaMes / pesoProductoMes) * 100 : 0
+
+    res.json({
+      day: {
+        metros: Number(resultDia.rows?.[0]?.metros || 0),
+        eficiencia: Number(resultDia.rows?.[0]?.eficiencia || 0),
+        rotTra105: Number(resultDia.rows?.[0]?.rot_tra_105 || 0),
+        rotUrd105: Number(resultDia.rows?.[0]?.rot_urd_105 || 0),
+        estopaAzulPct: estopaAzulPctDia,
+        meta: Number(metaDia.meta_dia || 0),
+        metaEfi: 0,
+        metaRt105: 0,
+        metaRu105: 0,
+        metaEstopaAzul: 0
+      },
+      month: {
+        metros: Number(resultMes.rows?.[0]?.metros || 0),
+        eficiencia: Number(resultMes.rows?.[0]?.eficiencia || 0),
+        rotTra105: Number(resultMes.rows?.[0]?.rot_tra_105 || 0),
+        rotUrd105: Number(resultMes.rows?.[0]?.rot_urd_105 || 0),
+        estopaAzulPct: estopaAzulPctMes,
+        metaAcumulada: Number(metaMes.meta_acumulada || 0),
+        metaEfi: 0,
+        metaRt105: 0,
+        metaRu105: 0,
+        metaEstopaAzul: 0
+      },
+      date: datePattern
+    })
+  } catch (err) {
+    console.error('Error en /api/produccion/tecelagem-resumen:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/produccion/acabamento-resumen
+app.get('/api/produccion/acabamento-resumen', async (req, res) => {
+  try {
+    const { date, monthStart, monthEnd } = req.query
+    if (!date) {
+      return res.status(400).json({ error: 'Se requiere parámetro "date" (YYYY-MM-DD)' })
+    }
+
+    const datePattern = String(date).split('T')[0]
+    const [year, month] = datePattern.split('-')
+    const mesInicio = monthStart || `${year}-${month}-01`
+    const mesFin = monthEnd || datePattern
+
+    const dtBaseDate = sqlParseDate('p."DT_BASE_PRODUCAO"')
+    const dtProdDate = sqlParseDate('t.dt_prod')
+    const metragemNum = sqlParseNumberIntl('p."METRAGEM"')
+    const testeMetragemNum = sqlParseNumberIntl('t.metragem')
+    const encUrdNum = sqlParseNumberIntl('t."%_ENC_URD"')
+
+    const sqlMetrosDia = `
+      SELECT COALESCE(SUM(${metragemNum}), 0) AS metros
+      FROM tb_produccion p
+      WHERE ${dtBaseDate} = $1::date
+        AND p."MAQUINA" = '165001'
+    `
+    const sqlMetrosMes = `
+      SELECT COALESCE(SUM(${metragemNum}), 0) AS metros
+      FROM tb_produccion p
+      WHERE ${dtBaseDate} >= $1::date
+        AND ${dtBaseDate} <= $2::date
+        AND p."MAQUINA" = '165001'
+    `
+
+    const sqlEncUrdDia = `
+      SELECT
+        CASE
+          WHEN SUM(${testeMetragemNum}) > 0 THEN
+            SUM(${testeMetragemNum} * ${encUrdNum}) / SUM(${testeMetragemNum})
+          ELSE 0
+        END AS enc_urd_pct
+      FROM tb_testes t
+      WHERE ${dtProdDate} = $1::date
+        AND t.maquina = '165001'
+        AND t.aprov = 'A'
+    `
+    const sqlEncUrdMes = `
+      SELECT
+        CASE
+          WHEN SUM(${testeMetragemNum}) > 0 THEN
+            SUM(${testeMetragemNum} * ${encUrdNum}) / SUM(${testeMetragemNum})
+          ELSE 0
+        END AS enc_urd_pct
+      FROM tb_testes t
+      WHERE ${dtProdDate} >= $1::date
+        AND ${dtProdDate} <= $2::date
+        AND t.maquina = '165001'
+        AND t.aprov = 'A'
+    `
+
+    const resultMetrosDia = await query(sqlMetrosDia, [datePattern], 'acabamento/metros-dia')
+    const resultMetrosMes = await query(sqlMetrosMes, [mesInicio, mesFin], 'acabamento/metros-mes')
+    const resultEncUrdDia = await query(sqlEncUrdDia, [datePattern], 'acabamento/enc-urd-dia')
+    const resultEncUrdMes = await query(sqlEncUrdMes, [mesInicio, mesFin], 'acabamento/enc-urd-mes')
+
+    let metaDia = {}
+    let metaMes = {}
+    if (await tableExists('tb_metas')) {
+      const metaDiaRes = await query(
+        `SELECT acabamento_meta AS meta_dia, acabamento_enc_urd AS meta_enc_urd FROM tb_metas WHERE fecha = $1`,
+        [datePattern],
+        'metas/acabamento-dia'
+      )
+      const metaMesRes = await query(
+        `SELECT SUM(acabamento_meta) AS meta_acumulada, AVG(acabamento_enc_urd) AS meta_enc_urd
+         FROM tb_metas WHERE fecha >= $1 AND fecha <= $2`,
+        [mesInicio, mesFin],
+        'metas/acabamento-mes'
+      )
+      metaDia = metaDiaRes.rows?.[0] || {}
+      metaMes = metaMesRes.rows?.[0] || {}
+    }
+
+    res.json({
+      day: {
+        metros: Number(resultMetrosDia.rows?.[0]?.metros || 0),
+        encUrdPct: Number(resultEncUrdDia.rows?.[0]?.enc_urd_pct || 0),
+        meta: Number(metaDia.meta_dia || 0),
+        metaEncUrd: Number(metaDia.meta_enc_urd || -1.5)
+      },
+      month: {
+        metros: Number(resultMetrosMes.rows?.[0]?.metros || 0),
+        encUrdPct: Number(resultEncUrdMes.rows?.[0]?.enc_urd_pct || 0),
+        metaAcumulada: Number(metaMes.meta_acumulada || 0),
+        metaEncUrd: Number(metaMes.meta_enc_urd || -1.5)
+      },
+      date: datePattern
+    })
+  } catch (err) {
+    console.error('Error en /api/produccion/acabamento-resumen:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/produccion/eficiencia-roturas
+app.get('/api/produccion/eficiencia-roturas', async (req, res) => {
+  try {
+    const { date, trama, monthStart, monthEnd } = req.query
+    if (!date) {
+      return res.status(400).json({ error: 'Se requiere parámetro "date" (YYYY-MM-DD)' })
+    }
+
+    const datePattern = String(date).split('T')[0]
+    const [year, month] = datePattern.split('-')
+    const startDate = monthStart || `${year}-${month}-01`
+    const endDate = monthEnd || datePattern
+
+    const dtBaseDate = sqlParseDate('p."DT_BASE_PRODUCAO"')
+    const pontosLidosNum = sqlParseNumberIntl('p."PONTOS_LIDOS"')
+    const pontos100Num = sqlParseNumberIntl('p."PONTOS_100%"')
+    const paradaTramaNum = sqlParseNumberIntl('p."PARADA TEC TRAMA"')
+
+    const tramaFilter = trama ? 'AND p."TRAMA REDUZIDA 1" = $3' : ''
+    const params = trama ? [startDate, endDate, trama] : [startDate, endDate]
+
+    const sql = `
+      SELECT
+        to_char(${dtBaseDate}, 'YYYY-MM-DD') AS fecha,
+        p."TRAMA REDUZIDA 1" AS trama,
+        ROUND((SUM(COALESCE(${pontosLidosNum}, 0)) * 100.0) / NULLIF(SUM(COALESCE(${pontos100Num}, 0)), 0), 1) AS eficiencia,
+        ROUND((SUM(COALESCE(${paradaTramaNum}, 0)) * 100000.0) / NULLIF((SUM(COALESCE(${pontosLidosNum}, 0)) * 1000), 0), 1) AS rt105
+      FROM tb_produccion p
+      WHERE p."FILIAL" = '05'
+        AND p."SELETOR" = 'TECELAGEM'
+        AND ${dtBaseDate} >= $1::date
+        AND ${dtBaseDate} <= $2::date
+        ${tramaFilter}
+      GROUP BY fecha, p."TRAMA REDUZIDA 1"
+      ORDER BY fecha ASC
+    `
+
+    const result = await query(sql, params, 'produccion/eficiencia-roturas')
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en /api/produccion/eficiencia-roturas:', err)
     res.status(500).json({ error: err.message })
   }
 })
