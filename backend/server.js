@@ -23,12 +23,18 @@ const pool = new Pool({
   connectionTimeoutMillis: 2000,
 })
 
+function hrMs() {
+  return Number(process.hrtime.bigint()) / 1_000_000
+}
+
 // Helper: query wrapper
-async function query(text, params) {
-  const start = Date.now()
+async function query(text, params, label) {
+  const start = hrMs()
   const res = await pool.query(text, params)
-  const duration = Date.now() - start
-  console.log(`✓ Query executed in ${duration}ms`)
+  const duration = hrMs() - start
+  const tag = label ? ` [${label}]` : ''
+  const rows = Array.isArray(res?.rows) ? res.rows.length : res?.rowCount
+  console.log(`✓ Query${tag} in ${duration.toFixed(1)}ms (rows=${rows ?? 'n/a'})`)
   return res
 }
 
@@ -179,6 +185,99 @@ function arraysEqualCaseSensitive(a, b) {
   return true
 }
 
+function dateVariants(dateStr) {
+  const s = String(dateStr || '').trim()
+  const iso = /^\d{4}-\d{2}-\d{2}$/.test(s)
+  if (iso) {
+    const [yyyy, mm, dd] = s.split('-')
+    return { iso: s, br: `${dd}/${mm}/${yyyy}` }
+  }
+  const br = /^\d{2}\/\d{2}\/\d{4}$/.test(s)
+  if (br) {
+    const [dd, mm, yyyy] = s.split('/')
+    return { iso: `${yyyy}-${mm}-${dd}`, br: s }
+  }
+  return { iso: s, br: s }
+}
+
+function dateTextCandidates(dateStr) {
+  const v = dateVariants(dateStr)
+  const out = new Set([v.iso, v.br])
+
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(v.br)) {
+    const [dd, mm, yyyy] = v.br.split('/')
+    const ddNo = String(parseInt(dd, 10))
+    const mmNo = String(parseInt(mm, 10))
+    out.add(`${ddNo}/${mmNo}/${yyyy}`)
+  }
+
+  return Array.from(out).filter(Boolean)
+}
+
+async function ensureCalidadIndexes() {
+  // Índices pensados para acelerar filtros por (EMP, fecha text, revisor/partida)
+  // Usamos CONCURRENTLY para minimizar locks en tablas grandes.
+  try {
+    await query(`
+      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_tb_calidad_emp_datprod
+        ON tb_calidad ("EMP", "DAT_PROD")
+    `)
+  } catch (e) {
+    console.warn('No se pudo crear idx_tb_calidad_emp_datprod:', e.message)
+  }
+
+  try {
+    await query(`
+      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_tb_calidad_emp_datprod_revisor
+        ON tb_calidad ("EMP", "DAT_PROD", "REVISOR FINAL")
+    `)
+  } catch (e) {
+    console.warn('No se pudo crear idx_tb_calidad_emp_datprod_revisor:', e.message)
+  }
+
+  try {
+    await query(`
+      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_tb_calidad_emp_partida_revisor_datprod
+        ON tb_calidad ("EMP", "PARTIDA", "REVISOR FINAL", "DAT_PROD")
+    `)
+  } catch (e) {
+    console.warn('No se pudo crear idx_tb_calidad_emp_partida_revisor_datprod:', e.message)
+  }
+
+  try {
+    await query(`
+      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_tb_produccion_partida_tecelagem
+        ON tb_produccion ("PARTIDA")
+        WHERE "FILIAL" = '05' AND "SELETOR" = 'TECELAGEM'
+    `)
+  } catch (e) {
+    console.warn('No se pudo crear idx_tb_produccion_partida_tecelagem:', e.message)
+  }
+
+  try {
+    await query(`
+      CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_tb_defectos_etiqueta_trim
+        ON tb_defectos ((btrim(etiqueta)))
+    `)
+  } catch (e) {
+    console.warn('No se pudo crear idx_tb_defectos_etiqueta_trim:', e.message)
+  }
+
+  // Stats: opcional (puede competir con consultas y volver lento el UI)
+  if (process.env.PERF_ANALYZE_ON_STARTUP === '1') {
+    try {
+      await query('ANALYZE tb_calidad')
+    } catch (e) {
+      console.warn('No se pudo ANALYZE tb_calidad:', e.message)
+    }
+    try {
+      await query('ANALYZE tb_produccion')
+    } catch (e) {
+      console.warn('No se pudo ANALYZE tb_produccion:', e.message)
+    }
+  }
+}
+
 async function maybeInsertWarningHistory({ tableName, csvPath, extraColumns, missingColumns }) {
   // Evita spam: solo inserta si cambió respecto al último registro de esa tabla.
   const last = await query(
@@ -221,6 +320,7 @@ app.get('/api/health', async (req, res) => {
 // GET /api/produccion/calidad/revision-cq - Reporte agrupado por Revisor
 app.get('/api/produccion/calidad/revision-cq', async (req, res) => {
   try {
+    const t0 = hrMs()
     const { startDate, endDate } = req.query
     const tramas = req.query.tramas || 'Todas'
 
@@ -238,6 +338,12 @@ app.get('/api/produccion/calidad/revision-cq', async (req, res) => {
     const pontuacaoNum = sqlParseNumber('"PONTUACAO"')
     const larguraNum = sqlParseNumber('"LARGURA"')
 
+    const sameDay = String(startDate) === String(endDate)
+    const dateFilterSql = sameDay
+      ? `"DAT_PROD" = ANY($1::text[])`
+      : `${datProdDate} BETWEEN $1::date AND $2::date`
+    const params = sameDay ? [dateTextCandidates(startDate)] : [startDate, endDate]
+
     const sql = `
       WITH CAL AS (
         SELECT
@@ -251,7 +357,7 @@ app.get('/api/produccion/calidad/revision-cq', async (req, res) => {
         FROM tb_calidad
         WHERE
           "EMP" = 'STC'
-          AND ${datProdDate} BETWEEN $1::date AND $2::date
+          AND ${dateFilterSql}
           AND "QUALIDADE" NOT ILIKE '%RETALHO%'
           ${tramasFilter}
         GROUP BY
@@ -268,7 +374,7 @@ app.get('/api/produccion/calidad/revision-cq', async (req, res) => {
         FROM tb_calidad
         WHERE
           "EMP" = 'STC'
-          AND ${datProdDate} BETWEEN $1::date AND $2::date
+          AND ${dateFilterSql}
           AND "QUALIDADE" ILIKE '%RETALHO%'
           ${tramasFilter}
       ),
@@ -314,8 +420,11 @@ app.get('/api/produccion/calidad/revision-cq', async (req, res) => {
       ORDER BY "Mts_Total" DESC
     `
 
-    const result = await query(sql, [startDate, endDate])
+    const result = await query(sql, params, 'calidad/revision-cq')
     res.json(result.rows)
+    console.log(
+      `[PERF] GET /calidad/revision-cq ${startDate}..${endDate} tramas=${tramas} total=${(hrMs() - t0).toFixed(1)}ms`
+    )
   } catch (err) {
     console.error('Error en calidad/revision-cq:', err)
     res.status(500).json({ error: err.message })
@@ -325,6 +434,7 @@ app.get('/api/produccion/calidad/revision-cq', async (req, res) => {
 // GET /api/produccion/calidad/revisor-detalle - Detalle por revisor (con partidas)
 app.get('/api/produccion/calidad/revisor-detalle', async (req, res) => {
   try {
+    const t0 = hrMs()
     const { startDate, endDate, revisor } = req.query
     const tramas = req.query.tramas || 'Todas'
 
@@ -346,42 +456,58 @@ app.get('/api/produccion/calidad/revisor-detalle', async (req, res) => {
     const prodParTraNum = sqlParseNumber('P."PARADA TEC TRAMA"')
     const prodParUrdNum = sqlParseNumber('P."PARADA TEC URDUME"')
 
+    const sameDay = String(startDate) === String(endDate)
+    const dateFilterSql = sameDay
+      ? `"DAT_PROD" = ANY($1::text[])`
+      : `${calDatProdDate} BETWEEN $1::date AND $2::date`
+    const revisorParam = sameDay ? '$2' : '$3'
+    const params = sameDay ? [dateTextCandidates(startDate), revisor] : [startDate, endDate, revisor]
+
     const sql = `
-      WITH CAL AS (
+      WITH RAW AS (
         SELECT
           "NM MERC" as "NombreArticulo",
           "PARTIDA" as "PARTIDA",
-          SUM(${calMetragemNum}) AS METRAGEM,
-          AVG(${calPontuacaoNum}) AS PONTUACAO,
-          AVG(${calLarguraNum}) AS LARGURA,
-          btrim("QUALIDADE") AS QUALIDADE
+          "DAT_PROD" as "DAT_PROD",
+          "ARTIGO" as "ARTIGO",
+          "PEÇA" as "PEÇA",
+          "ETIQUETA" as "ETIQUETA",
+          btrim("QUALIDADE") AS QUALIDADE,
+          "HORA" as "HORA",
+          ${calMetragemNum} AS METRAGEM,
+          ${calPontuacaoNum} AS PONTUACAO,
+          ${calLarguraNum} AS LARGURA
         FROM tb_calidad
         WHERE
           "EMP" = 'STC'
-          AND ${calDatProdDate} BETWEEN $1::date AND $2::date
-          AND "REVISOR FINAL" = $3
+          AND ${dateFilterSql}
+          AND "REVISOR FINAL" = ${revisorParam}
           AND "QUALIDADE" NOT ILIKE '%RETALHO%'
           ${tramasFilter}
+      ),
+      CAL AS (
+        SELECT
+          "NombreArticulo",
+          "PARTIDA",
+          SUM(METRAGEM) AS METRAGEM,
+          AVG(PONTUACAO) AS PONTUACAO,
+          AVG(LARGURA) AS LARGURA,
+          QUALIDADE
+        FROM RAW
         GROUP BY
-          "NM MERC",
+          "NombreArticulo",
           "PARTIDA",
           "DAT_PROD",
           "ARTIGO",
           "PEÇA",
-          "QUALIDADE",
+          QUALIDADE,
           "ETIQUETA"
       ),
       HorasPartida AS (
         SELECT
           "PARTIDA" as PARTIDA,
           MIN("HORA") as "HoraInicio"
-        FROM tb_calidad
-        WHERE
-          "EMP" = 'STC'
-          AND ${calDatProdDate} BETWEEN $1::date AND $2::date
-          AND "REVISOR FINAL" = $3
-          AND "QUALIDADE" NOT ILIKE '%RETALHO%'
-          ${tramasFilter}
+        FROM RAW
         GROUP BY "PARTIDA"
       ),
       CalidadPorPartida AS (
@@ -413,76 +539,74 @@ app.get('/api/produccion/calidad/revisor-detalle', async (req, res) => {
         FROM CAL
         GROUP BY "NombreArticulo", "PARTIDA"
       ),
-      PartidaVariantes AS (
+      PartidaVars AS (
         SELECT
-          "PARTIDA" as "CalPartida",
-          "PARTIDA" as "Var0",
+          C.*,
+          C."PARTIDA" as "Var0",
           CASE
-            WHEN length("PARTIDA") > 1 AND left("PARTIDA", 1) ~ '^[0-9]$' AND left("PARTIDA", 1)::int > 0
-              THEN (left("PARTIDA", 1)::int - 1)::text || substring("PARTIDA" from 2)
+            WHEN length(C."PARTIDA") > 1 AND left(C."PARTIDA", 1) ~ '^[0-9]$' AND left(C."PARTIDA", 1)::int > 0
+              THEN (left(C."PARTIDA", 1)::int - 1)::text || substring(C."PARTIDA" from 2)
           END as "Var1",
           CASE
-            WHEN length("PARTIDA") > 1 AND left("PARTIDA", 1) ~ '^[0-9]$' AND left("PARTIDA", 1)::int > 1
-              THEN (left("PARTIDA", 1)::int - 2)::text || substring("PARTIDA" from 2)
+            WHEN length(C."PARTIDA") > 1 AND left(C."PARTIDA", 1) ~ '^[0-9]$' AND left(C."PARTIDA", 1)::int > 1
+              THEN (left(C."PARTIDA", 1)::int - 2)::text || substring(C."PARTIDA" from 2)
           END as "Var2",
           CASE
-            WHEN length("PARTIDA") > 1 AND left("PARTIDA", 1) ~ '^[0-9]$' AND left("PARTIDA", 1)::int > 2
-              THEN (left("PARTIDA", 1)::int - 3)::text || substring("PARTIDA" from 2)
+            WHEN length(C."PARTIDA") > 1 AND left(C."PARTIDA", 1) ~ '^[0-9]$' AND left(C."PARTIDA", 1)::int > 2
+              THEN (left(C."PARTIDA", 1)::int - 3)::text || substring(C."PARTIDA" from 2)
           END as "Var3",
           CASE
-            WHEN length("PARTIDA") > 1
-              THEN '0' || substring("PARTIDA" from 2)
+            WHEN length(C."PARTIDA") > 1
+              THEN '0' || substring(C."PARTIDA" from 2)
           END as "Var4"
-        FROM CalidadPorPartida
+        FROM CalidadPorPartida C
       ),
-      ProduccionTelares AS (
+      TejPorPartida AS (
         SELECT
-          P."PARTIDA" as "PARTIDA",
-          MAX(
-            CASE
-              WHEN right(P."MAQUINA", 2) ~ '^[0-9]{2}$' THEN right(P."MAQUINA", 2)::int
-              ELSE NULL
-            END
-          ) as "Telar",
-          SUM(COALESCE(${prodPtsLidosNum}, 0)) as "PtsLei",
-          SUM(COALESCE(${prodPts100Num}, 0)) as "Pts100",
-          SUM(COALESCE(${prodParTraNum}, 0)) as "ParTra",
-          SUM(COALESCE(${prodParUrdNum}, 0)) as "ParUrd"
-        FROM tb_produccion P
-        WHERE
-          P."FILIAL" = '05'
-          AND P."SELETOR" = 'TECELAGEM'
-          AND P."PARTIDA" IN (
-            SELECT "Var0" FROM PartidaVariantes WHERE "Var0" IS NOT NULL
-            UNION SELECT "Var1" FROM PartidaVariantes WHERE "Var1" IS NOT NULL
-            UNION SELECT "Var2" FROM PartidaVariantes WHERE "Var2" IS NOT NULL
-            UNION SELECT "Var3" FROM PartidaVariantes WHERE "Var3" IS NOT NULL
-            UNION SELECT "Var4" FROM PartidaVariantes WHERE "Var4" IS NOT NULL
-          )
-        GROUP BY P."PARTIDA"
-      ),
-      PartidaMapping AS (
-        SELECT
-          PV."CalPartida",
-          COALESCE(PT0."PARTIDA", PT1."PARTIDA", PT2."PARTIDA", PT3."PARTIDA", PT4."PARTIDA") as "ProdPartida"
-        FROM PartidaVariantes PV
-        LEFT JOIN ProduccionTelares PT0 ON PT0."PARTIDA" = PV."Var0"
-        LEFT JOIN ProduccionTelares PT1 ON PT1."PARTIDA" = PV."Var1"
-        LEFT JOIN ProduccionTelares PT2 ON PT2."PARTIDA" = PV."Var2"
-        LEFT JOIN ProduccionTelares PT3 ON PT3."PARTIDA" = PV."Var3"
-        LEFT JOIN ProduccionTelares PT4 ON PT4."PARTIDA" = PV."Var4"
+          PV."PARTIDA" as "CalPartida",
+          TEJ.*
+        FROM PartidaVars PV
+        LEFT JOIN LATERAL (
+          SELECT
+            P."PARTIDA" as "PARTIDA",
+            MAX(
+              CASE
+                WHEN right(P."MAQUINA", 2) ~ '^[0-9]{2}$' THEN right(P."MAQUINA", 2)::int
+                ELSE NULL
+              END
+            ) as "Telar",
+            SUM(COALESCE(${prodPtsLidosNum}, 0)) as "PtsLei",
+            SUM(COALESCE(${prodPts100Num}, 0)) as "Pts100",
+            SUM(COALESCE(${prodParTraNum}, 0)) as "ParTra",
+            SUM(COALESCE(${prodParUrdNum}, 0)) as "ParUrd"
+          FROM tb_produccion P
+          WHERE
+            P."FILIAL" = '05'
+            AND P."SELETOR" = 'TECELAGEM'
+            AND P."PARTIDA" IN (PV."Var0", PV."Var1", PV."Var2", PV."Var3", PV."Var4")
+          GROUP BY P."PARTIDA"
+          ORDER BY CASE P."PARTIDA"
+            WHEN PV."Var0" THEN 0
+            WHEN PV."Var1" THEN 1
+            WHEN PV."Var2" THEN 2
+            WHEN PV."Var3" THEN 3
+            WHEN PV."Var4" THEN 4
+            ELSE 9
+          END ASC
+          LIMIT 1
+        ) TEJ ON true
       )
       SELECT
         HP."HoraInicio" as "HoraInicio",
-        CAL."NombreArticulo" as "NombreArticulo",
-        CAL."PARTIDA" as "PARTIDA",
-        CAL."Partidas" as "Partidas",
-        CAL."MetrosRevisados" as "MetrosRevisados",
-        CAL."CalidadPct" as "CalidadPct",
-        CAL."Pts100m2" as "Pts100m2",
-        CAL."TotalRollos" as "TotalRollos",
-        CAL."SinPuntos" as "SinPuntos",
-        CAL."SinPuntosPct" as "SinPuntosPct",
+        PV."NombreArticulo" as "NombreArticulo",
+        PV."PARTIDA" as "PARTIDA",
+        PV."Partidas" as "Partidas",
+        PV."MetrosRevisados" as "MetrosRevisados",
+        PV."CalidadPct" as "CalidadPct",
+        PV."Pts100m2" as "Pts100m2",
+        PV."TotalRollos" as "TotalRollos",
+        PV."SinPuntos" as "SinPuntos",
+        PV."SinPuntosPct" as "SinPuntosPct",
         COALESCE(TEJ."Telar", 0) as "Telar",
         CASE
           WHEN TEJ."PtsLei" IS NULL OR TEJ."PtsLei" = 0 THEN NULL
@@ -496,15 +620,19 @@ app.get('/api/produccion/calidad/revisor-detalle', async (req, res) => {
           WHEN TEJ."PtsLei" IS NULL OR TEJ."PtsLei" = 0 THEN NULL
           ELSE ROUND((TEJ."ParTra" * 100000)::numeric / NULLIF((TEJ."PtsLei" * 1000), 0)::numeric, 1)
         END as "RT105"
-      FROM CalidadPorPartida CAL
-      LEFT JOIN HorasPartida HP ON CAL."PARTIDA" = HP.PARTIDA
-      LEFT JOIN PartidaMapping PM ON CAL."PARTIDA" = PM."CalPartida"
-      LEFT JOIN ProduccionTelares TEJ ON PM."ProdPartida" = TEJ."PARTIDA"
+      FROM PartidaVars PV
+      LEFT JOIN HorasPartida HP ON PV."PARTIDA" = HP.PARTIDA
+      LEFT JOIN TejPorPartida TEJ ON TEJ."CalPartida" = PV."PARTIDA"
       ORDER BY HP."HoraInicio" ASC
     `
 
-    const result = await query(sql, [startDate, endDate, revisor])
+    const result = await query(sql, params, 'calidad/revisor-detalle')
     res.json(result.rows)
+    console.log(
+      `[PERF] GET /calidad/revisor-detalle ${startDate}..${endDate} revisor=${revisor} tramas=${tramas} rows=${result.rows.length} total=${(
+        hrMs() - t0
+      ).toFixed(1)}ms`
+    )
   } catch (err) {
     console.error('Error en calidad/revisor-detalle:', err)
     res.status(500).json({ error: err.message })
@@ -514,6 +642,7 @@ app.get('/api/produccion/calidad/revisor-detalle', async (req, res) => {
 // GET /api/produccion/calidad/partida-detalle - Detalle de defectos por partida
 app.get('/api/produccion/calidad/partida-detalle', async (req, res) => {
   try {
+    const t0 = hrMs()
     const { fecha, partida, revisor } = req.query
     if (!fecha || !partida || !revisor) {
       return res.status(400).json({ error: 'Se requieren fecha, partida y revisor' })
@@ -524,6 +653,7 @@ app.get('/api/produccion/calidad/partida-detalle', async (req, res) => {
     const larguraNum = sqlParseNumber('"LARGURA"')
     const pontuacaoNum = sqlParseNumber('"PONTUACAO"')
 
+    const variants = dateVariants(fecha)
     const sql = `
       SELECT
         "DAT_PROD" as "DAT_PROD",
@@ -545,15 +675,20 @@ app.get('/api/produccion/calidad/partida-detalle', async (req, res) => {
       FROM tb_calidad
       WHERE
         "EMP" = 'STC'
-        AND ${datProdDate} = $1::date
-        AND "PARTIDA" = $2
-        AND "REVISOR FINAL" = $3
+        AND ("DAT_PROD" = ANY($1::text[]) OR ${datProdDate} = $2::date)
+        AND "PARTIDA" = $3
+        AND "REVISOR FINAL" = $4
         AND "QUALIDADE" NOT ILIKE '%RETALHO%'
       ORDER BY "HORA" ASC, "PEÇA" ASC
     `
 
-    const result = await query(sql, [fecha, partida, revisor])
+    const result = await query(sql, [dateTextCandidates(fecha), variants.iso, partida, revisor], 'calidad/partida-detalle')
     res.json(result.rows)
+    console.log(
+      `[PERF] GET /calidad/partida-detalle fecha=${fecha} partida=${partida} revisor=${revisor} rows=${result.rows.length} total=${(
+        hrMs() - t0
+      ).toFixed(1)}ms`
+    )
   } catch (err) {
     console.error('Error en calidad/partida-detalle:', err)
     res.status(500).json({ error: err.message })
@@ -563,6 +698,7 @@ app.get('/api/produccion/calidad/partida-detalle', async (req, res) => {
 // GET /api/produccion/calidad/defectos-detalle - Defectos por etiqueta (tb_defectos)
 app.get('/api/produccion/calidad/defectos-detalle', async (req, res) => {
   try {
+    const t0 = hrMs()
     const etiqueta = String(req.query.etiqueta || '').trim()
     if (!etiqueta) return res.status(400).json({ error: 'Se requiere la etiqueta' })
 
@@ -577,12 +713,15 @@ app.get('/api/produccion/calidad/defectos-detalle', async (req, res) => {
         qualidade as "QUALIDADE",
         data_prod as "DATA_PROD"
       FROM tb_defectos
-      WHERE btrim(etiqueta) = btrim($1)
+      WHERE btrim(etiqueta) = $1
       ORDER BY peca ASC, cod_def ASC
     `
 
-    const result = await query(sql, [etiqueta])
+    const result = await query(sql, [etiqueta], 'calidad/defectos-detalle')
     res.json(result.rows)
+    console.log(
+      `[PERF] GET /calidad/defectos-detalle etiqueta=${etiqueta} rows=${result.rows.length} total=${(hrMs() - t0).toFixed(1)}ms`
+    )
   } catch (err) {
     console.error('Error en calidad/defectos-detalle:', err)
     res.status(500).json({ error: err.message })
@@ -1176,6 +1315,9 @@ async function startServer() {
     const client = await pool.connect()
     console.log('✓ Conexión a PostgreSQL exitosa')
     client.release()
+
+    // Índices para endpoints de calidad (impacta en performance con muchos datos)
+    ensureCalidadIndexes().catch((e) => console.warn('ensureCalidadIndexes falló:', e.message))
     
     app.listen(PORT, '0.0.0.0', () => {
       console.log('🚀 ========================================')

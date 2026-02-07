@@ -683,50 +683,55 @@ function showImportSummaryModal() {
     const modeText = escapeHtml(result.mode || '-')
     const modeReasonText = escapeHtml(result.modeReason || '')
     const modeReasonHtml = modeReasonText
-      ? `<div class="text-xs text-gray-500 leading-snug mt-1">${modeReasonText}</div>`
+      ? `<span class="text-xs text-gray-500 ml-2">${modeReasonText}</span>`
       : ''
     
     tableRows += `
       <tr class="border-b hover:bg-gray-50">
         <td class="px-4 py-2 text-center ${statusColor}">${statusIcon}</td>
-        <td class="px-4 py-2 font-mono text-sm">${escapeHtml(result.table)}</td>
-        <td class="px-4 py-2 text-right font-semibold">${rowsText}</td>
-        <td class="px-4 py-2 text-left">
-          <div class="font-mono text-xs">${modeText}</div>
-          ${modeReasonHtml}
+        <td class="px-4 py-2 font-mono text-sm whitespace-nowrap">${escapeHtml(result.table)}</td>
+        <td class="px-4 py-2 text-right font-semibold whitespace-nowrap">${rowsText}</td>
+        <td class="px-4 py-2 text-left whitespace-nowrap">
+          <span class="font-mono text-xs">${modeText}</span>${modeReasonHtml}
         </td>
-        <td class="px-4 py-2 text-right text-gray-600">${timeText}</td>
+        <td class="px-4 py-2 text-right text-gray-600 whitespace-nowrap">${timeText}</td>
       </tr>
     `
   })
   
   Swal.fire({
-    title: '📊 Resumen de Importaciones',
     html: `
       <div class="text-left">
-        <div class="grid grid-cols-3 gap-3 mb-4">
-          <div class="bg-blue-50 p-3 rounded-lg">
-            <div class="text-xs text-gray-600 mb-1">Total Tablas</div>
-            <div class="text-2xl font-bold text-blue-600">${importResults.value.length}</div>
+        <div class="flex items-center gap-3 mb-3 whitespace-nowrap">
+          <div class="w-8 h-8 rounded-full flex items-center justify-center ${failCount > 0 ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}" aria-hidden="true">
+            ${failCount > 0 ? '⚠️' : '✅'}
           </div>
-          <div class="bg-green-50 p-3 rounded-lg">
-            <div class="text-xs text-gray-600 mb-1">Total Registros</div>
-            <div class="text-2xl font-bold text-green-600">${totalRows.toLocaleString()}</div>
-          </div>
-          <div class="bg-purple-50 p-3 rounded-lg">
-            <div class="text-xs text-gray-600 mb-1">Tiempo Total</div>
-            <div class="text-2xl font-bold text-purple-600">${totalTime}s</div>
+          <div class="text-lg font-semibold text-gray-700">📊 Resumen de Importaciones</div>
+
+          <div class="ml-auto flex items-center gap-5 text-sm">
+            <div class="flex items-baseline gap-2">
+              <span class="text-xs text-gray-600">Total Tablas</span>
+              <span class="font-bold text-blue-600">${importResults.value.length}</span>
+            </div>
+            <div class="flex items-baseline gap-2">
+              <span class="text-xs text-gray-600">Total Registros</span>
+              <span class="font-bold text-green-600">${totalRows.toLocaleString()}</span>
+            </div>
+            <div class="flex items-baseline gap-2">
+              <span class="text-xs text-gray-600">Tiempo Total</span>
+              <span class="font-bold text-purple-600">${totalTime}s</span>
+            </div>
           </div>
         </div>
         
         ${failCount > 0 ? `
-          <div class="bg-red-50 border-l-4 border-red-500 p-3 mb-4 rounded">
+          <div class="bg-red-50 border-l-4 border-red-500 p-3 mb-3 rounded">
             <p class="text-sm text-red-700">⚠️ ${failCount} tabla(s) con errores</p>
           </div>
         ` : ''}
         
-        <div class="overflow-auto" style="max-height: 400px;">
-          <table class="w-full text-sm border-collapse">
+        <div id="import-summary-table-wrap" class="overflow-auto" style="overflow-x: auto;">
+          <table class="w-full text-sm border-collapse" style="white-space: nowrap;">
             <thead class="bg-gray-100 sticky top-0">
               <tr>
                 <th class="px-4 py-2 text-center">Estado</th>
@@ -743,11 +748,51 @@ function showImportSummaryModal() {
         </div>
       </div>
     `,
-    icon: failCount > 0 ? 'warning' : 'success',
     confirmButtonText: 'Cerrar',
-    width: '700px',
+    width: '95vw',
+    heightAuto: false,
     customClass: {
       htmlContainer: 'text-left'
+    },
+    didOpen: () => {
+      const popup = Swal.getPopup()
+      if (!popup) return
+
+      // Limita el alto al viewport, pero sin forzar altura fija
+      popup.style.maxHeight = '92vh'
+      popup.style.overflow = 'hidden'
+      // Evita que el botón quede recortado al fondo
+      const currentPaddingBottom = Number.parseFloat(getComputedStyle(popup).paddingBottom || '0')
+      if (currentPaddingBottom < 16) popup.style.paddingBottom = '16px'
+
+      const actionsEl = popup.querySelector('.swal2-actions')
+      if (actionsEl) {
+        actionsEl.style.marginTop = '12px'
+        actionsEl.style.paddingBottom = '8px'
+      }
+
+      const tableWrap = popup.querySelector('#import-summary-table-wrap')
+      if (!tableWrap) return
+
+      // Calcula el alto disponible real para el scroll de la tabla
+      requestAnimationFrame(() => {
+        const maxPopupHeightPx = Math.floor(window.innerHeight * 0.92)
+        const popupRect = popup.getBoundingClientRect()
+        const tableRect = tableWrap.getBoundingClientRect()
+        const actions = popup.querySelector('.swal2-actions')
+        const actionsHeight = actions ? actions.getBoundingClientRect().height : 0
+        const popupPaddingBottom = Number.parseFloat(getComputedStyle(popup).paddingBottom || '0')
+
+        const tableTopWithinPopup = tableRect.top - popupRect.top
+        const safetyPx = 8
+        const availableForTablePx = Math.max(
+          160,
+          maxPopupHeightPx - tableTopWithinPopup - actionsHeight - popupPaddingBottom - safetyPx
+        )
+
+        tableWrap.style.maxHeight = `${availableForTablePx}px`
+        tableWrap.style.overflowY = 'auto'
+      })
     }
   })
   
