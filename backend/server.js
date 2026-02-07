@@ -56,6 +56,30 @@ function formatNumber(val) {
   return String(parseFloat(num.toFixed(2)))
 }
 
+// Helpers SQL (PostgreSQL): parseo robusto de fechas/números desde TEXT
+function sqlParseDate(colIdent) {
+  // Soporta DD/MM/YYYY y YYYY-MM-DD (opcional con hora)
+  return `(
+    CASE
+      WHEN ${colIdent} IS NULL OR ${colIdent} = '' THEN NULL
+      WHEN ${colIdent} ~ '^[0-3][0-9]/[0-1][0-9]/[0-9]{4}' THEN to_date(substring(${colIdent} from 1 for 10), 'DD/MM/YYYY')
+      WHEN ${colIdent} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' THEN substring(${colIdent} from 1 for 10)::date
+      ELSE NULL
+    END
+  )`
+}
+
+function sqlParseNumber(colIdent) {
+  // Convierte TEXT numérico con '.' o ',' decimal; ignora valores no numéricos.
+  return `(
+    CASE
+      WHEN ${colIdent} IS NULL OR ${colIdent} = '' THEN NULL
+      WHEN ${colIdent} ~ '^-?[0-9]+([.,][0-9]+)?$' THEN replace(${colIdent}, ',', '.')::numeric
+      ELSE NULL
+    END
+  )`
+}
+
 // =====================================================
 // MIDDLEWARE
 // =====================================================
@@ -186,6 +210,382 @@ app.get('/api/health', async (req, res) => {
     res.json({ ok: true, timestamp: new Date().toISOString() })
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message })
+  }
+})
+
+// =====================================================
+// ENDPOINTS CALIDAD (para UI /revision-cq)
+// Base URL en frontend: /api/produccion
+// =====================================================
+
+// GET /api/produccion/calidad/revision-cq - Reporte agrupado por Revisor
+app.get('/api/produccion/calidad/revision-cq', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query
+    const tramas = req.query.tramas || 'Todas'
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({ error: 'Se requieren startDate y endDate' })
+    }
+
+    let tramasFilter = ''
+    if (tramas === 'ALG 100%') tramasFilter = `AND left("ARTIGO", 1) = 'A'`
+    else if (tramas === 'P + E') tramasFilter = `AND left("ARTIGO", 1) = 'Y'`
+    else if (tramas === 'POL 100%') tramasFilter = `AND left("ARTIGO", 1) = 'P'`
+
+    const datProdDate = sqlParseDate('"DAT_PROD"')
+    const metragemNum = sqlParseNumber('"METRAGEM"')
+    const pontuacaoNum = sqlParseNumber('"PONTUACAO"')
+    const larguraNum = sqlParseNumber('"LARGURA"')
+
+    const sql = `
+      WITH CAL AS (
+        SELECT
+          "DAT_PROD",
+          "ARTIGO",
+          SUM(${metragemNum}) AS METRAGEM,
+          AVG(${pontuacaoNum}) AS PONTUACAO,
+          AVG(${larguraNum}) AS LARGURA,
+          "REVISOR FINAL" AS REVISOR_FINAL,
+          btrim("QUALIDADE") AS QUALIDADE
+        FROM tb_calidad
+        WHERE
+          "EMP" = 'STC'
+          AND ${datProdDate} BETWEEN $1::date AND $2::date
+          AND "QUALIDADE" NOT ILIKE '%RETALHO%'
+          ${tramasFilter}
+        GROUP BY
+          "DAT_PROD",
+          "ARTIGO",
+          "REVISOR FINAL",
+          "PEÇA",
+          "QUALIDADE",
+          "ETIQUETA"
+      ),
+      RETALHO_METROS AS (
+        SELECT
+          SUM(${metragemNum}) AS METRAGEM_RETALHO
+        FROM tb_calidad
+        WHERE
+          "EMP" = 'STC'
+          AND ${datProdDate} BETWEEN $1::date AND $2::date
+          AND "QUALIDADE" ILIKE '%RETALHO%'
+          ${tramasFilter}
+      ),
+      REVISORES AS (
+        SELECT
+          REVISOR_FINAL AS "Revisor",
+          CAST(SUM(METRAGEM) AS INTEGER) AS "Mts_Total",
+          ROUND(
+            SUM(CASE WHEN QUALIDADE ILIKE 'PRIMEIRA%' THEN METRAGEM ELSE 0 END)
+            / NULLIF(SUM(METRAGEM), 0) * 100
+          , 1) AS "Calidad_Perc",
+          ROUND(
+            (SUM(CASE WHEN QUALIDADE ILIKE 'PRIMEIRA%' THEN COALESCE(PONTUACAO, 0) ELSE 0 END) * 100)
+            /
+            NULLIF(
+              (SUM(CASE WHEN QUALIDADE ILIKE 'PRIMEIRA%' THEN METRAGEM * COALESCE(LARGURA, 0) ELSE 0 END))
+              / NULLIF(SUM(CASE WHEN QUALIDADE ILIKE 'PRIMEIRA%' THEN METRAGEM ELSE 0 END), 0)
+              / 100
+              * SUM(CASE WHEN QUALIDADE ILIKE 'PRIMEIRA%' THEN METRAGEM ELSE 0 END)
+            , 0)
+          , 1) AS "Pts_100m2",
+          COUNT(CASE WHEN QUALIDADE ILIKE 'PRIMEIRA%' THEN 1 END) AS "Rollos_1era",
+          COUNT(CASE WHEN QUALIDADE ILIKE 'PRIMEIRA%' AND (PONTUACAO IS NULL OR PONTUACAO = 0) THEN 1 END) AS "Rollos_Sin_Pts",
+          ROUND(
+            (COUNT(CASE WHEN QUALIDADE ILIKE 'PRIMEIRA%' AND (PONTUACAO IS NULL OR PONTUACAO = 0) THEN 1 END)::numeric
+            / NULLIF(COUNT(CASE WHEN QUALIDADE ILIKE 'PRIMEIRA%' THEN 1 END), 0)::numeric) * 100
+          , 1) AS "Perc_Sin_Pts"
+        FROM CAL
+        GROUP BY REVISOR_FINAL
+      )
+      SELECT * FROM REVISORES
+      UNION ALL
+      SELECT
+        'RETALHO' AS "Revisor",
+        ROUND(METRAGEM_RETALHO)::int AS "Mts_Total",
+        0::numeric AS "Calidad_Perc",
+        0::numeric AS "Pts_100m2",
+        0::int AS "Rollos_1era",
+        0::int AS "Rollos_Sin_Pts",
+        0::numeric AS "Perc_Sin_Pts"
+      FROM RETALHO_METROS
+      WHERE METRAGEM_RETALHO > 0
+      ORDER BY "Mts_Total" DESC
+    `
+
+    const result = await query(sql, [startDate, endDate])
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en calidad/revision-cq:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/produccion/calidad/revisor-detalle - Detalle por revisor (con partidas)
+app.get('/api/produccion/calidad/revisor-detalle', async (req, res) => {
+  try {
+    const { startDate, endDate, revisor } = req.query
+    const tramas = req.query.tramas || 'Todas'
+
+    if (!startDate || !endDate || !revisor) {
+      return res.status(400).json({ error: 'Se requieren startDate, endDate y revisor' })
+    }
+
+    let tramasFilter = ''
+    if (tramas === 'ALG 100%') tramasFilter = `AND left("ARTIGO", 1) = 'A'`
+    else if (tramas === 'P + E') tramasFilter = `AND left("ARTIGO", 1) = 'Y'`
+    else if (tramas === 'POL 100%') tramasFilter = `AND left("ARTIGO", 1) = 'P'`
+
+    const calDatProdDate = sqlParseDate('"DAT_PROD"')
+    const calMetragemNum = sqlParseNumber('"METRAGEM"')
+    const calPontuacaoNum = sqlParseNumber('"PONTUACAO"')
+    const calLarguraNum = sqlParseNumber('"LARGURA"')
+    const prodPtsLidosNum = sqlParseNumber('P."PONTOS_LIDOS"')
+    const prodPts100Num = sqlParseNumber('P."PONTOS_100%"')
+    const prodParTraNum = sqlParseNumber('P."PARADA TEC TRAMA"')
+    const prodParUrdNum = sqlParseNumber('P."PARADA TEC URDUME"')
+
+    const sql = `
+      WITH CAL AS (
+        SELECT
+          "NM MERC" as "NombreArticulo",
+          "PARTIDA" as "PARTIDA",
+          SUM(${calMetragemNum}) AS METRAGEM,
+          AVG(${calPontuacaoNum}) AS PONTUACAO,
+          AVG(${calLarguraNum}) AS LARGURA,
+          btrim("QUALIDADE") AS QUALIDADE
+        FROM tb_calidad
+        WHERE
+          "EMP" = 'STC'
+          AND ${calDatProdDate} BETWEEN $1::date AND $2::date
+          AND "REVISOR FINAL" = $3
+          AND "QUALIDADE" NOT ILIKE '%RETALHO%'
+          ${tramasFilter}
+        GROUP BY
+          "NM MERC",
+          "PARTIDA",
+          "DAT_PROD",
+          "ARTIGO",
+          "PEÇA",
+          "QUALIDADE",
+          "ETIQUETA"
+      ),
+      HorasPartida AS (
+        SELECT
+          "PARTIDA" as PARTIDA,
+          MIN("HORA") as "HoraInicio"
+        FROM tb_calidad
+        WHERE
+          "EMP" = 'STC'
+          AND ${calDatProdDate} BETWEEN $1::date AND $2::date
+          AND "REVISOR FINAL" = $3
+          AND "QUALIDADE" NOT ILIKE '%RETALHO%'
+          ${tramasFilter}
+        GROUP BY "PARTIDA"
+      ),
+      CalidadPorPartida AS (
+        SELECT
+          "NombreArticulo",
+          "PARTIDA",
+          "PARTIDA" as "Partidas",
+          CAST(SUM(METRAGEM) AS INTEGER) as "MetrosRevisados",
+          ROUND(
+            SUM(CASE WHEN QUALIDADE ILIKE 'PRIMEIRA%' THEN METRAGEM ELSE 0 END)
+            / NULLIF(SUM(METRAGEM), 0) * 100
+          , 1) as "CalidadPct",
+          ROUND(
+            (SUM(CASE WHEN QUALIDADE ILIKE 'PRIMEIRA%' THEN COALESCE(PONTUACAO, 0) ELSE 0 END) * 100)
+            /
+            NULLIF(
+              (SUM(CASE WHEN QUALIDADE ILIKE 'PRIMEIRA%' THEN METRAGEM * COALESCE(LARGURA, 0) ELSE 0 END))
+              / NULLIF(SUM(CASE WHEN QUALIDADE ILIKE 'PRIMEIRA%' THEN METRAGEM ELSE 0 END), 0)
+              / 100
+              * SUM(CASE WHEN QUALIDADE ILIKE 'PRIMEIRA%' THEN METRAGEM ELSE 0 END)
+            , 0)
+          , 1) as "Pts100m2",
+          COUNT(CASE WHEN QUALIDADE ILIKE 'PRIMEIRA%' THEN 1 END) as "TotalRollos",
+          COUNT(CASE WHEN QUALIDADE ILIKE 'PRIMEIRA%' AND (PONTUACAO IS NULL OR PONTUACAO = 0) THEN 1 END) as "SinPuntos",
+          ROUND(
+            (COUNT(CASE WHEN QUALIDADE ILIKE 'PRIMEIRA%' AND (PONTUACAO IS NULL OR PONTUACAO = 0) THEN 1 END)::numeric
+            / NULLIF(COUNT(CASE WHEN QUALIDADE ILIKE 'PRIMEIRA%' THEN 1 END), 0)::numeric) * 100
+          , 1) as "SinPuntosPct"
+        FROM CAL
+        GROUP BY "NombreArticulo", "PARTIDA"
+      ),
+      PartidaVariantes AS (
+        SELECT
+          "PARTIDA" as "CalPartida",
+          "PARTIDA" as "Var0",
+          CASE
+            WHEN length("PARTIDA") > 1 AND left("PARTIDA", 1) ~ '^[0-9]$' AND left("PARTIDA", 1)::int > 0
+              THEN (left("PARTIDA", 1)::int - 1)::text || substring("PARTIDA" from 2)
+          END as "Var1",
+          CASE
+            WHEN length("PARTIDA") > 1 AND left("PARTIDA", 1) ~ '^[0-9]$' AND left("PARTIDA", 1)::int > 1
+              THEN (left("PARTIDA", 1)::int - 2)::text || substring("PARTIDA" from 2)
+          END as "Var2",
+          CASE
+            WHEN length("PARTIDA") > 1 AND left("PARTIDA", 1) ~ '^[0-9]$' AND left("PARTIDA", 1)::int > 2
+              THEN (left("PARTIDA", 1)::int - 3)::text || substring("PARTIDA" from 2)
+          END as "Var3",
+          CASE
+            WHEN length("PARTIDA") > 1
+              THEN '0' || substring("PARTIDA" from 2)
+          END as "Var4"
+        FROM CalidadPorPartida
+      ),
+      ProduccionTelares AS (
+        SELECT
+          P."PARTIDA" as "PARTIDA",
+          MAX(
+            CASE
+              WHEN right(P."MAQUINA", 2) ~ '^[0-9]{2}$' THEN right(P."MAQUINA", 2)::int
+              ELSE NULL
+            END
+          ) as "Telar",
+          SUM(COALESCE(${prodPtsLidosNum}, 0)) as "PtsLei",
+          SUM(COALESCE(${prodPts100Num}, 0)) as "Pts100",
+          SUM(COALESCE(${prodParTraNum}, 0)) as "ParTra",
+          SUM(COALESCE(${prodParUrdNum}, 0)) as "ParUrd"
+        FROM tb_produccion P
+        WHERE
+          P."FILIAL" = '05'
+          AND P."SELETOR" = 'TECELAGEM'
+          AND P."PARTIDA" IN (
+            SELECT "Var0" FROM PartidaVariantes WHERE "Var0" IS NOT NULL
+            UNION SELECT "Var1" FROM PartidaVariantes WHERE "Var1" IS NOT NULL
+            UNION SELECT "Var2" FROM PartidaVariantes WHERE "Var2" IS NOT NULL
+            UNION SELECT "Var3" FROM PartidaVariantes WHERE "Var3" IS NOT NULL
+            UNION SELECT "Var4" FROM PartidaVariantes WHERE "Var4" IS NOT NULL
+          )
+        GROUP BY P."PARTIDA"
+      ),
+      PartidaMapping AS (
+        SELECT
+          PV."CalPartida",
+          COALESCE(PT0."PARTIDA", PT1."PARTIDA", PT2."PARTIDA", PT3."PARTIDA", PT4."PARTIDA") as "ProdPartida"
+        FROM PartidaVariantes PV
+        LEFT JOIN ProduccionTelares PT0 ON PT0."PARTIDA" = PV."Var0"
+        LEFT JOIN ProduccionTelares PT1 ON PT1."PARTIDA" = PV."Var1"
+        LEFT JOIN ProduccionTelares PT2 ON PT2."PARTIDA" = PV."Var2"
+        LEFT JOIN ProduccionTelares PT3 ON PT3."PARTIDA" = PV."Var3"
+        LEFT JOIN ProduccionTelares PT4 ON PT4."PARTIDA" = PV."Var4"
+      )
+      SELECT
+        HP."HoraInicio" as "HoraInicio",
+        CAL."NombreArticulo" as "NombreArticulo",
+        CAL."PARTIDA" as "PARTIDA",
+        CAL."Partidas" as "Partidas",
+        CAL."MetrosRevisados" as "MetrosRevisados",
+        CAL."CalidadPct" as "CalidadPct",
+        CAL."Pts100m2" as "Pts100m2",
+        CAL."TotalRollos" as "TotalRollos",
+        CAL."SinPuntos" as "SinPuntos",
+        CAL."SinPuntosPct" as "SinPuntosPct",
+        COALESCE(TEJ."Telar", 0) as "Telar",
+        CASE
+          WHEN TEJ."PtsLei" IS NULL OR TEJ."PtsLei" = 0 THEN NULL
+          ELSE ROUND((TEJ."PtsLei" / NULLIF(TEJ."Pts100", 0)) * 100, 1)
+        END as "EficienciaPct",
+        CASE
+          WHEN TEJ."PtsLei" IS NULL OR TEJ."PtsLei" = 0 THEN NULL
+          ELSE ROUND((TEJ."ParUrd" * 100000)::numeric / NULLIF((TEJ."PtsLei" * 1000), 0)::numeric, 1)
+        END as "RU105",
+        CASE
+          WHEN TEJ."PtsLei" IS NULL OR TEJ."PtsLei" = 0 THEN NULL
+          ELSE ROUND((TEJ."ParTra" * 100000)::numeric / NULLIF((TEJ."PtsLei" * 1000), 0)::numeric, 1)
+        END as "RT105"
+      FROM CalidadPorPartida CAL
+      LEFT JOIN HorasPartida HP ON CAL."PARTIDA" = HP.PARTIDA
+      LEFT JOIN PartidaMapping PM ON CAL."PARTIDA" = PM."CalPartida"
+      LEFT JOIN ProduccionTelares TEJ ON PM."ProdPartida" = TEJ."PARTIDA"
+      ORDER BY HP."HoraInicio" ASC
+    `
+
+    const result = await query(sql, [startDate, endDate, revisor])
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en calidad/revisor-detalle:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/produccion/calidad/partida-detalle - Detalle de defectos por partida
+app.get('/api/produccion/calidad/partida-detalle', async (req, res) => {
+  try {
+    const { fecha, partida, revisor } = req.query
+    if (!fecha || !partida || !revisor) {
+      return res.status(400).json({ error: 'Se requieren fecha, partida y revisor' })
+    }
+
+    const datProdDate = sqlParseDate('"DAT_PROD"')
+    const metragemNum = sqlParseNumber('"METRAGEM"')
+    const larguraNum = sqlParseNumber('"LARGURA"')
+    const pontuacaoNum = sqlParseNumber('"PONTUACAO"')
+
+    const sql = `
+      SELECT
+        "DAT_PROD" as "DAT_PROD",
+        "ARTIGO" as "ARTIGO",
+        "COR" as "COR",
+        "NM MERC" as "NM_MERC",
+        "TRAMA" as "TRAMA",
+        "GRP_DEF" as "GRP_DEF",
+        "COD_DE" as "COD_DE",
+        "DEFEITO" as "DEFEITO",
+        ${metragemNum} as "METRAGEM",
+        "QUALIDADE" as "QUALIDADE",
+        "HORA" as "HORA",
+        "EMENDAS" as "EMENDAS",
+        "PEÇA" as "PEÇA",
+        "ETIQUETA" as "ETIQUETA",
+        ${larguraNum} as "LARGURA",
+        ${pontuacaoNum} as "PONTUACAO"
+      FROM tb_calidad
+      WHERE
+        "EMP" = 'STC'
+        AND ${datProdDate} = $1::date
+        AND "PARTIDA" = $2
+        AND "REVISOR FINAL" = $3
+        AND "QUALIDADE" NOT ILIKE '%RETALHO%'
+      ORDER BY "HORA" ASC, "PEÇA" ASC
+    `
+
+    const result = await query(sql, [fecha, partida, revisor])
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en calidad/partida-detalle:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/produccion/calidad/defectos-detalle - Defectos por etiqueta (tb_defectos)
+app.get('/api/produccion/calidad/defectos-detalle', async (req, res) => {
+  try {
+    const etiqueta = String(req.query.etiqueta || '').trim()
+    if (!etiqueta) return res.status(400).json({ error: 'Se requiere la etiqueta' })
+
+    const sql = `
+      SELECT
+        partida as "PARTIDA",
+        peca as "PECA",
+        etiqueta as "ETIQUETA",
+        cod_def as "COD_DEF",
+        desc_defeito as "DESC_DEFEITO",
+        pontos as "PONTOS",
+        qualidade as "QUALIDADE",
+        data_prod as "DATA_PROD"
+      FROM tb_defectos
+      WHERE btrim(etiqueta) = btrim($1)
+      ORDER BY peca ASC, cod_def ASC
+    `
+
+    const result = await query(sql, [etiqueta])
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en calidad/defectos-detalle:', err)
+    res.status(500).json({ error: err.message })
   }
 })
 
