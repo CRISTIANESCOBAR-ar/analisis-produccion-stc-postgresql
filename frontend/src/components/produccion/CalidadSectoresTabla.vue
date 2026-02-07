@@ -1868,13 +1868,20 @@ async function copyChartToClipboard() {
     chartTempCanvas.width = chartWidth
     chartTempCanvas.height = chartHeight
     
+    // Helper para convertir valores a número seguro
+    const toNumber = (value) => {
+      if (value === null || value === undefined || value === '') return 0
+      const num = Number(String(value).replace(',', '.'))
+      return Number.isFinite(num) ? num : 0
+    }
+
     // Preparar datos del gráfico (igual que renderChart)
     const labels = chartData.value.map(d => {
       const [year, month, day] = d.fecha.split('-')
       return `${day}-${month}-${year.slice(-2)}`
     })
-    const eficiencias = chartData.value.map(d => d.eficiencia || 0)
-    const rt105 = chartData.value.map(d => d.rt105 || 0)
+    const eficiencias = chartData.value.map(d => toNumber(d.eficiencia))
+    const rt105 = chartData.value.map(d => toNumber(d.rt105))
     const maxRT105 = Math.max(...rt105)
     const scaleMaxY1 = maxRT105 * 1.15
     
@@ -1903,7 +1910,10 @@ async function copyChartToClipboard() {
               color: '#1e293b',
               rotation: -90,
               font: { family: 'Verdana', weight: 'bold', size: 43 },
-              formatter: (value) => value !== null && value !== 0 ? value.toFixed(1) : ''
+              formatter: (value) => {
+                const num = toNumber(value)
+                return num !== 0 ? num.toFixed(1) : ''
+              }
             }
           },
           {
@@ -1928,7 +1938,10 @@ async function copyChartToClipboard() {
               color: '#f97316',
               clip: false,
               font: { family: 'Verdana', weight: 'bold', size: 43 },
-              formatter: (value) => value !== null && value !== 0 ? value.toFixed(1) : ''
+              formatter: (value) => {
+                const num = toNumber(value)
+                return num !== 0 ? num.toFixed(1) : ''
+              }
             }
           }
         ]
@@ -1963,7 +1976,10 @@ async function copyChartToClipboard() {
             ticks: {
               color: '#64748b',
               font: { family: 'Verdana', size: 39, weight: 'bold' },
-              callback: (value) => value.toFixed(0)
+              callback: (value) => {
+                const n = toNumber(value)
+                return n.toFixed(0)
+              }
             },
             min: 0,
             max: 100
@@ -1976,7 +1992,10 @@ async function copyChartToClipboard() {
             ticks: {
               color: '#f97316',
               font: { family: 'Verdana', size: 39, weight: 'bold' },
-              callback: (value) => value.toFixed(1)
+              callback: (value) => {
+                const n = toNumber(value)
+                return n.toFixed(1)
+              }
             },
             min: 0,
             max: scaleMaxY1
