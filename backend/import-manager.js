@@ -8,6 +8,199 @@ import { from as copyFrom } from 'pg-copy-streams';
 import pkg from 'pg';
 const { Pool } = pkg;
 
+const FULL_TRUNCATE_TABLES = new Set([
+  'tb_fichas',
+  'tb_calidad_fibra',
+  'tb_proceso'
+]);
+
+// Tablas con estrategia incremental: borrar solo fechas presentes en el CSV
+// (Basado en la estrategia del proyecto anterior analisis-produccion-stc)
+const TABLE_DATE_COLUMN = {
+  tb_produccion: 'DT_BASE_PRODUCAO',
+  tb_produccion_oe: 'data_producao',
+  tb_testes: 'dt_prod',
+  tb_paradas: 'data_base',
+  tb_residuos_por_sector: 'DT_MOV',
+  tb_residuos_indigo: 'DT_MOV',
+  tb_calidad: 'DAT_PROD',
+  tb_defectos: 'data_prod'
+};
+
+const MAX_DISTINCT_DATES_FOR_DELETE = 31;
+
+function safeTableName(tableName) {
+  const t = String(tableName ?? '').toLowerCase().trim();
+  if (!/^[a-z0-9_]+$/u.test(t)) {
+    throw new Error(`Nombre de tabla no seguro: ${tableName}`);
+  }
+  return t;
+}
+
+function quoteIdent(name) {
+  return `"${String(name ?? '').replace(/"/g, '""')}"`;
+}
+
+function parseDateToISO(value) {
+  const s = String(value ?? '').trim();
+  if (!s) return null;
+  // dd/mm/yyyy
+  const m1 = s.match(/^([0-3]\d)\/([0-1]\d)\/(\d{4})$/u);
+  if (m1) return `${m1[3]}-${m1[2]}-${m1[1]}`;
+  // yyyy-mm-dd (o yyyy-mm-dd HH:..)
+  const m2 = s.match(/^(\d{4}-\d{2}-\d{2})/u);
+  if (m2) return m2[1];
+  return null;
+}
+
+async function getTableColumnType(client, tableName, columnName) {
+  const query = `
+    SELECT column_name, data_type
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = $1
+      AND lower(column_name) = lower($2)
+    LIMIT 1
+  `;
+  const res = await client.query(query, [safeTableName(tableName), String(columnName ?? '')]);
+  if (!res.rows?.[0]) return { column_name: null, data_type: null };
+  return { column_name: res.rows[0].column_name, data_type: res.rows[0].data_type };
+}
+
+async function scanCsvDistinctDates(csvPath, desiredDateColumn) {
+  const headerLine = readFirstLine(csvPath);
+  const originalHeaders = headerLine.split(',').map(normalizeHeaderName);
+  const headers = renameduplicateHeaders(originalHeaders);
+
+  const desiredKey = canonicalColumnKey(desiredDateColumn);
+  const csvHeader =
+    headers.find((h) => canonicalColumnKey(h) === desiredKey) ||
+    headers.find((h) => h.toLowerCase() === String(desiredDateColumn).toLowerCase());
+
+  if (!csvHeader) {
+    return { dates: new Set(), csvHeader: null, headers };
+  }
+
+  const dates = new Set();
+
+  const parser = parseStream({
+    columns: headers,
+    from_line: 2,
+    bom: true,
+    skip_empty_lines: true,
+    trim: true,
+    relax_column_count: true,
+    relax_quotes: true
+  });
+
+  parser.on('data', (record) => {
+    const raw = record?.[csvHeader];
+    // Filtrar filas de header repetido
+    if (raw === csvHeader) return;
+    const iso = parseDateToISO(raw);
+    if (!iso) return;
+    dates.add(iso);
+    if (dates.size > MAX_DISTINCT_DATES_FOR_DELETE) {
+      parser.destroy(
+        new Error(
+          `Demasiadas fechas distintas (${dates.size}) en ${path.basename(csvPath)} para date_delete (límite ${MAX_DISTINCT_DATES_FOR_DELETE})`
+        )
+      );
+    }
+  });
+
+  await pipeline(fs.createReadStream(csvPath), parser);
+  return { dates, csvHeader, headers };
+}
+
+async function applyImportStrategy(client, tableName, csvPath) {
+  const safeTable = safeTableName(tableName);
+
+  if (FULL_TRUNCATE_TABLES.has(safeTable)) {
+    console.log(`[IMPORT] TRUNCATE TABLE ${safeTable} (strategy=truncate)`);
+    await client.query(`TRUNCATE TABLE ${safeTable}`);
+    return {
+      strategy: 'truncate',
+      dateColumn: null,
+      deletedDates: 0,
+      deletedRows: null,
+      deleteDates: []
+    };
+  }
+
+  const dateColumn = TABLE_DATE_COLUMN[safeTable];
+  if (!dateColumn) {
+    console.log(`[IMPORT] TRUNCATE TABLE ${safeTable} (strategy=truncate; no dateColumn)`);
+    await client.query(`TRUNCATE TABLE ${safeTable}`);
+    return {
+      strategy: 'truncate',
+      dateColumn: null,
+      deletedDates: 0,
+      deletedRows: null,
+      deleteDates: []
+    };
+  }
+
+  const colInfo = await getTableColumnType(client, safeTable, dateColumn);
+  const resolvedDateColumn = colInfo.column_name;
+  if (!resolvedDateColumn) {
+    console.log(
+      `[IMPORT] TRUNCATE TABLE ${safeTable} (strategy=truncate; dateColumn no existe: ${dateColumn})`
+    );
+    await client.query(`TRUNCATE TABLE ${safeTable}`);
+    return {
+      strategy: 'truncate',
+      dateColumn: null,
+      deletedDates: 0,
+      deletedRows: null,
+      deleteDates: []
+    };
+  }
+
+  const { dates } = await scanCsvDistinctDates(csvPath, resolvedDateColumn);
+  const deleteDates = Array.from(dates).sort();
+  if (deleteDates.length === 0) {
+    return {
+      strategy: 'date_delete',
+      dateColumn: resolvedDateColumn,
+      deletedDates: 0,
+      deletedRows: 0,
+      deleteDates
+    };
+  }
+
+  const dataType = colInfo.data_type || 'text';
+  const qcol = quoteIdent(resolvedDateColumn);
+
+  let dateExpr;
+  if (dataType === 'date') {
+    dateExpr = `${qcol}`;
+  } else if (dataType.includes('timestamp')) {
+    dateExpr = `DATE(${qcol})`;
+  } else {
+    // TEXT u otros: soportar DD/MM/YYYY y YYYY-MM-DD(+hora)
+    dateExpr = `(
+      CASE
+        WHEN ${qcol} IS NULL OR ${qcol} = '' THEN NULL
+        WHEN ${qcol} ~ '^[0-3][0-9]/[0-1][0-9]/[0-9]{4}' THEN to_date(substring(${qcol} from 1 for 10), 'DD/MM/YYYY')
+        WHEN ${qcol} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' THEN substring(${qcol} from 1 for 10)::date
+        ELSE NULL
+      END
+    )`;
+  }
+
+  const delSql = `DELETE FROM ${safeTable} WHERE ${dateExpr} = ANY($1::date[])`;
+  const delRes = await client.query(delSql, [deleteDates]);
+
+  return {
+    strategy: 'date_delete',
+    dateColumn: resolvedDateColumn,
+    deletedDates: deleteDates.length,
+    deletedRows: delRes?.rowCount ?? null,
+    deleteDates
+  };
+}
+
 function normalizeHeaderName(header) {
   return String(header ?? '')
     .replace(/"/g, '')
@@ -23,6 +216,20 @@ function canonicalColumnKey(name) {
   // - "SAP 1" ~ "SAP1"
   // - "MOTIVO 1" ~ "motivo1"
   let s = normalizeHeaderName(name)
+
+  // Quitar sufijos aclaratorios entre paréntesis: "OBSERVACAO (DO TESTE)" -> "OBSERVACAO"
+  s = s.replace(/\s*\([^)]*\)\s*/gu, ' ').replace(/\s+/g, ' ').trim()
+
+  // Normalizar prefijos con +: "+b" -> "PLUS b"
+  s = s.replace(/^\+\s*([0-9A-Za-z]+)/u, 'PLUS $1')
+
+  // Alinear columnas duplicadas cuando el esquema usa sufijos _2, _3... y el CSV usa " 1", " 2"...
+  // Ej: "FORNECEDOR_2" (PG) debe equivaler a "FORNECEDOR 1" (CSV deduplicado)
+  s = s.replace(/_(\d+)$/u, (_m, nRaw) => {
+    const n = Number(nRaw)
+    if (!Number.isFinite(n) || n < 2) return `_${nRaw}`
+    return ` ${n - 1}`
+  })
   try {
     s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   } catch {
@@ -243,10 +450,6 @@ export async function importCSVToTable(client, csvPath, tableName, columnMapping
     return matchingKey ? record[matchingKey] : null;
   };
   
-  // Limpiar tabla
-  console.log(`[IMPORT] TRUNCATE TABLE ${tableName.toLowerCase()}`)
-  await client.query(`TRUNCATE TABLE ${tableName.toLowerCase()}`);
-  
   let imported = 0;
   let skipped = 0;
   
@@ -338,9 +541,6 @@ async function importCSVToTableCopyRaw(client, csvPath, tableName) {
     );
   }
 
-  console.log(`[IMPORT] TRUNCATE TABLE ${tableName.toLowerCase()} (COPY_RAW)`);
-  await client.query(`TRUNCATE TABLE ${tableName.toLowerCase()}`);
-
   const copyColumns = headers.map((h) => resolvePgColumn(h));
   const quotedCols = copyColumns.map((c) => `"${c}"`).join(', ');
   const copySql = `COPY ${tableName.toLowerCase()} (${quotedCols}) FROM STDIN WITH (FORMAT csv, HEADER true, DELIMITER ',', QUOTE '"', ESCAPE '"', NULL '')`;
@@ -384,9 +584,6 @@ async function importCSVToTableCopyTransformed(client, csvPath, tableName) {
   if (copyColumns.length === 0) {
     throw new Error(`No hay columnas compatibles para COPY en ${tableName}`);
   }
-
-  console.log(`[IMPORT] TRUNCATE TABLE ${tableName.toLowerCase()} (COPY)`);
-  await client.query(`TRUNCATE TABLE ${tableName.toLowerCase()}`);
 
   const quotedCols = copyColumns.map((c) => `"${c}"`).join(', ');
   const copySql = `COPY ${tableName.toLowerCase()} (${quotedCols}) FROM STDIN WITH (FORMAT csv, DELIMITER ',', QUOTE '"', ESCAPE '"', NULL '')`;
@@ -458,6 +655,9 @@ const CSV_TO_TABLE_MAP = {
   'fichaArtigo.csv': 'tb_FICHAS',
   'rptResiduosPorSetor.csv': 'tb_RESIDUOS_POR_SECTOR',
   'RelResIndigo.csv': 'tb_RESIDUOS_INDIGO',
+  'rptAcompDiarioPBI.csv': 'tb_calidad',
+  'rptMovimMP.csv': 'tb_calidad_fibra',
+  'rpsPosicaoEstoquePRD.csv': 'tb_proceso',
   'rptDefPeca.csv': 'tb_defectos'  // Minúsculas como está en PostgreSQL
 }
 
@@ -505,10 +705,13 @@ export async function getImportStatus(pool, csvFolderPath) {
         status.push({
           table: tableName,
           csvFile,
+          csv_file: csvFile,
+          xlsx_sheet: 'CSV',
           csvPath,
           status: 'MISSING_FILE',
           last_import_date: null,
           file_mtime: null,
+          csv_modified: null,
           rows_imported: 0
         })
         continue
@@ -542,10 +745,13 @@ export async function getImportStatus(pool, csvFolderPath) {
       status.push({
         table: tableName,
         csvFile,
+        csv_file: csvFile,
+        xlsx_sheet: 'CSV',
         csvPath,
         status: importStatus,
         last_import_date: lastImportDate,
         file_mtime: fileMtime,
+        csv_modified: fileMtime,
         rows_imported: rowsImported
       })
       
@@ -554,11 +760,14 @@ export async function getImportStatus(pool, csvFolderPath) {
       status.push({
         table: tableName,
         csvFile,
+        csv_file: csvFile,
+        xlsx_sheet: 'CSV',
         csvPath: null,
         status: 'ERROR',
         error: error.message,
         last_import_date: null,
         file_mtime: null,
+        csv_modified: null,
         rows_imported: 0
       })
     }
@@ -576,6 +785,8 @@ export async function importCSV(pool, tableName, csvPath) {
   
   try {
     await client.query('BEGIN')
+
+    const strategyInfo = await applyImportStrategy(client, tableName, csvPath)
     
     const stats = fs.statSync(csvPath)
     const fileMtime = stats.mtime
@@ -613,6 +824,13 @@ export async function importCSV(pool, tableName, csvPath) {
         }
       }
     }
+
+    const strategySuffix =
+      strategyInfo.strategy === 'date_delete'
+        ? `; strategy=date_delete(${strategyInfo.dateColumn}) fechas=${strategyInfo.deletedDates} rows_deleted=${strategyInfo.deletedRows ?? 'NA'}`
+        : `; strategy=truncate`
+
+    modeReason = (modeReason ? `${modeReason} | ` : '') + strategySuffix
     
     // Actualizar metadata
     await client.query(`
