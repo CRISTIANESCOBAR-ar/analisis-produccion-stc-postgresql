@@ -1249,24 +1249,14 @@ app.get('/api/metas/resumen/:fecha', async (req, res) => {
     }
 
     const metaDia = await query(
-      `SELECT
-         COALESCE(fiacao_meta, 0)
-       + COALESCE(indigo_meta, 0)
-       + COALESCE(tecelagem_meta, 0)
-       + COALESCE(acabamento_meta, 0) AS total
-       FROM tb_metas WHERE fecha = $1`,
+      `SELECT COALESCE("Revision", 0) AS total
+       FROM tb_metas WHERE "Dia" = $1`,
       [datePattern],
       'metas/resumen-dia'
     )
     const metaMes = await query(
-      `SELECT
-         SUM(
-           COALESCE(fiacao_meta, 0)
-         + COALESCE(indigo_meta, 0)
-         + COALESCE(tecelagem_meta, 0)
-         + COALESCE(acabamento_meta, 0)
-         ) AS total
-       FROM tb_metas WHERE fecha >= $1 AND fecha <= $2`,
+      `SELECT COALESCE(SUM("Revision"), 0) AS total
+       FROM tb_metas WHERE "Dia" >= $1 AND "Dia" <= $2`,
       [monthStart, datePattern],
       'metas/resumen-mes'
     )
@@ -1436,31 +1426,39 @@ app.get('/api/produccion/indigo-resumen', async (req, res) => {
 
     let metaDia = 0
     let metaMes = 0
+    let indigoMetaRot = 0
+    let indigoMetaEstopa = 0
     if (await tableExists('tb_metas')) {
       const metaDiaRes = await query(
-        'SELECT indigo_meta FROM tb_metas WHERE fecha = $1',
+        'SELECT "Indigo" AS meta_dia, "Meta_Rotura_INDIGO" AS meta_rot_103, "Meta_Estopa_Azul" AS meta_estopa_azul FROM tb_metas WHERE "Dia" = $1',
         [datePattern],
         'metas/indigo-dia'
       )
       const metaMesRes = await query(
-        'SELECT SUM(indigo_meta) AS total FROM tb_metas WHERE fecha >= $1 AND fecha <= $2',
+        'SELECT SUM("Indigo") AS total, AVG("Meta_Rotura_INDIGO") AS meta_rot_103, AVG("Meta_Estopa_Azul") AS meta_estopa_azul FROM tb_metas WHERE "Dia" >= $1 AND "Dia" <= $2',
         [mesInicio, mesFin],
         'metas/indigo-mes'
       )
-      metaDia = Number(metaDiaRes.rows?.[0]?.indigo_meta || 0)
+      metaDia = Number(metaDiaRes.rows?.[0]?.meta_dia || 0)
       metaMes = Number(metaMesRes.rows?.[0]?.total || 0)
+      indigoMetaRot = Number(metaDiaRes.rows?.[0]?.meta_rot_103 || metaMesRes.rows?.[0]?.meta_rot_103 || 0)
+      indigoMetaEstopa = Number(metaDiaRes.rows?.[0]?.meta_estopa_azul || metaMesRes.rows?.[0]?.meta_estopa_azul || 0)
     }
 
     res.json({
       day: {
         metros: Number(resultDia.rows?.[0]?.metros || 0),
         rot103: Number(resultDia.rows?.[0]?.rot_103 || 0),
-        meta: metaDia
+        meta: metaDia,
+        metaRot103: indigoMetaRot || 0,
+        metaEstopaAzul: indigoMetaEstopa || 0
       },
       month: {
         metros: Number(resultMes.rows?.[0]?.metros || 0),
         rot103: Number(resultMes.rows?.[0]?.rot_103 || 0),
-        metaAcumulada: metaMes
+        metaAcumulada: metaMes,
+        metaRot103: indigoMetaRot || 0,
+        metaEstopaAzul: indigoMetaEstopa || 0
       },
       date: datePattern
     })
@@ -1669,15 +1667,24 @@ app.get('/api/produccion/tecelagem-resumen', async (req, res) => {
     let metaMes = {}
     if (await tableExists('tb_metas')) {
       const metaDiaRes = await query(
-        `SELECT tecelagem_meta AS meta_dia, tecelagem_enc_urd AS meta_enc_urd
-         FROM tb_metas WHERE fecha = $1`,
+        `SELECT
+           "Tejeduria" AS meta_dia,
+           "EFI_Percent" AS meta_efi,
+           "RT105" AS meta_rt105,
+           "RU105" AS meta_ru105,
+           "Meta_Estopa_Azul_Tejeduria" AS meta_estopa
+         FROM tb_metas WHERE "Dia" = $1`,
         [datePattern],
         'metas/tecelagem-dia'
       )
       const metaMesRes = await query(
-        `SELECT SUM(tecelagem_meta) AS meta_acumulada,
-                AVG(tecelagem_enc_urd) AS meta_enc_urd
-         FROM tb_metas WHERE fecha >= $1 AND fecha <= $2`,
+        `SELECT
+           SUM("Tejeduria") AS meta_acumulada,
+           AVG("EFI_Percent") AS meta_efi,
+           AVG("RT105") AS meta_rt105,
+           AVG("RU105") AS meta_ru105,
+           AVG("Meta_Estopa_Azul_Tejeduria") AS meta_estopa
+         FROM tb_metas WHERE "Dia" >= $1 AND "Dia" <= $2`,
         [mesInicio, mesFin],
         'metas/tecelagem-mes'
       )
@@ -1788,10 +1795,10 @@ app.get('/api/produccion/tecelagem-resumen', async (req, res) => {
         rotUrd105: Number(resultDia.rows?.[0]?.rot_urd_105 || 0),
         estopaAzulPct: estopaAzulPctDia,
         meta: Number(metaDia.meta_dia || 0),
-        metaEfi: 0,
-        metaRt105: 0,
-        metaRu105: 0,
-        metaEstopaAzul: 0
+        metaEfi: Number(metaDia.meta_efi || 0),
+        metaRt105: Number(metaDia.meta_rt105 || 0),
+        metaRu105: Number(metaDia.meta_ru105 || 0),
+        metaEstopaAzul: Number(metaDia.meta_estopa || 0)
       },
       month: {
         metros: Number(resultMes.rows?.[0]?.metros || 0),
@@ -1800,10 +1807,10 @@ app.get('/api/produccion/tecelagem-resumen', async (req, res) => {
         rotUrd105: Number(resultMes.rows?.[0]?.rot_urd_105 || 0),
         estopaAzulPct: estopaAzulPctMes,
         metaAcumulada: Number(metaMes.meta_acumulada || 0),
-        metaEfi: 0,
-        metaRt105: 0,
-        metaRu105: 0,
-        metaEstopaAzul: 0
+        metaEfi: Number(metaMes.meta_efi || 0),
+        metaRt105: Number(metaMes.meta_rt105 || 0),
+        metaRu105: Number(metaMes.meta_ru105 || 0),
+        metaEstopaAzul: Number(metaMes.meta_estopa || 0)
       },
       date: datePattern
     })
@@ -1881,13 +1888,13 @@ app.get('/api/produccion/acabamento-resumen', async (req, res) => {
     let metaMes = {}
     if (await tableExists('tb_metas')) {
       const metaDiaRes = await query(
-        `SELECT acabamento_meta AS meta_dia, acabamento_enc_urd AS meta_enc_urd FROM tb_metas WHERE fecha = $1`,
+        `SELECT "Integrada" AS meta_dia, "Meta_ENC_URD_Integrada" AS meta_enc_urd FROM tb_metas WHERE "Dia" = $1`,
         [datePattern],
         'metas/acabamento-dia'
       )
       const metaMesRes = await query(
-        `SELECT SUM(acabamento_meta) AS meta_acumulada, AVG(acabamento_enc_urd) AS meta_enc_urd
-         FROM tb_metas WHERE fecha >= $1 AND fecha <= $2`,
+        `SELECT SUM("Integrada") AS meta_acumulada, AVG("Meta_ENC_URD_Integrada") AS meta_enc_urd
+         FROM tb_metas WHERE "Dia" >= $1 AND "Dia" <= $2`,
         [mesInicio, mesFin],
         'metas/acabamento-mes'
       )

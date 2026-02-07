@@ -1321,6 +1321,10 @@ async function loadData(useLastAvailable = false) {
           metaAcumulada: Number(dataIndigo.month?.metaAcumulada || 0)
         }
       }
+      indigoMetas.value = {
+        rot103: Number(dataIndigo.day?.metaRot103 || dataIndigo.month?.metaRot103 || indigoMetas.value.rot103 || 0),
+        estopaAzul: Number(dataIndigo.day?.metaEstopaAzul || dataIndigo.month?.metaEstopaAzul || indigoMetas.value.estopaAzul || 0)
+      }
       console.log(`🔵 INDIGO cargados - Día: ${indigoData.value.day.metros} m, Meta: ${indigoData.value.day.meta}, Rot: ${indigoData.value.day.rot103.toFixed(2)}`)
       console.log(`🔵 INDIGO cargados - Mes: ${indigoData.value.month.metros} m, Meta Acum: ${indigoData.value.month.metaAcumulada}, Rot: ${indigoData.value.month.rot103.toFixed(2)}`)
     } else {
