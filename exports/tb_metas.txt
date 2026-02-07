@@ -1,0 +1,2 @@
+id	fecha	fiacao_meta	fiacao_enc_urd	indigo_meta	indigo_enc_urd	tecelagem_meta	tecelagem_enc_urd	acabamento_meta	acabamento_enc_urd	observaciones	created_at	updated_at
+
