@@ -6,7 +6,7 @@ Backend Express.js con PostgreSQL para sistema integrado de producción y ensayo
 
 - **Base de datos:** PostgreSQL 16 con 22 tablas
 - **ORM:** node-postgres (pg) con consultas SQL nativas
-- **CORS:** Configurado para desarrollo local
+- **CORS:** Configurado para desarrollo y despliegue (same-origin)
 - **Pool de conexiones:** Hasta 20 conexiones simultáneas
 
 ## 📦 Tablas Soportadas
@@ -80,6 +80,16 @@ PG_USER=stc_user
 PG_PASSWORD=stc_password_2026
 PORT=3001
 FRONTEND_ORIGIN=http://localhost:5173
+
+# Carpeta donde se buscan los CSV para importación (ImportControl)
+# Windows (sin contenedor): C:\STC\CSV
+# Contenedor (recomendado): /data/csv (montar volumen del host a esta ruta)
+CSV_FOLDER=/data/csv
+
+# Producción (si frontend y API están en la misma URL vía reverse-proxy,
+# normalmente no hace falta CORS). Si el frontend está en otra origin,
+# agrega aquí la(s) origin(es) permitidas separadas por coma.
+# FRONTEND_ORIGIN=https://mi-servidor,https://otra-origin
 ```
 
 ## 📊 Pool de Conexiones

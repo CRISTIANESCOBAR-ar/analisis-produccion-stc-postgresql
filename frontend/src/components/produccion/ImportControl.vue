@@ -548,8 +548,10 @@ const completedTables = ref(new Set())
 const importQueue = ref(new Set())
 let pollIntervalId = null
 
-// API URL para PostgreSQL backend
-const API_URL = 'http://localhost:3001/api/produccion'
+// Estrategia despliegue (Podman/servidor): misma origin y rutas relativas.
+// En dev, Vite proxyfía /api hacia el backend. Si se necesita, VITE_API_BASE.
+const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
+const API_URL = `${API_BASE}/api/produccion`
 
 const toast = Swal.mixin({
   toast: true,
@@ -568,7 +570,19 @@ const toastError = Swal.mixin({
   icon: 'error'
 })
 
-const csvFolder = ref(localStorage.getItem('csvFolder') || 'C:\\STC\\CSV')
+const normalizeCsvFolder = (folder) => {
+  const s = String(folder || '').trim()
+  if (!s) return ''
+  // Si parece ruta Windows (C:\...), normaliza a backslash.
+  if (/^[A-Za-z]:[\\/]/.test(s)) return s.replace(/\//g, '\\')
+  // En Linux/contendor mantener /data/csv
+  return s
+}
+
+// En producción (build servido desde contenedor), por defecto NO forzamos rutas del host.
+// Deja vacío para que el backend use CSV_FOLDER (env) y el volumen montado.
+const storedCsvFolder = localStorage.getItem('csvFolder')
+const csvFolder = ref(import.meta.env.PROD ? '' : (storedCsvFolder || 'C:\\STC\\CSV'))
 const columnWarnings = ref([])
 const showColumnWarnings = ref(true)
 const showSyncModal = ref(false)
@@ -609,10 +623,16 @@ async function pickFolder() {
 
 // Guardar carpeta en localStorage y refrescar
 const saveFolder = () => {
-  if (!csvFolder.value) return
-  csvFolder.value = csvFolder.value.replace(/\//g, '\\')
-  localStorage.setItem('csvFolder', csvFolder.value)
-  toast.fire({ icon: 'success', title: 'Carpeta guardada' })
+  csvFolder.value = normalizeCsvFolder(csvFolder.value)
+
+  if (!csvFolder.value) {
+    localStorage.removeItem('csvFolder')
+    toast.fire({ icon: 'success', title: 'Usando carpeta por defecto' })
+  } else {
+    localStorage.setItem('csvFolder', csvFolder.value)
+    toast.fire({ icon: 'success', title: 'Carpeta guardada' })
+  }
+
   fetchStatus()
   fetchColumnWarnings()
 }

@@ -248,7 +248,12 @@ import { formatNumber as formatNum } from '@/utils/formatters'
 
 Chart.register(...registerables)
 
-const API_BASE = 'http://localhost:3001'
+// Estrategia despliegue (Podman/servidor): usar misma origin y rutas relativas.
+// En dev, Vite ya proxyfía /api hacia el backend. Si alguna vez se necesita,
+// se puede fijar VITE_API_BASE en build (ej: https://mi-servidor).
+const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
+
+const apiUrl = (path) => `${API_BASE}${path}`
 
 // Estado reactivo - Lista de artículos
 const listaArticulos = ref([])
@@ -402,7 +407,7 @@ const cargarListaArticulos = async () => {
   loadingLista.value = true
 
   try {
-    let url = `${API_BASE}/api/produccion/calidad/articulos-mesa-test?fecha_inicial=${fechaInicial.value}`
+    let url = apiUrl(`/api/produccion/calidad/articulos-mesa-test?fecha_inicial=${fechaInicial.value}`)
     if (fechaFinal.value) {
       url += `&fecha_final=${fechaFinal.value}`
     }
@@ -457,7 +462,7 @@ const loadData = async () => {
   error.value = null
 
   try {
-    let url = `${API_BASE}/api/produccion/calidad/analisis-mesa-test?articulo=${encodeURIComponent(articulo)}&fecha_inicial=${fechaInicial.value}`
+    let url = apiUrl(`/api/produccion/calidad/analisis-mesa-test?articulo=${encodeURIComponent(articulo)}&fecha_inicial=${fechaInicial.value}`)
     if (fechaFinal.value) {
       url += `&fecha_final=${fechaFinal.value}`
     }

@@ -54,6 +54,14 @@ podman-compose up -d pgadmin
 # Password: admin123
 ```
 
+## 🌐 Frontend + Backend (recomendado para servidor)
+
+- **Estrategia:** el frontend llama a la API con URL relativa ` /api ` (misma origin).
+  - En desarrollo, Vite proxyfía ` /api ` al backend.
+  - En servidor (Podman), lo ideal es publicar una única URL y enrutar ` /api ` al backend (reverse proxy) o servir el build del frontend desde el mismo host.
+- **Config opcional:** si alguna vez necesitas un prefijo distinto al mismo host, puedes fijar `VITE_API_BASE` al construir el frontend.
+
+
 ## 📊 Estructura de Tablas
 
 ### produccion

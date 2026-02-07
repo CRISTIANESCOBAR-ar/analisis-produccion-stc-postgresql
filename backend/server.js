@@ -4,10 +4,49 @@ import express from 'express'
 import cors from 'cors'
 import pg from 'pg'
 import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import { getImportStatus, importCSV, importAll, importSpecificTables, importForceAll, renameduplicateHeaders, getTableColumns, compareColumns, addColumnsToTable } from './import-manager.js'
 
 const { Pool } = pg
 const app = express()
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+function looksLikeWindowsPath(p) {
+  if (!p) return false
+  // Drive letter (C:\...) or UNC (\\server\share)
+  return /^[a-zA-Z]:[\\/]/.test(p) || /^\\\\/.test(p)
+}
+
+function sanitizeCsvFolder(raw) {
+  const value = String(raw ?? '').trim()
+  if (!value) return ''
+  // Si el backend corre en Linux (contenedor/servidor), una ruta Windows no existe.
+  if (process.platform !== 'win32' && looksLikeWindowsPath(value)) return ''
+  return value
+}
+
+function defaultCsvFolder() {
+  // Windows dev histórico: C:\STC\CSV
+  // Linux/Container: montar volumen en /data/csv
+  const envFolder = String(process.env.CSV_FOLDER || '').trim()
+  if (envFolder) return envFolder
+  return process.platform === 'win32' ? 'C:\\STC\\CSV' : '/data/csv'
+}
+
+function resolveCsvFolderFromReq(req) {
+  const q = sanitizeCsvFolder(req?.query?.csvFolder)
+  if (q) return q
+  return defaultCsvFolder()
+}
+
+function resolveCsvFolderFromBody(req) {
+  const b = sanitizeCsvFolder(req?.body?.csvFolder)
+  if (b) return b
+  return defaultCsvFolder()
+}
 
 // =====================================================
 // CONFIGURACIÓN DATABASE
@@ -86,6 +125,19 @@ function sqlParseNumber(colIdent) {
   )`
 }
 
+function sqlParseNumberIntl(colIdent) {
+  // Soporta números en formato europeo con separador de miles '.' y decimal ',' (ej: 1.980,00)
+  // y también formatos simples (ej: 1980.00 o 1980,00).
+  return `(
+    CASE
+      WHEN ${colIdent} IS NULL OR ${colIdent} = '' THEN NULL
+      WHEN ${colIdent} ~ '^-?[0-9]{1,3}(\\.[0-9]{3})+(,[0-9]+)?$' THEN replace(replace(${colIdent}, '.', ''), ',', '.')::numeric
+      WHEN ${colIdent} ~ '^-?[0-9]+([.,][0-9]+)?$' THEN replace(${colIdent}, ',', '.')::numeric
+      ELSE NULL
+    END
+  )`
+}
+
 // =====================================================
 // MIDDLEWARE
 // =====================================================
@@ -99,21 +151,47 @@ const allowedOriginList = (process.env.FRONTEND_ORIGIN || '')
   .map((s) => s.trim())
   .filter(Boolean)
 
-const corsOptions = {
-  origin(origin, cb) {
-    // Permitir requests sin Origin (curl, health checks)
-    if (!origin) return cb(null, true)
+function isOriginAllowed(origin, host) {
+  if (!origin) return true
+  if (allowedOriginList.includes(origin)) return true
+  if (allowedOriginRegexes.some((re) => re.test(origin))) return true
 
-    if (allowedOriginList.includes(origin)) return cb(null, true)
-    if (allowedOriginRegexes.some((re) => re.test(origin))) return cb(null, true)
+  // Despliegue típico (Podman + reverse proxy): el frontend sirve desde la misma origin,
+  // y /api se proxifica al backend. Permitimos Origin == http(s)://<host>.
+  if (host && (origin === `http://${host}` || origin === `https://${host}`)) return true
 
-    return cb(new Error(`CORS: Origin no permitido: ${origin}`))
-  },
-  credentials: true
+  return false
 }
-app.use(cors(corsOptions))
-app.options('*', cors(corsOptions))
+
+const corsOptionsDelegate = (req, cb) => {
+  const origin = req.header('Origin')
+  const host = req.headers.host
+
+  const allowed = isOriginAllowed(origin, host)
+  cb(null, {
+    origin: allowed,
+    credentials: true,
+  })
+}
+
+app.use(cors(corsOptionsDelegate))
+app.options('*', cors(corsOptionsDelegate))
 app.use(express.json({ limit: '10mb' }))
+
+// =====================================================
+// FRONTEND (PRODUCCIÓN): servir SPA desde el mismo servidor
+// =====================================================
+if (process.env.NODE_ENV === 'production') {
+  const frontendDist = process.env.FRONTEND_DIST
+    ? path.resolve(process.env.FRONTEND_DIST)
+    : path.resolve(__dirname, '..', 'frontend', 'dist')
+
+  app.use(express.static(frontendDist))
+  // SPA fallback: cualquier ruta que no sea /api/... vuelve a index.html
+  app.get(/^\/(?!api\/).*/, (req, res) => {
+    res.sendFile(path.join(frontendDist, 'index.html'))
+  })
+}
 
 const PORT = process.env.PORT || 3001
 
@@ -729,6 +807,319 @@ app.get('/api/produccion/calidad/defectos-detalle', async (req, res) => {
 })
 
 // =====================================================
+// ENDPOINTS - MESA DE TEST (AnalisisMesaTest.vue)
+// =====================================================
+
+// GET /api/produccion/calidad/articulos-mesa-test?fecha_inicial=YYYY-MM-DD&fecha_final=YYYY-MM-DD
+app.get('/api/produccion/calidad/articulos-mesa-test', async (req, res) => {
+  try {
+    const t0 = hrMs()
+    const { fecha_inicial, fecha_final } = req.query
+
+    if (!fecha_inicial) {
+      return res.status(400).json({ error: 'Parámetro "fecha_inicial" requerido' })
+    }
+
+    const startDate = String(fecha_inicial)
+    const endDate = fecha_final ? String(fecha_final) : '2099-12-31'
+
+    const calDatProdDate = sqlParseDate('"DAT_PROD"')
+    const calMetragemNum = sqlParseNumberIntl('"METRAGEM"')
+
+    const testesDtProdDate = sqlParseDate('dt_prod')
+    const testesMetragemNum = sqlParseNumberIntl('metragem')
+
+    const sql = `
+      WITH MetricasCalidad AS (
+        SELECT
+          "ARTIGO" AS ARTIGO,
+          ROUND(SUM(COALESCE(${calMetragemNum}, 0)), 0)::int AS METROS_REV
+        FROM tb_calidad
+        WHERE
+          "EMP" = 'STC'
+          AND ${calDatProdDate} BETWEEN $1::date AND $2::date
+          AND "TRAMA" IS NOT NULL
+          AND btrim("TRAMA") <> ''
+        GROUP BY "ARTIGO"
+      ),
+      MetricasTestesPartida AS (
+        SELECT
+          artigo AS ARTIGO,
+          btrim(partida) AS PARTIDA,
+          AVG(COALESCE(${testesMetragemNum}, 0)) AS METRAGEM_AVG
+        FROM tb_testes
+        WHERE
+          ${testesDtProdDate} BETWEEN $1::date AND $2::date
+        GROUP BY artigo, btrim(partida)
+      ),
+      MetricasTestes AS (
+        SELECT
+          ARTIGO,
+          ROUND(SUM(METRAGEM_AVG), 0)::int AS METROS_TEST
+        FROM MetricasTestesPartida
+        GROUP BY ARTIGO
+      ),
+      AllArtigos AS (
+        SELECT ARTIGO FROM MetricasCalidad
+        UNION
+        SELECT ARTIGO FROM MetricasTestes
+      )
+      SELECT
+        AU.ARTIGO AS "ARTIGO_COMPLETO",
+        substring(AU.ARTIGO from 1 for 10) AS "Articulo",
+        substring(AU.ARTIGO from 7 for 2) AS "Id",
+        F."COR" AS "Color",
+        F."NOME DE MERCADO" AS "Nombre",
+        F."TRAMA REDUZIDO" AS "Trama",
+        F."PRODUCAO" AS "Prod",
+        COALESCE(MT.METROS_TEST, 0) AS "Metros_TEST",
+        COALESCE(MC.METROS_REV, 0) AS "Metros_REV"
+      FROM AllArtigos AU
+      LEFT JOIN MetricasTestes MT ON AU.ARTIGO = MT.ARTIGO
+      LEFT JOIN MetricasCalidad MC ON AU.ARTIGO = MC.ARTIGO
+      LEFT JOIN tb_fichas F ON AU.ARTIGO = F."ARTIGO CODIGO"
+      WHERE F."TRAMA REDUZIDO" IS NOT NULL
+      ORDER BY AU.ARTIGO;
+    `
+
+    const result = await query(sql, [startDate, endDate], 'calidad/articulos-mesa-test')
+    res.json(result.rows)
+    console.log(
+      `[PERF] GET /calidad/articulos-mesa-test ${startDate}..${endDate} rows=${result.rows.length} total=${(hrMs() - t0).toFixed(1)}ms`
+    )
+  } catch (err) {
+    console.error('Error en /calidad/articulos-mesa-test:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/produccion/calidad/analisis-mesa-test?articulo=XXX&fecha_inicial=YYYY-MM-DD&fecha_final=YYYY-MM-DD
+app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
+  try {
+    const t0 = hrMs()
+    const { articulo, fecha_inicial, fecha_final } = req.query
+
+    if (!articulo) {
+      return res.status(400).json({ error: 'Parámetro "articulo" requerido' })
+    }
+    if (!fecha_inicial) {
+      return res.status(400).json({ error: 'Parámetro "fecha_inicial" requerido' })
+    }
+
+    const articleCode = String(articulo)
+    const startDate = String(fecha_inicial)
+    const endDate = fecha_final ? String(fecha_final) : '2099-12-31'
+
+    const testesDtProdDate = sqlParseDate('dt_prod')
+    const calDatProdDate = sqlParseDate('"DAT_PROD"')
+
+    const tMetragemNum = sqlParseNumberIntl('metragem')
+    const tLargAlNum = sqlParseNumberIntl('larg_al')
+    const tGramatNum = sqlParseNumberIntl('gramat')
+    const tPotenNum = sqlParseNumberIntl('poten')
+    const tEncUrdNum = sqlParseNumberIntl('"%_ENC_URD"')
+    const tEncTramaNum = sqlParseNumberIntl('"%_ENC_TRAMA"')
+    const tSk1Num = sqlParseNumberIntl('"%_SK1"')
+    const tSk2Num = sqlParseNumberIntl('"%_SK2"')
+    const tSk3Num = sqlParseNumberIntl('"%_SK3"')
+    const tSk4Num = sqlParseNumberIntl('"%_SK4"')
+    const tSkeNum = sqlParseNumberIntl('"%_SKE"')
+    const tSttNum = sqlParseNumberIntl('"%_STT"')
+    const tSkmNum = sqlParseNumberIntl('"%_SKM"')
+
+    const cMetragemNum = sqlParseNumberIntl('"METRAGEM"')
+    const cLarguraNum = sqlParseNumberIntl('"LARGURA"')
+    const cGrm2Num = sqlParseNumberIntl('"GR/M2"')
+
+    const fLargMinNum = sqlParseNumberIntl('"LARGURA MIN"')
+    const fLargStdNum = sqlParseNumberIntl('"LARGURA"')
+    const fLargMaxNum = sqlParseNumberIntl('"LARGURA MAX"')
+    const fPesoM2Num = sqlParseNumberIntl('"Peso/m2"')
+    const fEncAcabUrdNum = sqlParseNumberIntl('"ENC#ACAB URD"')
+    const fSkewMinNum = sqlParseNumberIntl('"SKEW MIN"')
+    const fSkewMaxNum = sqlParseNumberIntl('"SKEW MAX"')
+    const fUrdMinNum = sqlParseNumberIntl('"URD#MIN"')
+    const fUrdMaxNum = sqlParseNumberIntl('"URD#MAX"')
+    const fTraMinNum = sqlParseNumberIntl('"TRAMA MIN"')
+    const fTraMaxNum = sqlParseNumberIntl('"TRAMA MAX"')
+    const fVarTrMinNum = sqlParseNumberIntl('"VAR STR#MIN TRAMA"')
+    const fVarTrMaxNum = sqlParseNumberIntl('"VAR STR#MAX TRAMA"')
+    const fVarUrMinNum = sqlParseNumberIntl('"VAR STR#MIN URD"')
+    const fVarUrMaxNum = sqlParseNumberIntl('"VAR STR#MAX URD"')
+
+    const sql = `
+      WITH TESTES AS (
+        SELECT
+          maquina,
+          artigo AS art_test,
+          btrim(partida) AS partida,
+          artigo AS testes,
+          dt_prod,
+          aprov,
+          obs,
+          reprocesso,
+          ${tMetragemNum} AS metragem_num,
+          ${tLargAlNum} AS larg_al_num,
+          ${tGramatNum} AS gramat_num,
+          ${tPotenNum} AS poten_num,
+          ${tEncUrdNum} AS enc_urd_num,
+          ${tEncTramaNum} AS enc_trama_num,
+          ${tSk1Num} AS sk1_num,
+          ${tSk2Num} AS sk2_num,
+          ${tSk3Num} AS sk3_num,
+          ${tSk4Num} AS sk4_num,
+          ${tSkeNum} AS ske_num,
+          ${tSttNum} AS stt_num,
+          ${tSkmNum} AS skm_num
+        FROM tb_testes
+        WHERE
+          artigo = $1
+          AND ${testesDtProdDate} BETWEEN $2::date AND $3::date
+      ),
+      CALIDAD AS (
+        SELECT
+          MIN("DAT_PROD") AS dat_prod,
+          "ARTIGO" AS art_cal,
+          btrim("PARTIDA") AS partida,
+          ROUND(SUM(COALESCE(${cMetragemNum}, 0)), 0) AS metragem,
+          ROUND(AVG(COALESCE(${cLarguraNum}, 0)), 1) AS largura,
+          ROUND(AVG(COALESCE(${cGrm2Num}, 0)), 1) AS grm2
+        FROM tb_calidad
+        WHERE
+          "ARTIGO" = $1
+          AND ${calDatProdDate} BETWEEN $2::date AND $3::date
+        GROUP BY "ARTIGO", btrim("PARTIDA")
+      ),
+      TESTES_CALIDAD AS (
+        SELECT
+          T.*,
+          C.dat_prod AS calidad_dat_prod,
+          C.metragem AS calidad_metragem,
+          C.largura AS calidad_largura,
+          C.grm2 AS calidad_grm2
+        FROM TESTES T
+        LEFT JOIN CALIDAD C ON T.partida = C.partida
+      ),
+      ESPECIFICACION AS (
+        SELECT
+          "ARTIGO CODIGO",
+          "TRAMA REDUZIDO" AS trama_reducido,
+          ${fLargMinNum} AS largura_min_val,
+          ${fLargStdNum} AS ancho,
+          ${fLargMaxNum} AS largura_max_val,
+          ${fPesoM2Num} AS peso_m2,
+          ${fEncAcabUrdNum} AS enc_acab_urd,
+          ${fSkewMinNum} AS skew_min,
+          (${fSkewMinNum} + ${fSkewMaxNum}) / 2.0 AS skew_std,
+          ${fSkewMaxNum} AS skew_max,
+          ${fUrdMinNum} AS urd_min,
+          (${fUrdMinNum} + ${fUrdMaxNum}) / 2.0 AS urd_std,
+          ${fUrdMaxNum} AS urd_max,
+          ${fTraMinNum} AS trama_min,
+          (${fTraMinNum} + ${fTraMaxNum}) / 2.0 AS trama_std,
+          ${fTraMaxNum} AS trama_max,
+          ${fVarTrMinNum} AS var_str_min_trama,
+          (${fVarTrMinNum} + ${fVarTrMaxNum}) / 2.0 AS var_str_std_trama,
+          ${fVarTrMaxNum} AS var_str_max_trama,
+          ${fVarUrMinNum} AS var_str_min_urd,
+          (${fVarUrMinNum} + ${fVarUrMaxNum}) / 2.0 AS var_str_std_urd,
+          ${fVarUrMaxNum} AS var_str_max_urd
+        FROM tb_fichas
+        WHERE "ARTIGO CODIGO" = $1
+      )
+      SELECT
+        CASE WHEN TC.maquina ~ '^[0-9]+$' THEN TC.maquina::int ELSE NULL END AS "Maquina",
+        TC.art_test AS "Articulo",
+        E.trama_reducido AS "Trama",
+        TC.partida AS "Partida",
+        TC.testes AS "C",
+        TC.dt_prod AS "Fecha",
+        TC.aprov AS "Ap",
+        TC.obs AS "Obs",
+        TC.reprocesso AS "R",
+        ROUND(TC.metragem_num, 0) AS "Metros_TEST",
+        ROUND(TC.calidad_metragem, 0) AS "Metros_MESA",
+
+        ROUND(TC.calidad_largura, 1) AS "Ancho_MESA",
+        ROUND(
+          CASE
+            WHEN E.largura_min_val < (E.ancho * 0.5) THEN E.ancho - E.largura_min_val
+            ELSE E.largura_min_val
+          END
+        , 1) AS "Ancho_MIN",
+        ROUND(E.ancho, 1) AS "Ancho_STD",
+        ROUND(
+          CASE
+            WHEN E.largura_max_val < (E.ancho * 0.5) THEN E.ancho + E.largura_max_val
+            ELSE E.largura_max_val
+          END
+        , 1) AS "Ancho_MAX",
+        ROUND(TC.larg_al_num, 1) AS "Ancho_TEST",
+
+        ROUND(TC.calidad_grm2, 1) AS "Peso_MESA",
+        ROUND(E.peso_m2 * 0.95, 1) AS "Peso_MIN",
+        ROUND(E.peso_m2, 1) AS "Peso_STD",
+        ROUND(E.peso_m2 * 1.05, 1) AS "Peso_MAX",
+        ROUND(TC.gramat_num, 1) AS "Peso_TEST",
+
+        ROUND(TC.poten_num, 2) AS "Potencial",
+        ROUND(E.enc_acab_urd, 2) AS "Potencial_STD",
+
+        ROUND(TC.enc_urd_num, 2) AS "ENC_URD_%",
+        ROUND(E.urd_min, 2) AS "ENC_URD_MIN_%",
+        ROUND(E.urd_std, 2) AS "ENC_URD_STD_%",
+        ROUND(E.urd_max, 2) AS "ENC_URD_MAX_%",
+        -1.5::numeric AS "%_ENC_URD_MIN_Meta",
+        -1.0::numeric AS "%_ENC_URD_MAX_Meta",
+
+        ROUND(TC.enc_trama_num, 2) AS "ENC_TRA_%",
+        ROUND(E.trama_min, 2) AS "ENC_TRA_MIN_%",
+        ROUND(E.trama_std, 2) AS "ENC_TRA_STD_%",
+        ROUND(E.trama_max, 2) AS "ENC_TRA_MAX_%",
+
+        ROUND(TC.sk1_num, 2) AS "%_SK1",
+        ROUND(TC.sk2_num, 2) AS "%_SK2",
+        ROUND(TC.sk3_num, 2) AS "%_SK3",
+        ROUND(TC.sk4_num, 2) AS "%_SK4",
+        ROUND(TC.ske_num, 2) AS "%_SKE",
+
+        ROUND(E.skew_min, 2) AS "Skew_MIN",
+        ROUND(E.skew_std, 2) AS "Skew_STD",
+        ROUND(E.skew_max, 2) AS "Skew_MAX",
+
+        ROUND(TC.stt_num, 3) AS "%_STT",
+        ROUND(E.var_str_min_trama, 3) AS "%_STT_MIN",
+        ROUND(E.var_str_std_trama, 3) AS "%_STT_STD",
+        ROUND(E.var_str_max_trama, 3) AS "%_STT_MAX",
+
+        ROUND(TC.skm_num, 2) AS "Pasadas_Terminadas",
+        ROUND(E.var_str_min_urd, 2) AS "Pasadas_MIN",
+        ROUND(E.var_str_std_urd, 2) AS "Pasadas_STD",
+        ROUND(E.var_str_max_urd, 2) AS "Pasadas_MAX",
+
+        ROUND(TC.calidad_grm2 * 0.0295, 1) AS "Peso_MESA_OzYd²",
+        ROUND(E.peso_m2 * 0.95 * 0.0295, 1) AS "Peso_MIN_OzYd²",
+        ROUND(E.peso_m2 * 0.0295, 1) AS "Peso_STD_OzYd²",
+        ROUND(E.peso_m2 * 1.05 * 0.0295, 1) AS "Peso_MAX_OzYd²"
+      FROM TESTES_CALIDAD TC
+      LEFT JOIN ESPECIFICACION E ON TC.art_test = E."ARTIGO CODIGO"
+      ORDER BY ${sqlParseDate('TC.dt_prod')} ASC;
+    `
+
+    const result = await query(sql, [articleCode, startDate, endDate], 'calidad/analisis-mesa-test')
+    res.json(result.rows)
+    console.log(
+      `[PERF] GET /calidad/analisis-mesa-test articulo=${articleCode} ${startDate}..${endDate} rows=${result.rows.length} total=${(
+        hrMs() - t0
+      ).toFixed(1)}ms`
+    )
+  } catch (err) {
+    console.error('Error en /calidad/analisis-mesa-test:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// =====================================================
 // ENDPOINTS USTER
 // =====================================================
 
@@ -988,7 +1379,7 @@ app.delete('/api/tensorapid/delete/:testnr', async (req, res) => {
 // PRODUCCION: Import status (estado de todos los CSVs)
 app.get('/api/produccion/import-status', async (req, res) => {
   try {
-    const csvFolder = req.query.csvFolder || 'C:\\STC\\CSV'
+    const csvFolder = resolveCsvFolderFromReq(req)
     const status = await getImportStatus(pool, csvFolder)
     res.json(status)
   } catch (err) {
@@ -1027,7 +1418,7 @@ app.post('/api/produccion/import/update-outdated', async (req, res) => {
       return res.status(400).json({ error: 'Se requiere un array de nombres de tablas' })
     }
     
-    const csvPath = csvFolder || 'C:\\STC\\CSV'
+    const csvPath = sanitizeCsvFolder(csvFolder) || resolveCsvFolderFromBody(req)
     console.log(`[IMPORT] Importando tablas específicas: ${tables.join(', ')}`)
     
     const results = await importSpecificTables(pool, tables, csvPath)
@@ -1055,7 +1446,7 @@ app.post('/api/produccion/import/force-table', async (req, res) => {
     let csvPath = csvPathRaw
     if (!csvPath) {
       // Compatibilidad con la UI: envía { table, csvFolder }
-      const folder = csvFolder || 'C:\\STC\\CSV'
+      const folder = sanitizeCsvFolder(csvFolder) || resolveCsvFolderFromBody(req)
       const status = await getImportStatus(pool, folder)
       const match = status.find(s => s.table === table)
       csvPath = match?.csvPath
@@ -1079,7 +1470,7 @@ app.post('/api/produccion/import/force-table', async (req, res) => {
 // PRODUCCION: Importar todos los CSVs desactualizados
 app.post('/api/produccion/import-all', async (req, res) => {
   try {
-    const csvFolder = req.body.csvFolder || 'C:\\STC\\CSV'
+    const csvFolder = resolveCsvFolderFromBody(req)
     const results = await importAll(pool, csvFolder)
     res.json({ results })
   } catch (err) {
@@ -1092,7 +1483,7 @@ app.post('/api/produccion/import-all', async (req, res) => {
 // IMPORTANTE: Esta ruta debe estar ANTES de /import/:table para que Express no la confunda
 app.post('/api/produccion/import/force-all', async (req, res) => {
   try {
-    const csvFolder = req.body.csvFolder || 'C:\\STC\\CSV'
+    const csvFolder = resolveCsvFolderFromBody(req)
     console.log(`[IMPORT] Forzando importación de todas las tablas desde ${csvFolder}`)
 
     const results = await importForceAll(pool, csvFolder)
@@ -1117,7 +1508,7 @@ app.post('/api/produccion/import/force-all', async (req, res) => {
 // PRODUCCION: Column warnings (devuelve lista vacía - funcionalidad opcional)
 app.get('/api/produccion/import/column-warnings', async (req, res) => {
   try {
-    const csvFolder = req.query.csvFolder || 'C:\\STC\\CSV'
+    const csvFolder = resolveCsvFolderFromReq(req)
 
     await ensureSyncHistoryTables()
 
@@ -1311,10 +1702,26 @@ app.get('/api/produccion/schema/changes-log', async (req, res) => {
 // =====================================================
 async function startServer() {
   try {
-    // Test database connection
-    const client = await pool.connect()
+    // Esperar a PostgreSQL (en Podman/compose puede tardar unos segundos)
+    const maxAttempts = Math.max(1, parseInt(process.env.PG_CONNECT_ATTEMPTS || '30', 10))
+    const delayMs = Math.max(200, parseInt(process.env.PG_CONNECT_DELAY_MS || '1000', 10))
+    let lastErr = null
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const client = await pool.connect()
+        client.release()
+        lastErr = null
+        break
+      } catch (e) {
+        lastErr = e
+        console.warn(`PostgreSQL no disponible (intento ${attempt}/${maxAttempts}): ${e.message}`)
+        await new Promise((r) => setTimeout(r, delayMs))
+      }
+    }
+
+    if (lastErr) throw lastErr
     console.log('✓ Conexión a PostgreSQL exitosa')
-    client.release()
 
     // Índices para endpoints de calidad (impacta en performance con muchos datos)
     ensureCalidadIndexes().catch((e) => console.warn('ensureCalidadIndexes falló:', e.message))

@@ -1,6 +1,38 @@
 version: '3.9'
 
 services:
+  # App (Frontend build + Backend API en un solo contenedor)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stc_app
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      FRONTEND_DIST: /app/frontend/dist
+      CSV_FOLDER: /data/csv
+      # Conexión a Postgres dentro de la red de compose
+      PG_HOST: postgres
+      PG_PORT: 5432
+      PG_DATABASE: stc_produccion
+      PG_USER: stc_user
+      PG_PASSWORD: stc_password_2026
+      # Reintentos de conexión al arrancar (evita fallos por timing)
+      PG_CONNECT_ATTEMPTS: 60
+      PG_CONNECT_DELAY_MS: 1000
+    ports:
+      - "3001:3001"
+    volumes:
+      # Monta la carpeta de CSV del host dentro del contenedor.
+      # En servidor, define STC_CSV_HOST_PATH en un .env junto al compose.
+      - ${STC_CSV_HOST_PATH:-./csv}:/data/csv
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    networks:
+      - stc_network
+
   # PostgreSQL Database
   postgres:
     image: postgres:16-alpine
