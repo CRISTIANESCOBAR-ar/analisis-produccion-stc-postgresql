@@ -59,7 +59,7 @@ const pool = new Pool({
   password: process.env.PG_PASSWORD || 'stc_password_2026',
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 10000,
 })
 
 function hrMs() {
@@ -138,9 +138,81 @@ function sqlParseNumberIntl(colIdent) {
   )`
 }
 
+function quoteIdent(name) {
+  return `"${String(name).replace(/"/g, '""')}"`
+}
+
 async function tableExists(tableName) {
   const res = await query('SELECT to_regclass($1) AS reg', [`public.${tableName}`])
   return Boolean(res.rows?.[0]?.reg)
+}
+
+async function ensureCostosSchema() {
+  await query(
+    `CREATE TABLE IF NOT EXISTS tb_costo_items (
+      id SERIAL PRIMARY KEY,
+      codigo TEXT NOT NULL UNIQUE,
+      descripcion TEXT NOT NULL,
+      unidad TEXT NOT NULL DEFAULT 'KG',
+      activo BOOLEAN NOT NULL DEFAULT TRUE
+    )`
+  )
+
+  await query(
+    `CREATE TABLE IF NOT EXISTS tb_costo_item_alias (
+      id SERIAL PRIMARY KEY,
+      item_id INTEGER NOT NULL REFERENCES tb_costo_items(id),
+      origen TEXT NOT NULL,
+      nombre_en_origen TEXT NOT NULL,
+      UNIQUE (origen, nombre_en_origen)
+    )`
+  )
+
+  await query(
+    `CREATE TABLE IF NOT EXISTS tb_costo_mensual (
+      id SERIAL PRIMARY KEY,
+      yyyymm TEXT NOT NULL,
+      item_id INTEGER NOT NULL REFERENCES tb_costo_items(id),
+      ars_por_unidad NUMERIC NOT NULL,
+      observaciones TEXT,
+      UNIQUE (yyyymm, item_id)
+    )`
+  )
+
+  await query('CREATE INDEX IF NOT EXISTS idx_costo_mensual_mes ON tb_costo_mensual(yyyymm)')
+  await query('CREATE INDEX IF NOT EXISTS idx_costo_alias_item ON tb_costo_item_alias(item_id)')
+
+  await query(
+    `INSERT INTO tb_costo_items (codigo, descripcion, unidad, activo)
+     VALUES
+       ('ESTOPA_AZUL', 'Estopa Azul', 'KG', TRUE),
+       ('URDIDO_TENIDO', 'Urdido Tenido', 'M', TRUE),
+       ('TELA_TERMINADA', 'Tela Terminada', 'M', TRUE)
+     ON CONFLICT (codigo) DO NOTHING`
+  )
+
+  await query("UPDATE tb_costo_items SET unidad = 'M' WHERE codigo IN ('URDIDO_TENIDO', 'TELA_TERMINADA')")
+
+  await query(
+    `INSERT INTO tb_costo_item_alias (item_id, origen, nombre_en_origen)
+     SELECT id, 'ACCESS', 'URDIDO TEÑIDO' FROM tb_costo_items WHERE codigo = 'URDIDO_TENIDO'
+     ON CONFLICT DO NOTHING`
+  )
+  await query(
+    `INSERT INTO tb_costo_item_alias (item_id, origen, nombre_en_origen)
+     SELECT id, 'ACCESS', 'TELA TERMINADA' FROM tb_costo_items WHERE codigo = 'TELA_TERMINADA'
+     ON CONFLICT DO NOTHING`
+  )
+  await query(
+    `INSERT INTO tb_costo_item_alias (item_id, origen, nombre_en_origen)
+     SELECT id, 'ACCESS', 'ESTOPA AZUL' FROM tb_costo_items WHERE codigo = 'ESTOPA_AZUL'
+     ON CONFLICT DO NOTHING`
+  )
+  await query(
+    `INSERT INTO tb_costo_item_alias (item_id, origen, nombre_en_origen)
+     SELECT id, 'ACCESS', 'ESTOPA AZUL TEJEDURIA' FROM tb_costo_items WHERE codigo = 'ESTOPA_AZUL'
+     ON CONFLICT DO NOTHING`
+  )
 }
 
 // =====================================================
@@ -392,6 +464,138 @@ app.get('/api/health', async (req, res) => {
     res.json({ ok: true, timestamp: new Date().toISOString() })
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message })
+  }
+})
+
+async function costosTablesReady() {
+  await ensureCostosSchema()
+  return true
+}
+
+// =====================================================
+// ENDPOINTS COSTOS MENSUALES
+// Base URL en frontend: /api/produccion
+// =====================================================
+
+app.get('/api/produccion/costos/items', async (req, res) => {
+  try {
+    const ready = await costosTablesReady()
+    if (!ready) return res.json({ rows: [] })
+
+    const sql = `
+      SELECT
+        i.id AS item_id,
+        i.codigo AS codigo,
+        i.descripcion AS descripcion,
+        i.unidad AS unidad,
+        i.activo AS activo,
+        a.origen AS origen,
+        a.nombre_en_origen AS nombre_en_origen
+      FROM tb_costo_items i
+      LEFT JOIN tb_costo_item_alias a ON a.item_id = i.id
+      ORDER BY i.id ASC, a.id ASC
+    `
+    const result = await query(sql, [], 'costos-items')
+    res.json({ rows: result.rows })
+  } catch (err) {
+    console.error('Error en costos/items:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/produccion/costos/mensual', async (req, res) => {
+  try {
+    const ready = await costosTablesReady()
+    if (!ready) return res.json({ rows: [] })
+
+    const limite = Math.max(1, Number.parseInt(String(req.query.limite || ''), 10) || 24)
+    const sql = `
+      WITH meses AS (
+        SELECT DISTINCT yyyymm
+        FROM tb_costo_mensual
+        ORDER BY yyyymm DESC
+        LIMIT $1
+      )
+      SELECT
+        m.yyyymm AS yyyymm,
+        i.id AS item_id,
+        i.codigo AS codigo,
+        i.descripcion AS descripcion,
+        i.unidad AS unidad,
+        cm.ars_por_unidad AS ars_por_unidad,
+        cm.observaciones AS observaciones
+      FROM meses m
+      CROSS JOIN tb_costo_items i
+      LEFT JOIN tb_costo_mensual cm
+        ON cm.yyyymm = m.yyyymm AND cm.item_id = i.id
+      ORDER BY m.yyyymm DESC, i.id ASC
+    `
+
+    const result = await query(sql, [limite], 'costos-mensual')
+    res.json({ rows: result.rows })
+  } catch (err) {
+    console.error('Error en costos/mensual:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.put('/api/produccion/costos/mensual', async (req, res) => {
+  const { rows } = req.body || {}
+  if (!Array.isArray(rows)) return res.status(400).json({ error: 'rows requerido' })
+
+  const ready = await costosTablesReady()
+  if (!ready) return res.status(400).json({ error: 'Tablas de costos no configuradas' })
+
+  const client = await getClient()
+  try {
+    await client.query('BEGIN')
+
+    for (const row of rows) {
+      const yyyymm = String(row?.yyyymm || '').trim()
+      const itemId = Number(row?.item_id)
+      const obs = row?.observaciones ?? null
+
+      if (!/^\d{4}-\d{2}$/.test(yyyymm)) {
+        throw new Error(`yyyymm invalido: ${yyyymm}`)
+      }
+      if (!Number.isFinite(itemId) || itemId <= 0) {
+        throw new Error('item_id invalido')
+      }
+
+      const rawValue = row?.ars_por_unidad
+      if (rawValue === null || rawValue === undefined || rawValue === '') {
+        await client.query(
+          'DELETE FROM tb_costo_mensual WHERE yyyymm = $1 AND item_id = $2',
+          [yyyymm, itemId]
+        )
+        continue
+      }
+
+      const value = Number(rawValue)
+      if (!Number.isFinite(value) || value < 0) {
+        throw new Error('ars_por_unidad invalido')
+      }
+
+      await client.query(
+        `
+          INSERT INTO tb_costo_mensual (yyyymm, item_id, ars_por_unidad, observaciones)
+          VALUES ($1, $2, $3, $4)
+          ON CONFLICT (yyyymm, item_id) DO UPDATE
+          SET ars_por_unidad = EXCLUDED.ars_por_unidad,
+              observaciones = EXCLUDED.observaciones
+        `,
+        [yyyymm, itemId, value, obs]
+      )
+    }
+
+    await client.query('COMMIT')
+    res.json({ success: true })
+  } catch (err) {
+    await client.query('ROLLBACK')
+    console.error('Error en costos/mensual (PUT):', err)
+    res.status(500).json({ error: err.message })
+  } finally {
+    client.release()
   }
 })
 
@@ -2218,6 +2422,1374 @@ app.delete('/api/tensorapid/delete/:testnr', async (req, res) => {
     res.json({ success: true })
   } catch (err) { 
     res.status(500).json({ error: err.message }) 
+  }
+})
+
+// =====================================================
+// ENDPOINTS INDIGO
+// =====================================================
+app.get('/api/residuos-indigo-tejeduria', async (req, res) => {
+  try {
+    const requiredTables = [
+      'tb_produccion',
+      'tb_fichas',
+      'tb_residuos_indigo',
+      'tb_residuos_por_sector',
+      'tb_paradas'
+    ]
+    const ready = await Promise.all(requiredTables.map(tableExists))
+    if (!ready.every(Boolean)) {
+      return res.json([])
+    }
+
+    const { fecha_inicio, fecha_fin } = req.query
+    const fechaInicio = fecha_inicio ? dateVariants(fecha_inicio).iso : null
+    const fechaFin = fecha_fin ? dateVariants(fecha_fin).iso : null
+
+    const fichasColumns = await query(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'tb_fichas'`,
+      [],
+      'tb-fichas-columns'
+    )
+    const fichasCols = new Map(
+      (fichasColumns.rows || []).map((r) => [String(r.column_name).toLowerCase(), r.column_name])
+    )
+    const consumoKey = ['cons#urd/m', 'consumo'].find((c) => fichasCols.has(c))
+    const sizingKey = ['enc#tec#urdume', 'sizing'].find((c) => fichasCols.has(c))
+    const consumoCol = consumoKey ? fichasCols.get(consumoKey) : null
+    const sizingCol = sizingKey ? fichasCols.get(sizingKey) : null
+    const consumoNum = consumoCol ? sqlParseNumber(quoteIdent(consumoCol)) : 'NULL::numeric'
+    const sizingNum = sizingCol ? sqlParseNumber(quoteIdent(sizingCol)) : 'NULL::numeric'
+
+    const produccionColumns = await query(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'tb_produccion'`,
+      [],
+      'tb-produccion-columns'
+    )
+    const prodCols = new Map(
+      (produccionColumns.rows || []).map((r) => [String(r.column_name).toLowerCase(), r.column_name])
+    )
+    const urdumeKey = ['urdume', 'base urdume'].find((c) => prodCols.has(c))
+    const urdumeCol = urdumeKey ? prodCols.get(urdumeKey) : null
+    const urdumeExprProd = urdumeCol ? `P.${quoteIdent(urdumeCol)}` : 'NULL::text'
+    const urdumeExprTej = urdumeCol ? `T.${quoteIdent(urdumeCol)}` : 'NULL::text'
+    const prodDateKey = ['dt_base_producao', 'data_base'].find((c) => prodCols.has(c))
+    const prodDateCol = prodDateKey ? prodCols.get(prodDateKey) : null
+    const prodDateExpr = prodDateCol ? `P.${quoteIdent(prodDateCol)}` : 'NULL::text'
+    const tejDateExpr = prodDateCol ? `T.${quoteIdent(prodDateCol)}` : 'NULL::text'
+
+    const paradasColumns = await query(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'tb_paradas'`,
+      [],
+      'tb-paradas-columns'
+    )
+    const parCols = new Map(
+      (paradasColumns.rows || []).map((r) => [String(r.column_name).toLowerCase(), r.column_name])
+    )
+    const parDateKey = ['dt_base_producao', 'data_base'].find((c) => parCols.has(c))
+    const parDateCol = parDateKey ? parCols.get(parDateKey) : null
+    const parDateExpr = parDateCol ? `"${parDateCol}"` : 'NULL::text'
+    const parMotivoKey = ['motivo', 'motivo1'].find((c) => parCols.has(c))
+    const parMotivoCol = parMotivoKey ? parCols.get(parMotivoKey) : null
+    const parMotivoExpr = parMotivoCol ? quoteIdent(parMotivoCol) : 'NULL::text'
+    const metragemNum = sqlParseNumberIntl('P."METRAGEM"')
+    const metragemTejNum = sqlParseNumberIntl('T."METRAGEM"')
+    const residuosNum = sqlParseNumber('R."PESO LIQUIDO (KG)"')
+    const residuosTejNum = sqlParseNumber('RS."PESO LIQUIDO (KG)"')
+    const residuosPrensNum = sqlParseNumber('RP."PESO LIQUIDO (KG)"')
+
+    const dateExpr = sqlParseDate('D.fecha')
+    const dateFilter = fechaInicio && fechaFin ? `WHERE ${dateExpr} BETWEEN $1::date AND $2::date` : ''
+    const params = fechaInicio && fechaFin ? [fechaInicio, fechaFin] : []
+
+    const sql = `
+      WITH FICHAS_UNIQUE AS (
+        SELECT
+          btrim("URDUME") AS URDUME,
+          MAX(${consumoNum}) AS CONSUMO,
+          AVG(${sizingNum}) AS SIZING
+        FROM tb_fichas
+        WHERE ${consumoNum} IS NOT NULL AND ${consumoNum} <> 0
+        GROUP BY btrim("URDUME")
+      ),
+      FICHAS_ARTIGO AS (
+        SELECT
+          btrim("URDUME") AS URDUME,
+          btrim("ARTIGO") AS ARTIGO,
+          MAX(${consumoNum}) AS CONSUMO,
+          AVG(${sizingNum}) AS SIZING
+        FROM tb_fichas
+        WHERE ${consumoNum} IS NOT NULL AND ${consumoNum} <> 0
+        GROUP BY btrim("URDUME"), btrim("ARTIGO")
+      ),
+      PRODUCCION_IND AS (
+        SELECT
+          ${prodDateExpr} AS DT_BASE_PRODUCAO,
+          SUM(${metragemNum}) AS TotalMetros,
+          (SUM(${metragemNum} * FU.CONSUMO) / 1000) * 0.98 AS TotalKg
+        FROM tb_produccion P
+        JOIN FICHAS_UNIQUE FU ON btrim(${urdumeExprProd}) = FU.URDUME
+        WHERE P."SELETOR" = 'INDIGO' AND P."FILIAL" = '05'
+        GROUP BY ${prodDateExpr}
+      ),
+      TEJEDURIA_RAW AS (
+        SELECT
+          ${tejDateExpr} AS DT_BASE_PRODUCAO,
+          ${metragemTejNum} AS Metros,
+          COALESCE(FA.CONSUMO, FU.CONSUMO) AS Consumo,
+          COALESCE(FA.SIZING, FU.SIZING, 0) AS Sizing
+        FROM tb_produccion T
+        LEFT JOIN FICHAS_ARTIGO FA ON btrim(${urdumeExprTej}) = FA.URDUME AND T."ARTIGO" LIKE FA.ARTIGO || '%'
+        LEFT JOIN FICHAS_UNIQUE FU ON btrim(${urdumeExprTej}) = FU.URDUME
+        WHERE T."SELETOR" = 'TECELAGEM' AND T."FILIAL" = '05'
+      ),
+      PRODUCCION_TEJ AS (
+        SELECT
+          DT_BASE_PRODUCAO,
+          SUM(Metros) AS TejeduriaMetros,
+          SUM(Metros * Consumo / NULLIF(1 - (Sizing / 100), 0)) / 1000 AS TejeduriaKg
+        FROM TEJEDURIA_RAW
+        GROUP BY DT_BASE_PRODUCAO
+      ),
+      RES_IND AS (
+        SELECT R."DT_MOV" AS DT_MOV, SUM(${residuosNum}) AS ResiduosKg
+        FROM tb_residuos_indigo R
+        WHERE btrim(R."DESCRICAO") = 'ESTOPA AZUL'
+        GROUP BY R."DT_MOV"
+      ),
+      RES_TEJ AS (
+        SELECT RS."DT_MOV" AS DT_MOV, SUM(${residuosTejNum}) AS ResiduosTejeduriaKg
+        FROM tb_residuos_por_sector RS
+        WHERE btrim(RS."DESCRICAO") = 'ESTOPA AZUL TEJEDURÍA'
+        GROUP BY RS."DT_MOV"
+      ),
+      RES_PRENSA AS (
+        SELECT RP."DT_MOV" AS DT_MOV, SUM(${residuosPrensNum}) AS ResiduosPrensadaKg
+        FROM tb_residuos_por_sector RP
+        WHERE btrim(RP."DESCRICAO") = 'ESTOPA AZUL'
+        GROUP BY RP."DT_MOV"
+      ),
+      ANUDADOS AS (
+        SELECT ${parDateExpr} AS DT_BASE_PRODUCAO, COUNT(*)::int AS AnudadosCount
+        FROM tb_paradas
+        WHERE ${sqlParseNumber(parMotivoExpr)} = 101
+        GROUP BY ${parDateExpr}
+      ),
+      ALL_DATES AS (
+        SELECT DT_BASE_PRODUCAO AS fecha FROM PRODUCCION_IND
+        UNION
+        SELECT DT_BASE_PRODUCAO AS fecha FROM PRODUCCION_TEJ
+        UNION
+        SELECT DT_MOV AS fecha FROM RES_IND
+        UNION
+        SELECT DT_MOV AS fecha FROM RES_TEJ
+        UNION
+        SELECT DT_MOV AS fecha FROM RES_PRENSA
+      )
+      SELECT
+        D.fecha AS "DT_BASE_PRODUCAO",
+        COALESCE(PI.TotalMetros, 0) AS "TotalMetros",
+        COALESCE(PI.TotalKg, 0) AS "TotalKg",
+        COALESCE(RI.ResiduosKg, 0) AS "ResiduosKg",
+        COALESCE(PT.TejeduriaMetros, 0) AS "TejeduriaMetros",
+        COALESCE(PT.TejeduriaKg, 0) AS "TejeduriaKg",
+        COALESCE(RT.ResiduosTejeduriaKg, 0) AS "ResiduosTejeduriaKg",
+        COALESCE(A.AnudadosCount, 0) AS "AnudadosCount",
+        COALESCE(RP.ResiduosPrensadaKg, 0) AS "ResiduosPrensadaKg"
+      FROM ALL_DATES D
+      LEFT JOIN PRODUCCION_IND PI ON PI.DT_BASE_PRODUCAO = D.fecha
+      LEFT JOIN PRODUCCION_TEJ PT ON PT.DT_BASE_PRODUCAO = D.fecha
+      LEFT JOIN RES_IND RI ON RI.DT_MOV = D.fecha
+      LEFT JOIN RES_TEJ RT ON RT.DT_MOV = D.fecha
+      LEFT JOIN RES_PRENSA RP ON RP.DT_MOV = D.fecha
+      LEFT JOIN ANUDADOS A ON A.DT_BASE_PRODUCAO = D.fecha
+      ${dateFilter}
+      ORDER BY ${dateExpr} ASC NULLS LAST
+    `
+
+    const result = await query(sql, params, 'residuos-indigo-tejeduria')
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en residuos-indigo-tejeduria:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/detalle-residuos', async (req, res) => {
+  try {
+    const fecha = String(req.query.fecha || '').trim()
+    if (!fecha) return res.status(400).json({ error: 'fecha requerida' })
+    const variants = dateVariants(fecha)
+    const sql = `
+      SELECT
+        "DT_MOV" AS "DT_MOV",
+        "TURNO" AS "TURNO",
+        "SUBPRODUTO" AS "SUBPRODUTO",
+        "DESCRICAO" AS "DESCRICAO",
+        "ID" AS "ID",
+        ${sqlParseNumber('"PESO LIQUIDO (KG)"')} AS "PESO LIQUIDO (KG)",
+        "PARTIDA" AS "PARTIDA",
+        "ROLADA" AS "ROLADA",
+        "MOTIVO" AS "MOTIVO",
+        "DESC_MOTIVO" AS "DESC_MOTIVO",
+        "URDUME" AS "URDUME",
+        "PE DE ROLO" AS "PE DE ROLO",
+        "INDIGO" AS "INDIGO",
+        "GAIOLA" AS "GAIOLA",
+        "OBS" AS "OBS"
+      FROM tb_residuos_indigo
+      WHERE ("DT_MOV" = ANY($1::text[]) OR ${sqlParseDate('"DT_MOV"')} = $2::date)
+      ORDER BY "ID" ASC
+    `
+    const result = await query(sql, [dateTextCandidates(fecha), variants.iso], 'detalle-residuos')
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en detalle-residuos:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/detalle-residuos-sector', async (req, res) => {
+  try {
+    const fecha = String(req.query.fecha || '').trim()
+    if (!fecha) return res.status(400).json({ error: 'fecha requerida' })
+    const variants = dateVariants(fecha)
+    const sql = `
+      SELECT
+        "DT_MOV" AS "DT_MOV",
+        "TURNO" AS "TURNO",
+        "SUBPRODUTO" AS "SUBPRODUTO",
+        "DESCRICAO" AS "DESCRICAO",
+        "ID" AS "ID",
+        ${sqlParseNumber('"PESO LIQUIDO (KG)"')} AS "PESO LIQUIDO (KG)",
+        "OBS" AS "OBS"
+      FROM tb_residuos_por_sector
+      WHERE ("DT_MOV" = ANY($1::text[]) OR ${sqlParseDate('"DT_MOV"')} = $2::date)
+        AND btrim("DESC_SETOR") = 'TECELAGEM'
+      ORDER BY "ID" ASC
+    `
+    const result = await query(sql, [dateTextCandidates(fecha), variants.iso], 'detalle-residuos-sector')
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en detalle-residuos-sector:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/residuos-indigo-analisis', async (req, res) => {
+  try {
+    const { fecha_inicio, fecha_fin } = req.query
+    if (!fecha_inicio || !fecha_fin) return res.status(400).json({ error: 'fecha_inicio y fecha_fin requeridos' })
+    const fechaInicio = dateVariants(fecha_inicio).iso
+    const fechaFin = dateVariants(fecha_fin).iso
+    const sql = `
+      SELECT
+        "MOTIVO" AS "MOTIVO",
+        "DESC_MOTIVO" AS "DESC_MOTIVO",
+        SUM(${sqlParseNumber('"PESO LIQUIDO (KG)"')}) AS "TotalKg"
+      FROM tb_residuos_indigo
+      WHERE btrim("DESCRICAO") = 'ESTOPA AZUL'
+        AND ${sqlParseDate('"DT_MOV"')} BETWEEN $1::date AND $2::date
+      GROUP BY "MOTIVO", "DESC_MOTIVO"
+      HAVING SUM(${sqlParseNumber('"PESO LIQUIDO (KG)"')}) > 0
+      ORDER BY "TotalKg" DESC
+    `
+    const result = await query(sql, [fechaInicio, fechaFin], 'residuos-indigo-analisis')
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en residuos-indigo-analisis:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/residuos-indigo-estopa-por-mes', async (req, res) => {
+  try {
+    const sql = `
+      WITH BASE AS (
+        SELECT ${sqlParseDate('"DT_MOV"')} AS DT,
+               ${sqlParseNumber('"PESO LIQUIDO (KG)"')} AS PESO
+        FROM tb_residuos_indigo
+        WHERE btrim("DESCRICAO") = 'ESTOPA AZUL'
+      )
+      SELECT
+        to_char(DT, 'YYYY-MM') AS "Mes",
+        COALESCE(ROUND(SUM(PESO)), 0)::int AS "KgResiduo"
+      FROM BASE
+      WHERE DT IS NOT NULL
+        AND DT >= (date_trunc('month', current_date) - interval '11 months')
+      GROUP BY 1
+      ORDER BY 1
+    `
+    const result = await query(sql, [], 'residuos-indigo-estopa-por-mes')
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en residuos-indigo-estopa-por-mes:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/residuos-indigo-estopa-por-dia', async (req, res) => {
+  try {
+    const { fecha_inicio, fecha_fin } = req.query
+    if (!fecha_inicio || !fecha_fin) return res.status(400).json({ error: 'fecha_inicio y fecha_fin requeridos' })
+    const fechaInicio = dateVariants(fecha_inicio).iso
+    const fechaFin = dateVariants(fecha_fin).iso
+    const sql = `
+      SELECT
+        "DT_MOV" AS "Fecha",
+        COALESCE(ROUND(SUM(${sqlParseNumber('"PESO LIQUIDO (KG)"')})), 0)::int AS "KgResiduo"
+      FROM tb_residuos_indigo
+      WHERE btrim("DESCRICAO") = 'ESTOPA AZUL'
+        AND ${sqlParseDate('"DT_MOV"')} BETWEEN $1::date AND $2::date
+      GROUP BY "DT_MOV"
+      ORDER BY ${sqlParseDate('"DT_MOV"')} ASC
+    `
+    const result = await query(sql, [fechaInicio, fechaFin], 'residuos-indigo-estopa-por-dia')
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en residuos-indigo-estopa-por-dia:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/produccion-indigo-resumen', async (req, res) => {
+  try {
+    const { fecha_inicio, fecha_fin } = req.query
+    if (!fecha_inicio || !fecha_fin) return res.status(400).json({ error: 'fecha_inicio y fecha_fin requeridos' })
+    const fechaInicio = dateVariants(fecha_inicio).iso
+    const fechaFin = dateVariants(fecha_fin).iso
+    const sql = `
+      SELECT "S" AS "S", COUNT(*)::int AS "count"
+      FROM tb_produccion
+      WHERE "SELETOR" = 'INDIGO'
+        AND ${sqlParseDate('"DT_BASE_PRODUCAO"')} BETWEEN $1::date AND $2::date
+      GROUP BY "S"
+      ORDER BY "S"
+    `
+    const result = await query(sql, [fechaInicio, fechaFin], 'produccion-indigo-resumen')
+    res.json({ s_valores: result.rows })
+  } catch (err) {
+    console.error('Error en produccion-indigo-resumen:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/consulta-rolada-indigo', async (req, res) => {
+  try {
+    const rolada = String(req.query.rolada || '').trim()
+    if (!rolada) return res.status(400).json({ error: 'rolada requerida' })
+    const sql = `
+      SELECT
+        "ROLADA" AS "ROLADA",
+        "DT_INICIO" AS "DT_INICIO",
+        "HORA_INICIO" AS "HORA_INICIO",
+        "DT_FINAL" AS "DT_FINAL",
+        "HORA_FINAL" AS "HORA_FINAL",
+        "TURNO" AS "TURNO",
+        "PARTIDA" AS "PARTIDA",
+        "ARTIGO" AS "ARTIGO",
+        "COR" AS "COR",
+        ${sqlParseNumber('"METRAGEM"')} AS "METRAGEM",
+        ${sqlParseNumber('"VELOC"')} AS "VELOC",
+        "S" AS "S",
+        ${sqlParseNumber('"RUPTURAS"')} AS "RUPTURAS",
+        ${sqlParseNumber('"CAVALOS"')} AS "CAVALOS",
+        "OPERADOR" AS "OPERADOR",
+        "NM OPERADOR" AS "NM_OPERADOR"
+      FROM tb_produccion
+      WHERE "SELETOR" = 'INDIGO' AND "ROLADA" = $1
+      ORDER BY ${sqlParseDate('"DT_INICIO"')} ASC, "HORA_INICIO" ASC
+    `
+    const result = await query(sql, [rolada], 'consulta-rolada-indigo')
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en consulta-rolada-indigo:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/consulta-rolada-urdimbre', async (req, res) => {
+  try {
+    const rolada = String(req.query.rolada || '').trim()
+    if (!rolada) return res.status(400).json({ error: 'rolada requerida' })
+    const sql = `
+      SELECT
+        "PARTIDA" AS "PARTIDA",
+        "DT_INICIO" AS "DT_INICIO",
+        "HORA_INICIO" AS "HORA_INICIO",
+        "DT_FINAL" AS "DT_FINAL",
+        "HORA_FINAL" AS "HORA_FINAL",
+        "ARTIGO" AS "ARTIGO",
+        ${sqlParseNumber('"METRAGEM"')} AS "METRAGEM",
+        ${sqlParseNumber('"VELOC"')} AS "VELOC",
+        ${sqlParseNumber('"NUM_FIOS"')} AS "NUM_FIOS",
+        ${sqlParseNumber('"RUP FIACAO"')} AS "RUP_FIACAO",
+        ${sqlParseNumber('"RUP URD"')} AS "RUP_URD",
+        ${sqlParseNumber('"RUP OPER"')} AS "RUP_OPER",
+        ${sqlParseNumber('"RUPTURAS"')} AS "RUPTURAS",
+        "NM OPERADOR" AS "NM_OPERADOR",
+        "LOTE FIACAO" AS "LOTE_FIACAO",
+        "MAQ FIACAO" AS "MAQ_FIACAO",
+        "BASE URDUME" AS "BASE_URDUME"
+      FROM tb_produccion
+      WHERE "SELETOR" IN ('URDIDEIRA', 'URDIDORA') AND "ROLADA" = $1
+      ORDER BY ${sqlParseDate('"DT_INICIO"')} ASC, "HORA_INICIO" ASC
+    `
+    const result = await query(sql, [rolada], 'consulta-rolada-urdimbre')
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en consulta-rolada-urdimbre:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/consulta-rolada-tecelagem', async (req, res) => {
+  try {
+    const rolada = String(req.query.rolada || '').trim()
+    if (!rolada) return res.status(400).json({ error: 'rolada requerida' })
+
+    const metragemNum = sqlParseNumber('"METRAGEM"')
+    const eficienciaNum = sqlParseNumber('"EFICIENCIA"')
+    const paradaTramaNum = sqlParseNumber('"PARADA TEC TRAMA"')
+    const paradaUrdNum = sqlParseNumber('"PARADA TEC URDUME"')
+    const rpmNum = sqlParseNumber('"RPM NOMINALTEAR"')
+    const batidasNum = sqlParseNumber('"BATIDAS"')
+
+    const sql = `
+      SELECT
+        "PARTIDA" AS "PARTIDA",
+        MIN("DT_INICIO") AS "FECHA_INICIAL",
+        MAX("DT_FINAL") AS "FECHA_FINAL",
+        SUM(${metragemNum}) AS "METRAGEM",
+        MAX("MAQUINA") AS "MAQUINA",
+        AVG(${eficienciaNum}) AS "EFICIENCIA",
+        ROUND((SUM(${paradaTramaNum}) * 100000) / NULLIF(SUM(${metragemNum}) * 1000, 0), 1) AS "ROTURAS_TRA_105",
+        ROUND((SUM(${paradaUrdNum}) * 100000) / NULLIF(SUM(${metragemNum}) * 1000, 0), 1) AS "ROTURAS_URD_105",
+        MAX("ARTIGO") AS "ARTIGO",
+        MAX("COR") AS "COR",
+        MAX("NM MERCADO") AS "NM_MERCADO",
+        MAX("TRAMA") AS "TRAMA",
+        SUM(${batidasNum}) AS "PASADAS",
+        AVG(${rpmNum}) AS "RPM"
+      FROM tb_produccion
+      WHERE "SELETOR" = 'TECELAGEM' AND "ROLADA" = $1
+      GROUP BY "PARTIDA", "MAQUINA", "ARTIGO", "COR", "NM MERCADO", "TRAMA"
+      ORDER BY substring("PARTIDA" from '.{6}$') ASC
+    `
+
+    const result = await query(sql, [rolada], 'consulta-rolada-tecelagem')
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en consulta-rolada-tecelagem:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/consulta-partida-tecelagem', async (req, res) => {
+  try {
+    const partida = String(req.query.partida || '').trim()
+    const cor = String(req.query.cor || '').trim()
+    if (!partida) return res.status(400).json({ error: 'partida requerida' })
+
+    const sortDir = cor.length === 4 ? 'DESC' : 'ASC'
+    const sql = `
+      SELECT
+        "DT_BASE_PRODUCAO" AS "DT_BASE_PRODUCAO",
+        "TURNO" AS "TURNO",
+        "PARTIDA" AS "PARTIDA",
+        ${sqlParseNumber('"METRAGEM"')} AS "METRAGEM",
+        ${sqlParseNumber('"PARADA TEC TRAMA"')} AS "PARADA_TRAMA",
+        ${sqlParseNumber('"PARADA TEC URDUME"')} AS "PARADA_URDUME",
+        ${sqlParseNumber('"EFICIENCIA"')} AS "EFICIENCIA",
+        ROUND((${sqlParseNumber('"PARADA TEC TRAMA"')} * 100000) / NULLIF(${sqlParseNumber('"METRAGEM"')} * 1000, 0), 1) AS "ROTURAS_TRA_105",
+        ROUND((${sqlParseNumber('"PARADA TEC URDUME"')} * 100000) / NULLIF(${sqlParseNumber('"METRAGEM"')} * 1000, 0), 1) AS "ROTURAS_URD_105",
+        ${sqlParseNumber('"BATIDAS"')} AS "BATIDAS",
+        ${sqlParseNumber('"RPM NOMINALTEAR"')} AS "RPM",
+        "ARTIGO" AS "ARTIGO",
+        "COR" AS "COR",
+        "NM MERCADO" AS "NM_MERCADO",
+        "TRAMA" AS "TRAMA",
+        "MAQUINA" AS "MAQUINA",
+        "GRUPO TEAR" AS "GRUPO_TEAR",
+        "BASE URDUME" AS "BASE_URDUME"
+      FROM tb_produccion
+      WHERE "SELETOR" = 'TECELAGEM' AND "PARTIDA" = $1
+      ORDER BY ${sqlParseDate('"DT_BASE_PRODUCAO"')} ${sortDir}, "TURNO" ${sortDir}
+    `
+
+    const result = await query(sql, [partida], 'consulta-partida-tecelagem')
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en consulta-partida-tecelagem:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/consulta-rolada-calidad', async (req, res) => {
+  try {
+    const rolada = String(req.query.rolada || '').trim()
+    if (!rolada) return res.status(400).json({ error: 'rolada requerida' })
+
+    const metragemNum = sqlParseNumber('"METRAGEM"')
+    const sql = `
+      SELECT
+        "PARTIDA" AS "PARTIDA",
+        MAX("ST IND") AS "ST_IND",
+        MAX("REPROCESSO") AS "REPROCESSO",
+        MAX("TEAR") AS "TEAR",
+        SUM(${metragemNum}) AS "METRAGEM_TOTAL",
+        SUM(CASE WHEN "QUALIDADE" ILIKE 'PRIMEIRA%' THEN ${metragemNum} ELSE 0 END) AS "METROS_1ERA",
+        SUM(CASE WHEN "QUALIDADE" NOT ILIKE 'PRIMEIRA%' THEN ${metragemNum} ELSE 0 END) AS "METROS_2DA",
+        SUM(CASE WHEN "GRP_DEF" = 'HIL' THEN ${metragemNum} ELSE 0 END) AS "METROS_2DA_HIL",
+        SUM(CASE WHEN "GRP_DEF" = 'IND' THEN ${metragemNum} ELSE 0 END) AS "METROS_2DA_IND",
+        SUM(CASE WHEN "GRP_DEF" = 'TE' THEN ${metragemNum} ELSE 0 END) AS "METROS_2DA_TE",
+        SUM(CASE WHEN "GRP_DEF" = 'TEF' THEN ${metragemNum} ELSE 0 END) AS "METROS_2DA_TEF",
+        MAX("ARTIGO") AS "ARTIGO",
+        MAX("COR") AS "COR",
+        MAX("NM MERC") AS "NM_MERCADO",
+        MAX("TRAMA") AS "TRAMA"
+      FROM tb_calidad
+      WHERE substring(right("PARTIDA", 6) from 1 for 4) = $1
+      GROUP BY "PARTIDA", "TEAR", "ARTIGO", "COR", "NM MERC", "TRAMA"
+      ORDER BY "PARTIDA" ASC
+    `
+
+    const result = await query(sql, [rolada], 'consulta-rolada-calidad')
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en consulta-rolada-calidad:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/consulta-partida-calidad', async (req, res) => {
+  try {
+    const partida = String(req.query.partida || '').trim()
+    if (!partida) return res.status(400).json({ error: 'partida requerida' })
+    const sql = `
+      SELECT
+        "GRP_DEF" AS "GRP_DEF",
+        "COD_DE" AS "COD_DE",
+        "DEFEITO" AS "DEFEITO",
+        ${sqlParseNumber('"METRAGEM"')} AS "METRAGEM",
+        "QUALIDADE" AS "QUALIDADE",
+        "HORA" AS "HORA",
+        "EMENDAS" AS "EMENDAS",
+        "PEÇA" AS "PECA",
+        "ETIQUETA" AS "ETIQUETA",
+        ${sqlParseNumber('"LARGURA"')} AS "LARGURA",
+        ${sqlParseNumber('"PONTUACAO"')} AS "PONTUACAO",
+        "REVISOR FINAL" AS "REVISOR_FINAL"
+      FROM tb_calidad
+      WHERE "PARTIDA" = $1
+      ORDER BY "HORA" ASC
+    `
+    const result = await query(sql, [partida], 'consulta-partida-calidad')
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en consulta-partida-calidad:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+async function getSeguimientoRoladasData(fechaInicio, fechaFin) {
+  const metragemNum = sqlParseNumber('"METRAGEM"')
+  const rupturasNum = sqlParseNumber('"RUPTURAS"')
+  const cavalosNum = sqlParseNumber('"CAVALOS"')
+  const velocNum = sqlParseNumber('"VELOC"')
+  const eficienciaNum = sqlParseNumber('"EFICIENCIA"')
+  const parTraNum = sqlParseNumber('"PARADA TEC TRAMA"')
+  const parUrdNum = sqlParseNumber('"PARADA TEC URDUME"')
+
+  const calMetragemNum = sqlParseNumber('"METRAGEM"')
+  const calPontuacaoNum = sqlParseNumber('"PONTUACAO"')
+  const calLarguraNum = sqlParseNumber('"LARGURA"')
+
+  const sql = `
+    WITH IND AS (
+      SELECT
+        "ROLADA" AS ROLADA,
+        MAX("DT_BASE_PRODUCAO") AS FECHA,
+        MAX("ARTIGO") AS BASE,
+        string_agg(DISTINCT "COR", ', ') AS COLOR,
+        SUM(${metragemNum}) AS MTS_IND,
+        SUM(${rupturasNum}) AS RUPTURAS,
+        SUM(${cavalosNum}) AS CAV,
+        MAX(${velocNum}) AS VEL_NOM,
+        SUM(${metragemNum} * COALESCE(${velocNum}, 0)) / NULLIF(SUM(${metragemNum}), 0) AS VEL_PROM
+      FROM tb_produccion
+      WHERE "SELETOR" = 'INDIGO'
+        AND "FILIAL" = '05'
+        AND ${sqlParseDate('"DT_BASE_PRODUCAO"')} BETWEEN $1::date AND $2::date
+      GROUP BY "ROLADA"
+    ),
+    URD AS (
+      SELECT
+        "ROLADA" AS ROLADA,
+        string_agg(DISTINCT "MAQUINA", ', ') AS MAQ_OE,
+        string_agg(DISTINCT "LOTE FIACAO", ', ') AS LOTE,
+        SUM(${metragemNum}) AS URDIDORA_METROS,
+        SUM(${rupturasNum}) AS URDIDORA_ROTURAS,
+        MAX(${sqlParseNumber('"NUM_FIOS"')}) AS NUM_FIOS
+      FROM tb_produccion
+      WHERE "SELETOR" IN ('URDIDEIRA', 'URDIDORA')
+        AND "FILIAL" = '05'
+        AND ${sqlParseDate('"DT_BASE_PRODUCAO"')} BETWEEN $1::date AND $2::date
+      GROUP BY "ROLADA"
+    ),
+    TEC AS (
+      SELECT
+        "ROLADA" AS ROLADA,
+        SUM(${metragemNum}) AS MTS_CRUDOS,
+        SUM(${metragemNum} * COALESCE(${eficienciaNum}, 0)) / NULLIF(SUM(${metragemNum}), 0) AS EFI_TEJ,
+        SUM(${parTraNum}) AS PARADA_TRAMA,
+        SUM(${parUrdNum}) AS PARADA_URD
+      FROM tb_produccion
+      WHERE "SELETOR" = 'TECELAGEM'
+        AND "FILIAL" = '05'
+        AND ${sqlParseDate('"DT_BASE_PRODUCAO"')} BETWEEN $1::date AND $2::date
+      GROUP BY "ROLADA"
+    ),
+    CAL AS (
+      SELECT
+        "ROLADA" AS ROLADA,
+        SUM(${calMetragemNum}) AS MTS_CAL,
+        SUM(CASE WHEN "QUALIDADE" ILIKE 'PRIMEIRA%' THEN ${calMetragemNum} ELSE 0 END) AS METROS_1ERA,
+        SUM(COALESCE(${calPontuacaoNum}, 0)) AS PONTOS,
+        AVG(${calLarguraNum}) AS LARGURA
+      FROM tb_calidad
+      WHERE "EMP" = 'STC'
+        AND "QUALIDADE" NOT ILIKE '%RETALHO%'
+        AND ${sqlParseDate('"DAT_PROD"')} BETWEEN $1::date AND $2::date
+      GROUP BY "ROLADA"
+    )
+    SELECT
+      IND.ROLADA AS "ROLADA",
+      URD.MAQ_OE AS "MAQ_OE",
+      URD.LOTE AS "LOTE",
+      URD.URDIDORA_METROS AS "URDIDORA_METROS",
+      URD.URDIDORA_ROTURAS AS "URDIDORA_ROTURAS",
+      URD.NUM_FIOS AS "NUM_FIOS",
+      IND.FECHA AS "FECHA",
+      IND.BASE AS "BASE",
+      IND.COLOR AS "COLOR",
+      IND.MTS_IND AS "MTS_IND",
+      ROUND((IND.RUPTURAS * 1000) / NULLIF(IND.MTS_IND, 0), 1) AS "R103",
+      IND.CAV AS "CAV",
+      IND.VEL_NOM AS "VEL_NOM",
+      IND.VEL_PROM AS "VEL_PROM",
+      TEC.MTS_CRUDOS AS "MTS_CRUDOS",
+      TEC.EFI_TEJ AS "EFI_TEJ",
+      ROUND((TEC.PARADA_URD * 100000) / NULLIF(TEC.MTS_CRUDOS * 1000, 0), 1) AS "RU105",
+      ROUND((TEC.PARADA_TRAMA * 100000) / NULLIF(TEC.MTS_CRUDOS * 1000, 0), 1) AS "RT105",
+      CAL.MTS_CAL AS "MTS_CAL",
+      ROUND((CAL.METROS_1ERA / NULLIF(CAL.MTS_CAL, 0)) * 100, 1) AS "CAL_PERCENT",
+      ROUND((CAL.PONTOS * 100) / NULLIF((CAL.MTS_CAL * NULLIF(CAL.LARGURA, 0) / 100), 0), 1) AS "PTS_100M2",
+      IND.RUPTURAS AS "RUPTURAS"
+    FROM IND
+    LEFT JOIN URD ON URD.ROLADA = IND.ROLADA
+    LEFT JOIN TEC ON TEC.ROLADA = IND.ROLADA
+    LEFT JOIN CAL ON CAL.ROLADA = IND.ROLADA
+    ORDER BY IND.ROLADA::int ASC
+  `
+
+  const result = await query(sql, [fechaInicio, fechaFin], 'seguimiento-roladas')
+  const datos = result.rows || []
+
+  const totales = datos.reduce(
+    (acc, row) => {
+      const mtsInd = Number(row.MTS_IND) || 0
+      const mtsUrd = Number(row.URDIDORA_METROS) || 0
+      const mtsTej = Number(row.MTS_CRUDOS) || 0
+      const mtsCal = Number(row.MTS_CAL) || 0
+      const rupturas = Number(row.RUPTURAS) || 0
+
+      acc.TOTAL_ROLADAS += 1
+      acc.MTS_IND += mtsInd
+      acc.RUPTURAS += rupturas
+      acc.CAV += Number(row.CAV) || 0
+      acc.URDIDORA_METROS += mtsUrd
+      acc.URDIDORA_ROTURAS += Number(row.URDIDORA_ROTURAS) || 0
+      acc.NUM_FIOS_SUM += Number(row.NUM_FIOS) || 0
+      acc.NUM_FIOS_COUNT += row.NUM_FIOS ? 1 : 0
+      acc.MTS_CRUDOS += mtsTej
+      acc.MTS_CAL += mtsCal
+
+      acc.VEL_PROM_NUM += (Number(row.VEL_PROM) || 0) * mtsInd
+      acc.EFI_TEJ_NUM += (Number(row.EFI_TEJ) || 0) * mtsTej
+      acc.RU105_NUM += (Number(row.RU105) || 0) * mtsTej
+      acc.RT105_NUM += (Number(row.RT105) || 0) * mtsTej
+      acc.CAL_NUM += (Number(row.CAL_PERCENT) || 0) * mtsCal
+      acc.PTS_NUM += (Number(row.PTS_100M2) || 0) * mtsCal
+      return acc
+    },
+    {
+      TOTAL_ROLADAS: 0,
+      MTS_IND: 0,
+      RUPTURAS: 0,
+      CAV: 0,
+      URDIDORA_METROS: 0,
+      URDIDORA_ROTURAS: 0,
+      NUM_FIOS_SUM: 0,
+      NUM_FIOS_COUNT: 0,
+      MTS_CRUDOS: 0,
+      MTS_CAL: 0,
+      VEL_PROM_NUM: 0,
+      EFI_TEJ_NUM: 0,
+      RU105_NUM: 0,
+      RT105_NUM: 0,
+      CAL_NUM: 0,
+      PTS_NUM: 0
+    }
+  )
+
+  const totalesMes = {
+    TOTAL_ROLADAS: totales.TOTAL_ROLADAS,
+    MTS_IND: totales.MTS_IND,
+    R103: totales.MTS_IND ? (totales.RUPTURAS * 1000) / totales.MTS_IND : null,
+    CAV: totales.CAV,
+    VEL_PROM: totales.MTS_IND ? totales.VEL_PROM_NUM / totales.MTS_IND : null,
+    URDIDORA_METROS: totales.URDIDORA_METROS,
+    URDIDORA_ROTURAS: totales.URDIDORA_ROTURAS,
+    NUM_FIOS: totales.NUM_FIOS_COUNT ? totales.NUM_FIOS_SUM / totales.NUM_FIOS_COUNT : null,
+    MTS_CRUDOS: totales.MTS_CRUDOS,
+    EFI_TEJ: totales.MTS_CRUDOS ? totales.EFI_TEJ_NUM / totales.MTS_CRUDOS : null,
+    RU105: totales.MTS_CRUDOS ? totales.RU105_NUM / totales.MTS_CRUDOS : null,
+    RT105: totales.MTS_CRUDOS ? totales.RT105_NUM / totales.MTS_CRUDOS : null,
+    MTS_CAL: totales.MTS_CAL,
+    CAL_PERCENT: totales.MTS_CAL ? totales.CAL_NUM / totales.MTS_CAL : null,
+    PTS_100M2: totales.MTS_CAL ? totales.PTS_NUM / totales.MTS_CAL : null
+  }
+
+  return { datos, totales: totalesMes }
+}
+
+app.get('/api/seguimiento-roladas', async (req, res) => {
+  try {
+    const { fechaInicio, fechaFin } = req.query
+    if (!fechaInicio || !fechaFin) {
+      return res.status(400).json({ error: 'fechaInicio y fechaFin requeridos' })
+    }
+
+    const payload = await getSeguimientoRoladasData(fechaInicio, fechaFin)
+    res.json(payload)
+  } catch (err) {
+    console.error('Error en seguimiento-roladas:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/seguimiento-roladas-fibra', async (req, res) => {
+  try {
+    const { fechaInicio, fechaFin } = req.query
+    if (!fechaInicio || !fechaFin) {
+      return res.status(400).json({ error: 'fechaInicio y fechaFin requeridos' })
+    }
+
+    const { datos, totales } = await getSeguimientoRoladasData(fechaInicio, fechaFin)
+
+    const lotes = Array.from(
+      new Set(
+        (datos || [])
+          .map((d) => String(d.LOTE || '').split(',')[0].trim())
+          .filter(Boolean)
+      )
+    )
+
+    let hviMap = {}
+    if (lotes.length > 0) {
+      const sql = `
+        SELECT
+          "LOTE" AS LOTE,
+          "LOTE_FIAC" AS LOTE_FIAC,
+          "MISTURA" AS MISTURA,
+          "DT_ENTRADA_PROD" AS FECHA_INGRESO,
+          ${sqlParseNumber('"SCI"')} AS SCI,
+          ${sqlParseNumber('"MST"')} AS MST,
+          ${sqlParseNumber('"MIC"')} AS MIC,
+          ${sqlParseNumber('"MAT"')} AS MAT,
+          ${sqlParseNumber('"UHML"')} AS UHML,
+          ${sqlParseNumber('"UI"')} AS UI,
+          ${sqlParseNumber('"SF"')} AS SF,
+          ${sqlParseNumber('"STR"')} AS STR,
+          ${sqlParseNumber('"ELG"')} AS ELG,
+          ${sqlParseNumber('"RD"')} AS RD,
+          ${sqlParseNumber('"PLUS_B"')} AS PLUS_B,
+          ${sqlParseNumber('"TrCNT"')} AS "TrCNT",
+          ${sqlParseNumber('"TrAR"')} AS "TrAR",
+          ${sqlParseNumber('"TRID"')} AS "TRID",
+          ${sqlParseNumber('"PESO"')} AS PESO
+        FROM tb_calidad_fibra
+        WHERE "TIPO_MOV" = 'MIST'
+          AND ("LOTE" = ANY($1::text[]) OR "LOTE_FIAC" = ANY($1::text[]))
+      `
+      const hviRows = await query(sql, [lotes], 'seguimiento-roladas-fibra-hvi')
+      hviMap = hviRows.rows.reduce((acc, row) => {
+        const key = String(row.LOTE_FIAC || row.LOTE || '').trim()
+        if (!key) return acc
+        if (!acc[key]) {
+          acc[key] = { ...row, _peso: 0, _sum: {} }
+        }
+        const peso = Number(row.PESO) || 0
+        acc[key]._peso += peso
+        for (const k of ['SCI','MST','MIC','MAT','UHML','UI','SF','STR','ELG','RD','PLUS_B','TrCNT','TrAR','TRID']) {
+          const val = Number(row[k])
+          if (!isNaN(val)) {
+            acc[key]._sum[k] = (acc[key]._sum[k] || 0) + val * peso
+          }
+        }
+        return acc
+      }, {})
+
+      for (const key of Object.keys(hviMap)) {
+        const item = hviMap[key]
+        const peso = item._peso || 0
+        for (const k of Object.keys(item._sum)) {
+          item[k] = peso ? item._sum[k] / peso : null
+        }
+      }
+    }
+
+    const datosConFibra = (datos || []).map((row) => {
+      const loteKey = String(row.LOTE || '').split(',')[0].trim()
+      const hvi = hviMap[loteKey] || {}
+      return {
+        ...row,
+        MISTURA: hvi.MISTURA || null,
+        FECHA_INGRESO: hvi.FECHA_INGRESO || null,
+        SCI: hvi.SCI ?? null,
+        MST: hvi.MST ?? null,
+        MIC: hvi.MIC ?? null,
+        MAT: hvi.MAT ?? null,
+        UHML: hvi.UHML ?? null,
+        UI: hvi.UI ?? null,
+        SF: hvi.SF ?? null,
+        STR: hvi.STR ?? null,
+        ELG: hvi.ELG ?? null,
+        RD: hvi.RD ?? null,
+        PLUS_B: hvi.PLUS_B ?? null,
+        TrCNT: hvi.TrCNT ?? null,
+        TrAR: hvi.TrAR ?? null,
+        TRID: hvi.TRID ?? null,
+        COLOR_BCO_PCT: null,
+        COLOR_GRI_PCT: null,
+        COLOR_LG_PCT: null,
+        COLOR_AMA_PCT: null,
+        COLOR_LA_PCT: null
+      }
+    })
+
+    res.json({ datos: datosConFibra, totales })
+  } catch (err) {
+    console.error('Error en seguimiento-roladas-fibra:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/hvi-estadisticas-mezcla', async (req, res) => {
+  try {
+    const { fechaInicio, fechaFin } = req.query
+    if (!fechaInicio || !fechaFin) return res.status(400).json({ error: 'fechaInicio y fechaFin requeridos' })
+
+    const sql = `
+      SELECT
+        "MISTURA" AS MISTURA,
+        ${sqlParseNumber('"SCI"')} AS SCI,
+        ${sqlParseNumber('"MST"')} AS MST,
+        ${sqlParseNumber('"MIC"')} AS MIC,
+        ${sqlParseNumber('"MAT"')} AS MAT,
+        ${sqlParseNumber('"UHML"')} AS UHML,
+        ${sqlParseNumber('"UI"')} AS UI,
+        ${sqlParseNumber('"SF"')} AS SF,
+        ${sqlParseNumber('"STR"')} AS STR,
+        ${sqlParseNumber('"ELG"')} AS ELG,
+        ${sqlParseNumber('"RD"')} AS RD,
+        ${sqlParseNumber('"PLUS_B"')} AS PLUS_B,
+        ${sqlParseNumber('"TrCNT"')} AS "TrCNT",
+        ${sqlParseNumber('"TrAR"')} AS "TrAR",
+        ${sqlParseNumber('"TRID"')} AS "TRID",
+        ${sqlParseNumber('"PESO"')} AS PESO
+      FROM tb_calidad_fibra
+      WHERE "TIPO_MOV" = 'MIST'
+        AND ${sqlParseDate('"DT_ENTRADA_PROD"')} BETWEEN $1::date AND $2::date
+    `
+
+    const rows = (await query(sql, [fechaInicio, fechaFin], 'hvi-estadisticas-mezcla')).rows
+    const stats = {}
+
+    for (const row of rows) {
+      const mistura = String(row.MISTURA || '').trim()
+      if (!mistura) continue
+      if (!stats[mistura]) stats[mistura] = { N: 0 }
+      const target = stats[mistura]
+      target.N += 1
+
+      for (const key of ['SCI','MST','MIC','MAT','UHML','UI','SF','STR','ELG','RD','PLUS_B','TrCNT','TrAR','TRID']) {
+        const val = Number(row[key])
+        if (isNaN(val)) continue
+        const k = key === 'PLUS_B' ? 'PLUS_B' : key
+        if (!target[k]) target[k] = { values: [] }
+        target[k].values.push(val)
+      }
+    }
+
+    for (const mistura of Object.keys(stats)) {
+      const target = stats[mistura]
+      for (const key of Object.keys(target)) {
+        if (key === 'N') continue
+        const vals = target[key].values || []
+        if (!vals.length) {
+          target[key] = { MIN: null, MAX: null, DESV: null }
+          continue
+        }
+        const min = Math.min(...vals)
+        const max = Math.max(...vals)
+        const avg = vals.reduce((a, b) => a + b, 0) / vals.length
+        const desv = Math.sqrt(vals.reduce((a, b) => a + Math.pow(b - avg, 2), 0) / vals.length)
+        target[key] = { MIN: min, MAX: max, DESV: desv }
+      }
+    }
+
+    res.json({ stats })
+  } catch (err) {
+    console.error('Error en hvi-estadisticas-mezcla:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/calidad-fibra-mistura', async (req, res) => {
+  try {
+    const misturaRaw = String(req.query.mistura || '').trim()
+    if (!misturaRaw) return res.status(400).json({ error: 'mistura requerida' })
+
+    const mistura = misturaRaw.padStart(10, '0')
+    const sql = `
+      SELECT
+        "MISTURA" AS MISTURA,
+        "SEQ" AS SEQ,
+        "DT_ENTRADA_PROD" AS "DT_ENTRADA_PROD",
+        "HR_ENTRADA_PROD" AS "HR_ENTRADA_PROD",
+        ${sqlParseNumber('"SCI"')} AS SCI,
+        ${sqlParseNumber('"MST"')} AS MST,
+        ${sqlParseNumber('"MIC"')} AS MIC,
+        ${sqlParseNumber('"MAT"')} AS MAT,
+        ${sqlParseNumber('"UHML"')} AS UHML,
+        ${sqlParseNumber('"UI"')} AS UI,
+        ${sqlParseNumber('"SF"')} AS SF,
+        ${sqlParseNumber('"STR"')} AS STR,
+        ${sqlParseNumber('"ELG"')} AS ELG,
+        ${sqlParseNumber('"RD"')} AS RD,
+        ${sqlParseNumber('"PLUS_B"')} AS PLUS_B,
+        ${sqlParseNumber('"TrCNT"')} AS "TrCNT",
+        ${sqlParseNumber('"TrAR"')} AS "TrAR",
+        ${sqlParseNumber('"TRID"')} AS "TRID",
+        ${sqlParseNumber('"PESO"')} AS PESO
+      FROM tb_calidad_fibra
+      WHERE "TIPO_MOV" = 'MIST' AND ("MISTURA" = $1 OR "MISTURA" = $2)
+    `
+
+    const rows = (await query(sql, [misturaRaw, mistura], 'calidad-fibra-mistura')).rows
+    if (!rows.length) return res.json({ mistura: misturaRaw, seqs: [], totales: {} })
+
+    const seqs = {}
+    const totales = { sumPeso: 0, sum: {} }
+
+    for (const row of rows) {
+      const seq = String(row.SEQ || '').trim()
+      if (!seqs[seq]) {
+        seqs[seq] = { SEQ: seq, DT_ENTRADA_PROD: row.DT_ENTRADA_PROD, HR_ENTRADA_PROD: row.HR_ENTRADA_PROD, sumPeso: 0, sum: {} }
+      }
+      const peso = Number(row.PESO) || 0
+      seqs[seq].sumPeso += peso
+      totales.sumPeso += peso
+      for (const key of ['SCI','MST','MIC','MAT','UHML','UI','SF','STR','ELG','RD','PLUS_B','TrCNT','TrAR','TRID']) {
+        const val = Number(row[key])
+        if (isNaN(val)) continue
+        seqs[seq].sum[key] = (seqs[seq].sum[key] || 0) + val * peso
+        totales.sum[key] = (totales.sum[key] || 0) + val * peso
+      }
+    }
+
+    const seqsOut = Object.values(seqs).map((s) => {
+      const out = { SEQ: s.SEQ, DT_ENTRADA_PROD: s.DT_ENTRADA_PROD, HR_ENTRADA_PROD: s.HR_ENTRADA_PROD }
+      for (const key of Object.keys(s.sum)) {
+        out[key === 'PLUS_B' ? '+b' : key] = s.sumPeso ? s.sum[key] / s.sumPeso : null
+      }
+      return out
+    })
+
+    const totalesOut = {}
+    for (const key of Object.keys(totales.sum)) {
+      totalesOut[key === 'PLUS_B' ? '+b' : key] = totales.sumPeso ? totales.sum[key] / totales.sumPeso : null
+    }
+
+    res.json({ mistura: misturaRaw, seqs: seqsOut, totales: totalesOut })
+  } catch (err) {
+    console.error('Error en calidad-fibra-mistura:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/metricas-diarias-calidad', async (req, res) => {
+  try {
+    const { fechaInicio, fechaFin } = req.query
+    if (!fechaInicio || !fechaFin) return res.status(400).json({ error: 'fechaInicio y fechaFin requeridos' })
+
+    const metragemNum = sqlParseNumber('"METRAGEM"')
+    const pontuacaoNum = sqlParseNumber('"PONTUACAO"')
+    const larguraNum = sqlParseNumber('"LARGURA"')
+    const sql = `
+      SELECT
+        ${sqlParseDate('"DAT_PROD"')} AS FECHA_DB,
+        "DAT_PROD" AS FECHA,
+        SUM(${metragemNum}) AS METROS_TOTAL,
+        SUM(CASE WHEN "QUALIDADE" ILIKE 'PRIMEIRA%' THEN ${metragemNum} ELSE 0 END) AS METROS_1ERA,
+        SUM(COALESCE(${pontuacaoNum}, 0)) AS PONTOS,
+        AVG(${larguraNum}) AS LARGURA
+      FROM tb_calidad
+      WHERE "EMP" = 'STC'
+        AND "QUALIDADE" NOT ILIKE '%RETALHO%'
+        AND ${sqlParseDate('"DAT_PROD"')} BETWEEN $1::date AND $2::date
+      GROUP BY FECHA_DB, "DAT_PROD"
+      ORDER BY FECHA_DB ASC
+    `
+
+    const rows = (await query(sql, [fechaInicio, fechaFin], 'metricas-diarias-calidad')).rows
+    const datos = rows.map((r) => {
+      const calPct = r.METROS_TOTAL ? (Number(r.METROS_1ERA) / Number(r.METROS_TOTAL)) * 100 : null
+      const pts100 = r.METROS_TOTAL && r.LARGURA
+        ? (Number(r.PONTOS) * 100) / (Number(r.METROS_TOTAL) * Number(r.LARGURA) / 100)
+        : null
+      return {
+        FECHA_DB: r.FECHA_DB,
+        FECHA: r.FECHA,
+        CALIDAD_PERCENT: calPct,
+        PTS_100M2: pts100,
+        METROS_1ERA: r.METROS_1ERA,
+        METROS_TOTAL: r.METROS_TOTAL,
+        ROLLOS: null
+      }
+    })
+
+    const rangos = {}
+    for (const key of ['CALIDAD_PERCENT', 'PTS_100M2', 'METROS_1ERA', 'METROS_TOTAL']) {
+      const vals = datos.map((d) => Number(d[key])).filter((v) => !isNaN(v))
+      if (!vals.length) continue
+      const min = Math.min(...vals)
+      const max = Math.max(...vals)
+      const avg = vals.reduce((a, b) => a + b, 0) / vals.length
+      rangos[key] = { min, max, avg }
+    }
+
+    res.json({ datos, rangos, totalDias: datos.length })
+  } catch (err) {
+    console.error('Error en metricas-diarias-calidad:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/metricas-diarias-produccion', async (req, res) => {
+  try {
+    const { fechaInicio, fechaFin } = req.query
+    if (!fechaInicio || !fechaFin) return res.status(400).json({ error: 'fechaInicio y fechaFin requeridos' })
+
+    const metragemNum = sqlParseNumber('"METRAGEM"')
+    const rupturasNum = sqlParseNumber('"RUPTURAS"')
+    const numFiosNum = sqlParseNumber('"NUM_FIOS"')
+    const velocNum = sqlParseNumber('"VELOC"')
+    const eficienciaNum = sqlParseNumber('"EFICIENCIA"')
+    const parTraNum = sqlParseNumber('"PARADA TEC TRAMA"')
+    const parUrdNum = sqlParseNumber('"PARADA TEC URDUME"')
+
+    const sql = `
+      WITH BASE AS (
+        SELECT
+          ${sqlParseDate('"DT_BASE_PRODUCAO"')} AS FECHA_DB,
+          "DT_BASE_PRODUCAO" AS FECHA,
+          "SELETOR" AS SELETOR,
+          ${metragemNum} AS METRAGEM,
+          ${rupturasNum} AS RUPTURAS,
+          ${numFiosNum} AS NUM_FIOS,
+          ${velocNum} AS VELOC,
+          ${eficienciaNum} AS EFICIENCIA,
+          ${parTraNum} AS PARADA_TRAMA,
+          ${parUrdNum} AS PARADA_URD
+        FROM tb_produccion
+        WHERE "FILIAL" = '05'
+          AND ${sqlParseDate('"DT_BASE_PRODUCAO"')} BETWEEN $1::date AND $2::date
+      )
+      SELECT
+        FECHA_DB,
+        FECHA,
+        SUM(CASE WHEN SELETOR IN ('URDIDEIRA','URDIDORA') THEN (RUPTURAS * 1000000) ELSE 0 END)
+          / NULLIF(SUM(CASE WHEN SELETOR IN ('URDIDEIRA','URDIDORA') THEN (METRAGEM * NUM_FIOS) ELSE 0 END), 0) AS RU106_URDIDORA,
+        SUM(CASE WHEN SELETOR = 'INDIGO' THEN METRAGEM ELSE 0 END) AS METROS_INDIGO,
+        SUM(CASE WHEN SELETOR = 'INDIGO' THEN RUPTURAS ELSE 0 END) * 1000
+          / NULLIF(SUM(CASE WHEN SELETOR = 'INDIGO' THEN METRAGEM ELSE 0 END), 0) AS R103_INDIGO,
+        SUM(CASE WHEN SELETOR = 'INDIGO' THEN METRAGEM * VELOC ELSE 0 END)
+          / NULLIF(SUM(CASE WHEN SELETOR = 'INDIGO' THEN METRAGEM ELSE 0 END), 0) AS VELOCIDAD_INDIGO,
+        SUM(CASE WHEN SELETOR = 'TECELAGEM' THEN METRAGEM * EFICIENCIA ELSE 0 END)
+          / NULLIF(SUM(CASE WHEN SELETOR = 'TECELAGEM' THEN METRAGEM ELSE 0 END), 0) AS EFICIENCIA_TELAR,
+        SUM(CASE WHEN SELETOR = 'TECELAGEM' THEN PARADA_URD ELSE 0 END) * 100000
+          / NULLIF(SUM(CASE WHEN SELETOR = 'TECELAGEM' THEN METRAGEM ELSE 0 END) * 1000, 0) AS RU105_TELAR,
+        SUM(CASE WHEN SELETOR = 'TECELAGEM' THEN PARADA_TRAMA ELSE 0 END) * 100000
+          / NULLIF(SUM(CASE WHEN SELETOR = 'TECELAGEM' THEN METRAGEM ELSE 0 END) * 1000, 0) AS RT105_TELAR
+      FROM BASE
+      GROUP BY FECHA_DB, FECHA
+      ORDER BY FECHA_DB ASC
+    `
+
+    const rows = (await query(sql, [fechaInicio, fechaFin], 'metricas-diarias-produccion')).rows
+    const datos = rows.map((r) => ({
+      FECHA_DB: r.FECHA_DB,
+      FECHA: r.FECHA,
+      RU106_URDIDORA: r.RU106_URDIDORA,
+      METROS_INDIGO: r.METROS_INDIGO,
+      R103_INDIGO: r.R103_INDIGO,
+      VELOCIDAD_INDIGO: r.VELOCIDAD_INDIGO,
+      EFICIENCIA_TELAR: r.EFICIENCIA_TELAR,
+      RU105_TELAR: r.RU105_TELAR,
+      RT105_TELAR: r.RT105_TELAR
+    }))
+
+    const rangos = {}
+    for (const key of ['RU106_URDIDORA','METROS_INDIGO','R103_INDIGO','VELOCIDAD_INDIGO','EFICIENCIA_TELAR','RU105_TELAR','RT105_TELAR']) {
+      const vals = datos.map((d) => Number(d[key])).filter((v) => !isNaN(v))
+      if (!vals.length) continue
+      const min = Math.min(...vals)
+      const max = Math.max(...vals)
+      const avg = vals.reduce((a, b) => a + b, 0) / vals.length
+      rangos[key] = { min, max, avg }
+    }
+
+    res.json({ datos, rangos, totalDias: datos.length })
+  } catch (err) {
+    console.error('Error en metricas-diarias-produccion:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/metricas-diarias-fibra', async (req, res) => {
+  try {
+    const { fechaInicio, fechaFin } = req.query
+    if (!fechaInicio || !fechaFin) return res.status(400).json({ error: 'fechaInicio y fechaFin requeridos' })
+
+    const pesoNum = sqlParseNumber('"PESO"')
+    const sql = `
+      WITH BASE AS (
+        SELECT
+          ${sqlParseDate('"DT_ENTRADA_PROD"')} AS FECHA_DB,
+          "DT_ENTRADA_PROD" AS FECHA,
+          ${pesoNum} AS PESO,
+          ${sqlParseNumber('"SCI"')} AS SCI,
+          ${sqlParseNumber('"MIC"')} AS MIC,
+          ${sqlParseNumber('"MAT"')} AS MAT,
+          ${sqlParseNumber('"UHML"')} AS UHML,
+          ${sqlParseNumber('"UI"')} AS UI,
+          ${sqlParseNumber('"SF"')} AS SF,
+          ${sqlParseNumber('"STR"')} AS STR,
+          ${sqlParseNumber('"ELG"')} AS ELG,
+          ${sqlParseNumber('"RD"')} AS RD,
+          ${sqlParseNumber('"PLUS_B"')} AS PLUS_B
+        FROM tb_calidad_fibra
+        WHERE "TIPO_MOV" = 'MIST'
+          AND ${sqlParseDate('"DT_ENTRADA_PROD"')} BETWEEN $1::date AND $2::date
+      )
+      SELECT
+        FECHA_DB,
+        FECHA,
+        SUM(PESO) AS PESO_TOTAL,
+        SUM(SCI * PESO) / NULLIF(SUM(PESO), 0) AS SCI,
+        SUM(MIC * PESO) / NULLIF(SUM(PESO), 0) AS MIC,
+        SUM(MAT * PESO) / NULLIF(SUM(PESO), 0) AS MAT,
+        SUM(UHML * PESO) / NULLIF(SUM(PESO), 0) AS UHML,
+        SUM(UI * PESO) / NULLIF(SUM(PESO), 0) AS UI,
+        SUM(SF * PESO) / NULLIF(SUM(PESO), 0) AS SF,
+        SUM(STR * PESO) / NULLIF(SUM(PESO), 0) AS STR,
+        SUM(ELG * PESO) / NULLIF(SUM(PESO), 0) AS ELG,
+        SUM(RD * PESO) / NULLIF(SUM(PESO), 0) AS RD,
+        SUM(PLUS_B * PESO) / NULLIF(SUM(PESO), 0) AS PLUS_B
+      FROM BASE
+      GROUP BY FECHA_DB, FECHA
+      ORDER BY FECHA_DB ASC
+    `
+
+    const rows = (await query(sql, [fechaInicio, fechaFin], 'metricas-diarias-fibra')).rows
+    const datos = rows.map((r) => ({
+      FECHA_DB: r.FECHA_DB,
+      FECHA: r.FECHA,
+      SCI: r.SCI,
+      MIC: r.MIC,
+      MAT: r.MAT,
+      UHML: r.UHML,
+      UI: r.UI,
+      SF: r.SF,
+      STR: r.STR,
+      ELG: r.ELG,
+      RD: r.RD,
+      PLUS_B: r.PLUS_B,
+      PESO_TOTAL: r.PESO_TOTAL
+    }))
+
+    const rangos = {}
+    for (const key of ['SCI','MIC','MAT','UHML','UI','SF','STR','ELG','RD','PLUS_B','PESO_TOTAL']) {
+      const vals = datos.map((d) => Number(d[key])).filter((v) => !isNaN(v))
+      if (!vals.length) continue
+      const min = Math.min(...vals)
+      const max = Math.max(...vals)
+      const avg = vals.reduce((a, b) => a + b, 0) / vals.length
+      rangos[key] = { min, max, avg }
+    }
+
+    res.json({ datos, rangos, totalDias: datos.length })
+  } catch (err) {
+    console.error('Error en metricas-diarias-fibra:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/informe-produccion-indigo', async (req, res) => {
+  try {
+    const { fechaInicio, fechaFin } = req.query
+    if (!fechaInicio || !fechaFin) return res.status(400).json({ error: 'fechaInicio y fechaFin requeridos' })
+
+    const metragemNum = sqlParseNumber('"METRAGEM"')
+    const rupturasNum = sqlParseNumber('"RUPTURAS"')
+    const cavalosNum = sqlParseNumber('"CAVALOS"')
+    const velocNum = sqlParseNumber('"VELOC"')
+    const numFiosNum = sqlParseNumber('"NUM_FIOS"')
+    const tempoNum = sqlParseNumber('"TOTAL MINUTOS TUR"')
+    const eficienciaNum = sqlParseNumber('"EFICIENCIA"')
+    const parTraNum = sqlParseNumber('"PARADA TEC TRAMA"')
+    const parUrdNum = sqlParseNumber('"PARADA TEC URDUME"')
+
+    const calMetragemNum = sqlParseNumber('"METRAGEM"')
+    const calPontuacaoNum = sqlParseNumber('"PONTUACAO"')
+    const calLarguraNum = sqlParseNumber('"LARGURA"')
+
+    const sql = `
+      WITH IND AS (
+        SELECT
+          "ROLADA" AS ROLADA,
+          MAX(${sqlParseDate('"DT_BASE_PRODUCAO"')}) AS FECHA_INDIGO,
+          MAX("ARTIGO") AS ARTIGO,
+          MAX("COR") AS COR,
+          SUM(${metragemNum}) AS METRAGEM,
+          SUM(${rupturasNum}) AS RUPTURAS,
+          SUM(${cavalosNum}) AS CAVALOS,
+          SUM(${metragemNum} * COALESCE(${velocNum}, 0)) / NULLIF(SUM(${metragemNum}), 0) AS VELOC_PROMEDIO,
+          SUM(COALESCE(${tempoNum}, 0)) AS TIEMPO_MINUTOS
+        FROM tb_produccion
+        WHERE "SELETOR" = 'INDIGO'
+          AND "FILIAL" = '05'
+          AND ${sqlParseDate('"DT_BASE_PRODUCAO"')} BETWEEN $1::date AND $2::date
+        GROUP BY "ROLADA"
+      ),
+      URD AS (
+        SELECT
+          "ROLADA" AS ROLADA,
+          MAX(${sqlParseDate('"DT_BASE_PRODUCAO"')}) AS FECHA_URDIDORA,
+          string_agg(DISTINCT "MAQUINA", ', ') AS MAQ_OE,
+          string_agg(DISTINCT "LOTE FIACAO", ', ') AS LOTE,
+          SUM(${metragemNum}) AS URDIDORA_M,
+          SUM(${rupturasNum}) AS URDIDORA_ROT_TOT,
+          MAX(${numFiosNum}) AS NUM_FIOS,
+          SUM(COALESCE(${tempoNum}, 0)) AS URDIDORA_TIEMPO_MIN
+        FROM tb_produccion
+        WHERE "SELETOR" IN ('URDIDEIRA', 'URDIDORA')
+          AND "FILIAL" = '05'
+          AND ${sqlParseDate('"DT_BASE_PRODUCAO"')} BETWEEN $1::date AND $2::date
+        GROUP BY "ROLADA"
+      ),
+      CAL_S AS (
+        SELECT
+          "ROLADA" AS ROLADA,
+          SUM(CASE WHEN "S" = 'N' THEN 1 ELSE 0 END) AS N_COUNT,
+          SUM(CASE WHEN "S" = 'P' THEN 1 ELSE 0 END) AS P_COUNT,
+          SUM(CASE WHEN "S" = 'Q' THEN 1 ELSE 0 END) AS Q_COUNT,
+          COUNT(*) AS TOTAL_S
+        FROM tb_produccion
+        WHERE "SELETOR" = 'INDIGO'
+          AND "FILIAL" = '05'
+          AND ${sqlParseDate('"DT_BASE_PRODUCAO"')} BETWEEN $1::date AND $2::date
+        GROUP BY "ROLADA"
+      ),
+      TEC AS (
+        SELECT
+          "ROLADA" AS ROLADA,
+          SUM(${metragemNum}) AS TECELAGEM_METROS,
+          SUM(${metragemNum} * COALESCE(${eficienciaNum}, 0)) / NULLIF(SUM(${metragemNum}), 0) AS TECELAGEM_EFICIENCIA,
+          ROUND((SUM(${parTraNum}) * 100000) / NULLIF(SUM(${metragemNum}) * 1000, 0), 1) AS RT105,
+          ROUND((SUM(${parUrdNum}) * 100000) / NULLIF(SUM(${metragemNum}) * 1000, 0), 1) AS RU105
+        FROM tb_produccion
+        WHERE "SELETOR" = 'TECELAGEM'
+          AND "FILIAL" = '05'
+          AND ${sqlParseDate('"DT_BASE_PRODUCAO"')} BETWEEN $1::date AND $2::date
+        GROUP BY "ROLADA"
+      ),
+      CAL AS (
+        SELECT
+          "ROLADA" AS ROLADA,
+          SUM(${calMetragemNum}) AS METROS_CAL,
+          SUM(CASE WHEN "QUALIDADE" ILIKE 'PRIMEIRA%' THEN ${calMetragemNum} ELSE 0 END) AS METROS_1ERA,
+          SUM(COALESCE(${calPontuacaoNum}, 0)) AS PONTOS,
+          AVG(${calLarguraNum}) AS LARGURA
+        FROM tb_calidad
+        WHERE "EMP" = 'STC'
+          AND "QUALIDADE" NOT ILIKE '%RETALHO%'
+          AND ${sqlParseDate('"DAT_PROD"')} BETWEEN $1::date AND $2::date
+        GROUP BY "ROLADA"
+      )
+      SELECT
+        IND.ROLADA AS "ROLADA",
+        URD.FECHA_URDIDORA AS "FECHA_URDIDORA",
+        URD.MAQ_OE AS "MAQ_OE",
+        URD.LOTE AS "LOTE",
+        URD.URDIDORA_M AS "URDIDORA_M",
+        URD.URDIDORA_ROT_TOT AS "URDIDORA_ROT_TOT",
+        CASE
+          WHEN URD.URDIDORA_M IS NULL OR URD.NUM_FIOS IS NULL OR URD.URDIDORA_M = 0 OR URD.NUM_FIOS = 0 THEN NULL
+          ELSE (URD.URDIDORA_ROT_TOT * 1000000) / (URD.URDIDORA_M * URD.NUM_FIOS)
+        END AS "URDIDORA_ROT_106",
+        URD.URDIDORA_TIEMPO_MIN AS "URDIDORA_TIEMPO_MIN",
+        IND.FECHA_INDIGO AS "FECHA_INDIGO",
+        IND.ARTIGO AS "ARTIGO",
+        IND.COR AS "COR",
+        IND.METRAGEM AS "METRAGEM",
+        IND.RUPTURAS AS "RUPTURAS",
+        CASE WHEN IND.METRAGEM IS NULL OR IND.METRAGEM = 0 THEN NULL ELSE (IND.RUPTURAS * 1000) / IND.METRAGEM END AS "ROT_103",
+        IND.CAVALOS AS "CAVALOS",
+        IND.TIEMPO_MINUTOS AS "TIEMPO_MINUTOS",
+        IND.VELOC_PROMEDIO AS "VELOC_PROMEDIO",
+        CALS.N_COUNT AS "N_COUNT",
+        CASE WHEN CALS.TOTAL_S = 0 THEN NULL ELSE (CALS.N_COUNT::numeric / CALS.TOTAL_S) * 100 END AS "N_PERCENT",
+        CALS.P_COUNT AS "P_COUNT",
+        CASE WHEN CALS.TOTAL_S = 0 THEN NULL ELSE (CALS.P_COUNT::numeric / CALS.TOTAL_S) * 100 END AS "P_PERCENT",
+        CALS.Q_COUNT AS "Q_COUNT",
+        CASE WHEN CALS.TOTAL_S = 0 THEN NULL ELSE (CALS.Q_COUNT::numeric / CALS.TOTAL_S) * 100 END AS "Q_PERCENT",
+        TEC.TECELAGEM_METROS AS "TECELAGEM_METROS",
+        TEC.TECELAGEM_EFICIENCIA AS "TECELAGEM_EFICIENCIA",
+        TEC.RT105 AS "RT105",
+        TEC.RU105 AS "RU105",
+        CAL.METROS_CAL AS "METROS_CAL",
+        CASE WHEN CAL.METROS_CAL IS NULL OR CAL.METROS_CAL = 0 THEN NULL ELSE (CAL.METROS_1ERA / CAL.METROS_CAL) * 100 END AS "CAL_PERCENT",
+        CASE
+          WHEN CAL.METROS_CAL IS NULL OR CAL.METROS_CAL = 0 OR CAL.LARGURA IS NULL OR CAL.LARGURA = 0 THEN NULL
+          ELSE (CAL.PONTOS * 100) / (CAL.METROS_CAL * CAL.LARGURA / 100)
+        END AS "PTS_100M2"
+      FROM IND
+      LEFT JOIN URD ON URD.ROLADA = IND.ROLADA
+      LEFT JOIN CAL_S CALS ON CALS.ROLADA = IND.ROLADA
+      LEFT JOIN TEC ON TEC.ROLADA = IND.ROLADA
+      LEFT JOIN CAL ON CAL.ROLADA = IND.ROLADA
+      ORDER BY IND.ROLADA::int ASC
+    `
+
+    const result = await query(sql, [fechaInicio, fechaFin], 'informe-produccion-indigo')
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en informe-produccion-indigo:', err)
+    res.status(500).json({ error: err.message })
   }
 })
 

@@ -55,6 +55,42 @@ const routes = [
     component: () => import('./components/produccion/CalidadSectoresTabla.vue'),
     meta: { title: 'Metros por Sector - Control de Calidad' }
   }
+  ,
+  {
+    path: '/residuos-indigo-tejeduria',
+    component: () => import('./components/ResiduosIndigoTejeduria.vue'),
+    meta: { title: 'Residuos INDIGO y TEJEDURIA' }
+  },
+  {
+    path: '/analisis-residuos-indigo',
+    component: () => import('./components/AnalisisResiduosIndigo.vue'),
+    meta: { title: 'Analisis Residuos de Indigo' }
+  },
+  {
+    path: '/consulta-rolada-indigo',
+    component: () => import('./components/ConsultaRoladaIndigo.vue'),
+    meta: { title: 'Consulta ROLADA INDIGO' }
+  },
+  {
+    path: '/informe-produccion-indigo',
+    component: () => import('./components/InformeProduccionIndigo.vue'),
+    meta: { title: 'ROLADAS del Mes' }
+  },
+  {
+    path: '/seguimiento-roladas',
+    component: () => import('./components/SeguimientoRoladas.vue'),
+    meta: { title: 'Seguimiento de Roladas' }
+  },
+  {
+    path: '/seguimiento-roladas-fibra',
+    component: () => import('./components/SeguimientoRoladasFibra.vue'),
+    meta: { title: 'Seguimiento Roladas + Fibra HVI' }
+  },
+  {
+    path: '/grafico-metricas-diarias',
+    component: () => import('./components/GraficoMetricasDiarias.vue'),
+    meta: { title: 'Grafico de Metricas Diarias' }
+  }
 ]
 
 const router = createRouter({

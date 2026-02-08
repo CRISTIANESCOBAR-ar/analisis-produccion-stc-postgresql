@@ -6,7 +6,8 @@
 
 import { ref, computed } from 'vue'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api/produccion'
+const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
+const API_BASE_URL = API_BASE ? `${API_BASE}/api/produccion` : '/api/produccion'
 
 export function useDatabase() {
   const loading = ref(false)

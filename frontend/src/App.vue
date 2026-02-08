@@ -176,6 +176,84 @@
             </router-link>
           </div>
         </div>
+
+        <!-- INDIGO Group -->
+        <div class="space-y-1">
+          <button 
+            @click="toggleIndigoMenu"
+            class="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-blue-700 transition-colors"
+            :class="{ 'bg-blue-700': isIndigoRouteActive }"
+          >
+            <div class="flex items-center gap-2">
+              <span>💙</span>
+              <span class="font-medium">ÍNDIGO</span>
+            </div>
+            <svg 
+              class="w-4 h-4 transition-transform duration-200"
+              :class="{ 'rotate-180': indigoMenuOpen }"
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          
+          <div 
+            v-show="indigoMenuOpen"
+            class="ml-4 space-y-1 border-l-2 border-blue-600 pl-2"
+          >
+            <router-link 
+              to="/residuos-indigo-tejeduria" 
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
+              :class="{ 'bg-blue-600': $route.path === '/residuos-indigo-tejeduria' }"
+            >
+              <span>♻️</span> Residuos INDIGO y TEJEDURIA
+            </router-link>
+            <router-link 
+              to="/analisis-residuos-indigo" 
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
+              :class="{ 'bg-blue-600': $route.path === '/analisis-residuos-indigo' }"
+            >
+              <span>📊</span> Análisis Residuos de Índigo
+            </router-link>
+            <router-link 
+              to="/consulta-rolada-indigo" 
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
+              :class="{ 'bg-blue-600': $route.path === '/consulta-rolada-indigo' }"
+            >
+              <span>🔎</span> Consulta ROLADA ÍNDIGO
+            </router-link>
+            <router-link 
+              to="/informe-produccion-indigo" 
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
+              :class="{ 'bg-blue-600': $route.path === '/informe-produccion-indigo' }"
+            >
+              <span>📅</span> ROLADAS del Mes
+            </router-link>
+            <router-link 
+              to="/seguimiento-roladas" 
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
+              :class="{ 'bg-blue-600': $route.path === '/seguimiento-roladas' }"
+            >
+              <span>📈</span> Seguimiento de Roladas
+            </router-link>
+            <router-link 
+              to="/seguimiento-roladas-fibra" 
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
+              :class="{ 'bg-blue-600': $route.path === '/seguimiento-roladas-fibra' }"
+            >
+              <span>🧬</span> Seguimiento Roladas + Fibra HVI
+            </router-link>
+            <router-link 
+              to="/grafico-metricas-diarias" 
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
+              :class="{ 'bg-blue-600': $route.path === '/grafico-metricas-diarias' }"
+            >
+              <span>📉</span> Gráfico de Métricas Diarias
+            </router-link>
+          </div>
+        </div>
       </nav>
     </aside>
 
@@ -205,6 +283,7 @@ const sidebarVisible = ref(false)
 const labMenuOpen = ref(localStorage.getItem('labMenuOpen') !== 'false')
 const prodMenuOpen = ref(localStorage.getItem('prodMenuOpen') !== 'false')
 const calidadMenuOpen = ref(localStorage.getItem('calidadMenuOpen') !== 'false')
+const indigoMenuOpen = ref(localStorage.getItem('indigoMenuOpen') !== 'false')
 
 const labRoutes = ['/resumen', '/resumen-diario', '/stats', '/uster', '/tenso']
 const isLabRouteActive = computed(() => labRoutes.includes(route.path))
@@ -212,8 +291,19 @@ const isLabRouteActive = computed(() => labRoutes.includes(route.path))
 const prodRoutes = ['/import-control']
 const isProdRouteActive = computed(() => prodRoutes.includes(route.path))
 
-const calidadRoutes = ['/revision-cq']
+const calidadRoutes = ['/revision-cq', '/analisis-mesa-test', '/calidad-sectores']
 const isCalidadRouteActive = computed(() => calidadRoutes.includes(route.path))
+
+const indigoRoutes = [
+  '/residuos-indigo-tejeduria',
+  '/analisis-residuos-indigo',
+  '/consulta-rolada-indigo',
+  '/informe-produccion-indigo',
+  '/seguimiento-roladas',
+  '/seguimiento-roladas-fibra',
+  '/grafico-metricas-diarias'
+]
+const isIndigoRouteActive = computed(() => indigoRoutes.includes(route.path))
 
 function toggleLabMenu() {
   labMenuOpen.value = !labMenuOpen.value
@@ -228,6 +318,11 @@ function toggleProdMenu() {
 function toggleCalidadMenu() {
   calidadMenuOpen.value = !calidadMenuOpen.value
   localStorage.setItem('calidadMenuOpen', calidadMenuOpen.value.toString())
+}
+
+function toggleIndigoMenu() {
+  indigoMenuOpen.value = !indigoMenuOpen.value
+  localStorage.setItem('indigoMenuOpen', indigoMenuOpen.value.toString())
 }
 
 let showTimer = null

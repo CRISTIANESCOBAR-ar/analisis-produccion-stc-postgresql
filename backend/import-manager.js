@@ -297,6 +297,46 @@ function toCsvField(value) {
   return s;
 }
 
+function shouldSkipRecord(record, headers) {
+  if (!record || !headers || headers.length === 0) return true;
+
+  const values = headers.map((h) => String(record?.[h] ?? '').trim());
+  const nonEmpty = values.filter((v) => v !== '');
+  if (nonEmpty.length === 0) return true;
+
+  const isNumericLike = (val) => {
+    const s = String(val ?? '').trim();
+    if (!s) return false;
+    if (s === '-' || s === '--') return false;
+    return /^-?\d{1,3}([.,]\d{3})*([.,]\d+)?$/u.test(s);
+  };
+
+  let headerMatches = 0;
+  for (let i = 0; i < headers.length; i += 1) {
+    if (!values[i]) continue;
+    if (values[i].toLowerCase() === String(headers[i]).toLowerCase()) {
+      headerMatches += 1;
+    }
+  }
+
+  if (headerMatches >= 2 || (headerMatches >= 1 && nonEmpty.length <= 3)) {
+    return true;
+  }
+
+  const totalRegex = /^(total|subtotal|sub[-\s]?total)(\b|:)?/i;
+  const totalMetrosRegex = /^total\s*metros?/i;
+  const hasTotalCell = nonEmpty.some((v) => totalRegex.test(v) || totalMetrosRegex.test(v));
+  if (hasTotalCell && nonEmpty.length <= 3) return true;
+
+  const firstNonEmpty = nonEmpty[0] || '';
+  if (totalRegex.test(firstNonEmpty) || totalMetrosRegex.test(firstNonEmpty)) {
+    const rest = nonEmpty.slice(1);
+    if (rest.length > 0 && rest.every((v) => isNumericLike(v))) return true;
+  }
+
+  return false;
+}
+
 function isCopyEnabled() {
   const v = (process.env.IMPORT_COPY_ENABLED ?? '').toString().trim().toLowerCase();
   if (v === '') return true;
@@ -484,9 +524,7 @@ export async function importCSVToTable(client, csvPath, tableName, columnMapping
   let skipped = 0;
   
   for (const record of records) {
-    // Filtrar headers duplicados y filas vacías
-    const firstCol = Object.values(record)[0];
-    if (!firstCol || firstCol.trim() === '' || firstCol === Object.keys(record)[0]) {
+    if (shouldSkipRecord(record, headers)) {
       skipped++;
       continue;
     }
@@ -816,6 +854,9 @@ export async function importCSV(pool, tableName, csvPath) {
   try {
     await client.query('BEGIN')
 
+    const normalizedTable = safeTableName(tableName)
+    const forceCopyTransformed = true
+
     const strategyInfo = await applyImportStrategy(client, tableName, csvPath)
     
     const stats = fs.statSync(csvPath)
@@ -831,13 +872,18 @@ export async function importCSV(pool, tableName, csvPath) {
       result.mode = 'insert'
     } else {
       try {
-        // Intentar el COPY más rápido posible (stream directo del archivo)
-        result = await importCSVToTableCopyRaw(client, csvPath, tableName)
+        if (forceCopyTransformed) {
+          modeReason = `COPY_RAW omitido: limpieza de headers duplicados/filas resumen (${normalizedTable})`
+          result = await importCSVToTableCopyTransformed(client, csvPath, tableName)
+        } else {
+          // Intentar el COPY más rápido posible (stream directo del archivo)
+          result = await importCSVToTableCopyRaw(client, csvPath, tableName)
 
-        // Para registrar rows_imported, consultamos COUNT(*) (sin parsear el CSV)
-        const countRes = await client.query(`SELECT COUNT(*)::int AS c FROM ${tableName.toLowerCase()}`)
-        result.imported = countRes.rows?.[0]?.c ?? null
-        result.skipped = 0
+          // Para registrar rows_imported, consultamos COUNT(*) (sin parsear el CSV)
+          const countRes = await client.query(`SELECT COUNT(*)::int AS c FROM ${tableName.toLowerCase()}`)
+          result.imported = countRes.rows?.[0]?.c ?? null
+          result.skipped = 0
+        }
       } catch (errRaw) {
         try {
           // Segundo intento: COPY transformado (filtra filas vacías/headers repetidos y permite subset de columnas)

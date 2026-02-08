@@ -1,0 +1,8 @@
+-- Drop legacy/unused tables
+DROP TABLE IF EXISTS column_warnings CASCADE;
+DROP TABLE IF EXISTS schema_changes CASCADE;
+DROP TABLE IF EXISTS import_metadata CASCADE;
+DROP TABLE IF EXISTS import_control CASCADE;
+DROP TABLE IF EXISTS produccion CASCADE;
+DROP TABLE IF EXISTS calidad CASCADE;
+DROP TABLE IF EXISTS residuos_indigo CASCADE;
