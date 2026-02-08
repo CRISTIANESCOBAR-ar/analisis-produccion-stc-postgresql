@@ -2789,15 +2789,17 @@ app.get('/api/consulta-rolada-indigo', async (req, res) => {
         "PARTIDA" AS "PARTIDA",
         "ARTIGO" AS "ARTIGO",
         "COR" AS "COR",
-        ${sqlParseNumber('"METRAGEM"')} AS "METRAGEM",
-        ${sqlParseNumber('"VELOC"')} AS "VELOC",
+        ${sqlParseNumberIntl('"METRAGEM"')} AS "METRAGEM",
+        ${sqlParseNumberIntl('"VELOC"')} AS "VELOC",
         "S" AS "S",
-        ${sqlParseNumber('"RUPTURAS"')} AS "RUPTURAS",
-        ${sqlParseNumber('"CAVALOS"')} AS "CAVALOS",
+        ${sqlParseNumberIntl('"RUPTURAS"')} AS "RUPTURAS",
+        ${sqlParseNumberIntl('"CAVALOS"')} AS "CAVALOS",
         "OPERADOR" AS "OPERADOR",
         "NM OPERADOR" AS "NM_OPERADOR"
       FROM tb_produccion
-      WHERE "SELETOR" = 'INDIGO' AND "ROLADA" = $1
+      WHERE "SELETOR" = 'INDIGO' 
+        AND "FILIAL" = '05'
+        AND (LTRIM(TRIM("ROLADA"), '0') = LTRIM(TRIM($1), '0'))
       ORDER BY ${sqlParseDate('"DT_INICIO"')} ASC, "HORA_INICIO" ASC
     `
     const result = await query(sql, [rolada], 'consulta-rolada-indigo')
@@ -2820,19 +2822,21 @@ app.get('/api/consulta-rolada-urdimbre', async (req, res) => {
         "DT_FINAL" AS "DT_FINAL",
         "HORA_FINAL" AS "HORA_FINAL",
         "ARTIGO" AS "ARTIGO",
-        ${sqlParseNumber('"METRAGEM"')} AS "METRAGEM",
-        ${sqlParseNumber('"VELOC"')} AS "VELOC",
-        ${sqlParseNumber('"NUM_FIOS"')} AS "NUM_FIOS",
-        ${sqlParseNumber('"RUP FIACAO"')} AS "RUP_FIACAO",
-        ${sqlParseNumber('"RUP URD"')} AS "RUP_URD",
-        ${sqlParseNumber('"RUP OPER"')} AS "RUP_OPER",
-        ${sqlParseNumber('"RUPTURAS"')} AS "RUPTURAS",
+        ${sqlParseNumberIntl('"METRAGEM"')} AS "METRAGEM",
+        ${sqlParseNumberIntl('"VELOC"')} AS "VELOC",
+        ${sqlParseNumberIntl('"NUM_FIOS"')} AS "NUM_FIOS",
+        ${sqlParseNumberIntl('"RUP FIACAO"')} AS "RUP_FIACAO",
+        ${sqlParseNumberIntl('"RUP URD"')} AS "RUP_URD",
+        ${sqlParseNumberIntl('"RUP OPER"')} AS "RUP_OPER",
+        ${sqlParseNumberIntl('"RUPTURAS"')} AS "RUPTURAS",
         "NM OPERADOR" AS "NM_OPERADOR",
         "LOTE FIACAO" AS "LOTE_FIACAO",
         "MAQ FIACAO" AS "MAQ_FIACAO",
         "BASE URDUME" AS "BASE_URDUME"
       FROM tb_produccion
-      WHERE "SELETOR" IN ('URDIDEIRA', 'URDIDORA') AND "ROLADA" = $1
+      WHERE "SELETOR" IN ('URDIDEIRA', 'URDIDORA') 
+        AND "FILIAL" = '05'
+        AND (LTRIM(TRIM("ROLADA"), '0') = LTRIM(TRIM($1), '0'))
       ORDER BY ${sqlParseDate('"DT_INICIO"')} ASC, "HORA_INICIO" ASC
     `
     const result = await query(sql, [rolada], 'consulta-rolada-urdimbre')
@@ -2848,12 +2852,12 @@ app.get('/api/consulta-rolada-tecelagem', async (req, res) => {
     const rolada = String(req.query.rolada || '').trim()
     if (!rolada) return res.status(400).json({ error: 'rolada requerida' })
 
-    const metragemNum = sqlParseNumber('"METRAGEM"')
-    const eficienciaNum = sqlParseNumber('"EFICIENCIA"')
-    const paradaTramaNum = sqlParseNumber('"PARADA TEC TRAMA"')
-    const paradaUrdNum = sqlParseNumber('"PARADA TEC URDUME"')
-    const rpmNum = sqlParseNumber('"RPM NOMINALTEAR"')
-    const batidasNum = sqlParseNumber('"BATIDAS"')
+    const metragemNum = sqlParseNumberIntl('"METRAGEM"')
+    const eficienciaNum = sqlParseNumberIntl('"EFICIENCIA"')
+    const paradaTramaNum = sqlParseNumberIntl('"PARADA TEC TRAMA"')
+    const paradaUrdNum = sqlParseNumberIntl('"PARADA TEC URDUME"')
+    const rpmNum = sqlParseNumberIntl('"RPM NOMINALTEAR"')
+    const batidasNum = sqlParseNumberIntl('"BATIDAS"')
 
     const sql = `
       SELECT
@@ -2868,12 +2872,13 @@ app.get('/api/consulta-rolada-tecelagem', async (req, res) => {
         MAX("ARTIGO") AS "ARTIGO",
         MAX("COR") AS "COR",
         MAX("NM MERCADO") AS "NM_MERCADO",
-        MAX("TRAMA") AS "TRAMA",
         SUM(${batidasNum}) AS "PASADAS",
         AVG(${rpmNum}) AS "RPM"
       FROM tb_produccion
-      WHERE "SELETOR" = 'TECELAGEM' AND "ROLADA" = $1
-      GROUP BY "PARTIDA", "MAQUINA", "ARTIGO", "COR", "NM MERCADO", "TRAMA"
+      WHERE "SELETOR" = 'TECELAGEM' 
+        AND "FILIAL" = '05'
+        AND (LTRIM(TRIM("ROLADA"), '0') = LTRIM(TRIM($1), '0'))
+      GROUP BY "PARTIDA", "MAQUINA", "ARTIGO", "COR", "NM MERCADO"
       ORDER BY substring("PARTIDA" from '.{6}$') ASC
     `
 
@@ -2897,18 +2902,17 @@ app.get('/api/consulta-partida-tecelagem', async (req, res) => {
         "DT_BASE_PRODUCAO" AS "DT_BASE_PRODUCAO",
         "TURNO" AS "TURNO",
         "PARTIDA" AS "PARTIDA",
-        ${sqlParseNumber('"METRAGEM"')} AS "METRAGEM",
-        ${sqlParseNumber('"PARADA TEC TRAMA"')} AS "PARADA_TRAMA",
-        ${sqlParseNumber('"PARADA TEC URDUME"')} AS "PARADA_URDUME",
-        ${sqlParseNumber('"EFICIENCIA"')} AS "EFICIENCIA",
-        ROUND((${sqlParseNumber('"PARADA TEC TRAMA"')} * 100000) / NULLIF(${sqlParseNumber('"METRAGEM"')} * 1000, 0), 1) AS "ROTURAS_TRA_105",
-        ROUND((${sqlParseNumber('"PARADA TEC URDUME"')} * 100000) / NULLIF(${sqlParseNumber('"METRAGEM"')} * 1000, 0), 1) AS "ROTURAS_URD_105",
-        ${sqlParseNumber('"BATIDAS"')} AS "BATIDAS",
-        ${sqlParseNumber('"RPM NOMINALTEAR"')} AS "RPM",
+        ${sqlParseNumberIntl('"METRAGEM"')} AS "METRAGEM",
+        ${sqlParseNumberIntl('"PARADA TEC TRAMA"')} AS "PARADA_TRAMA",
+        ${sqlParseNumberIntl('"PARADA TEC URDUME"')} AS "PARADA_URDUME",
+        ${sqlParseNumberIntl('"EFICIENCIA"')} AS "EFICIENCIA",
+        ROUND((${sqlParseNumberIntl('"PARADA TEC TRAMA"')} * 100000) / NULLIF(${sqlParseNumberIntl('"METRAGEM"')} * 1000, 0), 1) AS "ROTURAS_TRA_105",
+        ROUND((${sqlParseNumberIntl('"PARADA TEC URDUME"')} * 100000) / NULLIF(${sqlParseNumberIntl('"METRAGEM"')} * 1000, 0), 1) AS "ROTURAS_URD_105",
+        ${sqlParseNumberIntl('"BATIDAS"')} AS "BATIDAS",
+        ${sqlParseNumberIntl('"RPM NOMINALTEAR"')} AS "RPM",
         "ARTIGO" AS "ARTIGO",
         "COR" AS "COR",
         "NM MERCADO" AS "NM_MERCADO",
-        "TRAMA" AS "TRAMA",
         "MAQUINA" AS "MAQUINA",
         "GRUPO TEAR" AS "GRUPO_TEAR",
         "BASE URDUME" AS "BASE_URDUME"
@@ -2930,7 +2934,7 @@ app.get('/api/consulta-rolada-calidad', async (req, res) => {
     const rolada = String(req.query.rolada || '').trim()
     if (!rolada) return res.status(400).json({ error: 'rolada requerida' })
 
-    const metragemNum = sqlParseNumber('"METRAGEM"')
+    const metragemNum = sqlParseNumberIntl('"METRAGEM"')
     const sql = `
       SELECT
         "PARTIDA" AS "PARTIDA",
@@ -2949,7 +2953,7 @@ app.get('/api/consulta-rolada-calidad', async (req, res) => {
         MAX("NM MERC") AS "NM_MERCADO",
         MAX("TRAMA") AS "TRAMA"
       FROM tb_calidad
-      WHERE substring(right("PARTIDA", 6) from 1 for 4) = $1
+      WHERE (LTRIM("ROLADA", '0') = LTRIM($1, '0') OR LTRIM(substring(right("PARTIDA", 6) from 1 for 4), '0') = LTRIM($1, '0'))
       GROUP BY "PARTIDA", "TEAR", "ARTIGO", "COR", "NM MERC", "TRAMA"
       ORDER BY "PARTIDA" ASC
     `
@@ -2993,6 +2997,23 @@ app.get('/api/consulta-partida-calidad', async (req, res) => {
 })
 
 async function getSeguimientoRoladasData(fechaInicio, fechaFin) {
+  // Obtener columnas de tb_produccion para detección dinámica de MAQ y LOTE
+  const produccionColumns = await query(
+    `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'tb_produccion'`,
+    [],
+    'tb-produccion-columns-seguimiento'
+  );
+  const prodCols = new Map(
+    (produccionColumns.rows || []).map((r) => [String(r.column_name).toLowerCase(), r.column_name])
+  );
+  
+  const maqKey = ['maq  fiacao', 'maq fiacao', 'maquina'].find((c) => prodCols.has(c));
+  const loteKey = ['lote fiacao', 'lote  fiacao'].find((c) => prodCols.has(c));
+  const maqCol = maqKey ? prodCols.get(maqKey) : null;
+  const loteCol = loteKey ? prodCols.get(loteKey) : null;
+  const maqExpr = maqCol ? quoteIdent(maqCol) : 'NULL::text';
+  const loteExpr = loteCol ? quoteIdent(loteCol) : 'NULL::text';
+
   const metragemNum = sqlParseNumberIntl('"METRAGEM"')
   const rupturasNum = sqlParseNumberIntl('"RUPTURAS"')
   const cavalosNum = sqlParseNumberIntl('"CAVALOS"')
@@ -3005,8 +3026,6 @@ async function getSeguimientoRoladasData(fechaInicio, fechaFin) {
   const calMetragemNum = sqlParseNumberIntl('"METRAGEM"')
   const calPontuacaoNum = sqlParseNumberIntl('"PONTUACAO"')
   const calLarguraNum = sqlParseNumberIntl('"LARGURA"')
-
-  const maqExpr = 'COALESCE("MAQ FIACAO", "MAQUINA")'
 
   const sql = `
     WITH IND AS (
@@ -3030,24 +3049,22 @@ async function getSeguimientoRoladasData(fechaInicio, fechaFin) {
       SELECT
         "ROLADA" AS ROLADA,
         string_agg(
-          DISTINCT NULLIF(
-            CASE 
-              WHEN length(regexp_replace(${maqExpr}, '\\D', '', 'g')) >= 2 
-              THEN right(regexp_replace(${maqExpr}, '\\D', '', 'g'), 2)::int::text
-              ELSE regexp_replace(${maqExpr}, '\\D', '', 'g')
-            END,
-            ''
-          ),
+          DISTINCT CAST(
+            NULLIF(regexp_replace(trim(right(${maqExpr}, 2)), '\\D', '', 'g'), '') AS INTEGER
+          )::text,
           ', '
         ) AS MAQ_OE,
-        string_agg(DISTINCT "LOTE FIACAO", ', ') AS LOTE,
+        string_agg(
+          DISTINCT CAST(CAST(${loteCol ? sqlParseNumberIntl(loteExpr) : 'NULL::numeric'} AS INTEGER) AS TEXT),
+          ', '
+        ) AS LOTE,
         SUM(${metragemNum}) AS URDIDORA_METROS,
         SUM(${rupturasNum}) AS URDIDORA_ROTURAS,
         MAX(${sqlParseNumberIntl('"NUM_FIOS"')}) AS NUM_FIOS
       FROM tb_produccion
       WHERE "SELETOR" IN ('URDIDEIRA', 'URDIDORA')
         AND "FILIAL" = '05'
-        AND ${sqlParseDate('"DT_BASE_PRODUCAO"')} BETWEEN $1::date AND $2::date
+        AND "ROLADA" IN (SELECT ROLADA FROM IND)
       GROUP BY "ROLADA"
     ),
     TEC AS (
@@ -3060,7 +3077,7 @@ async function getSeguimientoRoladasData(fechaInicio, fechaFin) {
       FROM tb_produccion
       WHERE "SELETOR" = 'TECELAGEM'
         AND "FILIAL" = '05'
-        AND ${sqlParseDate('"DT_BASE_PRODUCAO"')} BETWEEN $1::date AND $2::date
+        AND "ROLADA" IN (SELECT ROLADA FROM IND)
       GROUP BY "ROLADA"
     ),
     CAL AS (
@@ -3073,7 +3090,7 @@ async function getSeguimientoRoladasData(fechaInicio, fechaFin) {
       FROM tb_calidad
       WHERE "EMP" = 'STC'
         AND "QUALIDADE" NOT ILIKE '%RETALHO%'
-        AND ${sqlParseDate('"DAT_PROD"')} BETWEEN $1::date AND $2::date
+        AND "ROLADA" IN (SELECT ROLADA FROM IND)
       GROUP BY "ROLADA"
     )
     SELECT

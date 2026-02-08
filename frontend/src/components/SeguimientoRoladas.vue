@@ -1550,6 +1550,9 @@ const cambiarSeccion = async (seccion) => {
   if (seccion === 'urdimbre' && datosUrdimbre.value.length === 0) {
     await cargarDetalleUrdimbre(roladaSeleccionada.value);
   }
+  if (seccion === 'indigo' && datosDetalle.value.length === 0) {
+    await cargarDetalleRolada(roladaSeleccionada.value);
+  }
   if (seccion === 'tecelagem' && datosTecelagem.value.length === 0) {
     await cargarDetalleTecelagem(roladaSeleccionada.value);
   }
