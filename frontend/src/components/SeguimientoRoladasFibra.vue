@@ -91,59 +91,136 @@
           <thead class="sticky top-0 z-20">
             <!-- Fila superior - Grupos -->
             <tr class="text-slate-500 text-[10px] uppercase tracking-wider">
-              <th scope="col" rowspan="2" class="px-2 py-2 font-semibold text-center border-r-2 border-slate-300 border-b-2 border-b-slate-300 text-slate-700 bg-slate-50 sticky left-0 z-30 min-w-[55px]">Rolada</th>
+              <th scope="col" rowspan="3" class="px-2 py-2 font-semibold text-center border-r-2 border-slate-300 border-b-2 border-b-slate-300 text-slate-700 bg-slate-50 sticky left-0 z-30 min-w-[55px]">Rolada</th>
               <th scope="col" colspan="3" class="px-2 py-1.5 font-semibold text-center border-r-2 border-slate-300 border-b border-b-slate-300 text-slate-700 bg-slate-50">Urdidora</th>
               <th scope="col" colspan="8" class="px-2 py-1.5 font-semibold text-center border-r-2 border-slate-300 border-b border-b-slate-300 text-slate-700 bg-slate-50">Índigo</th>
               <th scope="col" colspan="4" class="px-2 py-1.5 font-semibold text-center border-r-2 border-slate-300 border-b border-b-slate-300 text-slate-700 bg-slate-50">Tejeduría</th>
               <th scope="col" colspan="3" class="px-2 py-1.5 font-semibold text-center border-r-2 border-slate-300 border-b border-b-slate-300 text-slate-700 bg-slate-50">Calidad</th>
-              <th scope="col" colspan="21" class="px-2 py-1.5 font-semibold text-center border-b border-b-slate-300 text-slate-700 bg-amber-50">Fibra HVI</th>
+              <th scope="col" colspan="63" class="px-2 py-1.5 font-semibold text-center border-b border-b-slate-300 text-slate-700 bg-amber-50">Fibra HVI</th>
             </tr>
-            <!-- Fila inferior - Columnas -->
+            <!-- Fila media - Columnas y Variables -->
             <tr class="text-slate-600 text-[10px] bg-slate-50">
               <!-- Urdidora -->
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[40px]">Maq</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px]">Lote</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r-2 border-slate-300 border-b-2 border-b-slate-300 min-w-[40px]">R10⁶</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[40px]">Maq</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px]">Lote</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r-2 border-slate-300 border-b-2 border-b-slate-300 min-w-[40px]">R10⁶</th>
               <!-- Índigo -->
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[70px]">Fecha</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[75px]">Base</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px]">Color</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[50px]">Metros</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px]">R10³</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[30px]"><span class="block leading-tight">Cav<br>10⁵</span></th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px]">VNom</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r-2 border-slate-300 border-b-2 border-b-slate-300 min-w-[35px]">VPro</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[70px]">Fecha</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[75px]">Base</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px]">Color</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[50px]">Metros</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px]">R10³</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[30px]"><span class="block leading-tight">Cav<br>10⁵</span></th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px]">VNom</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r-2 border-slate-300 border-b-2 border-b-slate-300 min-w-[35px]">VPro</th>
               <!-- Tejeduría -->
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[50px]">Metros</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[40px]">Efi%</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[40px]">RU10⁵</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r-2 border-slate-300 border-b-2 border-b-slate-300 min-w-[40px]">RT10⁵</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[50px]">Metros</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[40px]">Efi%</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[40px]">RU10⁵</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r-2 border-slate-300 border-b-2 border-b-slate-300 min-w-[40px]">RT10⁵</th>
               <!-- Calidad -->
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[50px]">Metros</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[40px]">Cal%</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r-2 border-slate-300 border-b-2 border-b-slate-300 min-w-[50px]">Pts100</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[50px]">Metros</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[40px]">Cal%</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r-2 border-slate-300 border-b-2 border-b-slate-300 min-w-[50px]">Pts100</th>
               <!-- Fibra HVI -->
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[40px] bg-amber-50">Mezc</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[70px] bg-amber-50">F.Ingr</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px] bg-blue-50" title="Índice de Color">SCI</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px] bg-blue-50" title="Humedad">MST</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px] bg-blue-50" title="Micronaire">MIC</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px] bg-blue-50" title="Madurez">MAT</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[40px] bg-green-50" title="Longitud media">UHML</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px] bg-green-50" title="Uniformidad">UI</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px] bg-green-50" title="Fibras cortas">SF</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px] bg-yellow-50" title="Resistencia">STR</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px] bg-yellow-50" title="Elongación">ELG</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px] bg-yellow-50" title="Reflectancia">RD</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px] bg-yellow-50" title="Amarillez">+b</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[40px] bg-purple-50">TrCNT</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[40px] bg-purple-50">TrAR</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r-2 border-slate-300 border-b-2 border-b-slate-300 min-w-[40px] bg-purple-50">TRID</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px] bg-orange-50">BCO</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px] bg-orange-50">GRI</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px] bg-orange-50">LG</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px] bg-orange-50">AMA</th>
-              <th scope="col" class="px-1 py-1.5 font-medium text-center border-b-2 border-b-slate-300 min-w-[35px] bg-orange-50">LA</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[40px] bg-amber-50">Mezc</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[70px] bg-amber-50">F.Ingr</th>
+              
+              <!-- Variables HVI (Stats expandidos) -->
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b border-slate-300 bg-blue-50" title="Índice de Color">SCI</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b border-slate-300 bg-blue-50" title="Humedad">MST</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b border-slate-300 bg-blue-50" title="Micronaire">MIC</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b border-slate-300 bg-blue-50" title="Madurez">MAT</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b border-slate-300 bg-green-50" title="Longitud media">UHML</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b border-slate-300 bg-green-50" title="Uniformidad">UI</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b border-slate-300 bg-green-50" title="Fibras cortas">SF</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b border-slate-300 bg-yellow-50" title="Resistencia">STR</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b border-slate-300 bg-yellow-50" title="Elongación">ELG</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b border-slate-300 bg-yellow-50" title="Reflectancia">RD</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b border-slate-300 bg-yellow-50" title="Amarillez">+b</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b border-slate-300 bg-purple-50">TrCNT</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b border-slate-300 bg-purple-50">TrAR</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r-2 border-slate-300 border-b border-slate-300 bg-purple-50">TRID</th>
+              
+              <!-- Colores (Sin stats) -->
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px] bg-orange-50">BCO</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px] bg-orange-50">GRI</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px] bg-orange-50">LG</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px] bg-orange-50">AMA</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-b-2 border-b-slate-300 min-w-[35px] bg-orange-50">LA</th>
+            </tr>
+            <!-- Fila inferior - Subcolumnas Stats -->
+            <tr class="text-slate-600 text-[9px] bg-slate-50">
+              <!-- SCI -->
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-blue-50/50">Avg</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-blue-50/50">Min</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-blue-50/50">Max</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-blue-50/50">σ</th>
+              <!-- MST -->
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-blue-50/50">Avg</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-blue-50/50">Min</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-blue-50/50">Max</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-blue-50/50">σ</th>
+              <!-- MIC -->
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-blue-50/50">Avg</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-blue-50/50">Min</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-blue-50/50">Max</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-blue-50/50">σ</th>
+              <!-- MAT -->
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-blue-50/50">Avg</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-blue-50/50">Min</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-blue-50/50">Max</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-blue-50/50">σ</th>
+              <!-- UHML -->
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-green-50/50">Avg</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-green-50/50">Min</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-green-50/50">Max</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-green-50/50">σ</th>
+              <!-- UI -->
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-green-50/50">Avg</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-green-50/50">Min</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-green-50/50">Max</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-green-50/50">σ</th>
+              <!-- SF -->
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-green-50/50">Avg</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-green-50/50">Min</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-green-50/50">Max</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-green-50/50">σ</th>
+              <!-- STR -->
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-yellow-50/50">Avg</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-yellow-50/50">Min</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-yellow-50/50">Max</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-yellow-50/50">σ</th>
+              <!-- ELG -->
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-yellow-50/50">Avg</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-yellow-50/50">Min</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-yellow-50/50">Max</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-yellow-50/50">σ</th>
+              <!-- RD -->
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-yellow-50/50">Avg</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-yellow-50/50">Min</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-yellow-50/50">Max</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-yellow-50/50">σ</th>
+              <!-- +b -->
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-yellow-50/50">Avg</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-yellow-50/50">Min</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-yellow-50/50">Max</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-yellow-50/50">σ</th>
+              <!-- TrCNT -->
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-purple-50/50">Avg</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-purple-50/50">Min</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-purple-50/50">Max</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-purple-50/50">σ</th>
+              <!-- TrAR -->
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-purple-50/50">Avg</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-purple-50/50">Min</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-purple-50/50">Max</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-purple-50/50">σ</th>
+              <!-- TRID -->
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-purple-50/50">Avg</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-purple-50/50">Min</th>
+              <th class="px-1 py-1 font-normal text-center border-r border-slate-200 border-b-2 border-b-slate-300 bg-purple-50/50">Max</th>
+              <th class="px-1 py-1 font-normal text-center border-r-2 border-slate-300 border-b-2 border-b-slate-300 bg-purple-50/50">σ</th>
             </tr>
           </thead>
           <tbody>
@@ -182,20 +259,76 @@
                 {{ item.MISTURA || '-' }}
               </td>
               <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-amber-50/30 text-xs">{{ formatFechaIngreso(item.FECHA_INGRESO) }}</td>
+              <!-- SCI -->
               <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-blue-50/30">{{ formatNumber(item.SCI, 1) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-blue-50/20 text-[9px]">{{ formatNumber(item.SCI_MIN, 1) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-blue-50/20 text-[9px]">{{ formatNumber(item.SCI_MAX, 1) }}</td>
+              <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-blue-50/30 text-[9px] font-medium">{{ formatNumber(item.SCI_SIGMA, 2) }}</td>
+              <!-- MST -->
               <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-blue-50/30">{{ formatNumber(item.MST, 1) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-blue-50/20 text-[9px]">{{ formatNumber(item.MST_MIN, 1) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-blue-50/20 text-[9px]">{{ formatNumber(item.MST_MAX, 1) }}</td>
+              <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-blue-50/30 text-[9px] font-medium">{{ formatNumber(item.MST_SIGMA, 2) }}</td>
+              <!-- MIC -->
               <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-blue-50/30">{{ formatNumber(item.MIC, 2) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-blue-50/20 text-[9px]">{{ formatNumber(item.MIC_MIN, 2) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-blue-50/20 text-[9px]">{{ formatNumber(item.MIC_MAX, 2) }}</td>
+              <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-blue-50/30 text-[9px] font-medium">{{ formatNumber(item.MIC_SIGMA, 2) }}</td>
+              <!-- MAT -->
               <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-blue-50/30">{{ formatNumber(item.MAT, 2) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-blue-50/20 text-[9px]">{{ formatNumber(item.MAT_MIN, 2) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-blue-50/20 text-[9px]">{{ formatNumber(item.MAT_MAX, 2) }}</td>
+              <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-blue-50/30 text-[9px] font-medium">{{ formatNumber(item.MAT_SIGMA, 2) }}</td>
+              <!-- UHML -->
               <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-green-50/30">{{ formatNumber(item.UHML, 2) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-green-50/20 text-[9px]">{{ formatNumber(item.UHML_MIN, 2) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-green-50/20 text-[9px]">{{ formatNumber(item.UHML_MAX, 2) }}</td>
+              <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-green-50/30 text-[9px] font-medium">{{ formatNumber(item.UHML_SIGMA, 2) }}</td>
+              <!-- UI -->
               <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-green-50/30">{{ formatNumber(item.UI, 1) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-green-50/20 text-[9px]">{{ formatNumber(item.UI_MIN, 1) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-green-50/20 text-[9px]">{{ formatNumber(item.UI_MAX, 1) }}</td>
+              <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-green-50/30 text-[9px] font-medium">{{ formatNumber(item.UI_SIGMA, 2) }}</td>
+              <!-- SF -->
               <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-green-50/30">{{ formatNumber(item.SF, 1) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-green-50/20 text-[9px]">{{ formatNumber(item.SF_MIN, 1) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-green-50/20 text-[9px]">{{ formatNumber(item.SF_MAX, 1) }}</td>
+              <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-green-50/30 text-[9px] font-medium">{{ formatNumber(item.SF_SIGMA, 2) }}</td>
+              <!-- STR -->
               <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-yellow-50/30">{{ formatNumber(item.STR, 1) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-yellow-50/20 text-[9px]">{{ formatNumber(item.STR_MIN, 1) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-yellow-50/20 text-[9px]">{{ formatNumber(item.STR_MAX, 1) }}</td>
+              <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-yellow-50/30 text-[9px] font-medium">{{ formatNumber(item.STR_SIGMA, 2) }}</td>
+              <!-- ELG -->
               <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-yellow-50/30">{{ formatNumber(item.ELG, 1) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-yellow-50/20 text-[9px]">{{ formatNumber(item.ELG_MIN, 1) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-yellow-50/20 text-[9px]">{{ formatNumber(item.ELG_MAX, 1) }}</td>
+              <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-yellow-50/30 text-[9px] font-medium">{{ formatNumber(item.ELG_SIGMA, 2) }}</td>
+              <!-- RD -->
               <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-yellow-50/30">{{ formatNumber(item.RD, 1) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-yellow-50/20 text-[9px]">{{ formatNumber(item.RD_MIN, 1) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-yellow-50/20 text-[9px]">{{ formatNumber(item.RD_MAX, 1) }}</td>
+              <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-yellow-50/30 text-[9px] font-medium">{{ formatNumber(item.RD_SIGMA, 2) }}</td>
+              <!-- PLUS_B -->
               <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-yellow-50/30">{{ formatNumber(item.PLUS_B, 1) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-yellow-50/20 text-[9px]">{{ formatNumber(item.PLUS_B_MIN, 1) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-yellow-50/20 text-[9px]">{{ formatNumber(item.PLUS_B_MAX, 1) }}</td>
+              <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-yellow-50/30 text-[9px] font-medium">{{ formatNumber(item.PLUS_B_SIGMA, 2) }}</td>
+              <!-- TrCNT -->
               <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-purple-50/30">{{ formatNumber(item.TrCNT, 0) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-purple-50/20 text-[9px]">{{ formatNumber(item.TrCNT_MIN, 0) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-purple-50/20 text-[9px]">{{ formatNumber(item.TrCNT_MAX, 0) }}</td>
+              <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-purple-50/30 text-[9px] font-medium">{{ formatNumber(item.TrCNT_SIGMA, 2) }}</td>
+              <!-- TrAR -->
               <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-purple-50/30">{{ formatNumber(item.TrAR, 2) }}</td>
-              <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r-2 border-slate-300 bg-purple-50/30">{{ formatNumber(item.TRID, 0) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-purple-50/20 text-[9px]">{{ formatNumber(item.TrAR_MIN, 2) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-purple-50/20 text-[9px]">{{ formatNumber(item.TrAR_MAX, 2) }}</td>
+              <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-purple-50/30 text-[9px] font-medium">{{ formatNumber(item.TrAR_SIGMA, 2) }}</td>
+              <!-- TRID -->
+              <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-purple-50/30">{{ formatNumber(item.TRID, 0) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-purple-50/20 text-[9px]">{{ formatNumber(item.TRID_MIN, 0) }}</td>
+              <td class="px-1 py-2 text-center text-slate-500 tabular-nums border-r border-slate-200 bg-purple-50/20 text-[9px]">{{ formatNumber(item.TRID_MAX, 0) }}</td>
+              <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r-2 border-slate-300 bg-purple-50/30 text-[9px] font-medium">{{ formatNumber(item.TRID_SIGMA, 2) }}</td>
               <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-orange-50/30">{{ formatPercent(item.COLOR_BCO_PCT) }}</td>
               <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-orange-50/30">{{ formatPercent(item.COLOR_GRI_PCT) }}</td>
               <td class="px-1 py-2 text-center text-slate-600 tabular-nums border-r border-slate-200 bg-orange-50/30">{{ formatPercent(item.COLOR_LG_PCT) }}</td>
@@ -230,7 +363,7 @@
               <td class="px-1 py-2.5 text-center tabular-nums border-r border-slate-200 border-t-2 border-t-slate-300">{{ formatNumber(totalesMes.CAL_PERCENT, 1) }}</td>
               <td class="px-1 py-2.5 text-center tabular-nums border-r-2 border-slate-300 border-t-2 border-t-slate-300">{{ formatNumber(totalesMes.PTS_100M2, 1) }}</td>
               <!-- Fibra HVI - Promedios no aplican para totales -->
-              <td class="px-1 py-2.5 text-center text-slate-400 border-t-2 border-t-slate-300 bg-amber-50/20" colspan="21">-</td>
+              <td class="px-1 py-2.5 text-center text-slate-400 border-t-2 border-t-slate-300 bg-amber-50/20" colspan="63">-</td>
             </tr>
           </tfoot>
         </table>
@@ -1396,105 +1529,111 @@ const exportarAExcel = async () => {
         }
       }
       
+      const parseNum = (val) => {
+        if (val === null || val === undefined || val === '') return null
+        const n = parseFloat(val)
+        return isNaN(n) ? null : n
+      }
+
       const row = worksheet.addRow({
-        ROLADA: item.ROLADA,
+        ROLADA: parseNum(item.ROLADA),
         MAQ_OE: item.MAQ_OE || '',
         LOTE: item.LOTE || '',
         ROT_106: calcularRot106Num(item.URDIDORA_ROTURAS, item.URDIDORA_METROS, item.NUM_FIOS),
         FECHA: fechaDate || '',
         BASE: item.BASE || '',
         COLOR: item.COLOR || '',
-        MTS_IND: item.MTS_IND || '',
-        R103: item.R103 || '',
+        MTS_IND: parseNum(item.MTS_IND),
+        R103: parseNum(item.R103),
         CAV: calcularCav105Num(item.CAV, item.MTS_IND),
-        VEL_NOM: item.VEL_NOM || '',
-        VEL_PROM: item.VEL_PROM || '',
-        MTS_CRUDOS: item.MTS_CRUDOS || '',
-        EFI_TEJ: item.EFI_TEJ || '',
-        RU105: item.RU105 || '',
-        RT105: item.RT105 || '',
-        MTS_CAL: item.MTS_CAL || '',
-        CAL_PERCENT: item.CAL_PERCENT || '',
-        PTS_100M2: item.PTS_100M2 || '',
+        VEL_NOM: parseNum(item.VEL_NOM),
+        VEL_PROM: parseNum(item.VEL_PROM),
+        MTS_CRUDOS: parseNum(item.MTS_CRUDOS),
+        EFI_TEJ: parseNum(item.EFI_TEJ),
+        RU105: parseNum(item.RU105),
+        RT105: parseNum(item.RT105),
+        MTS_CAL: parseNum(item.MTS_CAL),
+        CAL_PERCENT: parseNum(item.CAL_PERCENT),
+        PTS_100M2: parseNum(item.PTS_100M2),
         // Fibra HVI
         MEZCLA: item.MISTURA || '',
         F_INGRESO: item.FECHA_INGRESO || '',
         // SCI + estadísticas
-        SCI: item.SCI || '',
-        SCI_MIN: getEstadisticaMezcla(item.MISTURA, 'SCI', 'MIN'),
-        SCI_MAX: getEstadisticaMezcla(item.MISTURA, 'SCI', 'MAX'),
-        SCI_DESV: getEstadisticaMezcla(item.MISTURA, 'SCI', 'DESV'),
+        SCI: parseNum(item.SCI),
+        SCI_MIN: parseNum(item.SCI_MIN),
+        SCI_MAX: parseNum(item.SCI_MAX),
+        SCI_DESV: parseNum(item.SCI_SIGMA),
         // MST + estadísticas
-        MST: item.MST || '',
-        MST_MIN: getEstadisticaMezcla(item.MISTURA, 'MST', 'MIN'),
-        MST_MAX: getEstadisticaMezcla(item.MISTURA, 'MST', 'MAX'),
-        MST_DESV: getEstadisticaMezcla(item.MISTURA, 'MST', 'DESV'),
+        MST: parseNum(item.MST),
+        MST_MIN: parseNum(item.MST_MIN),
+        MST_MAX: parseNum(item.MST_MAX),
+        MST_DESV: parseNum(item.MST_SIGMA),
         // MIC + estadísticas
-        MIC: item.MIC || '',
-        MIC_MIN: getEstadisticaMezcla(item.MISTURA, 'MIC', 'MIN'),
-        MIC_MAX: getEstadisticaMezcla(item.MISTURA, 'MIC', 'MAX'),
-        MIC_DESV: getEstadisticaMezcla(item.MISTURA, 'MIC', 'DESV'),
+        MIC: parseNum(item.MIC),
+        MIC_MIN: parseNum(item.MIC_MIN),
+        MIC_MAX: parseNum(item.MIC_MAX),
+        MIC_DESV: parseNum(item.MIC_SIGMA),
         // MAT + estadísticas
-        MAT: item.MAT || '',
-        MAT_MIN: getEstadisticaMezcla(item.MISTURA, 'MAT', 'MIN'),
-        MAT_MAX: getEstadisticaMezcla(item.MISTURA, 'MAT', 'MAX'),
-        MAT_DESV: getEstadisticaMezcla(item.MISTURA, 'MAT', 'DESV'),
+        MAT: parseNum(item.MAT),
+        MAT_MIN: parseNum(item.MAT_MIN),
+        MAT_MAX: parseNum(item.MAT_MAX),
+        MAT_DESV: parseNum(item.MAT_SIGMA),
         // UHML + estadísticas
-        UHML: item.UHML || '',
-        UHML_MIN: getEstadisticaMezcla(item.MISTURA, 'UHML', 'MIN'),
-        UHML_MAX: getEstadisticaMezcla(item.MISTURA, 'UHML', 'MAX'),
-        UHML_DESV: getEstadisticaMezcla(item.MISTURA, 'UHML', 'DESV'),
+        UHML: parseNum(item.UHML),
+        UHML_MIN: parseNum(item.UHML_MIN),
+        UHML_MAX: parseNum(item.UHML_MAX),
+        UHML_DESV: parseNum(item.UHML_SIGMA),
         // UI + estadísticas
-        UI: item.UI || '',
-        UI_MIN: getEstadisticaMezcla(item.MISTURA, 'UI', 'MIN'),
-        UI_MAX: getEstadisticaMezcla(item.MISTURA, 'UI', 'MAX'),
-        UI_DESV: getEstadisticaMezcla(item.MISTURA, 'UI', 'DESV'),
+        UI: parseNum(item.UI),
+        UI_MIN: parseNum(item.UI_MIN),
+        UI_MAX: parseNum(item.UI_MAX),
+        UI_DESV: parseNum(item.UI_SIGMA),
         // SF + estadísticas
-        SF: item.SF || '',
-        SF_MIN: getEstadisticaMezcla(item.MISTURA, 'SF', 'MIN'),
-        SF_MAX: getEstadisticaMezcla(item.MISTURA, 'SF', 'MAX'),
-        SF_DESV: getEstadisticaMezcla(item.MISTURA, 'SF', 'DESV'),
+        SF: parseNum(item.SF),
+        SF_MIN: parseNum(item.SF_MIN),
+        SF_MAX: parseNum(item.SF_MAX),
+        SF_DESV: parseNum(item.SF_SIGMA),
         // STR + estadísticas
-        STR: item.STR || '',
-        STR_MIN: getEstadisticaMezcla(item.MISTURA, 'STR', 'MIN'),
-        STR_MAX: getEstadisticaMezcla(item.MISTURA, 'STR', 'MAX'),
-        STR_DESV: getEstadisticaMezcla(item.MISTURA, 'STR', 'DESV'),
+        STR: parseNum(item.STR),
+        STR_MIN: parseNum(item.STR_MIN),
+        STR_MAX: parseNum(item.STR_MAX),
+        STR_DESV: parseNum(item.STR_SIGMA),
         // ELG + estadísticas
-        ELG: item.ELG || '',
-        ELG_MIN: getEstadisticaMezcla(item.MISTURA, 'ELG', 'MIN'),
-        ELG_MAX: getEstadisticaMezcla(item.MISTURA, 'ELG', 'MAX'),
-        ELG_DESV: getEstadisticaMezcla(item.MISTURA, 'ELG', 'DESV'),
+        ELG: parseNum(item.ELG),
+        ELG_MIN: parseNum(item.ELG_MIN),
+        ELG_MAX: parseNum(item.ELG_MAX),
+        ELG_DESV: parseNum(item.ELG_SIGMA),
         // RD + estadísticas
-        RD: item.RD || '',
-        RD_MIN: getEstadisticaMezcla(item.MISTURA, 'RD', 'MIN'),
-        RD_MAX: getEstadisticaMezcla(item.MISTURA, 'RD', 'MAX'),
-        RD_DESV: getEstadisticaMezcla(item.MISTURA, 'RD', 'DESV'),
+        RD: parseNum(item.RD),
+        RD_MIN: parseNum(item.RD_MIN),
+        RD_MAX: parseNum(item.RD_MAX),
+        RD_DESV: parseNum(item.RD_SIGMA),
         // PLUS_B + estadísticas
-        PLUS_B: item.PLUS_B || '',
-        PLUS_B_MIN: getEstadisticaMezcla(item.MISTURA, 'PLUS_B', 'MIN'),
-        PLUS_B_MAX: getEstadisticaMezcla(item.MISTURA, 'PLUS_B', 'MAX'),
-        PLUS_B_DESV: getEstadisticaMezcla(item.MISTURA, 'PLUS_B', 'DESV'),
+        PLUS_B: parseNum(item.PLUS_B),
+        PLUS_B_MIN: parseNum(item.PLUS_B_MIN),
+        PLUS_B_MAX: parseNum(item.PLUS_B_MAX),
+        PLUS_B_DESV: parseNum(item.PLUS_B_SIGMA),
         // TrCNT + estadísticas
-        TrCNT: item.TrCNT || '',
-        TrCNT_MIN: getEstadisticaMezcla(item.MISTURA, 'TrCNT', 'MIN'),
-        TrCNT_MAX: getEstadisticaMezcla(item.MISTURA, 'TrCNT', 'MAX'),
-        TrCNT_DESV: getEstadisticaMezcla(item.MISTURA, 'TrCNT', 'DESV'),
+        TrCNT: parseNum(item.TrCNT),
+        TrCNT_MIN: parseNum(item.TrCNT_MIN),
+        TrCNT_MAX: parseNum(item.TrCNT_MAX),
+        TrCNT_DESV: parseNum(item.TrCNT_SIGMA),
         // TrAR + estadísticas
-        TrAR: item.TrAR || '',
-        TrAR_MIN: getEstadisticaMezcla(item.MISTURA, 'TrAR', 'MIN'),
-        TrAR_MAX: getEstadisticaMezcla(item.MISTURA, 'TrAR', 'MAX'),
-        TrAR_DESV: getEstadisticaMezcla(item.MISTURA, 'TrAR', 'DESV'),
+        TrAR: parseNum(item.TrAR),
+        TrAR_MIN: parseNum(item.TrAR_MIN),
+        TrAR_MAX: parseNum(item.TrAR_MAX),
+        TrAR_DESV: parseNum(item.TrAR_SIGMA),
         // TRID + estadísticas
-        TRID: item.TRID || '',
-        TRID_MIN: getEstadisticaMezcla(item.MISTURA, 'TRID', 'MIN'),
-        TRID_MAX: getEstadisticaMezcla(item.MISTURA, 'TRID', 'MAX'),
-        TRID_DESV: getEstadisticaMezcla(item.MISTURA, 'TRID', 'DESV'),
+        TRID: parseNum(item.TRID),
+        TRID_MIN: parseNum(item.TRID_MIN),
+        TRID_MAX: parseNum(item.TRID_MAX),
+        TRID_DESV: parseNum(item.TRID_SIGMA),
         // Color percentages (sin estadísticas)
-        BCO: item.COLOR_BCO_PCT || '',
-        GRI: item.COLOR_GRI_PCT || '',
-        LG: item.COLOR_LG_PCT || '',
-        AMA: item.COLOR_AMA_PCT || '',
-        LA: item.COLOR_LA_PCT || ''
+        BCO: parseNum(item.COLOR_BCO_PCT),
+        GRI: parseNum(item.COLOR_GRI_PCT),
+        LG: parseNum(item.COLOR_LG_PCT),
+        AMA: parseNum(item.COLOR_AMA_PCT),
+        LA: parseNum(item.COLOR_LA_PCT)
       })
       
       row.height = 16
@@ -1536,19 +1675,20 @@ const exportarAExcel = async () => {
       row.getCell('FECHA').numFmt = 'dd/mm/yyyy'
       
       // Formato numérico para columnas estándar
+      row.getCell('ROLADA').numFmt = '0'
       row.getCell('MTS_IND').numFmt = '#,##0'
-      row.getCell('R103').numFmt = '0.00'
-      row.getCell('VEL_NOM').numFmt = '0'
-      row.getCell('VEL_PROM').numFmt = '0'
+      row.getCell('R103').numFmt = '#,##0.00'
+      row.getCell('CAV').numFmt = '#,##0.0'
+      row.getCell('VEL_NOM').numFmt = '#,##0'
+      row.getCell('VEL_PROM').numFmt = '#,##0.0'
       row.getCell('MTS_CRUDOS').numFmt = '#,##0'
-      row.getCell('EFI_TEJ').numFmt = '0.0'
-      row.getCell('RU105').numFmt = '0.0'
-      row.getCell('RT105').numFmt = '0.0'
+      row.getCell('EFI_TEJ').numFmt = '#,##0.0'
+      row.getCell('RU105').numFmt = '#,##0.00'
+      row.getCell('RT105').numFmt = '#,##0.00'
       row.getCell('MTS_CAL').numFmt = '#,##0'
-      row.getCell('CAL_PERCENT').numFmt = '0.0'
-      row.getCell('PTS_100M2').numFmt = '0.0'
+      row.getCell('CAL_PERCENT').numFmt = '#,##0.0'
+      row.getCell('PTS_100M2').numFmt = '#,##0.0'
       row.getCell('ROT_106').numFmt = '0.00'
-      row.getCell('CAV').numFmt = '0.0'
       
       // Formato numérico para Fibra HVI
       row.getCell('SCI').numFmt = '0.0'
@@ -1647,153 +1787,6 @@ const exportarAExcel = async () => {
     worksheet.views = [
       { state: 'frozen', xSplit: 1, ySplit: 5, topLeftCell: 'B6', activeCell: 'B6' }
     ]
-    
-    // ============================================================
-    // HOJA 2: ANÁLISIS ESTADÍSTICO HVI POR MEZCLA
-    // ============================================================
-    const statsSheet = workbook.addWorksheet('Análisis HVI por Mezcla')
-    
-    // Agrupar datos por MEZCLA
-    const datosPorMezcla = {}
-    datos.value.forEach(item => {
-      const mezcla = item.MISTURA || 'Sin Mezcla'
-      if (!datosPorMezcla[mezcla]) {
-        datosPorMezcla[mezcla] = []
-      }
-      datosPorMezcla[mezcla].push(item)
-    })
-    
-    // Variables HVI a analizar
-    const variablesHVI = [
-      { key: 'SCI', nombre: 'SCI' },
-      { key: 'MST', nombre: 'MST' },
-      { key: 'MIC', nombre: 'MIC' },
-      { key: 'MAT', nombre: 'MAT' },
-      { key: 'UHML', nombre: 'UHML' },
-      { key: 'UI', nombre: 'UI' },
-      { key: 'SF', nombre: 'SF' },
-      { key: 'STR', nombre: 'STR' },
-      { key: 'ELG', nombre: 'ELG' },
-      { key: 'RD', nombre: 'RD' },
-      { key: 'PLUS_B', nombre: '+b' },
-      { key: 'TrCNT', nombre: 'TrCNT' },
-      { key: 'TrAR', nombre: 'TrAR' },
-      { key: 'TRID', nombre: 'TRID' },
-      { key: 'BCO', nombre: 'BCO%' },
-      { key: 'GRI', nombre: 'GRI%' },
-      { key: 'LG', nombre: 'LG%' },
-      { key: 'AMA', nombre: 'AMA%' },
-      { key: 'LA', nombre: 'LA%' }
-    ]
-    
-    // Función para calcular estadísticas
-    const calcularEstadisticas = (valores) => {
-      const valoresValidos = valores.filter(v => v !== null && v !== undefined && v !== '' && !isNaN(parseFloat(v)))
-      if (valoresValidos.length === 0) return { min: null, max: null, desv: null, count: 0 }
-      
-      const nums = valoresValidos.map(v => parseFloat(v))
-      const min = Math.min(...nums)
-      const max = Math.max(...nums)
-      const media = nums.reduce((a, b) => a + b, 0) / nums.length
-      const varianza = nums.reduce((sum, val) => sum + Math.pow(val - media, 2), 0) / nums.length
-      const desv = Math.sqrt(varianza)
-      
-      return { min, max, desv, count: nums.length }
-    }
-    
-    // Encabezados de la hoja de análisis
-    statsSheet.addRow(['ANÁLISIS ESTADÍSTICO HVI POR MEZCLA'])
-    statsSheet.addRow([])
-    const headerRow = statsSheet.addRow(['Mezcla', 'Variable', 'N', 'MIN', 'MAX', 'Desv.Est.'])
-    
-    // Estilo del título
-    statsSheet.getRow(1).font = { bold: true, size: 14, color: { argb: 'FF1E40AF' } }
-    statsSheet.getRow(1).alignment = { horizontal: 'center' }
-    statsSheet.mergeCells('A1:F1')
-    
-    // Estilo de encabezados
-    headerRow.font = { bold: true, size: 10 }
-    headerRow.alignment = { horizontal: 'center', vertical: 'middle' }
-    headerRow.height = 25
-    headerRow.eachCell(cell => {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF3B82F6' } }
-      cell.font = { bold: true, size: 10, color: { argb: 'FFFFFFFF' } }
-      cell.border = {
-        top: { style: 'thin' },
-        bottom: { style: 'medium' },
-        left: { style: 'thin' },
-        right: { style: 'thin' }
-      }
-    })
-    
-    // Agregar datos estadísticos por cada mezcla
-    let currentRow = 4
-    Object.keys(datosPorMezcla).sort().forEach((mezcla, mezclaIndex) => {
-      const datosGrupo = datosPorMezcla[mezcla]
-      
-      variablesHVI.forEach((variable, varIndex) => {
-        const valores = datosGrupo.map(item => item[variable.key])
-        const stats = calcularEstadisticas(valores)
-        
-        const row = statsSheet.addRow([
-          varIndex === 0 ? mezcla : '',  // Solo mostrar mezcla en primera variable
-          variable.nombre,
-          stats.count,
-          stats.min,
-          stats.max,
-          stats.desv
-        ])
-        
-        // Estilo de fila
-        row.alignment = { horizontal: 'center', vertical: 'middle' }
-        row.height = 18
-        
-        // Formato numérico
-        row.getCell(4).numFmt = '0.00'  // MIN
-        row.getCell(5).numFmt = '0.00'  // MAX
-        row.getCell(6).numFmt = '0.00'  // Desv.Est.
-        
-        // Color de fondo alternado por mezcla
-        const bgColor = mezclaIndex % 2 === 0 ? 'FFFFFFFF' : 'FFF8FAFC'
-        row.eachCell(cell => {
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } }
-          cell.border = {
-            top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-            bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-            left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-            right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
-          }
-        })
-        
-        // Negrita para la primera columna (Mezcla)
-        if (varIndex === 0) {
-          row.getCell(1).font = { bold: true, size: 10, color: { argb: 'FF1E40AF' } }
-        }
-        
-        currentRow++
-      })
-      
-      // Línea separadora entre mezclas
-      if (mezclaIndex < Object.keys(datosPorMezcla).length - 1) {
-        const separatorRow = statsSheet.addRow([''])
-        separatorRow.height = 5
-        currentRow++
-      }
-    })
-    
-    // Ajustar anchos de columnas
-    statsSheet.columns = [
-      { width: 20 },  // Mezcla
-      { width: 12 },  // Variable
-      { width: 8 },   // N
-      { width: 12 },  // MIN
-      { width: 12 },  // MAX
-      { width: 12 }   // Desv.Est.
-    ]
-    
-    // ============================================================
-    // FIN HOJA 2
-    // ============================================================
     
     // Generar archivo y descargar
     const buffer = await workbook.xlsx.writeBuffer()

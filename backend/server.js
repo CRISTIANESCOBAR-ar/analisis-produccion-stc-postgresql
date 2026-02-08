@@ -3228,84 +3228,219 @@ app.get('/api/seguimiento-roladas-fibra', async (req, res) => {
 
     let hviMap = {}
     if (lotes.length > 0) {
+      // Use logical comparison for LOTE_FIAC (strip leading zeros in DB)
       const sql = `
         SELECT
-          "LOTE" AS LOTE,
-          "LOTE_FIAC" AS LOTE_FIAC,
-          "MISTURA" AS MISTURA,
-          "DT_ENTRADA_PROD" AS FECHA_INGRESO,
-          ${sqlParseNumber('"SCI"')} AS SCI,
-          ${sqlParseNumber('"MST"')} AS MST,
-          ${sqlParseNumber('"MIC"')} AS MIC,
-          ${sqlParseNumber('"MAT"')} AS MAT,
-          ${sqlParseNumber('"UHML"')} AS UHML,
-          ${sqlParseNumber('"UI"')} AS UI,
-          ${sqlParseNumber('"SF"')} AS SF,
-          ${sqlParseNumber('"STR"')} AS STR,
-          ${sqlParseNumber('"ELG"')} AS ELG,
-          ${sqlParseNumber('"RD"')} AS RD,
-          ${sqlParseNumber('"PLUS_B"')} AS PLUS_B,
+          "LOTE" AS "LOTE",
+          "LOTE_FIAC" AS "LOTE_FIAC",
+          "MISTURA" AS "MISTURA",
+          "COR" AS "COR",
+          "DT_ENTRADA_PROD" AS "FECHA_INGRESO",
+          ${sqlParseNumber('"SCI"')} AS "SCI",
+          ${sqlParseNumber('"MST"')} AS "MST",
+          ${sqlParseNumber('"MIC"')} AS "MIC",
+          ${sqlParseNumber('"MAT"')} AS "MAT",
+          ${sqlParseNumber('"UHML"')} AS "UHML",
+          ${sqlParseNumber('"UI"')} AS "UI",
+          ${sqlParseNumber('"SF"')} AS "SF",
+          ${sqlParseNumber('"STR"')} AS "STR",
+          ${sqlParseNumber('"ELG"')} AS "ELG",
+          ${sqlParseNumber('"RD"')} AS "RD",
+          ${sqlParseNumber('"PLUS_B"')} AS "PLUS_B",
           ${sqlParseNumber('"TrCNT"')} AS "TrCNT",
           ${sqlParseNumber('"TrAR"')} AS "TrAR",
           ${sqlParseNumber('"TRID"')} AS "TRID",
-          ${sqlParseNumber('"PESO"')} AS PESO
+          CASE 
+            WHEN "PESO" IS NULL OR "PESO" = '' THEN 0
+            ELSE CAST(REPLACE(REPLACE("PESO", '.', ''), ',', '.') AS NUMERIC)
+          END AS "PESO"
         FROM tb_calidad_fibra
         WHERE "TIPO_MOV" = 'MIST'
-          AND ("LOTE" = ANY($1::text[]) OR "LOTE_FIAC" = ANY($1::text[]))
+          AND "MISTURA" IS NOT NULL
+          AND CAST(NULLIF(regexp_replace("LOTE_FIAC", '[^0-9]', '', 'g'), '') AS INTEGER)::TEXT = ANY($1::text[])
       `
+      
       const hviRows = await query(sql, [lotes], 'seguimiento-roladas-fibra-hvi')
+      
+      // Use numeric/short string key for map
       hviMap = hviRows.rows.reduce((acc, row) => {
-        const key = String(row.LOTE_FIAC || row.LOTE || '').trim()
-        if (!key) return acc
-        if (!acc[key]) {
-          acc[key] = { ...row, _peso: 0, _sum: {} }
+        // Normalize keys to short string (e.g. "104")
+        // ONLY use LOTE_FIAC as key, matching legacy system
+        const k2 = String(row.LOTE_FIAC || '').replace(/^0+/, '').trim()
+        
+        // Prefer LOTE_FIAC (normalized) as canonical key
+        const primaryKey = k2
+        
+        if (!primaryKey) return acc
+
+
+        if (!acc[primaryKey]) {
+          acc[primaryKey] = { 
+             ...row, 
+             MISTURA: [],
+             FECHA_INGRESO: [],
+             _peso: 0, 
+             _sum: {},
+             _dist: {},
+             _colors: {}
+          }
         }
+        
+        const target = acc[primaryKey]
+        
+        // Collect Metadata (Set-like behavior) WITH normalization
+        if (row.MISTURA) {
+          const m = String(row.MISTURA).replace(/^0+/, '')
+          if (m && !target.MISTURA.includes(m)) target.MISTURA.push(m)
+        }
+        if (row.FECHA_INGRESO) {
+          const d = row.FECHA_INGRESO instanceof Date
+            ? row.FECHA_INGRESO.toISOString().split('T')[0]
+            : String(row.FECHA_INGRESO).split('T')[0]
+          if (d && !target.FECHA_INGRESO.includes(d)) target.FECHA_INGRESO.push(d)
+        }
+
         const peso = Number(row.PESO) || 0
-        acc[key]._peso += peso
+        target._peso += peso
+
+        // Color weights
+        const cor = String(row.COR || '').toUpperCase().trim()
+        if (cor) {
+             target._colors[cor] = (target._colors[cor] || 0) + peso
+        }
+
         for (const k of ['SCI','MST','MIC','MAT','UHML','UI','SF','STR','ELG','RD','PLUS_B','TrCNT','TrAR','TRID']) {
           const val = Number(row[k])
           if (!isNaN(val)) {
-            acc[key]._sum[k] = (acc[key]._sum[k] || 0) + val * peso
+            target._sum[k] = (target._sum[k] || 0) + val * peso
+            // Collect distribution for stats
+            if (!target._dist[k]) target._dist[k] = []
+            target._dist[k].push(val)
           }
         }
+        
+        // Ensure strictly padded or unpadded lookups work
+        // if (k1) acc[k1] = target // Removed to ensure we STRICTLY use LOTE_FIAC
+        if (k2) acc[k2] = target
+        
         return acc
       }, {})
 
+      // Finalize weighted averages in the map items
+      // Note: multiple keys point to the same object, so calculate once per object
+      const processedObjects = new Set()
       for (const key of Object.keys(hviMap)) {
         const item = hviMap[key]
+        if (processedObjects.has(item)) continue
+        processedObjects.add(item)
+
         const peso = item._peso || 0
         for (const k of Object.keys(item._sum)) {
           item[k] = peso ? item._sum[k] / peso : null
+
+          // Calculate MIN, MAX, SIGMA
+          const vals = item._dist ? (item._dist[k] || []) : []
+          if (vals.length > 0) {
+              item[`${k}_MIN`] = Math.min(...vals)
+              item[`${k}_MAX`] = Math.max(...vals)
+              const n = vals.length
+              const simpleMean = vals.reduce((a,b)=>a+b,0)/n
+              const variance = vals.reduce((a,b) => a + Math.pow(b - simpleMean, 2), 0) / (n > 1 ? n - 1 : 1)
+              item[`${k}_SIGMA`] = Math.sqrt(variance)
+          } else {
+              item[`${k}_MIN`] = null
+              item[`${k}_MAX`] = null
+              item[`${k}_SIGMA`] = null
+          }
+        }
+        
+        // Calculate Colors
+        if (peso > 0 && item._colors) {
+            item.COLOR_BCO_PCT = (item._colors['BCO'] || 0) / peso * 100
+            item.COLOR_GRI_PCT = (item._colors['GRI'] || 0) / peso * 100
+            item.COLOR_LG_PCT = (item._colors['LG'] || 0) / peso * 100
+            item.COLOR_AMA_PCT = (item._colors['AMA'] || 0) / peso * 100
+            item.COLOR_LA_PCT = (item._colors['LA'] || 0) / peso * 100
         }
       }
     }
 
     const datosConFibra = (datos || []).map((row) => {
-      const loteKey = String(row.LOTE || '').split(',')[0].trim()
-      const hvi = hviMap[loteKey] || {}
+      // Find all HVI data for comma-separated lotes
+      const loteKeys = String(row.LOTE || '').split(',').map(s => s.trim().replace(/^0+/, '')).filter(Boolean)
+      
+      // Collect valid hvi objects
+      const found = loteKeys.map(k => hviMap[k]).filter(item => item && item.SCI !== undefined)
+      
+      const resultHvi = {
+        MISTURA: null, FECHA_INGRESO: null,
+        SCI: null, MST: null, MIC: null, MAT: null, UHML: null, UI: null, 
+        SF: null, STR: null, ELG: null, RD: null, PLUS_B: null, 
+        TrCNT: null, TrAR: null, TRID: null
+      }
+
+      if (found.length > 0) {
+        // Aggregate metadata from all matched lote items
+        const allMisturas = new Set()
+        const allFechas = new Set()
+        
+        found.forEach(item => {
+             if (Array.isArray(item.MISTURA)) item.MISTURA.forEach(m => allMisturas.add(m))
+             else if (item.MISTURA) allMisturas.add(item.MISTURA)
+
+             if (Array.isArray(item.FECHA_INGRESO)) item.FECHA_INGRESO.forEach(f => allFechas.add(f))
+             else if (item.FECHA_INGRESO) allFechas.add(item.FECHA_INGRESO)
+        })
+        
+        resultHvi.MISTURA = Array.from(allMisturas).join(',')
+        
+        // Sort dates to pick the earliest? Or just join them?
+        // Reference uses MIN(FECHA_INGRESO)
+        const sortedFechas = Array.from(allFechas).sort((a,b) => {
+             const ma = a.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+             const mb = b.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+             if (ma && mb) {
+                 const ka = `${ma[3]}${ma[2]}${ma[1]}`
+                 const kb = `${mb[3]}${mb[2]}${mb[1]}`
+                 return ka.localeCompare(kb)
+             }
+             return a.localeCompare(b)
+        })
+        resultHvi.FECHA_INGRESO = sortedFechas[0] || null
+
+        // Average the numeric fields
+        const keys = ['SCI','MST','MIC','MAT','UHML','UI','SF','STR','ELG','RD','PLUS_B','TrCNT','TrAR','TRID']
+        keys.forEach(k => {
+          const validValues = found.map(f => f[k]).filter(v => v !== null && v !== undefined)
+          if (validValues.length > 0) {
+             const sum = validValues.reduce((a,b) => a+b, 0)
+             resultHvi[k] = sum / validValues.length
+          }
+
+          // Min of Mins
+          const mins = found.map(f => f[`${k}_MIN`]).filter(v => v !== null && v !== undefined)
+          if (mins.length > 0) resultHvi[`${k}_MIN`] = Math.min(...mins)
+
+          // Max of Maxs
+          const maxs = found.map(f => f[`${k}_MAX`]).filter(v => v !== null && v !== undefined)
+          if (maxs.length > 0) resultHvi[`${k}_MAX`] = Math.max(...maxs)
+
+          // Avg of Sigmas (Simple approximation)
+          const sigmas = found.map(f => f[`${k}_SIGMA`]).filter(v => v !== null && v !== undefined)
+          if (sigmas.length > 0) resultHvi[`${k}_SIGMA`] = sigmas.reduce((a,b)=>a+b,0) / sigmas.length
+        })
+
+        // Colors
+        const colors = ['COLOR_BCO_PCT', 'COLOR_GRI_PCT', 'COLOR_LG_PCT', 'COLOR_AMA_PCT', 'COLOR_LA_PCT']
+        colors.forEach(k => {
+            const vals = found.map(f => f[k]).filter(v => v !== null && v !== undefined)
+            if (vals.length > 0) resultHvi[k] = vals.reduce((a,b) => a+b, 0) / vals.length
+        })
+      }
+
       return {
         ...row,
-        MISTURA: hvi.MISTURA || null,
-        FECHA_INGRESO: hvi.FECHA_INGRESO || null,
-        SCI: hvi.SCI ?? null,
-        MST: hvi.MST ?? null,
-        MIC: hvi.MIC ?? null,
-        MAT: hvi.MAT ?? null,
-        UHML: hvi.UHML ?? null,
-        UI: hvi.UI ?? null,
-        SF: hvi.SF ?? null,
-        STR: hvi.STR ?? null,
-        ELG: hvi.ELG ?? null,
-        RD: hvi.RD ?? null,
-        PLUS_B: hvi.PLUS_B ?? null,
-        TrCNT: hvi.TrCNT ?? null,
-        TrAR: hvi.TrAR ?? null,
-        TRID: hvi.TRID ?? null,
-        COLOR_BCO_PCT: null,
-        COLOR_GRI_PCT: null,
-        COLOR_LG_PCT: null,
-        COLOR_AMA_PCT: null,
-        COLOR_LA_PCT: null
+        ...resultHvi
       }
     })
 
