@@ -147,14 +147,14 @@
               <td @click="abrirModalDetalle(item.ROLADA, index, 'indigo')" class="px-2 py-2.5 text-center text-slate-700 border-r border-slate-200 cursor-pointer hover:bg-blue-50 transition-colors">{{ item.BASE }}</td>
               <td @click="abrirModalDetalle(item.ROLADA, index, 'indigo')" class="px-2 py-2.5 text-center text-slate-600 border-r border-slate-200 cursor-pointer hover:bg-blue-50 transition-colors">{{ item.COLOR }}</td>
               <td @click="abrirModalDetalle(item.ROLADA, index, 'indigo')" class="px-2 py-2.5 text-center text-slate-700 font-medium tabular-nums border-r border-slate-200 cursor-pointer hover:bg-blue-50 transition-colors">{{ formatNumber(item.MTS_IND, 0) }}</td>
-              <td @click="abrirModalDetalle(item.ROLADA, index, 'indigo')" class="px-2 py-2.5 text-center text-slate-600 tabular-nums border-r border-slate-200 cursor-pointer hover:bg-blue-50 transition-colors">{{ formatNumber(item.R103, 1) }}</td>
-              <td @click="abrirModalDetalle(item.ROLADA, index, 'indigo')" class="px-2 py-2.5 text-center text-slate-600 tabular-nums border-r border-slate-200 cursor-pointer hover:bg-blue-50 transition-colors">{{ item.CAV || '-' }}</td>
-              <td @click="abrirModalDetalle(item.ROLADA, index, 'indigo')" class="px-2 py-2.5 text-center text-slate-600 tabular-nums border-r border-slate-200 cursor-pointer hover:bg-blue-50 transition-colors">{{ formatNumber(item.VEL_NOM, 0) }}</td>
-              <td @click="abrirModalDetalle(item.ROLADA, index, 'indigo')" class="px-2 py-2.5 text-center text-slate-600 tabular-nums border-r-2 border-slate-300 cursor-pointer hover:bg-blue-50 transition-colors">{{ formatNumber(item.VEL_PROM, 0) }}</td>
+              <td @click="abrirModalDetalle(item.ROLADA, index, 'indigo')" class="px-2 py-2.5 text-center text-slate-600 tabular-nums border-r border-slate-200 cursor-pointer hover:bg-blue-50 transition-colors">{{ formatNumber(item.R103, 2) }}</td>
+              <td @click="abrirModalDetalle(item.ROLADA, index, 'indigo')" class="px-2 py-2.5 text-center text-slate-600 tabular-nums border-r border-slate-200 cursor-pointer hover:bg-blue-50 transition-colors">{{ formatNumber(item.CAV, 0) }}</td>
+              <td @click="abrirModalDetalle(item.ROLADA, index, 'indigo')" class="px-2 py-2.5 text-center text-slate-600 tabular-nums border-r border-slate-200 cursor-pointer hover:bg-blue-50 transition-colors">{{ formatNumber(item.VEL_NOM, 1) }}</td>
+              <td @click="abrirModalDetalle(item.ROLADA, index, 'indigo')" class="px-2 py-2.5 text-center text-slate-600 tabular-nums border-r-2 border-slate-300 cursor-pointer hover:bg-blue-50 transition-colors">{{ formatNumber(item.VEL_PROM, 1) }}</td>
               <td class="px-2 py-2.5 text-center text-slate-700 font-medium tabular-nums border-r border-slate-200 cursor-pointer hover:bg-purple-50 transition-colors" @click="abrirModalDetalle(item.ROLADA, index, 'tecelagem')">{{ formatNumber(item.MTS_CRUDOS, 0) }}</td>
               <td class="px-2 py-2.5 text-center text-slate-600 tabular-nums border-r border-slate-200 cursor-pointer hover:bg-purple-50 transition-colors" @click="abrirModalDetalle(item.ROLADA, index, 'tecelagem')">{{ formatNumber(item.EFI_TEJ, 1) }}</td>
-              <td class="px-2 py-2.5 text-center text-slate-600 tabular-nums border-r border-slate-200 cursor-pointer hover:bg-purple-50 transition-colors" @click="abrirModalDetalle(item.ROLADA, index, 'tecelagem')">{{ formatNumber(item.RU105, 1) }}</td>
-              <td class="px-2 py-2.5 text-center text-slate-600 tabular-nums border-r-2 border-slate-300 cursor-pointer hover:bg-purple-50 transition-colors" @click="abrirModalDetalle(item.ROLADA, index, 'tecelagem')">{{ formatNumber(item.RT105, 1) }}</td>
+              <td class="px-2 py-2.5 text-center text-slate-600 tabular-nums border-r border-slate-200 cursor-pointer hover:bg-purple-50 transition-colors" @click="abrirModalDetalle(item.ROLADA, index, 'tecelagem')">{{ formatNumber(item.RU105, 2) }}</td>
+              <td class="px-2 py-2.5 text-center text-slate-600 tabular-nums border-r-2 border-slate-300 cursor-pointer hover:bg-purple-50 transition-colors" @click="abrirModalDetalle(item.ROLADA, index, 'tecelagem')">{{ formatNumber(item.RT105, 2) }}</td>
               <td class="px-2 py-2.5 text-center text-slate-700 font-medium tabular-nums border-r border-slate-200 cursor-pointer hover:bg-teal-50 transition-colors" @click="abrirModalDetalle(item.ROLADA, index, 'calidad')">{{ formatNumber(item.MTS_CAL, 0) }}</td>
               <td class="px-2 py-2.5 text-center text-slate-600 tabular-nums border-r border-slate-200 cursor-pointer hover:bg-teal-50 transition-colors" @click="abrirModalDetalle(item.ROLADA, index, 'calidad')">{{ formatNumber(item.CAL_PERCENT, 1) }}</td>
               <td class="px-2 py-2.5 text-center text-slate-600 tabular-nums cursor-pointer hover:bg-teal-50 transition-colors" @click="abrirModalDetalle(item.ROLADA, index, 'calidad')">{{ formatNumber(item.PTS_100M2, 1) }}</td>
@@ -176,8 +176,8 @@
               <td class="px-2 py-3 text-center tabular-nums border-r-2 border-slate-300 border-t-2 border-t-slate-300">{{ formatNumber(totalesMes.VEL_PROM, 0) }}</td>
               <td class="px-2 py-3 text-center tabular-nums border-r border-slate-200 border-t-2 border-t-slate-300">{{ formatNumber(totalesMes.MTS_CRUDOS, 0) }}</td>
               <td class="px-2 py-3 text-center tabular-nums border-r border-slate-200 border-t-2 border-t-slate-300">{{ formatNumber(totalesMes.EFI_TEJ, 1) }}</td>
-              <td class="px-2 py-3 text-center tabular-nums border-r border-slate-200 border-t-2 border-t-slate-300">{{ formatNumber(totalesMes.RU105, 1) }}</td>
-              <td class="px-2 py-3 text-center tabular-nums border-r-2 border-slate-300 border-t-2 border-t-slate-300">{{ formatNumber(totalesMes.RT105, 1) }}</td>
+              <td class="px-2 py-3 text-center tabular-nums border-r border-slate-200 border-t-2 border-t-slate-300">{{ formatNumber(totalesMes.RU105, 2) }}</td>
+              <td class="px-2 py-3 text-center tabular-nums border-r-2 border-slate-300 border-t-2 border-t-slate-300">{{ formatNumber(totalesMes.RT105, 2) }}</td>
               <td class="px-2 py-3 text-center tabular-nums border-r border-slate-200 border-t-2 border-t-slate-300">{{ formatNumber(totalesMes.MTS_CAL, 0) }}</td>
               <td class="px-2 py-3 text-center tabular-nums border-r border-slate-200 border-t-2 border-t-slate-300">{{ formatNumber(totalesMes.CAL_PERCENT, 1) }}</td>
               <td class="px-2 py-3 text-center tabular-nums border-t-2 border-t-slate-300">{{ formatNumber(totalesMes.PTS_100M2, 1) }}</td>
@@ -1038,8 +1038,8 @@ const calcularRot106 = (rupturas, metros, numFios) => {
   
   const valor = (rup * 1000000) / (mts * fios);
   return new Intl.NumberFormat('es-ES', {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
   }).format(valor);
 };
 
@@ -3077,26 +3077,32 @@ const exportarAExcel = async () => {
     
     // Agregar datos
     datos.value.forEach(item => {
+      // Calcular Rot 10^6 numéricamente para el Excel
+      let rot106Val = null;
+      if (item.URDIDORA_METROS && item.NUM_FIOS && Number(item.URDIDORA_METROS) > 0 && Number(item.NUM_FIOS) > 0) {
+        rot106Val = (Number(item.URDIDORA_ROTURAS || 0) * 1000000) / (Number(item.URDIDORA_METROS) * Number(item.NUM_FIOS));
+      }
+
       const row = worksheet.addRow({
         ROLADA: item.ROLADA,
         MAQ_OE: formatListaConY(item.MAQ_OE),
         LOTE: formatListaConY(item.LOTE),
-        ROT_106: calcularRot106(item.URDIDORA_ROTURAS, item.URDIDORA_METROS, item.NUM_FIOS),
+        ROT_106: rot106Val,
         FECHA: item.FECHA,
         BASE: item.BASE,
         COLOR: item.COLOR,
-        MTS_IND: item.MTS_IND,
-        R103: item.R103,
-        CAV: item.CAV,
-        VEL_NOM: item.VEL_NOM,
-        VEL_PROM: item.VEL_PROM,
-        MTS_CRUDOS: item.MTS_CRUDOS,
-        EFI_TEJ: item.EFI_TEJ,
-        RU105: item.RU105,
-        RT105: item.RT105,
-        MTS_CAL: item.MTS_CAL,
-        CAL_PERCENT: item.CAL_PERCENT,
-        PTS_100M2: item.PTS_100M2
+        MTS_IND: item.MTS_IND ? Number(item.MTS_IND) : null,
+        R103: item.R103 ? Number(item.R103) : null,
+        CAV: item.CAV ? Number(item.CAV) : null,
+        VEL_NOM: item.VEL_NOM ? Number(item.VEL_NOM) : null,
+        VEL_PROM: item.VEL_PROM ? Number(item.VEL_PROM) : null,
+        MTS_CRUDOS: item.MTS_CRUDOS ? Number(item.MTS_CRUDOS) : null,
+        EFI_TEJ: item.EFI_TEJ ? Number(item.EFI_TEJ) : null,
+        RU105: item.RU105 ? Number(item.RU105) : null,
+        RT105: item.RT105 ? Number(item.RT105) : null,
+        MTS_CAL: item.MTS_CAL ? Number(item.MTS_CAL) : null,
+        CAL_PERCENT: item.CAL_PERCENT ? Number(item.CAL_PERCENT) : null,
+        PTS_100M2: item.PTS_100M2 ? Number(item.PTS_100M2) : null
       });
       
       row.height = 16;
@@ -3130,17 +3136,18 @@ const exportarAExcel = async () => {
       
       // Formato numérico
       row.getCell('MTS_IND').numFmt = '#,##0';
-      row.getCell('R103').numFmt = '0.0';
-      row.getCell('VEL_NOM').numFmt = '0';
-      row.getCell('VEL_PROM').numFmt = '0';
+      row.getCell('R103').numFmt = '#,##0.00';
+      row.getCell('CAV').numFmt = '#,##0';
+      row.getCell('VEL_NOM').numFmt = '#,##0.0';
+      row.getCell('VEL_PROM').numFmt = '#,##0.0';
       row.getCell('MTS_CRUDOS').numFmt = '#,##0';
-      row.getCell('EFI_TEJ').numFmt = '0.0';
-      row.getCell('RU105').numFmt = '0.0';
-      row.getCell('RT105').numFmt = '0.0';
+      row.getCell('EFI_TEJ').numFmt = '#,##0.0';
+      row.getCell('RU105').numFmt = '#,##0.00';
+      row.getCell('RT105').numFmt = '#,##0.00';
       row.getCell('MTS_CAL').numFmt = '#,##0';
-      row.getCell('CAL_PERCENT').numFmt = '0.0';
-      row.getCell('PTS_100M2').numFmt = '0.0';
-      row.getCell('ROT_106').numFmt = '0.00';
+      row.getCell('CAL_PERCENT').numFmt = '#,##0.0';
+      row.getCell('PTS_100M2').numFmt = '#,##0.0';
+      row.getCell('ROT_106').numFmt = '#,##0.00';
       
       // Colores especiales para valores destacados
       row.getCell('ROT_106').font = { size: 9, color: { argb: 'FF059669' }, bold: true };
@@ -3148,6 +3155,50 @@ const exportarAExcel = async () => {
       row.getCell('EFI_TEJ').font = { size: 9, color: { argb: 'FF7C3AED' }, bold: true };
       row.getCell('CAL_PERCENT').font = { size: 9, color: { argb: 'FFB45309' }, bold: true };
     });
+    
+    // Fila de totales en Excel
+    if (totalesMes.value) {
+      const totalRow = worksheet.addRow({
+        ROLADA: `TOTAL ${totalesMes.value.TOTAL_ROLADAS} roladas`,
+        ROT_106: (Number(totalesMes.value.URDIDORA_ROTURAS) * 1000000) / (Number(totalesMes.value.URDIDORA_METROS) * Number(totalesMes.value.NUM_FIOS) || 1),
+        MTS_IND: Number(totalesMes.value.MTS_IND),
+        R103: Number(totalesMes.value.R103),
+        CAV: Number(totalesMes.value.CAV),
+        VEL_PROM: Number(totalesMes.value.VEL_PROM),
+        MTS_CRUDOS: Number(totalesMes.value.MTS_CRUDOS),
+        EFI_TEJ: Number(totalesMes.value.EFI_TEJ),
+        RU105: Number(totalesMes.value.RU105),
+        RT105: Number(totalesMes.value.RT105),
+        MTS_CAL: Number(totalesMes.value.MTS_CAL),
+        CAL_PERCENT: Number(totalesMes.value.CAL_PERCENT),
+        PTS_100M2: Number(totalesMes.value.PTS_100M2)
+      });
+      
+      totalRow.font = { bold: true, size: 9 };
+      totalRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      totalRow.eachCell((cell) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+        cell.border = {
+          top: { style: 'medium', color: { argb: 'FF94A3B8' } },
+          bottom: { style: 'medium', color: { argb: 'FF94A3B8' } },
+          right: { style: 'thin', color: { argb: 'FFCBD5E1' } }
+        };
+      });
+      
+      // Aplicar formatos a los totales
+      totalRow.getCell('MTS_IND').numFmt = '#,##0';
+      totalRow.getCell('R103').numFmt = '#,##0.00';
+      totalRow.getCell('CAV').numFmt = '#,##0';
+      totalRow.getCell('VEL_PROM').numFmt = '#,##0.0';
+      totalRow.getCell('MTS_CRUDOS').numFmt = '#,##0';
+      totalRow.getCell('EFI_TEJ').numFmt = '#,##0.0';
+      totalRow.getCell('RU105').numFmt = '#,##0.00';
+      totalRow.getCell('RT105').numFmt = '#,##0.00';
+      totalRow.getCell('MTS_CAL').numFmt = '#,##0';
+      totalRow.getCell('CAL_PERCENT').numFmt = '#,##0.0';
+      totalRow.getCell('PTS_100M2').numFmt = '#,##0.0';
+      totalRow.getCell('ROT_106').numFmt = '#,##0.00';
+    }
     
     // Fila de totales del mes
     if (totalesMes.value) {
@@ -3199,16 +3250,16 @@ const exportarAExcel = async () => {
       
       // Formato numérico para totales
       totalRow.getCell('MTS_IND').numFmt = '#,##0';
-      totalRow.getCell('R103').numFmt = '0.0';
-      totalRow.getCell('VEL_PROM').numFmt = '0';
+      totalRow.getCell('R103').numFmt = '#,##0.00';
+      totalRow.getCell('VEL_PROM').numFmt = '#,##0.0';
       totalRow.getCell('MTS_CRUDOS').numFmt = '#,##0';
-      totalRow.getCell('EFI_TEJ').numFmt = '0.0';
-      totalRow.getCell('RU105').numFmt = '0.0';
-      totalRow.getCell('RT105').numFmt = '0.0';
+      totalRow.getCell('EFI_TEJ').numFmt = '#,##0.0';
+      totalRow.getCell('RU105').numFmt = '#,##0.00';
+      totalRow.getCell('RT105').numFmt = '#,##0.00';
       totalRow.getCell('MTS_CAL').numFmt = '#,##0';
-      totalRow.getCell('CAL_PERCENT').numFmt = '0.0';
-      totalRow.getCell('PTS_100M2').numFmt = '0.0';
-      totalRow.getCell('ROT_106').numFmt = '0.00';
+      totalRow.getCell('CAL_PERCENT').numFmt = '#,##0.0';
+      totalRow.getCell('PTS_100M2').numFmt = '#,##0.0';
+      totalRow.getCell('ROT_106').numFmt = '#,##0.00';
       
       // Colores especiales para valores destacados en totales
       totalRow.getCell('ROT_106').font = { size: 10, color: { argb: 'FF059669' }, bold: true };
@@ -3232,7 +3283,8 @@ const exportarAExcel = async () => {
     const yy = String(now.getFullYear()).slice(-2);
     const hh = String(now.getHours()).padStart(2, '0');
     const min = String(now.getMinutes()).padStart(2, '0');
-    const timestamp = `${dd}-${mm}-${yy}_${hh}${min}`;
+    const ss = String(now.getSeconds()).padStart(2, '0');
+    const timestamp = `${dd}-${mm}-${yy}_${hh}${min}${ss}`;
     
     // Generar archivo
     const buffer = await workbook.xlsx.writeBuffer();

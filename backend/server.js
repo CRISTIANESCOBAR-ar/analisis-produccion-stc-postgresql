@@ -2993,17 +2993,20 @@ app.get('/api/consulta-partida-calidad', async (req, res) => {
 })
 
 async function getSeguimientoRoladasData(fechaInicio, fechaFin) {
-  const metragemNum = sqlParseNumber('"METRAGEM"')
-  const rupturasNum = sqlParseNumber('"RUPTURAS"')
-  const cavalosNum = sqlParseNumber('"CAVALOS"')
-  const velocNum = sqlParseNumber('"VELOC"')
-  const eficienciaNum = sqlParseNumber('"EFICIENCIA"')
-  const parTraNum = sqlParseNumber('"PARADA TEC TRAMA"')
-  const parUrdNum = sqlParseNumber('"PARADA TEC URDUME"')
+  const metragemNum = sqlParseNumberIntl('"METRAGEM"')
+  const rupturasNum = sqlParseNumberIntl('"RUPTURAS"')
+  const cavalosNum = sqlParseNumberIntl('"CAVALOS"')
+  const velocNum = sqlParseNumberIntl('"VELOC"')
+  const pontosLidosNum = sqlParseNumberIntl('"PONTOS_LIDOS"')
+  const puntos100Num = sqlParseNumberIntl('"PONTOS_100%"')
+  const parTraNum = sqlParseNumberIntl('"PARADA TEC TRAMA"')
+  const parUrdNum = sqlParseNumberIntl('"PARADA TEC URDUME"')
 
-  const calMetragemNum = sqlParseNumber('"METRAGEM"')
-  const calPontuacaoNum = sqlParseNumber('"PONTUACAO"')
-  const calLarguraNum = sqlParseNumber('"LARGURA"')
+  const calMetragemNum = sqlParseNumberIntl('"METRAGEM"')
+  const calPontuacaoNum = sqlParseNumberIntl('"PONTUACAO"')
+  const calLarguraNum = sqlParseNumberIntl('"LARGURA"')
+
+  const maqExpr = 'COALESCE("MAQ FIACAO", "MAQUINA")'
 
   const sql = `
     WITH IND AS (
@@ -3026,11 +3029,21 @@ async function getSeguimientoRoladasData(fechaInicio, fechaFin) {
     URD AS (
       SELECT
         "ROLADA" AS ROLADA,
-        string_agg(DISTINCT "MAQUINA", ', ') AS MAQ_OE,
+        string_agg(
+          DISTINCT NULLIF(
+            CASE 
+              WHEN length(regexp_replace(${maqExpr}, '\\D', '', 'g')) >= 2 
+              THEN right(regexp_replace(${maqExpr}, '\\D', '', 'g'), 2)::int::text
+              ELSE regexp_replace(${maqExpr}, '\\D', '', 'g')
+            END,
+            ''
+          ),
+          ', '
+        ) AS MAQ_OE,
         string_agg(DISTINCT "LOTE FIACAO", ', ') AS LOTE,
         SUM(${metragemNum}) AS URDIDORA_METROS,
         SUM(${rupturasNum}) AS URDIDORA_ROTURAS,
-        MAX(${sqlParseNumber('"NUM_FIOS"')}) AS NUM_FIOS
+        MAX(${sqlParseNumberIntl('"NUM_FIOS"')}) AS NUM_FIOS
       FROM tb_produccion
       WHERE "SELETOR" IN ('URDIDEIRA', 'URDIDORA')
         AND "FILIAL" = '05'
@@ -3041,7 +3054,7 @@ async function getSeguimientoRoladasData(fechaInicio, fechaFin) {
       SELECT
         "ROLADA" AS ROLADA,
         SUM(${metragemNum}) AS MTS_CRUDOS,
-        SUM(${metragemNum} * COALESCE(${eficienciaNum}, 0)) / NULLIF(SUM(${metragemNum}), 0) AS EFI_TEJ,
+        ROUND((SUM(COALESCE(${pontosLidosNum}, 0))::numeric / NULLIF(SUM(COALESCE(${puntos100Num}, 0)), 0)) * 100, 2) AS EFI_TEJ,
         SUM(${parTraNum}) AS PARADA_TRAMA,
         SUM(${parUrdNum}) AS PARADA_URD
       FROM tb_produccion
@@ -3054,7 +3067,7 @@ async function getSeguimientoRoladasData(fechaInicio, fechaFin) {
       SELECT
         "ROLADA" AS ROLADA,
         SUM(${calMetragemNum}) AS MTS_CAL,
-        SUM(CASE WHEN "QUALIDADE" ILIKE 'PRIMEIRA%' THEN ${calMetragemNum} ELSE 0 END) AS METROS_1ERA,
+        SUM(CASE WHEN btrim("QUALIDADE") = 'PRIMEIRA' THEN ${calMetragemNum} ELSE 0 END) AS METROS_1ERA,
         SUM(COALESCE(${calPontuacaoNum}, 0)) AS PONTOS,
         AVG(${calLarguraNum}) AS LARGURA
       FROM tb_calidad
@@ -3074,17 +3087,17 @@ async function getSeguimientoRoladasData(fechaInicio, fechaFin) {
       IND.BASE AS "BASE",
       IND.COLOR AS "COLOR",
       IND.MTS_IND AS "MTS_IND",
-      ROUND((IND.RUPTURAS * 1000) / NULLIF(IND.MTS_IND, 0), 1) AS "R103",
+      ROUND(((IND.RUPTURAS * 1000) / NULLIF(IND.MTS_IND, 0))::numeric, 2) AS "R103",
       IND.CAV AS "CAV",
       IND.VEL_NOM AS "VEL_NOM",
       IND.VEL_PROM AS "VEL_PROM",
       TEC.MTS_CRUDOS AS "MTS_CRUDOS",
       TEC.EFI_TEJ AS "EFI_TEJ",
-      ROUND((TEC.PARADA_URD * 100000) / NULLIF(TEC.MTS_CRUDOS * 1000, 0), 1) AS "RU105",
-      ROUND((TEC.PARADA_TRAMA * 100000) / NULLIF(TEC.MTS_CRUDOS * 1000, 0), 1) AS "RT105",
+      ROUND(((TEC.PARADA_URD * 100000) / NULLIF(TEC.MTS_CRUDOS * 1000, 0))::numeric, 2) AS "RU105",
+      ROUND(((TEC.PARADA_TRAMA * 100000) / NULLIF(TEC.MTS_CRUDOS * 1000, 0))::numeric, 2) AS "RT105",
       CAL.MTS_CAL AS "MTS_CAL",
-      ROUND((CAL.METROS_1ERA / NULLIF(CAL.MTS_CAL, 0)) * 100, 1) AS "CAL_PERCENT",
-      ROUND((CAL.PONTOS * 100) / NULLIF((CAL.MTS_CAL * NULLIF(CAL.LARGURA, 0) / 100), 0), 1) AS "PTS_100M2",
+      ROUND(((CAL.METROS_1ERA / NULLIF(CAL.MTS_CAL, 0)) * 100)::numeric, 1) AS "CAL_PERCENT",
+      ROUND(((CAL.PONTOS * 100) / NULLIF((CAL.MTS_CAL * NULLIF(CAL.LARGURA, 0) / 100), 0))::numeric, 1) AS "PTS_100M2",
       IND.RUPTURAS AS "RUPTURAS"
     FROM IND
     LEFT JOIN URD ON URD.ROLADA = IND.ROLADA

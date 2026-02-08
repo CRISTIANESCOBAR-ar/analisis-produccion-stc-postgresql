@@ -582,7 +582,8 @@ const exportarAExcel = async () => {
     const yy = String(now.getFullYear()).slice(-2);
     const hh = String(now.getHours()).padStart(2, '0');
     const min = String(now.getMinutes()).padStart(2, '0');
-    const timestamp = `${dd}-${mm}-${yy}_${hh}${min}`;
+    const ss = String(now.getSeconds()).padStart(2, '0');
+    const timestamp = `${dd}-${mm}-${yy}_${hh}${min}${ss}`;
     
     a.download = `ROLADAS_${periodoFormateado.value}_${timestamp}.xlsx`;
     a.click();
