@@ -621,7 +621,7 @@ app.get('/api/produccion/calidad/revision-cq', async (req, res) => {
     else if (tramas === 'POL 100%') tramasFilter = `AND left("ARTIGO", 1) = 'P'`
 
     const datProdDate = sqlParseDate('"DAT_PROD"')
-    const metragemNum = sqlParseNumber('"METRAGEM"')
+    const metragemNum = sqlParseNumberIntl('"METRAGEM"')
     const pontuacaoNum = sqlParseNumber('"PONTUACAO"')
     const larguraNum = sqlParseNumber('"LARGURA"')
 
@@ -735,7 +735,7 @@ app.get('/api/produccion/calidad/revisor-detalle', async (req, res) => {
     else if (tramas === 'POL 100%') tramasFilter = `AND left("ARTIGO", 1) = 'P'`
 
     const calDatProdDate = sqlParseDate('"DAT_PROD"')
-    const calMetragemNum = sqlParseNumber('"METRAGEM"')
+    const calMetragemNum = sqlParseNumberIntl('"METRAGEM"')
     const calPontuacaoNum = sqlParseNumber('"PONTUACAO"')
     const calLarguraNum = sqlParseNumber('"LARGURA"')
     const prodPtsLidosNum = sqlParseNumber('P."PONTOS_LIDOS"')
@@ -3653,136 +3653,249 @@ app.get('/api/informe-produccion-indigo', async (req, res) => {
     const { fechaInicio, fechaFin } = req.query
     if (!fechaInicio || !fechaFin) return res.status(400).json({ error: 'fechaInicio y fechaFin requeridos' })
 
-    const metragemNum = sqlParseNumber('"METRAGEM"')
-    const rupturasNum = sqlParseNumber('"RUPTURAS"')
-    const cavalosNum = sqlParseNumber('"CAVALOS"')
-    const velocNum = sqlParseNumber('"VELOC"')
-    const numFiosNum = sqlParseNumber('"NUM_FIOS"')
-    const tempoNum = sqlParseNumber('"TOTAL MINUTOS TUR"')
-    const eficienciaNum = sqlParseNumber('"EFICIENCIA"')
-    const parTraNum = sqlParseNumber('"PARADA TEC TRAMA"')
-    const parUrdNum = sqlParseNumber('"PARADA TEC URDUME"')
+    const produccionColumns = await query(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'tb_produccion'`,
+      [],
+      'tb-produccion-columns-informe'
+    )
+    const prodCols = new Map(
+      (produccionColumns.rows || []).map((r) => [String(r.column_name).toLowerCase(), r.column_name])
+    )
+    const maqKey = ['maq  fiacao', 'maq fiacao'].find((c) => prodCols.has(c))
+    const loteKey = ['lote fiacao', 'lote  fiacao'].find((c) => prodCols.has(c))
+    const maqCol = maqKey ? prodCols.get(maqKey) : null
+    const loteCol = loteKey ? prodCols.get(loteKey) : null
+    const maqExpr = maqCol ? `p.${quoteIdent(maqCol)}` : 'NULL::text'
+    const loteExpr = loteCol ? `p.${quoteIdent(loteCol)}` : 'NULL::text'
+    const maqFilter = maqCol ? `${maqExpr} IS NOT NULL` : '1=1'
+    const loteFilter = loteCol ? `${loteExpr} IS NOT NULL` : '1=1'
 
-    const calMetragemNum = sqlParseNumber('"METRAGEM"')
-    const calPontuacaoNum = sqlParseNumber('"PONTUACAO"')
-    const calLarguraNum = sqlParseNumber('"LARGURA"')
+    const metragemIndNum = sqlParseNumberIntl('"METRAGEM"')
+    const metragemUrdNum = sqlParseNumberIntl('p."METRAGEM"')
+    const rupturasIndNum = sqlParseNumberIntl('"RUPTURAS"')
+    const rupturasUrdNum = sqlParseNumberIntl('p."RUPTURAS"')
+    const cavalosNum = sqlParseNumberIntl('"CAVALOS"')
+    const velocNum = sqlParseNumberIntl('"VELOC"')
+    const numFiosNum = sqlParseNumberIntl('"NUM_FIOS"')
+    const pontosLidosNum = sqlParseNumberIntl('"PONTOS_LIDOS"')
+    const pontos100Num = sqlParseNumberIntl('"PONTOS_100%"')
+    const parTraNum = sqlParseNumberIntl('"PARADA TEC TRAMA"')
+    const parUrdNum = sqlParseNumberIntl('"PARADA TEC URDUME"')
+
+    const calMetragemNum = sqlParseNumberIntl('"METRAGEM"')
+    const calPontuacaoNum = sqlParseNumberIntl('"PONTUACAO"')
+    const calLarguraNum = sqlParseNumberIntl('"LARGURA"')
+
+    const makeTimestampExpr = (dateCol, timeCol) => {
+      const dateExpr = sqlParseDate(dateCol)
+      return `(
+        CASE
+          WHEN ${dateExpr} IS NULL THEN NULL
+          ELSE to_timestamp(
+            to_char(${dateExpr}, 'YYYY-MM-DD') || ' ' || COALESCE(
+              CASE
+                WHEN ${timeCol} ~ '^[0-2][0-9]:[0-5][0-9]$' THEN ${timeCol} || ':00'
+                WHEN ${timeCol} ~ '^[0-2][0-9]:[0-5][0-9]:[0-5][0-9]$' THEN ${timeCol}
+                ELSE NULL
+              END,
+              '00:00:00'
+            ),
+            'YYYY-MM-DD HH24:MI:SS'
+          )
+        END
+      )`
+    }
+
+    const urdStartTs = makeTimestampExpr('p."DT_INICIO"', 'p."HORA_INICIO"')
+    const urdEndTs = makeTimestampExpr('p."DT_FINAL"', 'p."HORA_FINAL"')
+    const indStartTs = makeTimestampExpr('"DT_INICIO"', '"HORA_INICIO"')
+    const indEndTs = makeTimestampExpr('"DT_FINAL"', '"HORA_FINAL"')
 
     const sql = `
-      WITH IND AS (
+      WITH RoladaBase AS (
         SELECT
           "ROLADA" AS ROLADA,
-          MAX(${sqlParseDate('"DT_BASE_PRODUCAO"')}) AS FECHA_INDIGO,
-          MAX("ARTIGO") AS ARTIGO,
-          MAX("COR") AS COR,
-          SUM(${metragemNum}) AS METRAGEM,
-          SUM(${rupturasNum}) AS RUPTURAS,
-          SUM(${cavalosNum}) AS CAVALOS,
-          SUM(${metragemNum} * COALESCE(${velocNum}, 0)) / NULLIF(SUM(${metragemNum}), 0) AS VELOC_PROMEDIO,
-          SUM(COALESCE(${tempoNum}, 0)) AS TIEMPO_MINUTOS
+          "COR" AS COR,
+          MIN(${sqlParseDate('"DT_INICIO"')}) AS FECHA_INICIO,
+          "ARTIGO" AS ARTIGO
         FROM tb_produccion
         WHERE "SELETOR" = 'INDIGO'
-          AND "FILIAL" = '05'
-          AND ${sqlParseDate('"DT_BASE_PRODUCAO"')} BETWEEN $1::date AND $2::date
-        GROUP BY "ROLADA"
+          AND "ROLADA" IS NOT NULL
+          AND "ROLADA" <> ''
+        GROUP BY "ROLADA", "COR", "ARTIGO"
       ),
-      URD AS (
+      NumFiosPorRolada AS (
+        SELECT
+          ROLADA,
+          SUM(NUM_FIOS_MAX) AS NUM_FIOS_SUM
+        FROM (
+          SELECT
+            "ROLADA" AS ROLADA,
+            "PARTIDA" AS PARTIDA,
+            MAX(${numFiosNum}) AS NUM_FIOS_MAX
+          FROM tb_produccion
+          WHERE "SELETOR" = 'URDIDEIRA'
+            AND "ROLADA" IS NOT NULL
+            AND "PARTIDA" IS NOT NULL
+            AND "NUM_FIOS" IS NOT NULL
+          GROUP BY "ROLADA", "PARTIDA"
+        ) AS nf
+        GROUP BY ROLADA
+      ),
+      UrdideiraMetrics AS (
+        SELECT
+          p."ROLADA" AS ROLADA,
+          MIN(${sqlParseDate('p."DT_INICIO"')}) AS FECHA_URDIDORA,
+          string_agg(
+            DISTINCT CAST(
+              NULLIF(regexp_replace(trim(right(${maqExpr}, 2)), '\\D', '', 'g'), '') AS INTEGER
+            )::text,
+            ', '
+          ) AS MAQ_OE,
+          string_agg(
+            DISTINCT CAST(CAST(${loteCol ? sqlParseNumberIntl(loteExpr) : 'NULL::numeric'} AS INTEGER) AS TEXT),
+            ', '
+          ) AS LOTE,
+          SUM(${metragemUrdNum}) / NULLIF(COUNT(DISTINCT p."PARTIDA"), 0) AS METRAGEM_AVG,
+          SUM(${rupturasUrdNum}) AS RUPTURAS_TOTAL,
+          MIN(${urdStartTs}) AS INICIO_MIN,
+          MAX(${urdEndTs}) AS FIN_MAX
+        FROM tb_produccion p
+        WHERE p."SELETOR" = 'URDIDEIRA'
+          AND p."ROLADA" IS NOT NULL
+          AND p."ROLADA" <> ''
+          AND ${maqFilter}
+          AND ${loteFilter}
+        GROUP BY p."ROLADA"
+      ),
+      RoladaMetrics AS (
         SELECT
           "ROLADA" AS ROLADA,
-          MAX(${sqlParseDate('"DT_BASE_PRODUCAO"')}) AS FECHA_URDIDORA,
-          string_agg(DISTINCT "MAQUINA", ', ') AS MAQ_OE,
-          string_agg(DISTINCT "LOTE FIACAO", ', ') AS LOTE,
-          SUM(${metragemNum}) AS URDIDORA_M,
-          SUM(${rupturasNum}) AS URDIDORA_ROT_TOT,
-          MAX(${numFiosNum}) AS NUM_FIOS,
-          SUM(COALESCE(${tempoNum}, 0)) AS URDIDORA_TIEMPO_MIN
-        FROM tb_produccion
-        WHERE "SELETOR" IN ('URDIDEIRA', 'URDIDORA')
-          AND "FILIAL" = '05'
-          AND ${sqlParseDate('"DT_BASE_PRODUCAO"')} BETWEEN $1::date AND $2::date
-        GROUP BY "ROLADA"
-      ),
-      CAL_S AS (
-        SELECT
-          "ROLADA" AS ROLADA,
-          SUM(CASE WHEN "S" = 'N' THEN 1 ELSE 0 END) AS N_COUNT,
-          SUM(CASE WHEN "S" = 'P' THEN 1 ELSE 0 END) AS P_COUNT,
-          SUM(CASE WHEN "S" = 'Q' THEN 1 ELSE 0 END) AS Q_COUNT,
-          COUNT(*) AS TOTAL_S
+          "COR" AS COR,
+          SUM(${metragemIndNum}) AS METRAGEM_TOTAL,
+          SUM(${rupturasIndNum}) AS RUPTURAS_TOTAL,
+          SUM(${cavalosNum}) AS CAVALOS_TOTAL,
+          SUM(${metragemIndNum} * COALESCE(${velocNum}, 0)) AS VELOC_POND_NUM,
+          MIN(${indStartTs}) AS INICIO_MIN,
+          MAX(${indEndTs}) AS FIN_MAX
         FROM tb_produccion
         WHERE "SELETOR" = 'INDIGO'
-          AND "FILIAL" = '05'
-          AND ${sqlParseDate('"DT_BASE_PRODUCAO"')} BETWEEN $1::date AND $2::date
-        GROUP BY "ROLADA"
+          AND "ROLADA" IS NOT NULL
+          AND "ROLADA" <> ''
+        GROUP BY "ROLADA", "COR"
       ),
-      TEC AS (
+      RoladaCalidad AS (
         SELECT
           "ROLADA" AS ROLADA,
-          SUM(${metragemNum}) AS TECELAGEM_METROS,
-          SUM(${metragemNum} * COALESCE(${eficienciaNum}, 0)) / NULLIF(SUM(${metragemNum}), 0) AS TECELAGEM_EFICIENCIA,
-          ROUND((SUM(${parTraNum}) * 100000) / NULLIF(SUM(${metragemNum}) * 1000, 0), 1) AS RT105,
-          ROUND((SUM(${parUrdNum}) * 100000) / NULLIF(SUM(${metragemNum}) * 1000, 0), 1) AS RU105
+          "COR" AS COR,
+          COUNT(DISTINCT CASE WHEN "S" = 'N' THEN "PARTIDA" || '_' || "S" END) AS N_COUNT,
+          COUNT(DISTINCT CASE WHEN "S" = 'P' THEN "PARTIDA" || '_' || "S" END) AS P_COUNT,
+          COUNT(DISTINCT CASE WHEN "S" = 'Q' THEN "PARTIDA" || '_' || "S" END) AS Q_COUNT,
+          COUNT(DISTINCT "PARTIDA" || '_' || "S") AS TOTAL_COUNT
+        FROM tb_produccion
+        WHERE "SELETOR" = 'INDIGO'
+          AND "ROLADA" IS NOT NULL
+          AND "ROLADA" <> ''
+          AND "PARTIDA" IS NOT NULL
+          AND "S" IS NOT NULL
+        GROUP BY "ROLADA", "COR"
+      ),
+      TecelagemMetrics AS (
+        SELECT
+          "ROLADA" AS ROLADA,
+          SUM(${metragemIndNum}) AS METRAGEM_TOTAL,
+          SUM(${pontosLidosNum}) AS PONTOS_LIDOS_TOTAL,
+          SUM(${pontos100Num}) AS PONTOS_100_TOTAL,
+          SUM(${parTraNum}) AS PARADA_TRAMA_TOTAL,
+          SUM(${parUrdNum}) AS PARADA_URDUME_TOTAL
         FROM tb_produccion
         WHERE "SELETOR" = 'TECELAGEM'
-          AND "FILIAL" = '05'
-          AND ${sqlParseDate('"DT_BASE_PRODUCAO"')} BETWEEN $1::date AND $2::date
+          AND "ROLADA" IS NOT NULL
+          AND "ROLADA" <> ''
         GROUP BY "ROLADA"
       ),
-      CAL AS (
+      CalidadMetrics AS (
         SELECT
-          "ROLADA" AS ROLADA,
-          SUM(${calMetragemNum}) AS METROS_CAL,
-          SUM(CASE WHEN "QUALIDADE" ILIKE 'PRIMEIRA%' THEN ${calMetragemNum} ELSE 0 END) AS METROS_1ERA,
-          SUM(COALESCE(${calPontuacaoNum}, 0)) AS PONTOS,
-          AVG(${calLarguraNum}) AS LARGURA
-        FROM tb_calidad
-        WHERE "EMP" = 'STC'
-          AND "QUALIDADE" NOT ILIKE '%RETALHO%'
-          AND ${sqlParseDate('"DAT_PROD"')} BETWEEN $1::date AND $2::date
-        GROUP BY "ROLADA"
+          CAL_M.ROLADA,
+          CAL_M.MTS_CAL,
+          CAL_M.CAL_PERCENT,
+          ROUND(
+            ((PTS.PUNTOS * 100.0) / NULLIF((PTS.MTS_1ERA * PTS.ANC_POND), 0))::numeric,
+            1
+          ) AS PTS_100M2
+        FROM (
+          SELECT
+            "ROLADA" AS ROLADA,
+            SUM(${calMetragemNum}) AS MTS_CAL,
+            ROUND(
+              (SUM(CASE WHEN btrim("QUALIDADE") = 'PRIMEIRA' THEN ${calMetragemNum} ELSE 0 END) * 100.0) /
+              NULLIF(SUM(${calMetragemNum}), 0),
+              1
+            ) AS CAL_PERCENT
+          FROM tb_calidad
+          WHERE "EMP" = 'STC'
+            AND "ROLADA" IS NOT NULL
+            AND "ROLADA" <> ''
+          GROUP BY "ROLADA"
+        ) AS CAL_M
+        LEFT JOIN (
+          SELECT
+            "ROLADA" AS ROLADA,
+            SUM(${calMetragemNum}) AS MTS_1ERA,
+            SUM(${calPontuacaoNum}) AS PUNTOS,
+            SUM(${calMetragemNum} * ${calLarguraNum}) / NULLIF(SUM(${calMetragemNum}), 0) / 100.0 AS ANC_POND
+          FROM tb_calidad
+          WHERE "EMP" = 'STC'
+            AND btrim("QUALIDADE") = 'PRIMEIRA'
+            AND "ROLADA" IS NOT NULL
+            AND "ROLADA" <> ''
+          GROUP BY "ROLADA"
+        ) AS PTS ON CAL_M.ROLADA = PTS.ROLADA
       )
       SELECT
-        IND.ROLADA AS "ROLADA",
-        URD.FECHA_URDIDORA AS "FECHA_URDIDORA",
-        URD.MAQ_OE AS "MAQ_OE",
-        URD.LOTE AS "LOTE",
-        URD.URDIDORA_M AS "URDIDORA_M",
-        URD.URDIDORA_ROT_TOT AS "URDIDORA_ROT_TOT",
-        CASE
-          WHEN URD.URDIDORA_M IS NULL OR URD.NUM_FIOS IS NULL OR URD.URDIDORA_M = 0 OR URD.NUM_FIOS = 0 THEN NULL
-          ELSE (URD.URDIDORA_ROT_TOT * 1000000) / (URD.URDIDORA_M * URD.NUM_FIOS)
-        END AS "URDIDORA_ROT_106",
-        URD.URDIDORA_TIEMPO_MIN AS "URDIDORA_TIEMPO_MIN",
-        IND.FECHA_INDIGO AS "FECHA_INDIGO",
-        IND.ARTIGO AS "ARTIGO",
-        IND.COR AS "COR",
-        IND.METRAGEM AS "METRAGEM",
-        IND.RUPTURAS AS "RUPTURAS",
-        CASE WHEN IND.METRAGEM IS NULL OR IND.METRAGEM = 0 THEN NULL ELSE (IND.RUPTURAS * 1000) / IND.METRAGEM END AS "ROT_103",
-        IND.CAVALOS AS "CAVALOS",
-        IND.TIEMPO_MINUTOS AS "TIEMPO_MINUTOS",
-        IND.VELOC_PROMEDIO AS "VELOC_PROMEDIO",
-        CALS.N_COUNT AS "N_COUNT",
-        CASE WHEN CALS.TOTAL_S = 0 THEN NULL ELSE (CALS.N_COUNT::numeric / CALS.TOTAL_S) * 100 END AS "N_PERCENT",
-        CALS.P_COUNT AS "P_COUNT",
-        CASE WHEN CALS.TOTAL_S = 0 THEN NULL ELSE (CALS.P_COUNT::numeric / CALS.TOTAL_S) * 100 END AS "P_PERCENT",
-        CALS.Q_COUNT AS "Q_COUNT",
-        CASE WHEN CALS.TOTAL_S = 0 THEN NULL ELSE (CALS.Q_COUNT::numeric / CALS.TOTAL_S) * 100 END AS "Q_PERCENT",
-        TEC.TECELAGEM_METROS AS "TECELAGEM_METROS",
-        TEC.TECELAGEM_EFICIENCIA AS "TECELAGEM_EFICIENCIA",
-        TEC.RT105 AS "RT105",
-        TEC.RU105 AS "RU105",
-        CAL.METROS_CAL AS "METROS_CAL",
-        CASE WHEN CAL.METROS_CAL IS NULL OR CAL.METROS_CAL = 0 THEN NULL ELSE (CAL.METROS_1ERA / CAL.METROS_CAL) * 100 END AS "CAL_PERCENT",
-        CASE
-          WHEN CAL.METROS_CAL IS NULL OR CAL.METROS_CAL = 0 OR CAL.LARGURA IS NULL OR CAL.LARGURA = 0 THEN NULL
-          ELSE (CAL.PONTOS * 100) / (CAL.METROS_CAL * CAL.LARGURA / 100)
-        END AS "PTS_100M2"
-      FROM IND
-      LEFT JOIN URD ON URD.ROLADA = IND.ROLADA
-      LEFT JOIN CAL_S CALS ON CALS.ROLADA = IND.ROLADA
-      LEFT JOIN TEC ON TEC.ROLADA = IND.ROLADA
-      LEFT JOIN CAL ON CAL.ROLADA = IND.ROLADA
-      ORDER BY IND.ROLADA::int ASC
+        rb.ROLADA AS "ROLADA",
+        to_char(um.FECHA_URDIDORA, 'DD/MM/YYYY') AS "FECHA_URDIDORA",
+        um.MAQ_OE AS "MAQ_OE",
+        um.LOTE AS "LOTE",
+        ROUND(um.METRAGEM_AVG, 3) AS "URDIDORA_M",
+        um.RUPTURAS_TOTAL AS "URDIDORA_ROT_TOT",
+        ROUND(
+          ((CAST(um.RUPTURAS_TOTAL AS REAL) * 1000000.0) /
+          NULLIF((um.METRAGEM_AVG * nf.NUM_FIOS_SUM), 0))::numeric,
+          6
+        ) AS "URDIDORA_ROT_106",
+        CAST(EXTRACT(EPOCH FROM (um.FIN_MAX - um.INICIO_MIN)) / 60 AS INTEGER) AS "URDIDORA_TIEMPO_MIN",
+        to_char(rb.FECHA_INICIO, 'DD/MM/YYYY') AS "FECHA_INDIGO",
+        rb.COR AS "COR",
+        rb.ARTIGO AS "ARTIGO",
+        ROUND(rm.METRAGEM_TOTAL, 3) AS "METRAGEM",
+        rm.RUPTURAS_TOTAL AS "RUPTURAS",
+        ROUND(((CAST(rm.RUPTURAS_TOTAL AS REAL) * 1000.0) / NULLIF(rm.METRAGEM_TOTAL, 0))::numeric, 2) AS "ROT_103",
+        ROUND(rm.CAVALOS_TOTAL, 1) AS "CAVALOS",
+        ROUND((rm.VELOC_POND_NUM / NULLIF(rm.METRAGEM_TOTAL, 0))::numeric, 2) AS "VELOC_PROMEDIO",
+        CAST(EXTRACT(EPOCH FROM (rm.FIN_MAX - rm.INICIO_MIN)) / 60 AS INTEGER) AS "TIEMPO_MINUTOS",
+        COALESCE(rc.N_COUNT, 0) AS "N_COUNT",
+        ROUND(((CAST(COALESCE(rc.N_COUNT, 0) AS REAL) * 100.0) / NULLIF(rc.TOTAL_COUNT, 0))::numeric, 1) AS "N_PERCENT",
+        COALESCE(rc.P_COUNT, 0) AS "P_COUNT",
+        ROUND(((CAST(COALESCE(rc.P_COUNT, 0) AS REAL) * 100.0) / NULLIF(rc.TOTAL_COUNT, 0))::numeric, 1) AS "P_PERCENT",
+        COALESCE(rc.Q_COUNT, 0) AS "Q_COUNT",
+        ROUND(((CAST(COALESCE(rc.Q_COUNT, 0) AS REAL) * 100.0) / NULLIF(rc.TOTAL_COUNT, 0))::numeric, 1) AS "Q_PERCENT",
+        ROUND(tm.METRAGEM_TOTAL, 0) AS "TECELAGEM_METROS",
+        ROUND(((tm.PONTOS_LIDOS_TOTAL * 100.0) / NULLIF(tm.PONTOS_100_TOTAL, 0))::numeric, 1) AS "TECELAGEM_EFICIENCIA",
+        ROUND(((tm.PARADA_TRAMA_TOTAL * 100000.0) / NULLIF((tm.PONTOS_LIDOS_TOTAL * 1000.0), 0))::numeric, 2) AS "RT105",
+        ROUND(((tm.PARADA_URDUME_TOTAL * 100000.0) / NULLIF((tm.PONTOS_LIDOS_TOTAL * 1000.0), 0))::numeric, 2) AS "RU105",
+        ROUND(cm.MTS_CAL, 0) AS "METROS_CAL",
+        cm.CAL_PERCENT AS "CAL_PERCENT",
+        cm.PTS_100M2 AS "PTS_100M2"
+      FROM RoladaBase rb
+      INNER JOIN UrdideiraMetrics um ON rb.ROLADA = um.ROLADA
+      INNER JOIN NumFiosPorRolada nf ON rb.ROLADA = nf.ROLADA
+      INNER JOIN RoladaMetrics rm ON rb.ROLADA = rm.ROLADA AND rb.COR = rm.COR
+      LEFT JOIN RoladaCalidad rc ON rb.ROLADA = rc.ROLADA AND rb.COR = rc.COR
+      LEFT JOIN TecelagemMetrics tm ON rb.ROLADA = tm.ROLADA
+      LEFT JOIN CalidadMetrics cm ON rb.ROLADA = cm.ROLADA
+      WHERE rb.FECHA_INICIO BETWEEN $1::date AND $2::date
+      ORDER BY rb.FECHA_INICIO DESC, rb.ROLADA DESC, rb.COR
     `
 
     const result = await query(sql, [fechaInicio, fechaFin], 'informe-produccion-indigo')

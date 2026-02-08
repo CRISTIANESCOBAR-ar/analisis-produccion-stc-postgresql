@@ -465,32 +465,32 @@ const exportarAExcel = async () => {
         FECHA_URDIDORA: convertirFechaADate(item.FECHA_URDIDORA),
         MAQ_OE: formatListaConY(item.MAQ_OE),
         LOTE: formatListaConY(item.LOTE),
-        URDIDORA_M: item.URDIDORA_M,
-        URDIDORA_ROT_TOT: item.URDIDORA_ROT_TOT,
-        URDIDORA_ROT_106: item.URDIDORA_ROT_106,
+        URDIDORA_M: item.URDIDORA_M !== null && item.URDIDORA_M !== undefined && item.URDIDORA_M !== '' ? Number(item.URDIDORA_M) : null,
+        URDIDORA_ROT_TOT: item.URDIDORA_ROT_TOT !== null && item.URDIDORA_ROT_TOT !== undefined && item.URDIDORA_ROT_TOT !== '' ? Number(item.URDIDORA_ROT_TOT) : null,
+        URDIDORA_ROT_106: item.URDIDORA_ROT_106 !== null && item.URDIDORA_ROT_106 !== undefined && item.URDIDORA_ROT_106 !== '' ? Number(item.URDIDORA_ROT_106) : null,
         URDIDORA_TIEMPO: item.URDIDORA_TIEMPO_MIN ? item.URDIDORA_TIEMPO_MIN / 1440 : null, // Convertir minutos a fracción de día
         FECHA_INDIGO: convertirFechaADate(item.FECHA_INDIGO),
         ARTIGO: item.ARTIGO ? item.ARTIGO.substring(0, 10) : '',
         COR: item.COR,
-        METRAGEM: item.METRAGEM,
-        RUPTURAS: item.RUPTURAS,
-        ROT_103: item.ROT_103,
-        CAVALOS: item.CAVALOS,
+        METRAGEM: item.METRAGEM !== null && item.METRAGEM !== undefined && item.METRAGEM !== '' ? Number(item.METRAGEM) : null,
+        RUPTURAS: item.RUPTURAS !== null && item.RUPTURAS !== undefined && item.RUPTURAS !== '' ? Number(item.RUPTURAS) : null,
+        ROT_103: item.ROT_103 !== null && item.ROT_103 !== undefined && item.ROT_103 !== '' ? Number(item.ROT_103) : null,
+        CAVALOS: item.CAVALOS !== null && item.CAVALOS !== undefined && item.CAVALOS !== '' ? Number(item.CAVALOS) : null,
         TIEMPO_MINUTOS: item.TIEMPO_MINUTOS ? item.TIEMPO_MINUTOS / 1440 : null, // Convertir minutos a fracción de día
-        VELOC_PROMEDIO: item.VELOC_PROMEDIO,
-        N_COUNT: item.N_COUNT,
-        N_PERCENT: item.N_PERCENT,
-        P_COUNT: item.P_COUNT,
-        P_PERCENT: item.P_PERCENT,
-        Q_COUNT: item.Q_COUNT,
-        Q_PERCENT: item.Q_PERCENT,
-        TECELAGEM_METROS: item.TECELAGEM_METROS,
-        TECELAGEM_EFICIENCIA: item.TECELAGEM_EFICIENCIA,
-        RT105: item.RT105,
-        RU105: item.RU105,
-        METROS_CAL: item.METROS_CAL,
-        CAL_PERCENT: item.CAL_PERCENT,
-        PTS_100M2: item.PTS_100M2
+        VELOC_PROMEDIO: item.VELOC_PROMEDIO !== null && item.VELOC_PROMEDIO !== undefined && item.VELOC_PROMEDIO !== '' ? Number(item.VELOC_PROMEDIO) : null,
+        N_COUNT: item.N_COUNT !== null && item.N_COUNT !== undefined && item.N_COUNT !== '' ? Number(item.N_COUNT) : null,
+        N_PERCENT: item.N_PERCENT !== null && item.N_PERCENT !== undefined && item.N_PERCENT !== '' ? Number(item.N_PERCENT) : null,
+        P_COUNT: item.P_COUNT !== null && item.P_COUNT !== undefined && item.P_COUNT !== '' ? Number(item.P_COUNT) : null,
+        P_PERCENT: item.P_PERCENT !== null && item.P_PERCENT !== undefined && item.P_PERCENT !== '' ? Number(item.P_PERCENT) : null,
+        Q_COUNT: item.Q_COUNT !== null && item.Q_COUNT !== undefined && item.Q_COUNT !== '' ? Number(item.Q_COUNT) : null,
+        Q_PERCENT: item.Q_PERCENT !== null && item.Q_PERCENT !== undefined && item.Q_PERCENT !== '' ? Number(item.Q_PERCENT) : null,
+        TECELAGEM_METROS: item.TECELAGEM_METROS !== null && item.TECELAGEM_METROS !== undefined && item.TECELAGEM_METROS !== '' ? Number(item.TECELAGEM_METROS) : null,
+        TECELAGEM_EFICIENCIA: item.TECELAGEM_EFICIENCIA !== null && item.TECELAGEM_EFICIENCIA !== undefined && item.TECELAGEM_EFICIENCIA !== '' ? Number(item.TECELAGEM_EFICIENCIA) : null,
+        RT105: item.RT105 !== null && item.RT105 !== undefined && item.RT105 !== '' ? Number(item.RT105) : null,
+        RU105: item.RU105 !== null && item.RU105 !== undefined && item.RU105 !== '' ? Number(item.RU105) : null,
+        METROS_CAL: item.METROS_CAL !== null && item.METROS_CAL !== undefined && item.METROS_CAL !== '' ? Number(item.METROS_CAL) : null,
+        CAL_PERCENT: item.CAL_PERCENT !== null && item.CAL_PERCENT !== undefined && item.CAL_PERCENT !== '' ? Number(item.CAL_PERCENT) : null,
+        PTS_100M2: item.PTS_100M2 !== null && item.PTS_100M2 !== undefined && item.PTS_100M2 !== '' ? Number(item.PTS_100M2) : null
       });
       
       row.height = 16;
@@ -530,23 +530,29 @@ const exportarAExcel = async () => {
       // Formato numérico y de fecha
       row.getCell('FECHA_URDIDORA').numFmt = 'dd/mm/yy';
       row.getCell('URDIDORA_M').numFmt = '#,##0';
-      row.getCell('URDIDORA_ROT_106').numFmt = '0.00';
+      row.getCell('URDIDORA_ROT_TOT').numFmt = '#,##0';
+      row.getCell('URDIDORA_ROT_106').numFmt = '#,##0.00';
       row.getCell('URDIDORA_TIEMPO').numFmt = '[hh]:mm';
       row.getCell('FECHA_INDIGO').numFmt = 'dd/mm/yy';
       row.getCell('METRAGEM').numFmt = '#,##0';
-      row.getCell('ROT_103').numFmt = '0.00';
+      row.getCell('RUPTURAS').numFmt = '#,##0';
+      row.getCell('ROT_103').numFmt = '#,##0.00';
+      row.getCell('CAVALOS').numFmt = '#,##0';
       row.getCell('TIEMPO_MINUTOS').numFmt = '[hh]:mm';
-      row.getCell('VELOC_PROMEDIO').numFmt = '0.#';
-      row.getCell('N_PERCENT').numFmt = '0.0';
-      row.getCell('P_PERCENT').numFmt = '0.0';
-      row.getCell('Q_PERCENT').numFmt = '0.0';
+      row.getCell('VELOC_PROMEDIO').numFmt = '#,##0.0';
+      row.getCell('N_COUNT').numFmt = '#,##0';
+      row.getCell('N_PERCENT').numFmt = '#,##0.0';
+      row.getCell('P_COUNT').numFmt = '#,##0';
+      row.getCell('P_PERCENT').numFmt = '#,##0.0';
+      row.getCell('Q_COUNT').numFmt = '#,##0';
+      row.getCell('Q_PERCENT').numFmt = '#,##0.0';
       row.getCell('TECELAGEM_METROS').numFmt = '#,##0';
-      row.getCell('TECELAGEM_EFICIENCIA').numFmt = '0.0';
-      row.getCell('RT105').numFmt = '0.00';
-      row.getCell('RU105').numFmt = '0.00';
+      row.getCell('TECELAGEM_EFICIENCIA').numFmt = '#,##0.00';
+      row.getCell('RT105').numFmt = '#,##0.00';
+      row.getCell('RU105').numFmt = '#,##0.00';
       row.getCell('METROS_CAL').numFmt = '#,##0';
-      row.getCell('CAL_PERCENT').numFmt = '0.0';
-      row.getCell('PTS_100M2').numFmt = '0.0';
+      row.getCell('CAL_PERCENT').numFmt = '#,##0.0';
+      row.getCell('PTS_100M2').numFmt = '#,##0.0';
       
       // Colores especiales para valores destacados
       row.getCell('URDIDORA_ROT_106').font = { size: 9, color: { argb: 'FF059669' }, bold: true }; // emerald-700
