@@ -355,7 +355,6 @@ async function cargarDatos() {
   cargando.value = true
   try {
     const params = `fechaInicio=${fechaInicio.value}&fechaFin=${fechaFin.value}`
-    console.info('[metricas-diarias] params', params)
     
     // Llamar a los 3 endpoints en paralelo
     const [resCalidad, resProduccion, resFibra] = await Promise.all([
@@ -363,12 +362,6 @@ async function cargarDatos() {
       fetch(`${API_URL}/metricas-diarias-produccion?${params}`),
       fetch(`${API_URL}/metricas-diarias-fibra?${params}`)
     ])
-
-    console.info('[metricas-diarias] status', {
-      calidad: resCalidad.status,
-      produccion: resProduccion.status,
-      fibra: resFibra.status
-    })
     
     const [dataCalidad, dataProduccion, dataFibra] = await Promise.all([
       resCalidad.ok ? resCalidad.json() : { datos: [], rangos: {} },
@@ -376,11 +369,6 @@ async function cargarDatos() {
       resFibra.ok ? resFibra.json() : { datos: [], rangos: {} }
     ])
 
-    console.info('[metricas-diarias] counts', {
-      calidad: dataCalidad.datos?.length || 0,
-      produccion: dataProduccion.datos?.length || 0,
-      fibra: dataFibra.datos?.length || 0
-    })
     
     // Combinar datos por fecha
     const datosPorFecha = {}
@@ -405,11 +393,6 @@ async function cargarDatos() {
     // Convertir a array ordenado por fecha
     datos.value = Object.values(datosPorFecha).sort((a, b) => a.FECHA_DB.localeCompare(b.FECHA_DB))
 
-    console.info('[metricas-diarias] merged', {
-      total: datos.value.length,
-      first: datos.value[0]?.FECHA_DB,
-      last: datos.value[datos.value.length - 1]?.FECHA_DB
-    })
     
     // Combinar rangos
     rangos.value = {
@@ -533,7 +516,6 @@ function renderizarGrafico() {
     return date ? date.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }) : ''
   })
 
-  console.info('[metricas-diarias] labels', labels.slice(0, 5))
 
   // Crear datasets según métricas seleccionadas
   const useDualAxis = tipoNormalizacion.value === 'original'
@@ -580,11 +562,6 @@ function renderizarGrafico() {
     }
   }).filter(Boolean)
 
-  console.info('[metricas-diarias] datasets', datasets.map(d => ({
-    label: d.label,
-    points: d.data?.length || 0,
-    sample: d.data?.slice(0, 3)
-  })))
 
   const xTickRotation = labels.length > 14 ? 90 : 0
 

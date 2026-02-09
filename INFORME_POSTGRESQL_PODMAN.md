@@ -1,76 +1,68 @@
 # Informe: PostgreSQL con Podman para STC-Producción-v2
 
-**Fecha:** 4 de febrero de 2026  
+**Fecha:** 8 de febrero de 2026  
 **Proyecto:** STC-Producción-v2  
 **Tecnologías:** PostgreSQL 15+ | Podman | Node.js
 
 ---
 
-## 📊 Resumen Ejecutivo
+## Resumen Ejecutivo
 
-PostgreSQL con Podman representa una solución **gratuita, escalable y empresarial** para la gestión de datos de producción en STC. Esta implementación permite migrar desde Oracle manteniendo integridad de datos, mejorando el rendimiento y eliminando costos de licenciamiento.
-
----
-
-## ✅ Ventajas Principales
-
-### 1. **Gratuito y Sin Licencias**
-- **PostgreSQL**: 100% Open Source con licencia PostgreSQL (similar a BSD/MIT)
-- **Podman**: Completamente gratuito, sin restricciones de uso
-- **Ahorro estimado**: $10,000-50,000 USD/año en licencias Oracle
-- Sin límites de CPU, cores o usuarios concurrentes
-
-### 2. **Escalabilidad Empresarial**
-- **Escalado vertical**: Hasta 32TB por tabla individual
-- **Escalado horizontal**: Soporte nativo para particionado y sharding
-- **Crecimiento orgánico**: Capacidad para millones de registros sin degradación
-- **Streaming replication**: Alta disponibilidad sin downtime
-- **Performance**: Hasta 3-5x más rápido que Oracle en cargas OLTP mixtas
-
-### 3. **Compatibilidad con Estándares**
-- **SQL ANSI compliant**: Facilita migración desde Oracle
-- **JSON/JSONB nativo**: Almacenamiento y consultas de datos semiestructurados
-- **Full-text search**: Búsquedas avanzadas sin dependencias externas
-- **GIS con PostGIS**: Capacidades geoespaciales incluidas
-
-### 4. **Ventajas de Contenedores con Podman**
-- **Rootless**: Ejecución sin privilegios de administrador (mayor seguridad)
-- **Compatible Docker**: Usa imágenes y comandos de Docker
-- **Aislamiento**: Cada aplicación en su propio contenedor
-- **Portabilidad**: Mismo entorno en desarrollo, pruebas y producción
-- **Rollback rápido**: Volver a versiones anteriores en segundos
-
-### 5. **Características Técnicas Superiores**
-- **MVCC (Multi-Version Concurrency Control)**: Lecturas sin bloqueos
-- **Índices avanzados**: B-tree, Hash, GiST, SP-GiST, GIN, BRIN
-- **Transacciones ACID**: Integridad de datos garantizada
-- **Window functions**: Análisis complejos de producción
-- **CTEs recursivos**: Consultas jerárquicas simplificadas
-- **Procedimientos almacenados**: PL/pgSQL (similar a PL/SQL de Oracle)
-
-### 6. **Facilidad de Administración**
-- **pg_stat_statements**: Monitoreo de queries en tiempo real
-- **Auto-vacuum**: Mantenimiento automático de tablas
-- **pgAdmin 4**: Interfaz gráfica moderna y completa
-- **Backups incrementales**: Con pg_basebackup y WAL archiving
-- **Logs estructurados**: Auditoría y debugging simplificados
-
-### 7. **Ecosistema y Comunidad**
-- **Comunidad activa**: Más de 30 años de desarrollo continuo
-- **Extensiones**: Más de 200 extensiones disponibles (TimescaleDB, Citus, etc.)
-- **Soporte comercial**: Opcional a través de empresas como EnterpriseDB, 2ndQuadrant
-- **Documentación**: Excepcional calidad y profundidad
-- **Actualizaciones**: Nuevas versiones cada año con mejoras sustanciales
-
-### 8. **Integración con Stack Tecnológico**
-- **Node.js**: Driver `pg` nativo y optimizado
-- **Vue.js**: Consultas REST API sin problemas
-- **Docker/Podman**: Despliegue consistente y reproducible
-- **CI/CD**: Integración con GitHub Actions, GitLab CI
+PostgreSQL en Podman ofrece una plataforma de datos moderna, segura y escalable, diseñada desde cero para cargas de produccion. La combinacion de PostgreSQL y contenedores rootless permite alta disponibilidad, rendimiento consistente y costos operativos bajos, sin restricciones de licencias ni dependencia de proveedores.
 
 ---
 
-## 📋 Arquitectura Propuesta
+## Ventajas Tecnicas y Operativas
+
+### 1) Rendimiento y concurrencia
+- **MVCC**: lecturas y escrituras concurrentes sin bloqueos.
+- **Planificador avanzado**: optimizacion de consultas, CTEs, window functions, y agregaciones complejas.
+- **Indices especializados**: B-tree, Hash, GiST, SP-GiST, GIN, BRIN para distintos patrones de datos.
+- **Paralelismo**: ejecucion en paralelo para consultas pesadas y agregaciones.
+
+### 2) Escalabilidad
+- **Vertical**: escalado por CPU/RAM sin limites de licencias.
+- **Horizontal**: particionado nativo y extensiones para sharding si se requiere.
+- **Datos a gran escala**: millones de registros sin degradacion si se usan indices y mantenimiento adecuados.
+
+### 3) Integridad y disponibilidad
+- **Transacciones ACID**: consistencia garantizada.
+- **Replica streaming**: alta disponibilidad y lectura en replicas.
+- **Recuperacion**: WAL archiving y point-in-time recovery.
+
+### 4) Analitica y flexibilidad
+- **JSON/JSONB nativo**: mezcla de datos estructurados y semiestructurados.
+- **Full-text search**: busquedas avanzadas sin dependencias externas.
+- **Extensiones**: PostGIS, pg_stat_statements, pg_trgm, TimescaleDB, entre otras.
+
+### 5) Observabilidad y mantenimiento
+- **pg_stat_statements**: diagnostico de consultas lentas.
+- **Auto-vacuum**: mantenimiento automatico de tablas.
+- **Herramientas**: pgAdmin, psql, DBeaver.
+
+### 6) Contenedores con Podman
+- **Rootless**: mayor seguridad al ejecutar sin privilegios.
+- **Compatibilidad Docker**: comandos e imagenes equivalentes.
+- **Portabilidad**: mismo entorno en desarrollo, pruebas y produccion.
+- **Rollback rapido**: cambios reversibles con imagenes versionadas.
+
+---
+
+## Costos Ahorrados
+
+### Ahorros directos
+- **Licencias de base de datos**: $10,000-50,000 USD/anio (estimado, segun tamaño y concurrencia).
+- **Licencias de alta disponibilidad**: $5,000-20,000 USD/anio.
+- **Herramientas de administracion**: $1,000-5,000 USD/anio (alternativas open source).
+
+### Ahorros operativos
+- **Infraestructura eficiente**: mejor uso de CPU/RAM gracias a MVCC y planificador.
+- **Automatizacion**: backups y mantenimiento programado reducen horas de operacion.
+- **Despliegues reproducibles**: menos tiempo de soporte por inconsistencias de entorno.
+
+---
+
+## Arquitectura Propuesta
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -110,9 +102,9 @@ PostgreSQL con Podman representa una solución **gratuita, escalable y empresari
 
 ---
 
-## 🚀 Pasos de Implementación en Servidor
+## Pasos de Implementacion en Servidor
 
-### **FASE 1: Preparación del Servidor (30-45 minutos)**
+### FASE 1: Preparacion del Servidor (30-45 minutos)
 
 #### 1.1 Requisitos del Sistema
 
@@ -182,7 +174,7 @@ sudo ufw reload
 
 ---
 
-### **FASE 2: Despliegue de PostgreSQL (20-30 minutos)**
+### FASE 2: Despliegue de PostgreSQL (20-30 minutos)
 
 #### 2.1 Crear Volumen Persistente
 
@@ -348,7 +340,7 @@ GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO stc_user;
 
 ---
 
-### **FASE 3: Migración de Datos desde Oracle (1-2 horas)**
+### FASE 3: Carga Inicial de Datos (1-2 horas)
 
 #### 3.1 Preparar Entorno de Migración
 
@@ -357,10 +349,7 @@ GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO stc_user;
 cd c:\stc-produccion-v2\migration
 
 # Instalar dependencias
-npm install oracledb pg dotenv
-
-# Verificar que Oracle Instant Client está instalado
-# (necesario para oracledb)
+npm install pg dotenv
 ```
 
 #### 3.2 Configurar Variables de Entorno
@@ -368,12 +357,7 @@ npm install oracledb pg dotenv
 **Crear archivo `.env`:**
 
 ```ini
-# Oracle (origen)
-ORACLE_USER=SYSTEM
-ORACLE_PASSWORD=Alfa1984
-ORACLE_CONNECT=localhost/XE
-
-# PostgreSQL (destino)
+# PostgreSQL
 PG_HOST=localhost
 PG_PORT=5433
 PG_DATABASE=stc_produccion
@@ -384,17 +368,14 @@ PG_PASSWORD=stc_password_2026
 #### 3.3 Ejecutar Migración
 
 ```bash
-# Ejecutar script de migración
+# Ejecutar script de carga/importacion
 node migrate-oracle-to-postgresql.js
 ```
 
 **Salida esperada:**
 ```
-🚀 Iniciando migración Oracle → PostgreSQL (Podman)
+🚀 Iniciando carga a PostgreSQL (Podman)
 ================================================
-
-📡 Conectando a Oracle...
-✅ Conectado a Oracle exitosamente
 
 📡 Conectando a PostgreSQL (Podman)...
 ✅ Conectado a PostgreSQL exitosamente
@@ -409,7 +390,7 @@ node migrate-oracle-to-postgresql.js
 
 [... más tablas ...]
 
-🎉 Migración completada exitosamente!
+🎉 Carga completada exitosamente!
 
 📊 Verificación de datos:
    tb_uster_par: 1250 registros
@@ -451,11 +432,11 @@ FROM tb_uster_par;
 
 ---
 
-### **FASE 4: Configuración de la Aplicación (30 minutos)**
+### FASE 4: Configuracion de la Aplicacion (30 minutos)
 
 #### 4.1 Actualizar Configuración del Backend
 
-**Archivo: `server/db.js`**
+**Archivo sugerido:** `backend/server.js` (pool de conexion)
 
 ```javascript
 const { Pool } = require('pg');
@@ -484,37 +465,13 @@ pool.connect((err, client, release) => {
 module.exports = pool;
 ```
 
-#### 4.2 Actualizar Queries en el Backend
-
-**Conversión de queries Oracle → PostgreSQL:**
-
-```javascript
-// ❌ Oracle (antes)
-const query = `SELECT * FROM uster_par WHERE ROWNUM <= 10`;
-
-// ✅ PostgreSQL (después)
-const query = `SELECT * FROM tb_uster_par LIMIT 10`;
-
-// ❌ Oracle (antes)
-const query = `SELECT SYSDATE FROM DUAL`;
-
-// ✅ PostgreSQL (después)
-const query = `SELECT CURRENT_TIMESTAMP`;
-
-// ❌ Oracle (antes - secuencias)
-const query = `SELECT uster_seq.NEXTVAL FROM DUAL`;
-
-// ✅ PostgreSQL (después - SERIAL auto-incrementa)
-const query = `INSERT INTO tb_uster_par (...) VALUES (...) RETURNING id`;
-```
-
-#### 4.3 Probar Endpoints
+#### 4.2 Probar Endpoints
 
 ```bash
 # Iniciar servidor backend
-cd server
+cd backend
 npm install
-node index.js
+npm run dev
 
 # En otra terminal, probar endpoints
 curl http://localhost:3000/api/uster/parametros
@@ -523,7 +480,7 @@ curl http://localhost:3000/api/tensorapid/parametros
 
 ---
 
-### **FASE 5: Hardening y Seguridad (20-30 minutos)**
+### FASE 5: Hardening y Seguridad (20-30 minutos)
 
 #### 5.1 Configurar SSL/TLS
 
@@ -597,11 +554,11 @@ GRANT USAGE ON SCHEMA public TO stc_user;
 
 ---
 
-### **FASE 6: Backups y Alta Disponibilidad (30-45 minutos)**
+### FASE 6: Backups y Alta Disponibilidad (30-45 minutos)
 
 #### 6.1 Configurar Backups Automáticos
 
-**Script: `backup-postgres.sh` (Linux) o `backup-postgres.ps1` (Windows)**
+**Script: `backup-postgres.sh` (Linux) o `backup-database.ps1` (Windows)**
 
 **Linux:**
 ```bash
@@ -635,7 +592,7 @@ echo "🧹 Backups antiguos eliminados"
 
 **Windows PowerShell:**
 ```powershell
-# backup-postgres.ps1
+# backup-database.ps1
 
 $BackupDir = "C:\Backups\PostgreSQL"
 $Date = Get-Date -Format "yyyyMMdd_HHmmss"
@@ -702,7 +659,7 @@ podman exec -it stc-postgres psql -U stc_user -d stc_produccion -c "\dt"
 
 ---
 
-### **FASE 7: Monitoreo y Mantenimiento (20 minutos)**
+### FASE 7: Monitoreo y Mantenimiento (20 minutos)
 
 #### 7.1 Instalar pgAdmin (Opcional)
 
@@ -786,55 +743,26 @@ REINDEX TABLE tb_uster_tbl;
 
 ---
 
-## 📈 Métricas de Éxito Esperadas
+## Metricas de Exito Esperadas
 
-| Métrica | Oracle (Actual) | PostgreSQL (Esperado) | Mejora |
-|---------|-----------------|----------------------|--------|
-| Tiempo de consulta promedio | 250ms | 80-120ms | **50-70% más rápido** |
-| Inserciones/seg | 800 | 1500-2500 | **2-3x más rápido** |
+| Metrica | Actual (baseline) | Esperado con PostgreSQL | Mejora |
+|---------|------------------|-------------------------|--------|
+| Tiempo de consulta promedio | 250ms | 80-120ms | **50-70%** |
+| Inserciones/seg | 800 | 1500-2500 | **2-3x** |
 | Tamaño de base de datos | 5 GB | 3.5 GB | **30% menor** |
-| Costo de licencias/año | $15,000 | $0 | **100% ahorro** |
-| Tiempo de backup | 15 min | 5-8 min | **50% más rápido** |
-| Concurrencia (usuarios) | 50 | 200+ | **4x más usuarios** |
+| Costo de licencias/anio | $15,000 | $0 | **100% ahorro** |
+| Tiempo de backup | 15 min | 5-8 min | **50%** |
+| Concurrencia (usuarios) | 50 | 200+ | **4x** |
 
 ---
 
-## 🎯 Comparación: Oracle vs PostgreSQL
-
-| Característica | Oracle XE | PostgreSQL 15 | Ganador |
-|----------------|-----------|---------------|---------|
-| **Costo** | Gratis (limitado) / $17,500+ | **Gratis (sin límites)** | ✅ PostgreSQL |
-| **Límites de datos** | 11 GB / ilimitado ($$$) | **Ilimitado** | ✅ PostgreSQL |
-| **Límites de RAM** | 1 GB XE / ilimitado ($$$) | **Ilimitado** | ✅ PostgreSQL |
-| **Límites de CPU** | 1 CPU XE / ilimitado ($$$) | **Ilimitado** | ✅ PostgreSQL |
-| **Conformidad SQL** | Alta | **Alta (ANSI completo)** | 🤝 Empate |
-| **JSON nativo** | Sí (12c+) | **Sí (JSONB optimizado)** | ✅ PostgreSQL |
-| **Full-text search** | Sí (Oracle Text $$$) | **Sí (incluido)** | ✅ PostgreSQL |
-| **Replicación** | Sí (Oracle GoldenGate $$$) | **Sí (incluido)** | ✅ PostgreSQL |
-| **Comunidad** | Limitada | **Muy activa** | ✅ PostgreSQL |
-| **Documentación** | Excelente | **Excelente** | 🤝 Empate |
-| **Curva de aprendizaje** | Moderada-Alta | **Moderada** | ✅ PostgreSQL |
-| **Performance OLTP** | Excelente | **Excelente** | 🤝 Empate |
-
----
-
-## ⚠️ Consideraciones y Limitaciones
-
-### Diferencias Importantes Oracle → PostgreSQL
-
-1. **Secuencias**: PostgreSQL usa `SERIAL` o `IDENTITY` en lugar de secuencias explícitas
-2. **Packages**: PostgreSQL no tiene packages, usar esquemas separados
-3. **ROWNUM**: Usar `LIMIT` en lugar de `ROWNUM`
-4. **DUAL**: No existe, no es necesario usar tabla dummy
-5. **(+) Outer Joins**: Usar sintaxis estándar `LEFT/RIGHT JOIN`
-6. **NVL**: Usar `COALESCE` o `NULLIF`
-7. **TO_DATE**: Sintaxis diferente, usar `TO_TIMESTAMP`
+## Consideraciones y Limitaciones
 
 ### Limitaciones de Podman en Windows
 
-- **Performance**: Ligeramente inferior a Linux nativo (5-10% overhead)
-- **Volúmenes**: Mapeo de volúmenes más lento que en Linux
-- **WSL2 requerido**: En Windows, Podman usa WSL2 como backend
+- **Performance**: ligera penalizacion respecto a Linux nativo (5-10% overhead).
+- **Volumenes**: mapeo de volumenes mas lento que en Linux.
+- **WSL2 requerido**: en Windows, Podman usa WSL2 como backend.
 
 ### Recomendaciones para Producción
 
@@ -846,7 +774,7 @@ REINDEX TABLE tb_uster_tbl;
 
 ---
 
-## 📞 Soporte y Recursos
+## Soporte y Recursos
 
 ### Documentación Oficial
 - **PostgreSQL**: https://www.postgresql.org/docs/15/
@@ -867,7 +795,7 @@ REINDEX TABLE tb_uster_tbl;
 
 ---
 
-## ✅ Checklist de Implementación
+## Checklist de Implementacion
 
 - [ ] Servidor preparado con requisitos mínimos
 - [ ] Podman instalado y verificado
@@ -886,11 +814,11 @@ REINDEX TABLE tb_uster_tbl;
 
 ---
 
-## 🚦 Siguiente Paso
+## Siguiente Paso
 
-**Acción Inmediata:** Validar que el servidor de destino cumple los requisitos mínimos y programar ventana de mantenimiento para la migración (estimado: **3-4 horas** de downtime).
+**Accion inmediata:** validar que el servidor cumple los requisitos minimos y programar ventana de mantenimiento para la puesta en marcha (estimado: **3-4 horas** de downtime).
 
-**Contacto:** Para asistencia técnica durante la implementación, consultar con el equipo de desarrollo o DevOps.
+**Contacto:** para asistencia tecnica durante la implementacion, consultar con el equipo de desarrollo o DevOps.
 
 ---
 
