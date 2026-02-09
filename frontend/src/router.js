@@ -20,6 +20,11 @@ const routes = [
     component: () => import('./components/ensayos/ResumenEnsayos.vue'), 
     meta: { title: 'Resumen Ensayos' } 
   },
+  {
+    path: '/resumen-semanal-hilanderia',
+    component: () => import('./components/ensayos/ResumenSemanalHilanderia.vue'),
+    meta: { title: 'Resumen Semanal Hilanderia' }
+  },
   { 
     path: '/resumen-diario', 
     component: () => import('./components/ensayos/ResumenDiario.vue'), 

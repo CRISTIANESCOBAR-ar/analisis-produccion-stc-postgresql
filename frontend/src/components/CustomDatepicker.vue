@@ -6,16 +6,24 @@
       <input 
         type="text" 
         :value="displayDate" 
-        class="filter-input datepicker-input w-32 px-3 py-1.5 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all cursor-pointer bg-white"
+        class="filter-input datepicker-input w-32 px-3 py-1.5 border border-slate-300 rounded-md text-sm text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all cursor-pointer bg-white"
         :placeholder="placeholder"
         @click="toggleCalendar"
         @keydown.left.prevent="cambiarFecha(-1)"
         @keydown.right.prevent="cambiarFecha(1)"
+        dir="ltr"
         readonly
       />
       <span class="calendar-icon absolute right-3 top-1/2 -translate-y-1/2 text-lg cursor-pointer select-none" @click="toggleCalendar">📅</span>
 
-      <div v-if="showCalendar" class="calendar-dropdown absolute top-[calc(100%+4px)] right-0 bg-white border border-slate-200 rounded-lg shadow-xl p-3 z-50 min-w-[280px]">
+      <div
+        v-if="showCalendar"
+        ref="dropdownRef"
+        :class="[
+          'calendar-dropdown absolute top-[calc(100%+4px)] bg-white border border-slate-200 rounded-lg shadow-xl p-3 z-50 min-w-[280px]',
+          alignRight ? 'right-0' : 'left-0'
+        ]"
+      >
         <div class="calendar-header flex justify-between items-center mb-3">
           <button class="calendar-nav-btn w-8 h-8 flex items-center justify-center border border-slate-200 rounded bg-white text-blue-600 hover:bg-blue-600 hover:text-white transition-colors" @click.stop="changeMonth(-1)">&lt;</button>
           <div class="calendar-selects flex gap-1">
@@ -98,7 +106,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 
 const props = defineProps({
   modelValue: {
@@ -125,6 +133,8 @@ const showCalendar = ref(false)
 const calendarMonth = ref(new Date().getMonth())
 const calendarYear = ref(new Date().getFullYear())
 const datepickerRef = ref(null)
+const dropdownRef = ref(null)
+const alignRight = ref(false)
 
 // Cerrar al hacer clic fuera
 const handleClickOutside = (event) => {
@@ -135,10 +145,12 @@ const handleClickOutside = (event) => {
 
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
+  window.addEventListener('resize', updateDropdownAlignment)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutside)
+  window.removeEventListener('resize', updateDropdownAlignment)
 })
 
 const displayDate = computed(() => {
@@ -240,6 +252,18 @@ const calendarDays = computed(() => {
 
 function toggleCalendar() {
   showCalendar.value = !showCalendar.value
+  if (showCalendar.value) {
+    nextTick(updateDropdownAlignment)
+  }
+}
+
+function updateDropdownAlignment() {
+  const dropdownEl = dropdownRef.value
+  if (!dropdownEl) return
+  const rect = dropdownEl.getBoundingClientRect()
+  const spaceRight = window.innerWidth - rect.left
+  const spaceLeft = rect.right
+  alignRight.value = spaceRight < rect.width && spaceLeft >= rect.width
 }
 
 function changeMonth(offset) {
