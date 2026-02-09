@@ -3605,18 +3605,18 @@ app.get('/api/metricas-diarias-calidad', async (req, res) => {
     const larguraNum = sqlParseNumber('"LARGURA"')
     const sql = `
       SELECT
-        ${sqlParseDate('"DAT_PROD"')} AS FECHA_DB,
-        "DAT_PROD" AS FECHA,
-        SUM(${metragemNum}) AS METROS_TOTAL,
-        SUM(CASE WHEN "QUALIDADE" ILIKE 'PRIMEIRA%' THEN ${metragemNum} ELSE 0 END) AS METROS_1ERA,
-        SUM(COALESCE(${pontuacaoNum}, 0)) AS PONTOS,
-        AVG(${larguraNum}) AS LARGURA
+        ${sqlParseDate('"DAT_PROD"')} AS "FECHA_DB",
+        "DAT_PROD" AS "FECHA",
+        SUM(${metragemNum}) AS "METROS_TOTAL",
+        SUM(CASE WHEN "QUALIDADE" ILIKE 'PRIMEIRA%' THEN ${metragemNum} ELSE 0 END) AS "METROS_1ERA",
+        SUM(COALESCE(${pontuacaoNum}, 0)) AS "PONTOS",
+        AVG(${larguraNum}) AS "LARGURA"
       FROM tb_calidad
       WHERE "EMP" = 'STC'
         AND "QUALIDADE" NOT ILIKE '%RETALHO%'
         AND ${sqlParseDate('"DAT_PROD"')} BETWEEN $1::date AND $2::date
-      GROUP BY FECHA_DB, "DAT_PROD"
-      ORDER BY FECHA_DB ASC
+      GROUP BY "FECHA_DB", "FECHA"
+      ORDER BY "FECHA_DB" ASC
     `
 
     const rows = (await query(sql, [fechaInicio, fechaFin], 'metricas-diarias-calidad')).rows
@@ -3662,7 +3662,10 @@ app.get('/api/metricas-diarias-produccion', async (req, res) => {
     const rupturasNum = sqlParseNumber('"RUPTURAS"')
     const numFiosNum = sqlParseNumber('"NUM_FIOS"')
     const velocNum = sqlParseNumber('"VELOC"')
-    const eficienciaNum = sqlParseNumber('"EFICIENCIA"')
+    const eficienciaClean = `regexp_replace("EFICIENCIA", '[^0-9,.-]', '', 'g')`
+    const eficienciaNum = sqlParseNumberIntl(eficienciaClean)
+    const puntosLidosNum = sqlParseNumber('"PONTOS_LIDOS"')
+    const puntos100Num = sqlParseNumberIntl('"PONTOS_100%"')
     const parTraNum = sqlParseNumber('"PARADA TEC TRAMA"')
     const parUrdNum = sqlParseNumber('"PARADA TEC URDUME"')
 
@@ -3676,7 +3679,11 @@ app.get('/api/metricas-diarias-produccion', async (req, res) => {
           ${rupturasNum} AS RUPTURAS,
           ${numFiosNum} AS NUM_FIOS,
           ${velocNum} AS VELOC,
-          ${eficienciaNum} AS EFICIENCIA,
+          CASE
+            WHEN ${eficienciaNum} IS NULL OR ${eficienciaNum} = 0 THEN
+              (${puntosLidosNum} * 100) / NULLIF(${puntos100Num}, 0)
+            ELSE ${eficienciaNum}
+          END AS EFICIENCIA,
           ${parTraNum} AS PARADA_TRAMA,
           ${parUrdNum} AS PARADA_URD
         FROM tb_produccion
@@ -3684,21 +3691,21 @@ app.get('/api/metricas-diarias-produccion', async (req, res) => {
           AND ${sqlParseDate('"DT_BASE_PRODUCAO"')} BETWEEN $1::date AND $2::date
       )
       SELECT
-        FECHA_DB,
-        FECHA,
+        FECHA_DB AS "FECHA_DB",
+        FECHA AS "FECHA",
         SUM(CASE WHEN SELETOR IN ('URDIDEIRA','URDIDORA') THEN (RUPTURAS * 1000000) ELSE 0 END)
-          / NULLIF(SUM(CASE WHEN SELETOR IN ('URDIDEIRA','URDIDORA') THEN (METRAGEM * NUM_FIOS) ELSE 0 END), 0) AS RU106_URDIDORA,
-        SUM(CASE WHEN SELETOR = 'INDIGO' THEN METRAGEM ELSE 0 END) AS METROS_INDIGO,
+          / NULLIF(SUM(CASE WHEN SELETOR IN ('URDIDEIRA','URDIDORA') THEN (METRAGEM * NUM_FIOS) ELSE 0 END), 0) AS "RU106_URDIDORA",
+        SUM(CASE WHEN SELETOR = 'INDIGO' THEN METRAGEM ELSE 0 END) AS "METROS_INDIGO",
         SUM(CASE WHEN SELETOR = 'INDIGO' THEN RUPTURAS ELSE 0 END) * 1000
-          / NULLIF(SUM(CASE WHEN SELETOR = 'INDIGO' THEN METRAGEM ELSE 0 END), 0) AS R103_INDIGO,
+          / NULLIF(SUM(CASE WHEN SELETOR = 'INDIGO' THEN METRAGEM ELSE 0 END), 0) AS "R103_INDIGO",
         SUM(CASE WHEN SELETOR = 'INDIGO' THEN METRAGEM * VELOC ELSE 0 END)
-          / NULLIF(SUM(CASE WHEN SELETOR = 'INDIGO' THEN METRAGEM ELSE 0 END), 0) AS VELOCIDAD_INDIGO,
+          / NULLIF(SUM(CASE WHEN SELETOR = 'INDIGO' THEN METRAGEM ELSE 0 END), 0) AS "VELOCIDAD_INDIGO",
         SUM(CASE WHEN SELETOR = 'TECELAGEM' THEN METRAGEM * EFICIENCIA ELSE 0 END)
-          / NULLIF(SUM(CASE WHEN SELETOR = 'TECELAGEM' THEN METRAGEM ELSE 0 END), 0) AS EFICIENCIA_TELAR,
+          / NULLIF(SUM(CASE WHEN SELETOR = 'TECELAGEM' THEN METRAGEM ELSE 0 END), 0) AS "EFICIENCIA_TELAR",
         SUM(CASE WHEN SELETOR = 'TECELAGEM' THEN PARADA_URD ELSE 0 END) * 100000
-          / NULLIF(SUM(CASE WHEN SELETOR = 'TECELAGEM' THEN METRAGEM ELSE 0 END) * 1000, 0) AS RU105_TELAR,
+          / NULLIF(SUM(CASE WHEN SELETOR = 'TECELAGEM' THEN METRAGEM ELSE 0 END) * 1000, 0) AS "RU105_TELAR",
         SUM(CASE WHEN SELETOR = 'TECELAGEM' THEN PARADA_TRAMA ELSE 0 END) * 100000
-          / NULLIF(SUM(CASE WHEN SELETOR = 'TECELAGEM' THEN METRAGEM ELSE 0 END) * 1000, 0) AS RT105_TELAR
+          / NULLIF(SUM(CASE WHEN SELETOR = 'TECELAGEM' THEN METRAGEM ELSE 0 END) * 1000, 0) AS "RT105_TELAR"
       FROM BASE
       GROUP BY FECHA_DB, FECHA
       ORDER BY FECHA_DB ASC
@@ -3761,19 +3768,19 @@ app.get('/api/metricas-diarias-fibra', async (req, res) => {
           AND ${sqlParseDate('"DT_ENTRADA_PROD"')} BETWEEN $1::date AND $2::date
       )
       SELECT
-        FECHA_DB,
-        FECHA,
-        SUM(PESO) AS PESO_TOTAL,
-        SUM(SCI * PESO) / NULLIF(SUM(PESO), 0) AS SCI,
-        SUM(MIC * PESO) / NULLIF(SUM(PESO), 0) AS MIC,
-        SUM(MAT * PESO) / NULLIF(SUM(PESO), 0) AS MAT,
-        SUM(UHML * PESO) / NULLIF(SUM(PESO), 0) AS UHML,
-        SUM(UI * PESO) / NULLIF(SUM(PESO), 0) AS UI,
-        SUM(SF * PESO) / NULLIF(SUM(PESO), 0) AS SF,
-        SUM(STR * PESO) / NULLIF(SUM(PESO), 0) AS STR,
-        SUM(ELG * PESO) / NULLIF(SUM(PESO), 0) AS ELG,
-        SUM(RD * PESO) / NULLIF(SUM(PESO), 0) AS RD,
-        SUM(PLUS_B * PESO) / NULLIF(SUM(PESO), 0) AS PLUS_B
+        FECHA_DB AS "FECHA_DB",
+        FECHA AS "FECHA",
+        SUM(PESO) AS "PESO_TOTAL",
+        SUM(SCI * PESO) / NULLIF(SUM(PESO), 0) AS "SCI",
+        SUM(MIC * PESO) / NULLIF(SUM(PESO), 0) AS "MIC",
+        SUM(MAT * PESO) / NULLIF(SUM(PESO), 0) AS "MAT",
+        SUM(UHML * PESO) / NULLIF(SUM(PESO), 0) AS "UHML",
+        SUM(UI * PESO) / NULLIF(SUM(PESO), 0) AS "UI",
+        SUM(SF * PESO) / NULLIF(SUM(PESO), 0) AS "SF",
+        SUM(STR * PESO) / NULLIF(SUM(PESO), 0) AS "STR",
+        SUM(ELG * PESO) / NULLIF(SUM(PESO), 0) AS "ELG",
+        SUM(RD * PESO) / NULLIF(SUM(PESO), 0) AS "RD",
+        SUM(PLUS_B * PESO) / NULLIF(SUM(PESO), 0) AS "PLUS_B"
       FROM BASE
       GROUP BY FECHA_DB, FECHA
       ORDER BY FECHA_DB ASC

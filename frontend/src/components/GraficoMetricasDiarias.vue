@@ -297,9 +297,35 @@ function grupoSeleccionado(grupo) {
 // Formatear números
 function formatNumber(val) {
   if (val === null || val === undefined) return '-'
-  if (Math.abs(val) >= 1000) return val.toLocaleString('es-ES', { maximumFractionDigits: 0 })
-  if (Math.abs(val) >= 10) return val.toFixed(1)
-  return val.toFixed(2)
+  const num = typeof val === 'number' ? val : parseFloat(String(val).replace(',', '.'))
+  if (isNaN(num)) return '-'
+  if (Math.abs(num) >= 1000) return num.toLocaleString('es-ES', { maximumFractionDigits: 0 })
+  if (Math.abs(num) >= 10) return num.toFixed(1)
+  return num.toFixed(2)
+}
+
+function parseDateString(value) {
+  if (!value) return null
+  if (value instanceof Date) return value
+  const str = String(value)
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    return new Date(`${str.slice(0, 10)}T12:00:00`)
+  }
+  if (/^\d{2}\/\d{2}\/\d{4}/.test(str)) {
+    const [dd, mm, yyyy] = str.slice(0, 10).split('/')
+    return new Date(`${yyyy}-${mm}-${dd}T12:00:00`)
+  }
+  const fallback = new Date(str)
+  return isNaN(fallback) ? null : fallback
+}
+
+function dateKeyFrom(value) {
+  const date = parseDateString(value)
+  if (!date || isNaN(date)) return null
+  const yyyy = date.getFullYear()
+  const mm = String(date.getMonth() + 1).padStart(2, '0')
+  const dd = String(date.getDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
 }
 
 // Normalizar valor (0-100)
@@ -329,6 +355,7 @@ async function cargarDatos() {
   cargando.value = true
   try {
     const params = `fechaInicio=${fechaInicio.value}&fechaFin=${fechaFin.value}`
+    console.info('[metricas-diarias] params', params)
     
     // Llamar a los 3 endpoints en paralelo
     const [resCalidad, resProduccion, resFibra] = await Promise.all([
@@ -336,37 +363,53 @@ async function cargarDatos() {
       fetch(`${API_URL}/metricas-diarias-produccion?${params}`),
       fetch(`${API_URL}/metricas-diarias-fibra?${params}`)
     ])
+
+    console.info('[metricas-diarias] status', {
+      calidad: resCalidad.status,
+      produccion: resProduccion.status,
+      fibra: resFibra.status
+    })
     
     const [dataCalidad, dataProduccion, dataFibra] = await Promise.all([
       resCalidad.ok ? resCalidad.json() : { datos: [], rangos: {} },
       resProduccion.ok ? resProduccion.json() : { datos: [], rangos: {} },
       resFibra.ok ? resFibra.json() : { datos: [], rangos: {} }
     ])
+
+    console.info('[metricas-diarias] counts', {
+      calidad: dataCalidad.datos?.length || 0,
+      produccion: dataProduccion.datos?.length || 0,
+      fibra: dataFibra.datos?.length || 0
+    })
     
     // Combinar datos por fecha
     const datosPorFecha = {}
+    const upsertPorFecha = (d) => {
+      const fechaKey = dateKeyFrom(d.FECHA_DB || d.FECHA)
+      if (!fechaKey) return
+      if (!datosPorFecha[fechaKey]) {
+        datosPorFecha[fechaKey] = { FECHA_DB: fechaKey, FECHA: d.FECHA || fechaKey }
+      }
+      Object.assign(datosPorFecha[fechaKey], d, { FECHA_DB: fechaKey })
+    }
     
     // Agregar datos de calidad
-    dataCalidad.datos?.forEach(d => {
-      datosPorFecha[d.FECHA] = { FECHA: d.FECHA, ...d }
-    })
+    dataCalidad.datos?.forEach(upsertPorFecha)
     
     // Agregar datos de producción
-    dataProduccion.datos?.forEach(d => {
-      const fecha = d.FECHA
-      if (!datosPorFecha[fecha]) datosPorFecha[fecha] = { FECHA: fecha }
-      Object.assign(datosPorFecha[fecha], d)
-    })
+    dataProduccion.datos?.forEach(upsertPorFecha)
     
     // Agregar datos de fibra
-    dataFibra.datos?.forEach(d => {
-      const fecha = d.FECHA
-      if (!datosPorFecha[fecha]) datosPorFecha[fecha] = { FECHA: fecha }
-      Object.assign(datosPorFecha[fecha], d)
-    })
+    dataFibra.datos?.forEach(upsertPorFecha)
     
     // Convertir a array ordenado por fecha
-    datos.value = Object.values(datosPorFecha).sort((a, b) => a.FECHA.localeCompare(b.FECHA))
+    datos.value = Object.values(datosPorFecha).sort((a, b) => a.FECHA_DB.localeCompare(b.FECHA_DB))
+
+    console.info('[metricas-diarias] merged', {
+      total: datos.value.length,
+      first: datos.value[0]?.FECHA_DB,
+      last: datos.value[datos.value.length - 1]?.FECHA_DB
+    })
     
     // Combinar rangos
     rangos.value = {
@@ -428,9 +471,10 @@ function exportarExcel() {
   const filaDatos = datos.value.map(d => {
     return columnas.map(col => {
       if (col.key === 'FECHA') {
-        // Formatear fecha - usar T12:00:00 para evitar desfase por timezone
-        const fecha = new Date(d.FECHA + 'T12:00:00')
-        return fecha.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
+        const fecha = parseDateString(d.FECHA_DB || d.FECHA)
+        return fecha
+          ? fecha.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' })
+          : ''
       }
       const valor = d[col.key]
       return valor !== null && valor !== undefined ? valor : ''
@@ -485,12 +529,21 @@ function renderizarGrafico() {
 
   const ctx = chartCanvas.value.getContext('2d')
   const labels = datos.value.map(d => {
-    // Usar T12:00:00 para evitar desfase por timezone
-    const date = new Date(d.FECHA + 'T12:00:00')
-    return date.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })
+    const date = parseDateString(d.FECHA_DB || d.FECHA)
+    return date ? date.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }) : ''
   })
 
+  console.info('[metricas-diarias] labels', labels.slice(0, 5))
+
   // Crear datasets según métricas seleccionadas
+  const useDualAxis = tipoNormalizacion.value === 'original'
+  const axisForKey = (key) => {
+    if (!useDualAxis) return 'y'
+    if (key === 'EFICIENCIA_TELAR') return 'yLeft'
+    if (key === 'RU105_TELAR' || key === 'RT105_TELAR') return 'yRight'
+    return 'yLeft'
+  }
+
   const datasets = metricasSeleccionadas.value.map(key => {
     const info = getMetricaInfo(key)
     if (!info) return null
@@ -508,18 +561,32 @@ function renderizarGrafico() {
       data = datos.value.map(d => d[key])
     }
 
+    const isEficiencia = key === 'EFICIENCIA_TELAR'
+    const useBar = useDualAxis && isEficiencia
+
     return {
+      type: useBar ? 'bar' : 'line',
       label: info.label,
       data,
+      yAxisID: axisForKey(key),
       borderColor: info.color,
-      backgroundColor: info.color + '20',
+      backgroundColor: useBar ? info.color + '80' : info.color + '20',
       borderWidth: 2,
       pointRadius: 3,
       pointHoverRadius: 5,
-      tension: 0.3,
-      fill: false
+      tension: useBar ? 0 : 0.3,
+      fill: false,
+      ...(useBar ? { barPercentage: 0.7, categoryPercentage: 0.8 } : {})
     }
   }).filter(Boolean)
+
+  console.info('[metricas-diarias] datasets', datasets.map(d => ({
+    label: d.label,
+    points: d.data?.length || 0,
+    sample: d.data?.slice(0, 3)
+  })))
+
+  const xTickRotation = labels.length > 14 ? 90 : 0
 
   chartInstance = new Chart(ctx, {
     type: 'line',
@@ -554,16 +621,31 @@ function renderizarGrafico() {
       scales: {
         x: {
           grid: { display: false },
-          ticks: { maxRotation: 45, minRotation: 45, font: { size: 10 } }
+          ticks: { maxRotation: xTickRotation, minRotation: xTickRotation, font: { size: 10 } }
         },
-        y: {
-          title: {
-            display: true,
-            text: tipoNormalizacion.value === 'normalizada' ? 'Valor Normalizado (%)' :
-                  tipoNormalizacion.value === 'zscore' ? 'Z-Score (σ)' : 'Valor Original'
+        ...(useDualAxis ? {
+          yLeft: {
+            type: 'linear',
+            position: 'left',
+            title: { display: true, text: 'Eficiencia %' },
+            grid: { color: '#f1f5f9' }
           },
-          grid: { color: '#f1f5f9' }
-        }
+          yRight: {
+            type: 'linear',
+            position: 'right',
+            title: { display: true, text: 'RU/RT 10^5' },
+            grid: { drawOnChartArea: false }
+          }
+        } : {
+          y: {
+            title: {
+              display: true,
+              text: tipoNormalizacion.value === 'normalizada' ? 'Valor Normalizado (%)' :
+                    tipoNormalizacion.value === 'zscore' ? 'Z-Score (σ)' : 'Valor Original'
+            },
+            grid: { color: '#f1f5f9' }
+          }
+        })
       }
     }
   })

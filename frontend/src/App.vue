@@ -1,40 +1,51 @@
 <template>
   <div class="h-screen flex flex-col bg-gray-50">
-    <div class="fixed top-0 left-0 h-full w-12 z-50"
-      @mouseenter="startShowTimer"
-      @mouseleave="clearShowTimer"
-    ></div>
-    
     <aside 
-      @mouseleave="startHideTimer" 
-      @mouseenter="clearHideTimer" 
       :class="[
-        'fixed top-0 left-0 h-full bg-blue-800 text-white z-[9999] transition-all duration-300',
-        sidebarVisible ? 'translate-x-0 w-64' : '-translate-x-full w-64'
+        'fixed top-0 left-0 h-full bg-blue-800 text-white z-[9999] transition-all duration-300 flex flex-col',
+        sidebarExpanded ? 'w-64' : 'w-16',
+        sidebarVisible ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
       ]"
     >
       <div class="flex items-center justify-between px-4 py-3 border-b border-blue-600">
-        <h2 class="text-lg font-bold">STC Produção</h2>
-        <button @click="sidebarVisible = false" class="lg:hidden">
-          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+        <div class="flex items-center gap-2">
+          <h2 v-show="sidebarExpanded" class="text-lg font-bold">STC Produção</h2>
+          <span v-show="!sidebarExpanded" class="text-lg font-bold">STC</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            @click="toggleSidebarExpanded"
+            class="hidden lg:inline-flex items-center justify-center w-8 h-8 rounded hover:bg-blue-700 transition-colors"
+            :title="sidebarExpanded ? 'Colapsar menu' : 'Expandir menu'"
+          >
+            <span class="text-base">{{ sidebarExpanded ? '<' : '>' }}</span>
+          </button>
+          <button @click="sidebarVisible = false" class="lg:hidden">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
       </div>
       
-      <nav class="px-2 py-2 space-y-1">
+      <nav class="sidebar-scroll px-2 py-2 space-y-1 overflow-y-auto flex-1 min-h-0">
         <!-- Laboratorio Hilandería Group -->
         <div class="space-y-1">
           <button 
             @click="toggleLabMenu"
-            class="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-blue-700 transition-colors"
-            :class="{ 'bg-blue-700': isLabRouteActive }"
+            class="w-full flex items-center rounded hover:bg-blue-700 transition-colors"
+            :class="[
+              isLabRouteActive ? 'bg-blue-700' : '',
+              sidebarExpanded ? 'justify-between px-3 py-2' : 'justify-center px-2 py-2'
+            ]"
+            :title="sidebarExpanded ? '' : 'Laboratorio Hilanderia'"
           >
             <div class="flex items-center gap-2">
               <span>🧪</span>
-              <span class="font-medium">Laboratorio Hilandería</span>
+              <span v-show="sidebarExpanded" class="font-medium">Laboratorio Hilandería</span>
             </div>
             <svg 
+              v-show="sidebarExpanded"
               class="w-4 h-4 transition-transform duration-200"
               :class="{ 'rotate-180': labMenuOpen }"
               fill="none" 
@@ -46,7 +57,7 @@
           </button>
           
           <div 
-            v-show="labMenuOpen"
+            v-show="sidebarExpanded && labMenuOpen"
             class="ml-4 space-y-1 border-l-2 border-blue-600 pl-2"
           >
             <router-link 
@@ -95,14 +106,19 @@
         <div class="space-y-1">
           <button 
             @click="toggleProdMenu"
-            class="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-blue-700 transition-colors"
-            :class="{ 'bg-blue-700': isProdRouteActive }"
+            class="w-full flex items-center rounded hover:bg-blue-700 transition-colors"
+            :class="[
+              isProdRouteActive ? 'bg-blue-700' : '',
+              sidebarExpanded ? 'justify-between px-3 py-2' : 'justify-center px-2 py-2'
+            ]"
+            :title="sidebarExpanded ? '' : 'Produccion'"
           >
             <div class="flex items-center gap-2">
               <span>🏭</span>
-              <span class="font-medium">Producción</span>
+              <span v-show="sidebarExpanded" class="font-medium">Producción</span>
             </div>
             <svg 
+              v-show="sidebarExpanded"
               class="w-4 h-4 transition-transform duration-200"
               :class="{ 'rotate-180': prodMenuOpen }"
               fill="none" 
@@ -114,7 +130,7 @@
           </button>
           
           <div 
-            v-show="prodMenuOpen"
+            v-show="sidebarExpanded && prodMenuOpen"
             class="ml-4 space-y-1 border-l-2 border-blue-600 pl-2"
           >
             <router-link 
@@ -131,14 +147,19 @@
         <div class="space-y-1">
           <button 
             @click="toggleCalidadMenu"
-            class="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-blue-700 transition-colors"
-            :class="{ 'bg-blue-700': isCalidadRouteActive }"
+            class="w-full flex items-center rounded hover:bg-blue-700 transition-colors"
+            :class="[
+              isCalidadRouteActive ? 'bg-blue-700' : '',
+              sidebarExpanded ? 'justify-between px-3 py-2' : 'justify-center px-2 py-2'
+            ]"
+            :title="sidebarExpanded ? '' : 'Control de Calidad'"
           >
             <div class="flex items-center gap-2">
               <span>✅</span>
-              <span class="font-medium">Control de Calidad</span>
+              <span v-show="sidebarExpanded" class="font-medium">Control de Calidad</span>
             </div>
             <svg 
+              v-show="sidebarExpanded"
               class="w-4 h-4 transition-transform duration-200"
               :class="{ 'rotate-180': calidadMenuOpen }"
               fill="none" 
@@ -150,7 +171,7 @@
           </button>
           
           <div 
-            v-show="calidadMenuOpen"
+            v-show="sidebarExpanded && calidadMenuOpen"
             class="ml-4 space-y-1 border-l-2 border-blue-600 pl-2"
           >
             <router-link 
@@ -181,14 +202,19 @@
         <div class="space-y-1">
           <button 
             @click="toggleIndigoMenu"
-            class="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-blue-700 transition-colors"
-            :class="{ 'bg-blue-700': isIndigoRouteActive }"
+            class="w-full flex items-center rounded hover:bg-blue-700 transition-colors"
+            :class="[
+              isIndigoRouteActive ? 'bg-blue-700' : '',
+              sidebarExpanded ? 'justify-between px-3 py-2' : 'justify-center px-2 py-2'
+            ]"
+            :title="sidebarExpanded ? '' : 'Indigo'"
           >
             <div class="flex items-center gap-2">
               <span>💙</span>
-              <span class="font-medium">ÍNDIGO</span>
+              <span v-show="sidebarExpanded" class="font-medium">ÍNDIGO</span>
             </div>
             <svg 
+              v-show="sidebarExpanded"
               class="w-4 h-4 transition-transform duration-200"
               :class="{ 'rotate-180': indigoMenuOpen }"
               fill="none" 
@@ -200,7 +226,7 @@
           </button>
           
           <div 
-            v-show="indigoMenuOpen"
+            v-show="sidebarExpanded && indigoMenuOpen"
             class="ml-4 space-y-1 border-l-2 border-blue-600 pl-2"
           >
             <router-link 
@@ -266,18 +292,23 @@
       </svg>
     </button>
 
-    <main @click="sidebarVisible = false" class="flex-1 overflow-auto">
+    <main 
+      @click="sidebarVisible = false" 
+      class="main-scroll flex-1 overflow-auto transition-all duration-300"
+      :class="sidebarExpanded ? 'lg:pl-64' : 'lg:pl-16'"
+    >
       <router-view />
     </main>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
 const sidebarVisible = ref(false)
+const sidebarExpanded = ref(localStorage.getItem('sidebarExpanded') === 'true')
 
 // Laboratorio menu state (persisted in localStorage)
 const labMenuOpen = ref(localStorage.getItem('labMenuOpen') !== 'false')
@@ -305,79 +336,152 @@ const indigoRoutes = [
 ]
 const isIndigoRouteActive = computed(() => indigoRoutes.includes(route.path))
 
+function setSidebarExpanded(value) {
+  sidebarExpanded.value = value
+  localStorage.setItem('sidebarExpanded', value.toString())
+}
+
+function toggleSidebarExpanded() {
+  setSidebarExpanded(!sidebarExpanded.value)
+}
+
+function ensureSidebarExpanded() {
+  if (!sidebarExpanded.value) {
+    setSidebarExpanded(true)
+  }
+}
+
 function toggleLabMenu() {
+  ensureSidebarExpanded()
   labMenuOpen.value = !labMenuOpen.value
   localStorage.setItem('labMenuOpen', labMenuOpen.value.toString())
 }
 
 function toggleProdMenu() {
+  ensureSidebarExpanded()
   prodMenuOpen.value = !prodMenuOpen.value
   localStorage.setItem('prodMenuOpen', prodMenuOpen.value.toString())
 }
 
 function toggleCalidadMenu() {
+  ensureSidebarExpanded()
   calidadMenuOpen.value = !calidadMenuOpen.value
   localStorage.setItem('calidadMenuOpen', calidadMenuOpen.value.toString())
 }
 
 function toggleIndigoMenu() {
+  ensureSidebarExpanded()
   indigoMenuOpen.value = !indigoMenuOpen.value
   localStorage.setItem('indigoMenuOpen', indigoMenuOpen.value.toString())
 }
-
-let showTimer = null
-let hideTimer = null
-let closeTimer = null
-let recentClose = false
-let mouseDown = false
-
-function clearShowTimer() {
-  if (showTimer) {
-    clearTimeout(showTimer)
-    showTimer = null
-  }
-}
-
-function startShowTimer() {
-  clearShowTimer()
-  if (mouseDown || recentClose) return
-  showTimer = setTimeout(() => {
-    sidebarVisible.value = true
-    clearShowTimer()
-  }, 250) // small delay to avoid accidental opens
-}
-
-function clearHideTimer() {
-  if (hideTimer) {
-    clearTimeout(hideTimer)
-    hideTimer = null
-  }
-}
-
-function startHideTimer() {
-  clearHideTimer()
-  // give a short delay before hiding so brief mouse leaves don't close immediately
-  hideTimer = setTimeout(() => {
-    sidebarVisible.value = false
-    recentClose = true
-    if (closeTimer) clearTimeout(closeTimer)
-    closeTimer = setTimeout(() => { recentClose = false; closeTimer = null }, 800)
-    clearHideTimer()
-  }, 120)
-}
-
-onMounted(() => {
-  const md = () => (mouseDown = true)
-  const mu = () => (mouseDown = false)
-  window.addEventListener('mousedown', md)
-  window.addEventListener('mouseup', mu)
-  // cleanup
-  onBeforeUnmount(() => {
-    window.removeEventListener('mousedown', md)
-    window.removeEventListener('mouseup', mu)
-    clearShowTimer()
-    clearHideTimer()
-    if (closeTimer) clearTimeout(closeTimer)
-  })
-})
 </script>
+
+<style scoped>
+.sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.45) rgba(15, 23, 42, 0.25);
+}
+
+:deep(.sidebar-scroll::-webkit-scrollbar) {
+  width: 8px;
+}
+
+:deep(.sidebar-scroll::-webkit-scrollbar-track) {
+  background: rgba(15, 23, 42, 0.25);
+  border-radius: 8px;
+}
+
+:deep(.sidebar-scroll::-webkit-scrollbar-thumb) {
+  background: rgba(255, 255, 255, 0.45);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+:deep(.sidebar-scroll::-webkit-scrollbar-thumb:hover) {
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.main-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.5) rgba(226, 232, 240, 0.8);
+}
+
+:global(.main-scroll::-webkit-scrollbar) {
+  width: 8px;
+  height: 8px;
+}
+
+:global(.main-scroll::-webkit-scrollbar-track) {
+  background: rgba(226, 232, 240, 0.8);
+  border-radius: 8px;
+}
+
+:global(.main-scroll::-webkit-scrollbar-thumb) {
+  background: rgba(100, 116, 139, 0.5);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+:global(.main-scroll::-webkit-scrollbar-thumb:hover) {
+  background: rgba(100, 116, 139, 0.7);
+}
+
+:global(html),
+:global(body) {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.5) rgba(226, 232, 240, 0.8);
+}
+
+:global(html::-webkit-scrollbar),
+:global(body::-webkit-scrollbar) {
+  width: 8px;
+  height: 8px;
+}
+
+:global(html::-webkit-scrollbar-track),
+:global(body::-webkit-scrollbar-track) {
+  background: rgba(226, 232, 240, 0.8);
+  border-radius: 8px;
+}
+
+:global(html::-webkit-scrollbar-thumb),
+:global(body::-webkit-scrollbar-thumb) {
+  background: rgba(100, 116, 139, 0.5);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+:global(html::-webkit-scrollbar-thumb:hover),
+:global(body::-webkit-scrollbar-thumb:hover) {
+  background: rgba(100, 116, 139, 0.7);
+}
+
+:global(.overflow-auto) {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(100, 116, 139, 0.5) rgba(226, 232, 240, 0.8);
+}
+
+:global(.overflow-auto::-webkit-scrollbar) {
+  width: 8px;
+  height: 8px;
+}
+
+:global(.overflow-auto::-webkit-scrollbar-track) {
+  background: rgba(226, 232, 240, 0.8);
+  border-radius: 8px;
+}
+
+:global(.overflow-auto::-webkit-scrollbar-thumb) {
+  background: rgba(100, 116, 139, 0.5);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+:global(.overflow-auto::-webkit-scrollbar-thumb:hover) {
+  background: rgba(100, 116, 139, 0.7);
+}
+</style>

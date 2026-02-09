@@ -19,6 +19,39 @@ body {
 	/* slate-900 */
 }
 
+html,
+body {
+	scrollbar-width: thin;
+	scrollbar-color: rgba(99, 102, 241, 0.35) transparent;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+html::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb {
+	background: rgba(99, 102, 241, 0.35);
+	border-radius: 999px;
+	border: 2px solid transparent;
+	background-clip: padding-box;
+	box-shadow: 0 0 8px rgba(99, 102, 241, 0.14);
+	transition: background 160ms linear, box-shadow 160ms linear;
+}
+
+html::-webkit-scrollbar-thumb:hover,
+body::-webkit-scrollbar-thumb:hover {
+	background: rgba(99, 102, 241, 0.65);
+	box-shadow: 0 0 12px rgba(99, 102, 241, 0.24);
+}
+
 #app {
 	height: 100%;
 	display: flex;
