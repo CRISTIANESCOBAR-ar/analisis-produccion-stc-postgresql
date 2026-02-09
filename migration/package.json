@@ -9,7 +9,11 @@
   },
   "dependencies": {
     "csv-parse": "^6.1.0",
-    "oracledb": "^6.3.0",
+    "dotenv": "^17.2.4",
+    "oracledb": "^6.10.0",
     "pg": "^8.18.0"
-  }
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
 }

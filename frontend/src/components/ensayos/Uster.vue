@@ -635,7 +635,7 @@ async function scanDirectory(dirHandle) {
       if (!t) continue;
 
       if (!map[t]) {
-        map[t] = { testnr: t, hasPar: false, hasTbl: false, parHandle: null, tblHandle: null, imp: false, nomcount: null, maschnr: null };
+        map[t] = { testnr: t, hasPar: false, hasTbl: false, parHandle: null, tblHandle: null, imp: false, nomcount: null, maschnr: null, timeStamp: null };
       }
       if (ln.endsWith('.par')) {
         map[t].hasPar = true;
@@ -646,6 +646,11 @@ async function scanDirectory(dirHandle) {
           map[t].nomcount = extractTsvCell(txt, 15, 5) || '';
           map[t].maschnr = extractTsvCell(txt, 13, 5) || '';
           map[t].matclass = extractTsvCell(txt, 14, 8) || '';
+          // Extraer timestamp numérico de fila 9, columna 5
+          const tValue = extractTsvCell(txt, 9, 5)
+          if (tValue) {
+            map[t].timeStamp = formatTimestampToDatetime(tValue)
+          }
         } catch (err) {
           console.warn('Error leyendo .PAR durante el escaneo', name, err);
         }
@@ -752,7 +757,7 @@ async function onFolderInputChange(e) {
       if (!(ln.endsWith('.par') || ln.endsWith('.tbl'))) continue
       const t = getTestnrFromName(name)
       if (!t) continue
-      if (!map[t]) map[t] = { testnr: t, hasPar: false, hasTbl: false, parHandle: null, tblHandle: null, imp: null, nomcount: null, maschnr: null }
+      if (!map[t]) map[t] = { testnr: t, hasPar: false, hasTbl: false, parHandle: null, tblHandle: null, imp: null, nomcount: null, maschnr: null, timeStamp: null }
       if (ln.endsWith('.par')) {
         map[t].hasPar = true
         map[t].parHandle = f
@@ -761,6 +766,11 @@ async function onFolderInputChange(e) {
           map[t].nomcount = extractTsvCell(txt, 15, 5) || ''
           map[t].maschnr = extractTsvCell(txt, 13, 5) || ''
           map[t].matclass = extractTsvCell(txt, 14, 8) || ''
+          // Extraer timestamp numérico de fila 9, columna 5
+          const tValue = extractTsvCell(txt, 9, 5)
+          if (tValue) {
+            map[t].timeStamp = formatTimestampToDatetime(tValue)
+          }
         } catch (err) { console.warn('reading .PAR fallback', name, err) }
       }
       if (ln.endsWith('.tbl')) {
@@ -1358,6 +1368,11 @@ function buildParObject() {
   if (pasador.value) par.PASADOR = pasador.value
   // include MATCLASS from manual selection (override PAR file value)
   if (matclass.value) par.MATCLASS = matclass.value
+  // Map TIME → TIME_STAMP for PostgreSQL backend
+  if (par.TIME) {
+    par.TIME_STAMP = par.TIME
+    delete par.TIME
+  }
   return par
 }
 
@@ -1377,34 +1392,43 @@ async function saveCurrentTest() {
   if (!canSave.value) return
   const par = buildParObject()
 
+  // Helper para convertir string a número, limpiando espacios y manejando punto decimal
+  const toNum = (val) => {
+    if (val == null || val === '') return null
+    const str = String(val).trim()
+    if (str === '') return null
+    const num = parseFloat(str)
+    return isNaN(num) ? null : num
+  }
+
   const tblRows = currentTblRows.value.map((r, idx) => ({
     SEQNO: r.SEQNO != null ? Number(r.SEQNO) : (idx + 1),
-    NO: r['NO'] != null ? (isNaN(Number(r['NO'])) ? null : Number(r['NO'])) : null,
-    'U%_%': r['U%_%'] != null ? r['U%_%'] : '',
-    'CVM_%': r['CVM_%'] != null ? r['CVM_%'] : '',
-    'INDICE_%': r['INDICE_%'] != null ? r['INDICE_%'] : '',
-    'CVM_1M_%': r['CVM_1M_%'] != null ? r['CVM_1M_%'] : '',
-    'CVM_3M_%': r['CVM_3M_%'] != null ? r['CVM_3M_%'] : '',
-    'CVM_10M_%': r['CVM_10M_%'] != null ? r['CVM_10M_%'] : '',
-    TITULO: r['TITULO'] != null ? r['TITULO'] : '',
-    'TITULO_REL_±_%': r['TITULO_REL_±_%'] != null ? r['TITULO_REL_±_%'] : '',
-    H: r['H'] != null ? r['H'] : '',
-    SH: r['SH'] != null ? r['SH'] : '',
-    SH_1M: r['SH_1M'] != null ? r['SH_1M'] : '',
-    SH_3M: r['SH_3M'] != null ? r['SH_3M'] : '',
-    SH_10M: r['SH_10M'] != null ? r['SH_10M'] : '',
-    'DELG_-30%_KM': r['DELG_-30%_KM'] != null ? r['DELG_-30%_KM'] : '',
-    'DELG_-40%_KM': r['DELG_-40%_KM'] != null ? r['DELG_-40%_KM'] : '',
-    'DELG_-50%_KM': r['DELG_-50%_KM'] != null ? r['DELG_-50%_KM'] : '',
-    'DELG_-60%_KM': r['DELG_-60%_KM'] != null ? r['DELG_-60%_KM'] : '',
-    'GRUE_35%_KM': r['GRUE_35%_KM'] != null ? r['GRUE_35%_KM'] : '',
-    'GRUE_50%_KM': r['GRUE_50%_KM'] != null ? r['GRUE_50%_KM'] : '',
-    'GRUE_70%_KM': r['GRUE_70%_KM'] != null ? r['GRUE_70%_KM'] : '',
-    'GRUE_100%_KM': r['GRUE_100%_KM'] != null ? r['GRUE_100%_KM'] : '',
-    'NEPS_140%_KM': r['NEPS_140%_KM'] != null ? r['NEPS_140%_KM'] : '',
-    'NEPS_200%_KM': r['NEPS_200%_KM'] != null ? r['NEPS_200%_KM'] : '',
-    'NEPS_280%_KM': r['NEPS_280%_KM'] != null ? r['NEPS_280%_KM'] : '',
-    'NEPS_400%_KM': r['NEPS_400%_KM'] != null ? r['NEPS_400%_KM'] : ''
+    NO_: toNum(r['NO']),
+    U_PERCENT: toNum(r['U%_%']),
+    CVM_PERCENT: toNum(r['CVM_%']),
+    INDICE_PERCENT: toNum(r['INDICE_%']),
+    CVM_1M_PERCENT: toNum(r['CVM_1M_%']),
+    CVM_3M_PERCENT: toNum(r['CVM_3M_%']),
+    CVM_10M_PERCENT: toNum(r['CVM_10M_%']),
+    TITULO: toNum(r['TITULO']),
+    TITULO_REL_PERC: toNum(r['TITULO_REL_±_%']),
+    H: toNum(r['H']),
+    SH: toNum(r['SH']),
+    SH_1M: toNum(r['SH_1M']),
+    SH_3M: toNum(r['SH_3M']),
+    SH_10M: toNum(r['SH_10M']),
+    DELG_MINUS30_KM: toNum(r['DELG_-30%_KM']),
+    DELG_MINUS40_KM: toNum(r['DELG_-40%_KM']),
+    DELG_MINUS50_KM: toNum(r['DELG_-50%_KM']),
+    DELG_MINUS60_KM: toNum(r['DELG_-60%_KM']),
+    GRUE_35_KM: toNum(r['GRUE_35%_KM']),
+    GRUE_50_KM: toNum(r['GRUE_50%_KM']),
+    GRUE_70_KM: toNum(r['GRUE_70%_KM']),
+    GRUE_100_KM: toNum(r['GRUE_100%_KM']),
+    NEPS_140_KM: toNum(r['NEPS_140%_KM']),
+    NEPS_200_KM: toNum(r['NEPS_200%_KM']),
+    NEPS_280_KM: toNum(r['NEPS_280%_KM']),
+    NEPS_400_KM: toNum(r['NEPS_400%_KM'])
   }))
 
   if (isSaving.value) return
@@ -2019,6 +2043,26 @@ function extractTsvCell(text, rowIndex, colIndex) {
   return cols[colIndex - 1]
 }
 
+function formatTimestampToDatetime(value) {
+  if (value == null) return ''
+  const s = String(value).trim()
+  if (s === '') return ''
+  // try numeric
+  const n = Number(s)
+  if (!Number.isFinite(n)) return s
+  // assume seconds if plausible (< 1e12), otherwise milliseconds
+  let ms = n
+  if (Math.abs(n) < 1e12) ms = n * 1000
+  const d = new Date(ms)
+  if (isNaN(d.getTime())) return s
+  const dd = String(d.getDate()).padStart(2, '0')
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const yyyy = d.getFullYear()
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mi = String(d.getMinutes()).padStart(2, '0')
+  return `${dd}/${mm}/${yyyy} ${hh}:${mi}`
+}
+
 function getCell(row, col) {
   if (!fileText.value) return ''
   const v = extractTsvCell(fileText.value, row, col)
@@ -2084,29 +2128,10 @@ function getFieldValueByCode(code) {
     if (code === 'MASCHNR') return item.maschnr || ''
     if (code === 'TESTNR') return item.testnr || ''
     if (code === 'MATCLASS') return item.matclass || ''
+    if (code === 'TIME') return item.timeStamp || ''
   }
   // last resort: empty string
   return ''
-}
-
-function formatTimestampToDatetime(value) {
-  if (value == null) return ''
-  const s = String(value).trim()
-  if (s === '') return ''
-  // try numeric
-  const n = Number(s)
-  if (!Number.isFinite(n)) return s
-  // assume seconds if plausible (< 1e12), otherwise milliseconds
-  let ms = n
-  if (Math.abs(n) < 1e12) ms = n * 1000
-  const d = new Date(ms)
-  if (isNaN(d.getTime())) return s
-  const dd = String(d.getDate()).padStart(2, '0')
-  const mm = String(d.getMonth() + 1).padStart(2, '0')
-  const yyyy = d.getFullYear()
-  const hh = String(d.getHours()).padStart(2, '0')
-  const mi = String(d.getMinutes()).padStart(2, '0')
-  return `${dd}/${mm}/${yyyy} ${hh}:${mi}`
 }
 </script>
 

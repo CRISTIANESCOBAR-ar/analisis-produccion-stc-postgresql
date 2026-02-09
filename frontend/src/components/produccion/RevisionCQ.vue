@@ -267,7 +267,7 @@
               <td class="px-2 py-[0.3rem] text-center text-slate-700">{{ row.GRP_DEF }}</td>
               <td class="px-2 py-[0.3rem] text-center text-slate-700">{{ row.COD_DE }}</td>
               <td class="px-2 py-[0.3rem] text-center text-slate-700">{{ row.DEFEITO }}</td>
-              <td class="px-2 py-[0.3rem] text-center text-slate-700">{{ row.METRAGEM }}</td>
+              <td class="px-2 py-[0.3rem] text-center text-slate-700">{{ formatMetraje(row.METRAGEM) }}</td>
               <td class="px-2 py-[0.3rem] text-center text-slate-700">{{ row.QUALIDADE }}</td>
               <td class="px-2 py-[0.3rem] text-center text-slate-700">{{ formatHora(row.HORA) }}</td>
               <td class="px-2 py-[0.3rem] text-center text-slate-700">{{ row.EMENDAS }}</td>
@@ -903,6 +903,15 @@ function formatPieza(pieza) {
   const str = pieza.toString()
   if (str.length < 3) return str
   return str.slice(0, -3) + ' ' + str.slice(-3)
+}
+
+// Formatea metraje eliminando decimales innecesarios (110.00 → 110, 62.50 → 62.5)
+function formatMetraje(metraje) {
+  if (metraje === null || metraje === undefined) return '-'
+  const n = parseFloat(metraje)
+  if (Number.isNaN(n)) return '-'
+  // Si es entero, mostrar sin decimales
+  return n % 1 === 0 ? n.toString() : n.toString()
 }
 
 // Formatea fecha "2026-01-16" o "2026-01-16 00:00:00" a "16/01/2026"

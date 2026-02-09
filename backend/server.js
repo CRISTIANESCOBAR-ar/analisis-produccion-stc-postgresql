@@ -2196,7 +2196,7 @@ app.post('/api/uster/status', async (req, res) => {
 // USTER: Get PAR
 app.get('/api/uster/par', async (req, res) => {
   try {
-    const result = await query(`SELECT testnr, nomcount, maschnr, lote, laborant, time_stamp, matclass, estiraje, pasador, obs FROM tb_uster_par ORDER BY testnr`)
+    const result = await query(`SELECT testnr, nomcount, maschnr, lote, laborant, time_stamp, matclass, estiraje, pasador, obs, created_at, updated_at FROM tb_uster_par ORDER BY testnr`)
     res.json({ rows: result.rows.map(uppercaseKeys) })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -2256,10 +2256,36 @@ app.post('/api/uster/upload', async (req, res) => {
     // Delete existing TBL records
     await client.query('DELETE FROM tb_uster_tbl WHERE testnr = $1', [par.TESTNR])
     
+    // Helper function to convert values to numbers, preserving zeros
+    const toNum = (val) => {
+      if (val == null || val === '') return null
+      const num = parseFloat(val)
+      return isNaN(num) ? null : num
+    }
+    
     // Insert new TBL records
     if (Array.isArray(tbl) && tbl.length > 0) {
+      // DEBUG: Log first row to see what values are arriving
+      if (tbl.length > 0) {
+        console.log('[DEBUG USTER TBL Row 1]', JSON.stringify(tbl[0], null, 2))
+      }
       for (let i = 0; i < tbl.length; i++) {
         const r = tbl[i]
+        const params = [
+          par.TESTNR, i+1, r.NO_, 
+          toNum(r.U_PERCENT), toNum(r.CVM_PERCENT), toNum(r.INDICE_PERCENT),
+          toNum(r.CVM_1M_PERCENT), toNum(r.CVM_3M_PERCENT), toNum(r.CVM_10M_PERCENT),
+          toNum(r.TITULO), toNum(r.TITULO_REL_PERC),
+          toNum(r.H), toNum(r.SH), toNum(r.SH_1M), toNum(r.SH_3M), toNum(r.SH_10M),
+          toNum(r.DELG_MINUS30_KM), toNum(r.DELG_MINUS40_KM),
+          toNum(r.DELG_MINUS50_KM), toNum(r.DELG_MINUS60_KM),
+          toNum(r.GRUE_35_KM), toNum(r.GRUE_50_KM), toNum(r.GRUE_70_KM),
+          toNum(r.GRUE_100_KM),
+          toNum(r.NEPS_140_KM), toNum(r.NEPS_200_KM), toNum(r.NEPS_280_KM), toNum(r.NEPS_400_KM)
+        ]
+        if (i === 0) {
+          console.log('[DEBUG INSERT params row 1]', params.slice(0, 10))
+        }
         await client.query(`
           INSERT INTO tb_uster_tbl (
             testnr, seqno, no_, u_percent, cvm_percent, indice_percent,
@@ -2270,18 +2296,7 @@ app.post('/api/uster/upload', async (req, res) => {
           ) VALUES (
             $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28
           )`,
-          [
-            par.TESTNR, i+1, r.NO_, 
-            parseFloat(r.U_PERCENT)||null, parseFloat(r.CVM_PERCENT)||null, parseFloat(r.INDICE_PERCENT)||null,
-            parseFloat(r.CVM_1M_PERCENT)||null, parseFloat(r.CVM_3M_PERCENT)||null, parseFloat(r.CVM_10M_PERCENT)||null,
-            parseFloat(r.TITULO)||null, parseFloat(r.TITULO_REL_PERC)||null,
-            parseFloat(r.H)||null, parseFloat(r.SH)||null, parseFloat(r.SH_1M)||null, parseFloat(r.SH_3M)||null, parseFloat(r.SH_10M)||null,
-            parseFloat(r.DELG_MINUS30_KM)||null, parseFloat(r.DELG_MINUS40_KM)||null,
-            parseFloat(r.DELG_MINUS50_KM)||null, parseFloat(r.DELG_MINUS60_KM)||null,
-            parseFloat(r.GRUE_35_KM)||null, parseFloat(r.GRUE_50_KM)||null, parseFloat(r.GRUE_70_KM)||null,
-            parseFloat(r.GRUE_100_KM)||null,
-            parseFloat(r.NEPS_140_KM)||null, parseFloat(r.NEPS_200_KM)||null, parseFloat(r.NEPS_280_KM)||null, parseFloat(r.NEPS_400_KM)||null
-          ]
+          params
         )
       }
     }

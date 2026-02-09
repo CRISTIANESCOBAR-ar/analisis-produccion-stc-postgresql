@@ -2090,7 +2090,8 @@ async function loadRows() {
 
       // Convertir TIME_STAMP a Date object para ordenamiento correcto
       // Manejar formato europeo DD/MM/YYYY HH:mm:ss si viene como string
-      const timeStampRaw = row.TIME_STAMP || row.TIME || row.TIMESTAMP || null
+      // Usar CREATED_AT como fallback cuando TIME_STAMP sea NULL
+      const timeStampRaw = row.TIME_STAMP || row.TIME || row.TIMESTAMP || row.CREATED_AT || row.created_at || null
       let timeStamp = null
       
       if (timeStampRaw) {
