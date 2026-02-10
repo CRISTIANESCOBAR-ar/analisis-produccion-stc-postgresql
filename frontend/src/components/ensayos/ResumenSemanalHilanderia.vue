@@ -359,9 +359,12 @@ const weeklyRows = computed(() => {
     const metrics = metricKeys.map(key => {
       const avg = calcAvg(group.rows, key)
       const base = baseline[key]
+      const dev = calcDevMetric(avg, base)
       return {
+        avgRaw: avg,
+        devRaw: dev,
         avg: formatNumber(avg, 2),
-        dev: formatNumber(calcDevMetric(avg, base), 1)
+        dev: formatNumber(dev, 1)
       }
     })
 
@@ -372,6 +375,8 @@ const weeklyRows = computed(() => {
       month: monthName,
       neDisplay: selectedNe.value ? String(selectedNe.value) : 'Todos',
       standardTitle: standard != null ? formatNumber(standard, 2) : '—',
+      tituloAvgRaw: tituloAvg,
+      tituloDevRaw: tituloDev,
       tituloAvg: formatNumber(tituloAvg, 2),
       tituloDev: formatNumber(tituloDev, 1),
       metricA: metrics[0],
@@ -436,16 +441,16 @@ const exportToExcel = async () => {
   weeklyRows.value.forEach(row => {
     const metrics = [row.metricA, row.metricB, row.metricC, row.metricD]
     const metricValues = metrics.flatMap(metric => [
-      parseNumber(metric.avg),
-      parseNumber(metric.dev)
+      metric.avgRaw,
+      metric.devRaw
     ])
 
     worksheet.addRow([
       formatMonthYear(row.month, row.year),
       row.week,
       row.neDisplay,
-      parseNumber(row.tituloAvg),
-      parseNumber(row.tituloDev),
+      row.tituloAvgRaw,
+      row.tituloDevRaw,
       ...metricValues
     ])
   })
@@ -457,15 +462,21 @@ const exportToExcel = async () => {
     row.getCell(2).numFmt = '0'
     row.getCell(4).numFmt = '0.00'
     row.getCell(5).numFmt = '0.0'
-    for (let c = 6; c <= headers.length; c += 2) {
-      if (c !== 6 && c !== 12) {
-        row.getCell(c).numFmt = '0.00'
+    
+    // Aplicar formato a cada columna de métrica
+    for (let metricIdx = 0; metricIdx < selectedMetricKeys.value.length; metricIdx++) {
+      const metricKey = selectedMetricKeys.value[metricIdx]
+      const colIndex = 6 + (metricIdx * 2) // Columna de la métrica (6, 8, 10, 12)
+      const devColIndex = colIndex + 1 // Columna del desvío
+      
+      // Formato especial para "Fuerza B" y "Trabajo B" (valores mayores a 999)
+      if (metricKey === 'Fuerza B' || metricKey === 'Trabajo B') {
+        row.getCell(colIndex).numFmt = '#,##0.00'
+      } else {
+        row.getCell(colIndex).numFmt = '0.00'
       }
-      row.getCell(c + 1).numFmt = '0.0'
+      row.getCell(devColIndex).numFmt = '0.0'
     }
-
-    row.getCell(6).numFmt = '#,##0.00'
-    row.getCell(12).numFmt = '#,##0.00'
   }
 
   worksheet.autoFilter = {

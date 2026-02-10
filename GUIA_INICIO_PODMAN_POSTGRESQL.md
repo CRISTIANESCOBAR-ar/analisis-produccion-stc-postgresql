@@ -1,0 +1,247 @@
+# Guía de Inicio - Podman y PostgreSQL
+
+## Requisitos Previos
+- Podman Desktop instalado en Windows
+- Docker Compose instalado
+- Proyecto clonado en `C:\stc-produccion-v2`
+
+---
+
+## Pasos para Iniciar el Sistema
+
+### 1. Iniciar Podman Machine
+
+```powershell
+podman machine start
+```
+
+**Salida esperada:**
+```
+Starting machine "podman-machine-default"
+```
+
+> **Nota:** Si ya está corriendo, verás: `Error: already running` (esto es normal, continúa).
+
+---
+
+### 2. Verificar el Estado de Podman
+
+```powershell
+podman ps
+```
+
+**Salida esperada:**
+```
+CONTAINER ID  IMAGE  COMMAND  CREATED  STATUS  PORTS  NAMES
+```
+(lista vacía o con contenedores existentes)
+
+---
+
+### 3. Navegar al Directorio del Proyecto
+
+```powershell
+cd C:\stc-produccion-v2
+```
+
+---
+
+### 4. Levantar PostgreSQL
+
+```powershell
+podman compose up -d postgres
+```
+
+**Salida esperada:**
+```
+[+] up 2/2
+ ✔ Network stc_network    Created
+ ✔ Container stc_postgres Created
+```
+
+---
+
+### 5. Verificar que PostgreSQL esté Corriendo
+
+```powershell
+podman ps
+```
+
+**Salida esperada:**
+```
+CONTAINER ID  IMAGE                     COMMAND    STATUS                   PORTS                   NAMES
+cd4d2aa7ba99  postgres:16-alpine        postgres   Up (healthy)             0.0.0.0:5433->5432/tcp  stc_postgres
+```
+
+> **Importante:** Verifica que el STATUS sea `Up (healthy)`
+
+---
+
+### 6. Ver Logs de PostgreSQL (Opcional)
+
+```powershell
+podman logs stc_postgres
+```
+
+---
+
+### 7. Iniciar el Backend
+
+```powershell
+cd backend
+npm start
+```
+
+**Salida esperada:**
+```
+✅ PostgreSQL conectado
+🚀 Backend iniciado en puerto 3001
+```
+
+---
+
+### 8. Iniciar el Frontend (En otra terminal)
+
+```powershell
+cd C:\stc-produccion-v2\frontend
+npm run dev
+```
+
+**Salida esperada:**
+```
+VITE v5.x ready in xxx ms
+➜ Local: http://localhost:5173/
+```
+
+---
+
+## Información de Conexión
+
+### PostgreSQL
+- **Host:** localhost
+- **Puerto:** 5433 (desde el host)
+- **Base de datos:** stc_produccion
+- **Usuario:** stc_user
+- **Contraseña:** stc_password_2026
+
+### API Backend
+- **URL:** http://localhost:3001
+- **Endpoints:** 
+  - API: `http://localhost:3001/api/*`
+  - Health: `http://localhost:3001/health`
+
+### Frontend
+- **URL:** http://localhost:5173
+
+---
+
+## Solución de Problemas Comunes
+
+### Error: "network stc_network has incorrect label"
+
+**Causa:** Red creada con configuración antigua.
+
+**Solución:**
+```powershell
+# 1. Detener todo
+podman compose down
+
+# 2. Eliminar todos los contenedores
+podman rm -f $(podman ps -aq)
+
+# 3. Eliminar la red problemática
+podman network rm stc_network
+
+# 4. Recrear PostgreSQL
+podman compose up -d postgres
+```
+
+---
+
+### Error: "PostgreSQL no disponible (intento X/30)"
+
+**Causa:** PostgreSQL no está corriendo o no está listo.
+
+**Solución:**
+```powershell
+# Verificar el estado
+podman ps
+
+# Ver los logs
+podman logs stc_postgres
+
+# Si no aparece, levantar PostgreSQL
+podman compose up -d postgres
+
+# Esperar a que el healthcheck sea "healthy"
+podman ps
+```
+
+---
+
+### Error: "ECONNREFUSED 127.0.0.1:5432"
+
+**Causa:** El backend está intentando conectarse al puerto incorrecto.
+
+**Solución:**
+Verificar variables de entorno en `backend/.env` o configuración:
+```env
+PG_HOST=localhost
+PG_PORT=5433
+```
+
+---
+
+## Comandos Útiles
+
+### Ver todos los contenedores (activos e inactivos)
+```powershell
+podman ps -a
+```
+
+### Detener PostgreSQL
+```powershell
+podman stop stc_postgres
+```
+
+### Reiniciar PostgreSQL
+```powershell
+podman restart stc_postgres
+```
+
+### Detener todo el stack
+```powershell
+podman compose down
+```
+
+### Ver las redes
+```powershell
+podman network ls
+```
+
+### Limpiar todo (CUIDADO: elimina datos)
+```powershell
+podman compose down -v
+```
+
+---
+
+## Orden Recomendado de Inicio
+
+1. Podman Machine ✅
+2. PostgreSQL (contenedor) ✅
+3. Backend (Node.js) ✅
+4. Frontend (Vite) ✅
+
+---
+
+## Orden Recomendado de Apagado
+
+1. Frontend (Ctrl+C en terminal)
+2. Backend (Ctrl+C en terminal)
+3. PostgreSQL: `podman stop stc_postgres` (opcional, puede quedarse corriendo)
+4. Podman Machine: `podman machine stop` (opcional)
+
+---
+
+**Última actualización:** 10 de febrero de 2026
