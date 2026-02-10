@@ -2374,12 +2374,13 @@ app.get('/api/tensorapid/tbl', async (req, res) => {
 app.get('/api/calidad-fibra', async (req, res) => {
   try {
     const result = await query(`
-      SELECT "LOTE_FIAC", "PESO", "SCI", "MST", "MIC", "MAT", "UHML", "UI", "SF", 
-             "STR", "ELG", "RD", "PLUS_B", "TrCNT", "TrAR", "TRID"
+      SELECT "LOTE_FIAC", "PESO", "MISTURA", "SEQ", "DT_ENTRADA_PROD", "HR_ENTRADA_PROD",
+             "SCI", "MST", "MIC", "MAT", "UHML", "UI", "SF", 
+             "STR", "ELG", "RD", "PLUS_B", "TIPO", "TrCNT", "TrAR", "TRID"
       FROM tb_CALIDAD_FIBRA
       WHERE "LOTE_FIAC" IS NOT NULL AND "LOTE_FIAC" != ''
         AND "TIPO_MOV" = 'MIST'
-      ORDER BY "LOTE_FIAC"
+      ORDER BY "MISTURA", "SEQ"
     `)
     res.json({ rows: result.rows.map(uppercaseKeys) })
   } catch (err) {

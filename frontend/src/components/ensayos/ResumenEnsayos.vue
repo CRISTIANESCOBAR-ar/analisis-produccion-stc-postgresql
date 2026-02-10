@@ -1163,12 +1163,12 @@ const filteredRows = computed(() => {
     // OE filter
     const oeMatch = !oe || (() => {
       const v = r.OE == null ? '' : String(r.OE).toLowerCase()
-      return v.includes(oe)
+      return v === oe
     })()
     // Ne filter
     const neMatch = !ne || (() => {
       const v = r.Ne == null ? '' : String(r.Ne).toLowerCase()
-      return v.includes(ne)
+      return v === ne
     })()
     
     // Status filter (desviación)

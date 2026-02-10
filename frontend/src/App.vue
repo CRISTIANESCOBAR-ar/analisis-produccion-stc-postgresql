@@ -75,6 +75,14 @@
             >
               <span>🗓️</span> Resumen Semanal
             </router-link>
+
+            <router-link
+              to="/analisis-calidad-fibra"
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm"
+              :class="{ 'bg-blue-600': $route.path === '/analisis-calidad-fibra' }"
+            >
+              <span>🧬</span> Análisis Calidad Fibra
+            </router-link>
             
             <router-link 
               to="/resumen-diario" 

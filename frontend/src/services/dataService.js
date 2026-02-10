@@ -18,9 +18,14 @@ export function setDataSource(source) {
 }
 
 async function fetchJson(endpoint) {
-  const response = await fetch(`${API_BASE}${endpoint}`)
+  const url = `${API_BASE}${endpoint}`
+  console.log(`🌐 Fetching: ${url}`)
+  const response = await fetch(url)
+  console.log(`📡 Response status: ${response.status} ${response.statusText}`)
   if (!response.ok) throw new Error(`API error: ${response.statusText}`)
   const data = await response.json()
+  console.log(`📦 Data received:`, data)
+  console.log(`📊 Rows count: ${data.rows ? data.rows.length : 'no rows property'}`)
   return data.rows || data
 }
 

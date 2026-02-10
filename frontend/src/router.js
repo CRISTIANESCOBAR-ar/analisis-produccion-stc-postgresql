@@ -25,6 +25,11 @@ const routes = [
     component: () => import('./components/ensayos/ResumenSemanalHilanderia.vue'),
     meta: { title: 'Resumen Semanal Hilanderia' }
   },
+  {
+    path: '/analisis-calidad-fibra',
+    component: () => import('./components/ensayos/AnalisisCalidadFibra.vue'),
+    meta: { title: 'Análisis Calidad Fibra' }
+  },
   { 
     path: '/resumen-diario', 
     component: () => import('./components/ensayos/ResumenDiario.vue'), 
