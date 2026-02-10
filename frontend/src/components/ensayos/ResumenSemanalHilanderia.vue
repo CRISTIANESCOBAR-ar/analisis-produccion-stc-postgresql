@@ -2,60 +2,39 @@
   <div class="w-full h-screen flex flex-col p-1">
     <main class="w-full flex-1 min-h-0 bg-white rounded-2xl shadow-xl px-4 py-3 border border-slate-200 flex flex-col">
       <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
-        <div class="flex items-center gap-2">
-          <span class="text-lg">🧪</span>
-          <h3 class="text-lg font-semibold text-slate-800">Resumen Semanal Hilanderia</h3>
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="flex items-center gap-2">
+            <span class="text-lg">🧪</span>
+            <h3 class="text-lg font-semibold text-slate-800">Resumen Semanal Hilanderia</h3>
+          </div>
+          <CustomDatepicker v-model="startDate" label="Desde" :show-buttons="false" />
+          <CustomDatepicker v-model="endDate" label="Hasta" :show-buttons="false" />
         </div>
-        <button
-          @click="loadRows"
-          v-tippy="{ content: 'Refrescar datos', placement: 'bottom', theme: 'custom' }"
-          class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <path d="M21 12a9 9 0 1 1-3-6.7" stroke-linecap="round" stroke-linejoin="round"></path>
-            <polyline points="21 3 21 9 15 9" stroke-linecap="round" stroke-linejoin="round"></polyline>
-          </svg>
-          <span>Refrescar</span>
-        </button>
-      </div>
-
-      <div class="flex flex-wrap items-end gap-4 mb-3">
-        <CustomDatepicker v-model="startDate" label="Desde" :show-buttons="false" />
-        <CustomDatepicker v-model="endDate" label="Hasta" :show-buttons="false" />
-
         <div class="flex items-center gap-2">
-          <label class="text-sm text-slate-600 font-medium">Ne</label>
-          <select
-            v-model="selectedNe"
-            class="px-2 py-1 border border-slate-200 rounded-md text-sm text-slate-700 bg-white"
-            style="width:10ch;min-width:10ch;max-width:10ch;"
+          <button
+            @click="loadRows"
+            v-tippy="{ content: 'Refrescar datos', placement: 'bottom', theme: 'custom' }"
+            class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md"
           >
-            <option value="">Todos</option>
-            <option v-for="ne in availableNes" :key="ne" :value="ne">{{ ne }}</option>
-          </select>
-        </div>
-
-        <div class="flex items-center gap-2">
-          <label class="text-sm text-slate-600 font-medium">Titulo estandar</label>
-          <input
-            v-model="standardTitleInput"
-            type="text"
-            inputmode="decimal"
-            class="w-24 px-2 py-1 border border-slate-200 rounded-md text-sm text-slate-700"
-            placeholder="Ej: 10"
-          />
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mb-3">
-        <div v-for="(key, idx) in selectedMetricKeys" :key="idx" class="flex items-center gap-2">
-          <label class="text-xs text-slate-500 font-semibold uppercase tracking-wide">Columna {{ idx + 1 }}</label>
-          <select
-            v-model="selectedMetricKeys[idx]"
-            class="flex-1 px-2 py-1 border border-slate-200 rounded-md text-sm text-slate-700 bg-white"
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M21 12a9 9 0 1 1-3-6.7" stroke-linecap="round" stroke-linejoin="round"></path>
+              <polyline points="21 3 21 9 15 9" stroke-linecap="round" stroke-linejoin="round"></polyline>
+            </svg>
+            <span>Refrescar</span>
+          </button>
+          <button
+            @click="exportToExcel"
+            :disabled="!weeklyRows.length"
+            v-tippy="{ content: 'Exportar a Excel', placement: 'bottom', theme: 'custom' }"
+            class="inline-flex items-center gap-1 px-2 py-1 border border-emerald-200 bg-emerald-50 text-emerald-700 rounded-lg text-sm font-medium hover:bg-emerald-100 transition-colors duration-150 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <option v-for="opt in metricOptions" :key="opt.key" :value="opt.key">{{ opt.label }}</option>
-          </select>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M14 3v4a1 1 0 0 0 1 1h4" stroke-linecap="round" stroke-linejoin="round"></path>
+              <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z" stroke-linecap="round" stroke-linejoin="round"></path>
+              <path d="M9 13l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+            <span>Excel</span>
+          </button>
         </div>
       </div>
 
@@ -71,11 +50,24 @@
           <table class="min-w-full w-full table-auto divide-y divide-slate-200 text-xs">
             <thead class="bg-gradient-to-r from-slate-50 to-slate-100 sticky top-0 z-20">
               <tr>
-                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200">Año</th>
                 <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200">Mes</th>
                 <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200">Semana</th>
-                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200">Titulo estandar</th>
-                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200">Titulo Ne promedio</th>
+                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200">
+                  <div class="flex items-center justify-center gap-1">
+                    <span class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Ne</span>
+                    <select
+                      v-model="selectedNe"
+                      class="w-full bg-transparent text-xs font-semibold text-slate-700"
+                      style="width:9.33ch;min-width:9.33ch;max-width:9.33ch;"
+                    >
+                      <option value="">Todos</option>
+                      <option v-for="ne in availableNes" :key="ne" :value="ne">{{ ne }}</option>
+                    </select>
+                  </div>
+                </th>
+                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200">
+                  <span>Ne<br>Promedio</span>
+                </th>
                 <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200">Desvio %</th>
                 <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200">
                   <select v-model="selectedMetricKeys[0]" class="w-full bg-transparent text-xs font-semibold text-slate-700">
@@ -105,10 +97,9 @@
             </thead>
             <tbody>
               <tr v-for="row in weeklyRows" :key="row.key" class="border-t border-slate-100 hover:bg-blue-50/30 transition-colors duration-150">
-                <td class="px-2 py-2 text-center text-slate-700">{{ row.year }}</td>
-                <td class="px-2 py-2 text-center text-slate-700 capitalize">{{ row.month }}</td>
+                <td class="px-2 py-2 text-center text-slate-700 capitalize">{{ formatMonthYear(row.month, row.year) }}</td>
                 <td class="px-2 py-2 text-center text-slate-700">{{ row.week }}</td>
-                <td class="px-2 py-2 text-center text-slate-700">{{ row.standardTitle }}</td>
+                <td class="px-2 py-2 text-center text-slate-700">{{ row.neDisplay }}</td>
                 <td class="px-2 py-2 text-center text-slate-700">{{ row.tituloAvg }}</td>
                 <td class="px-2 py-2 text-center text-slate-700">{{ row.tituloDev }}</td>
                 <td class="px-2 py-2 text-center text-slate-700">{{ row.metricA.avg }}</td>
@@ -131,6 +122,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import Swal from 'sweetalert2'
+import * as ExcelJS from 'exceljs'
 import { fetchAllStatsData } from '../../services/dataService'
 import CustomDatepicker from '../CustomDatepicker.vue'
 
@@ -173,22 +165,51 @@ function parseNumber(val) {
 
 function formatNe(nomcount, matclass) {
   if (nomcount == null || nomcount === '') return ''
-  let ne = String(nomcount).trim()
+  const raw = String(nomcount).trim()
+  let ne = raw
   const neNum = parseFloat(ne.replace(',', '.'))
   if (!isNaN(neNum)) {
     ne = String(parseFloat(ne.replace(',', '.')))
   }
-  if (matclass && String(matclass).toLowerCase() === 'hilo de fantasia') {
+  const matclassText = matclass ? String(matclass).toLowerCase().trim() : ''
+  const isFlame = /flame/i.test(raw) || matclassText.includes('flame') || matclassText.includes('fantasia')
+  if (isFlame) {
     return `${ne}Flame`
   }
   return ne
+}
+
+function parseStandardTitleFromNe(neValue) {
+  if (!neValue) return null
+  const match = String(neValue).trim().match(/^(\d+(?:[\.,]\d+)?)/)
+  if (!match) return null
+  const normalized = match[1].replace(',', '.')
+  const n = Number(normalized)
+  return Number.isFinite(n) ? normalized : null
+}
+
+function formatMonthYear(monthName, year) {
+  if (!monthName || !year) return ''
+  const mmm = String(monthName).slice(0, 3)
+  const yy = String(year).slice(-2)
+  return `${mmm}-${yy}`
+}
+
+function getRowNeDisplay(row) {
+  if (row.Ne != null && row.Ne !== '') return String(row.Ne)
+  const matclass = row.MATCLASS ?? row.matclass ?? row.Matclass ?? row.MatClass ?? null
+  return formatNe(row.NOMCOUNT ?? row.Ne, matclass)
 }
 
 function formatNumber(val, maxDecimals = 2) {
   if (val == null || !Number.isFinite(val)) return '—'
   const fixed = val.toFixed(maxDecimals)
   const trimmed = fixed.replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
-  return trimmed.replace('.', ',')
+  const [intPart, decPart] = trimmed.split('.')
+  const intWithSeparator = Math.abs(parseInt(intPart)) >= 1000 
+    ? intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+    : intPart
+  return decPart ? `${intWithSeparator},${decPart}` : intWithSeparator
 }
 
 function parseRowDate(row) {
@@ -232,9 +253,8 @@ function formatDateInput(date) {
 const availableNes = computed(() => {
   const set = new Set()
   for (const row of rows.value || []) {
-    if (row.Ne != null && row.Ne !== '') {
-      set.add(String(row.Ne))
-    }
+    const displayNe = getRowNeDisplay(row)
+    if (displayNe) set.add(displayNe)
   }
   return Array.from(set).sort((a, b) => {
     const na = parseFloat(String(a).replace(',', '.'))
@@ -251,7 +271,7 @@ const filteredRows = computed(() => {
   const ne = selectedNe.value ? String(selectedNe.value) : ''
 
   return rows.value.filter(row => {
-    if (ne && String(row.Ne || '') !== ne) return false
+    if (ne && getRowNeDisplay(row) !== ne) return false
     const d = parseRowDate(row)
     if (!d) return false
     if (start && d < start) return false
@@ -279,8 +299,16 @@ const baselineStats = computed(() => {
 const standardTitleNumber = computed(() => {
   const n = parseNumber(standardTitleInput.value)
   if (n != null) return n
-  const fromNe = selectedNe.value ? parseNumber(selectedNe.value) : null
+  const fromNeRaw = selectedNe.value ? parseStandardTitleFromNe(selectedNe.value) : null
+  const fromNe = fromNeRaw != null ? parseNumber(fromNeRaw) : null
   return fromNe != null ? fromNe : null
+})
+
+watch(selectedNe, value => {
+  const parsed = parseStandardTitleFromNe(value)
+  if (parsed != null) {
+    standardTitleInput.value = parsed
+  }
 })
 
 const weeklyRows = computed(() => {
@@ -342,6 +370,7 @@ const weeklyRows = computed(() => {
       year: group.year,
       week: group.week,
       month: monthName,
+      neDisplay: selectedNe.value ? String(selectedNe.value) : 'Todos',
       standardTitle: standard != null ? formatNumber(standard, 2) : '—',
       tituloAvg: formatNumber(tituloAvg, 2),
       tituloDev: formatNumber(tituloDev, 1),
@@ -357,6 +386,108 @@ const weeklyRows = computed(() => {
     return a.week - b.week
   })
 })
+
+const exportToExcel = async () => {
+  if (!weeklyRows.value.length) return
+
+  const workbook = new ExcelJS.Workbook()
+  workbook.creator = 'STC Dashboard'
+  workbook.created = new Date()
+
+  const worksheet = workbook.addWorksheet('Resumen Semanal')
+  worksheet.pageSetup = {
+    paperSize: 9,
+    orientation: 'landscape',
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    margins: { left: 0.2, right: 0.2, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 }
+  }
+
+  const headers = [
+    'Mes',
+    'Semana',
+    'Ne',
+    'Ne Promedio',
+    'Desvio %',
+    ...selectedMetricKeys.value.flatMap(key => [key, 'Desvio %'])
+  ]
+
+  worksheet.addRow(headers)
+
+  headers.forEach((_, idx) => {
+    const col = worksheet.getColumn(idx + 1)
+    col.width = idx === 0 ? 9 : idx === 2 ? 10 : 11
+  })
+
+  const headerRow = worksheet.getRow(1)
+  headerRow.font = { bold: true, size: 10, color: { argb: 'FF0F172A' } }
+  headerRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }
+  headerRow.eachCell(cell => {
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } }
+    cell.border = {
+      top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
+    }
+  })
+
+  weeklyRows.value.forEach(row => {
+    const metrics = [row.metricA, row.metricB, row.metricC, row.metricD]
+    const metricValues = metrics.flatMap(metric => [
+      parseNumber(metric.avg),
+      parseNumber(metric.dev)
+    ])
+
+    worksheet.addRow([
+      formatMonthYear(row.month, row.year),
+      row.week,
+      row.neDisplay,
+      parseNumber(row.tituloAvg),
+      parseNumber(row.tituloDev),
+      ...metricValues
+    ])
+  })
+
+  const lastRow = worksheet.rowCount
+  for (let i = 2; i <= lastRow; i += 1) {
+    const row = worksheet.getRow(i)
+    row.alignment = { vertical: 'middle', horizontal: 'center' }
+    row.getCell(2).numFmt = '0'
+    row.getCell(4).numFmt = '0.00'
+    row.getCell(5).numFmt = '0.0'
+    for (let c = 6; c <= headers.length; c += 2) {
+      if (c !== 6 && c !== 12) {
+        row.getCell(c).numFmt = '0.00'
+      }
+      row.getCell(c + 1).numFmt = '0.0'
+    }
+
+    row.getCell(6).numFmt = '#,##0.00'
+    row.getCell(12).numFmt = '#,##0.00'
+  }
+
+  worksheet.autoFilter = {
+    from: { row: 1, column: 1 },
+    to: { row: lastRow, column: headers.length }
+  }
+
+  worksheet.views = [{ state: 'frozen', ySplit: 1 }]
+
+  const buffer = await workbook.xlsx.writeBuffer()
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  const now = new Date()
+  const hhmmss = now.toTimeString().slice(0, 8).replace(/:/g, '')
+  const from = startDate.value || 'inicio'
+  const to = endDate.value || 'fin'
+  link.href = url
+  link.download = `Resumen_Semanal_Hilanderia_${from}_${to}_${hhmmss}.xlsx`
+  link.click()
+  window.URL.revokeObjectURL(url)
+}
 
 async function loadRows() {
   loading.value = true
@@ -449,7 +580,8 @@ async function loadRows() {
       }
 
       const neValue = row.NOMCOUNT ?? row.Ne ?? row.NE ?? row.titulo ?? row.TITULO ?? ''
-      const ne = formatNe(neValue, row.MATCLASS)
+      const matclass = row.MATCLASS ?? row.matclass ?? row.Matclass ?? row.MatClass ?? null
+      const ne = formatNe(neValue, matclass)
 
       return {
         Ensayo: testnr,
@@ -497,12 +629,6 @@ async function loadRows() {
     loading.value = false
   }
 }
-
-watch(selectedNe, (newVal) => {
-  if (!newVal) return
-  const parsed = parseNumber(newVal)
-  if (parsed != null) standardTitleInput.value = String(parsed)
-})
 
 onMounted(() => {
   loadRows()
