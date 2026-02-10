@@ -93,17 +93,26 @@ export async function deleteTensorapid(testnr) {
 }
 
 // =====================
+// CALIDAD FIBRA FUNCTIONS
+// =====================
+
+export async function fetchCalidadFibra() {
+  return fetchJson('/calidad-fibra')
+}
+
+// =====================
 // COMBINED FUNCTIONS
 // =====================
 
 export async function fetchAllStatsData() {
-  const [usterPar, usterTbl, tensorapidPar, tensorapidTbl] = await Promise.all([
+  const [usterPar, usterTbl, tensorapidPar, tensorapidTbl, calidadFibra] = await Promise.all([
     fetchUsterPar(),
     fetchUsterTbl(),
     fetchTensorapidPar(),
-    fetchTensorapidTbl()
+    fetchTensorapidTbl(),
+    fetchCalidadFibra()
   ])
-  return { usterPar, usterTbl, tensorapidPar, tensorapidTbl, source: currentSource }
+  return { usterPar, usterTbl, tensorapidPar, tensorapidTbl, calidadFibra, source: currentSource }
 }
 
 export default {
@@ -120,5 +129,6 @@ export default {
   deleteUster,
   deleteTensorapid,
   getUsterHusos,
+  fetchCalidadFibra,
   fetchAllStatsData
 }

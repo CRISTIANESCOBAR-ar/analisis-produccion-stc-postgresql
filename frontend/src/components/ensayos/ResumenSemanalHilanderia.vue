@@ -49,10 +49,11 @@
         <div v-else class="overflow-auto _minimal-scroll w-full flex-1 min-h-0 rounded-xl border border-slate-200">
           <table class="min-w-full w-full table-auto divide-y divide-slate-200 text-xs">
             <thead class="bg-gradient-to-r from-slate-50 to-slate-100 sticky top-0 z-20">
+              <!-- Fila de agrupación superior -->
               <tr>
-                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200">Mes</th>
-                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200">Semana</th>
-                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200">
+                <th rowspan="2" class="px-2 py-2 text-center font-semibold text-slate-700 border-b-2 border-slate-200">Mes</th>
+                <th rowspan="2" class="px-2 py-2 text-center font-semibold text-slate-700 border-b-2 border-slate-200">Semana</th>
+                <th rowspan="2" class="px-2 py-2 text-center font-semibold text-slate-700 border-b-2 border-slate-200">
                   <div class="flex items-center justify-center gap-1">
                     <span class="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Ne</span>
                     <select
@@ -65,34 +66,77 @@
                     </select>
                   </div>
                 </th>
-                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200">
+                <th rowspan="2" class="px-2 py-2 text-center font-semibold text-slate-700 border-b-2 border-slate-200">
                   <span>Ne<br>Promedio</span>
                 </th>
-                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200">Desvio %</th>
-                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200">
+                <th rowspan="2" class="px-2 py-2 text-center font-semibold text-slate-700 border-b-2 border-b-slate-200">
+                  <span>Desv<br>%</span>
+                </th>
+                <th colspan="6" class="px-2 py-1 text-center font-bold text-emerald-700 border-b-2 border-b-slate-200 border-l-2 border-l-emerald-500 border-r-2 border-r-emerald-500 bg-emerald-100">
+                  HVI - Calidad Fibra
+                </th>
+                <th colspan="8" class="px-2 py-1 text-center font-bold text-slate-700 border-b-2 border-b-slate-200 bg-slate-100">
+                  USTER + TENSORAPID - Calidad Hilo
+                </th>
+              </tr>
+              <!-- Fila de headers individuales -->
+              <tr>
+                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b-2 border-b-slate-200 border-l-2 border-l-emerald-500 bg-emerald-50">
+                  <select v-model="selectedHviKeys[0]" class="w-full bg-transparent text-xs font-semibold text-slate-700">
+                    <option v-for="opt in hviOptions" :key="opt.key" :value="opt.key">{{ opt.label }}</option>
+                  </select>
+                </th>
+                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b-2 border-b-slate-200 bg-emerald-50">
+                  <span>Desv<br>%</span>
+                </th>
+                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b-2 border-b-slate-200 bg-emerald-50">
+                  <select v-model="selectedHviKeys[1]" class="w-full bg-transparent text-xs font-semibold text-slate-700">
+                    <option v-for="opt in hviOptions" :key="opt.key" :value="opt.key">{{ opt.label }}</option>
+                  </select>
+                </th>
+                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b-2 border-b-slate-200 bg-emerald-50">
+                  <span>Desv<br>%</span>
+                </th>
+                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b-2 border-b-slate-200 bg-emerald-50">
+                  <select v-model="selectedHviKeys[2]" class="w-full bg-transparent text-xs font-semibold text-slate-700">
+                    <option v-for="opt in hviOptions" :key="opt.key" :value="opt.key">{{ opt.label }}</option>
+                  </select>
+                </th>
+                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b-2 border-b-slate-200 border-r-2 border-r-emerald-500 bg-emerald-50">
+                  <span>Desv<br>%</span>
+                </th>
+                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b-2 border-slate-200">
                   <select v-model="selectedMetricKeys[0]" class="w-full bg-transparent text-xs font-semibold text-slate-700">
                     <option v-for="opt in metricOptions" :key="opt.key" :value="opt.key">{{ opt.label }}</option>
                   </select>
                 </th>
-                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200">Desvio %</th>
-                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200">
+                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b-2 border-slate-200">
+                  <span>Desv<br>%</span>
+                </th>
+                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b-2 border-slate-200">
                   <select v-model="selectedMetricKeys[1]" class="w-full bg-transparent text-xs font-semibold text-slate-700">
                     <option v-for="opt in metricOptions" :key="opt.key" :value="opt.key">{{ opt.label }}</option>
                   </select>
                 </th>
-                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200">Desvio %</th>
-                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200">
+                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b-2 border-slate-200">
+                  <span>Desv<br>%</span>
+                </th>
+                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b-2 border-slate-200">
                   <select v-model="selectedMetricKeys[2]" class="w-full bg-transparent text-xs font-semibold text-slate-700">
                     <option v-for="opt in metricOptions" :key="opt.key" :value="opt.key">{{ opt.label }}</option>
                   </select>
                 </th>
-                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200">Desvio %</th>
-                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200">
+                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b-2 border-slate-200">
+                  <span>Desv<br>%</span>
+                </th>
+                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b-2 border-slate-200">
                   <select v-model="selectedMetricKeys[3]" class="w-full bg-transparent text-xs font-semibold text-slate-700">
                     <option v-for="opt in metricOptions" :key="opt.key" :value="opt.key">{{ opt.label }}</option>
                   </select>
                 </th>
-                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200">Desvio %</th>
+                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b-2 border-slate-200">
+                  <span>Desv<br>%</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -102,6 +146,12 @@
                 <td class="px-2 py-2 text-center text-slate-700">{{ row.neDisplay }}</td>
                 <td class="px-2 py-2 text-center text-slate-700">{{ row.tituloAvg }}</td>
                 <td class="px-2 py-2 text-center text-slate-700">{{ row.tituloDev }}</td>
+                <td class="px-2 py-2 text-center text-slate-700 bg-emerald-50/30 border-l-2 border-l-emerald-500">{{ row.hviMetricA.avg }}</td>
+                <td class="px-2 py-2 text-center text-slate-700 bg-emerald-50/30">{{ row.hviMetricA.dev }}</td>
+                <td class="px-2 py-2 text-center text-slate-700 bg-emerald-50/30">{{ row.hviMetricB.avg }}</td>
+                <td class="px-2 py-2 text-center text-slate-700 bg-emerald-50/30">{{ row.hviMetricB.dev }}</td>
+                <td class="px-2 py-2 text-center text-slate-700 bg-emerald-50/30">{{ row.hviMetricC.avg }}</td>
+                <td class="px-2 py-2 text-center text-slate-700 bg-emerald-50/30 border-r-2 border-r-emerald-500">{{ row.hviMetricC.dev }}</td>
                 <td class="px-2 py-2 text-center text-slate-700">{{ row.metricA.avg }}</td>
                 <td class="px-2 py-2 text-center text-slate-700">{{ row.metricA.dev }}</td>
                 <td class="px-2 py-2 text-center text-slate-700">{{ row.metricB.avg }}</td>
@@ -134,6 +184,23 @@ const endDate = ref('')
 const selectedNe = ref('')
 const standardTitleInput = ref('10')
 
+const hviOptions = [
+  { key: 'SCI', label: 'SCI' },
+  { key: 'MST', label: 'MST' },
+  { key: 'MIC', label: 'MIC' },
+  { key: 'MAT', label: 'MAT' },
+  { key: 'UHML', label: 'UHML' },
+  { key: 'UI', label: 'UI' },
+  { key: 'SF', label: 'SF' },
+  { key: 'STR', label: 'STR' },
+  { key: 'ELG', label: 'ELG' },
+  { key: 'RD', label: 'RD' },
+  { key: '+b', label: '+b' },
+  { key: 'TrCNT', label: 'TrCNT' },
+  { key: 'TrAR', label: 'TrAR' },
+  { key: 'TRID', label: 'TRID' }
+]
+
 const metricOptions = [
   { key: 'CVm %', label: 'CVm %' },
   { key: 'Delg -30%', label: 'Delg -30%' },
@@ -149,6 +216,7 @@ const metricOptions = [
   { key: 'Trabajo B', label: 'Trabajo B' }
 ]
 
+const selectedHviKeys = ref(['MIC', 'STR', 'UHML'])
 const selectedMetricKeys = ref(['Fuerza B', 'Elong. %', 'Tenac.', 'Trabajo B'])
 
 const monthNames = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
@@ -161,6 +229,19 @@ function parseNumber(val) {
   const normalized = raw.replace(/%/g, '').replace(/\s+/g, '').replace(/,/g, '.')
   const n = Number(normalized)
   return Number.isFinite(n) ? n : null
+}
+
+// Extrae el número del lote (ej: HD-106-26 → 106, HV 56-25 → 56)
+function formatLote(lote) {
+  if (!lote || lote === '') return ''
+  const str = String(lote).trim()
+  // Buscar patrón: separador (- o espacio) + dígitos + separador (- o espacio)
+  const match = str.match(/[\s-](\d+)[\s-]/)
+  if (match && match[1]) {
+    return match[1]
+  }
+  // Si no hay match, devolver el valor original
+  return str
 }
 
 function formatNe(nomcount, matclass) {
@@ -264,6 +345,48 @@ const availableNes = computed(() => {
   })
 })
 
+// Calcula promedio ponderado por peso de una variable HVI para un conjunto de lotes
+function calcHviWeightedAvg(lotes, hviKey) {
+  if (!window.calidadFibraByLote) return null
+  
+  const hviFieldMap = {
+    'SCI': 'SCI',
+    'MST': 'MST',
+    'MIC': 'MIC',
+    'MAT': 'MAT',
+    'UHML': 'UHML',
+    'UI': 'UI',
+    'SF': 'SF',
+    'STR': 'STR',
+    'ELG': 'ELG',
+    'RD': 'RD',
+    '+b': 'PLUS_B',
+    'TrCNT': 'TrCNT',
+    'TrAR': 'TrAR',
+    'TRID': 'TRID'
+  }
+  
+  const fieldName = hviFieldMap[hviKey] || hviKey
+  
+  let totalPeso = 0
+  let sumaPonderada = 0
+  
+  lotes.forEach(lote => {
+    const registros = window.calidadFibraByLote.get(lote) || []
+    registros.forEach(reg => {
+      const peso = parseNumber(reg.PESO ?? reg.peso)
+      const valor = parseNumber(reg[fieldName])
+      if (peso != null && valor != null) {
+        totalPeso += peso
+        sumaPonderada += valor * peso
+      }
+    })
+  })
+  
+  if (totalPeso === 0) return null
+  return sumaPonderada / totalPeso
+}
+
 const filteredRows = computed(() => {
   if (!rows.value || rows.value.length === 0) return []
   const start = startDate.value ? new Date(`${startDate.value}T00:00:00`) : null
@@ -291,6 +414,12 @@ const baselineStats = computed(() => {
   for (const opt of metricOptions) {
     const values = list.map(r => parseNumber(r[opt.key])).filter(v => v != null)
     baseline[opt.key] = values.length ? values.reduce((a, b) => a + b, 0) / values.length : null
+  }
+  
+  // Calcular baseline HVI (promedio ponderado de todos los lotes del período)
+  const allLotes = [...new Set(list.map(r => r.Lote).filter(l => l))]
+  for (const opt of hviOptions) {
+    baseline[opt.key] = calcHviWeightedAvg(allLotes, opt.key)
   }
 
   return baseline
@@ -353,11 +482,30 @@ const weeklyRows = computed(() => {
     const datesSorted = group.dates.slice().sort((a, b) => a - b)
     const monthName = datesSorted.length ? monthNames[datesSorted[0].getMonth()] : ''
     const tituloAvg = calcAvg(group.rows, 'Titulo')
-    const tituloDev = standard != null ? calcDevTitle(tituloAvg, standard) : null
+    
+    // Si no hay Ne seleccionado (Todos), usar el promedio global como referencia
+    // Si hay Ne seleccionado, usar el standard (manual o extraído del Ne)
+    const referenceTitle = selectedNe.value ? standard : baseline.Titulo
+    const tituloDev = referenceTitle != null ? calcDevTitle(tituloAvg, referenceTitle) : null
 
     const metricKeys = selectedMetricKeys.value
     const metrics = metricKeys.map(key => {
       const avg = calcAvg(group.rows, key)
+      const base = baseline[key]
+      const dev = calcDevMetric(avg, base)
+      return {
+        avgRaw: avg,
+        devRaw: dev,
+        avg: formatNumber(avg, 2),
+        dev: formatNumber(dev, 1)
+      }
+    })
+
+    // Calcular métricas HVI (promedio ponderado por peso)
+    const weekLotes = [...new Set(group.rows.map(r => r.Lote).filter(l => l))]
+    const hviKeys = selectedHviKeys.value
+    const hviMetrics = hviKeys.map(key => {
+      const avg = calcHviWeightedAvg(weekLotes, key)
       const base = baseline[key]
       const dev = calcDevMetric(avg, base)
       return {
@@ -379,6 +527,9 @@ const weeklyRows = computed(() => {
       tituloDevRaw: tituloDev,
       tituloAvg: formatNumber(tituloAvg, 2),
       tituloDev: formatNumber(tituloDev, 1),
+      hviMetricA: hviMetrics[0],
+      hviMetricB: hviMetrics[1],
+      hviMetricC: hviMetrics[2],
       metricA: metrics[0],
       metricB: metrics[1],
       metricC: metrics[2],
@@ -414,8 +565,9 @@ const exportToExcel = async () => {
     'Semana',
     'Ne',
     'Ne Promedio',
-    'Desvio %',
-    ...selectedMetricKeys.value.flatMap(key => [key, 'Desvio %'])
+    'Desv %',
+    ...selectedHviKeys.value.flatMap(key => [key, 'Desv %']),
+    ...selectedMetricKeys.value.flatMap(key => [key, 'Desv %'])
   ]
 
   worksheet.addRow(headers)
@@ -439,6 +591,12 @@ const exportToExcel = async () => {
   })
 
   weeklyRows.value.forEach(row => {
+    const hviMetrics = [row.hviMetricA, row.hviMetricB, row.hviMetricC]
+    const hviValues = hviMetrics.flatMap(metric => [
+      metric.avgRaw,
+      metric.devRaw
+    ])
+
     const metrics = [row.metricA, row.metricB, row.metricC, row.metricD]
     const metricValues = metrics.flatMap(metric => [
       metric.avgRaw,
@@ -451,6 +609,7 @@ const exportToExcel = async () => {
       row.neDisplay,
       row.tituloAvgRaw,
       row.tituloDevRaw,
+      ...hviValues,
       ...metricValues
     ])
   })
@@ -463,10 +622,19 @@ const exportToExcel = async () => {
     row.getCell(4).numFmt = '0.00'
     row.getCell(5).numFmt = '0.0'
     
-    // Aplicar formato a cada columna de métrica
+    // Aplicar formato a columnas HVI (3 métricas × 2 columnas cada una = 6 columnas)
+    for (let hviIdx = 0; hviIdx < selectedHviKeys.value.length; hviIdx++) {
+      const colIndex = 6 + (hviIdx * 2) // Columna HVI valor
+      const devColIndex = colIndex + 1 // Columna HVI desvío
+      row.getCell(colIndex).numFmt = '0.00'
+      row.getCell(devColIndex).numFmt = '0.0'
+    }
+    
+    // Aplicar formato a columnas USTER/TENSOR (después de las HVI)
+    const hviColumnsCount = selectedHviKeys.value.length * 2
     for (let metricIdx = 0; metricIdx < selectedMetricKeys.value.length; metricIdx++) {
       const metricKey = selectedMetricKeys.value[metricIdx]
-      const colIndex = 6 + (metricIdx * 2) // Columna de la métrica (6, 8, 10, 12)
+      const colIndex = 6 + hviColumnsCount + (metricIdx * 2) // Columna de la métrica
       const devColIndex = colIndex + 1 // Columna del desvío
       
       // Formato especial para "Fuerza B" y "Trabajo B" (valores mayores a 999)
@@ -508,6 +676,7 @@ async function loadRows() {
     const tblArr = Array.isArray(allDataFetched.usterTbl) ? allDataFetched.usterTbl : []
     const tensorTblArr = Array.isArray(allDataFetched.tensorapidTbl) ? allDataFetched.tensorapidTbl : []
     const tensorParArr = Array.isArray(allDataFetched.tensorapidPar) ? allDataFetched.tensorapidPar : []
+    const calidadFibraArr = Array.isArray(allDataFetched.calidadFibra) ? allDataFetched.calidadFibra : []
 
     const tblByTestnr = new Map()
     tblArr.forEach(row => {
@@ -534,6 +703,24 @@ async function loadRows() {
       if (!tensorParByUster.has(usterTestnr)) tensorParByUster.set(usterTestnr, [])
       tensorParByUster.get(usterTestnr).push(row)
     })
+
+    // Mapa de calidad fibra por LOTE_FIAC
+    const calidadFibraByLote = new Map()
+    calidadFibraArr.forEach(row => {
+      const loteFiacRaw = String(row.LOTE_FIAC ?? row.lote_fiac ?? '')
+      if (!loteFiacRaw) return
+      
+      // Convertir a número para eliminar ceros a la izquierda: "0000000104" → "104"
+      const loteFiac = String(parseInt(loteFiacRaw, 10))
+      
+      if (loteFiac && loteFiac !== 'NaN') {
+        if (!calidadFibraByLote.has(loteFiac)) calidadFibraByLote.set(loteFiac, [])
+        calidadFibraByLote.get(loteFiac).push(row)
+      }
+    })
+    
+    // Guardar en scope global para uso en weeklyRows
+    window.calidadFibraByLote = calidadFibraByLote
 
     const calcAvg = (rows, field) => {
       const values = rows
@@ -593,11 +780,15 @@ async function loadRows() {
       const neValue = row.NOMCOUNT ?? row.Ne ?? row.NE ?? row.titulo ?? row.TITULO ?? ''
       const matclass = row.MATCLASS ?? row.matclass ?? row.Matclass ?? row.MatClass ?? null
       const ne = formatNe(neValue, matclass)
+      
+      const loteRaw = row.LOTE ?? row.Lote ?? row.lote ?? ''
+      const loteNumero = formatLote(loteRaw)
 
       return {
         Ensayo: testnr,
         TIME_STAMP: timeStamp,
         Ne: ne,
+        Lote: loteNumero,
         Titulo: calcAvg(tblRows, 'TITULO'),
         'CVm %': calcAvg(tblRows, 'CVM_PERCENT') || calcAvg(tblRows, 'CVM_%'),
         'Delg -30%': calcAvg(tblRows, 'DELG_MINUS30_KM') || calcAvg(tblRows, 'DELG_-30%'),

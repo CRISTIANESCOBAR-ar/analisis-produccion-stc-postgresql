@@ -2370,6 +2370,23 @@ app.get('/api/tensorapid/tbl', async (req, res) => {
   }
 })
 
+// CALIDAD FIBRA: Get all
+app.get('/api/calidad-fibra', async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT "LOTE_FIAC", "PESO", "SCI", "MST", "MIC", "MAT", "UHML", "UI", "SF", 
+             "STR", "ELG", "RD", "PLUS_B", "TrCNT", "TrAR", "TRID"
+      FROM tb_CALIDAD_FIBRA
+      WHERE "LOTE_FIAC" IS NOT NULL AND "LOTE_FIAC" != ''
+        AND "TIPO_MOV" = 'MIST'
+      ORDER BY "LOTE_FIAC"
+    `)
+    res.json({ rows: result.rows.map(uppercaseKeys) })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // TENSORAPID: Upload
 app.post('/api/tensorapid/upload', async (req, res) => {
   const { par, tbl } = req.body
