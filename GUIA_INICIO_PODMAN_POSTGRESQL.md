@@ -85,7 +85,41 @@ podman logs stc_postgres
 
 ---
 
-### 7. Iniciar el Backend
+### 7. Iniciar pgAdmin (Opcional - Administración Visual de Base de Datos)
+
+```powershell
+podman compose up -d pgadmin
+```
+
+**Salida esperada:**
+```
+[+] up 1/1
+ ✔ Container stc_pgadmin Created
+```
+
+Abre tu navegador en: **http://localhost:5050/browser/**
+
+**Credenciales de acceso:**
+- **Email:** admin@stc.com
+- **Contraseña:** admin123
+
+**Configurar conexión a PostgreSQL:**
+1. Click derecho en "Servers" → "Register" → "Server"
+2. En la pestaña "General":
+   - Name: `STC Produccion`
+3. En la pestaña "Connection":
+   - Host name/address: `postgres` (nombre del contenedor)
+   - Port: `5432`
+   - Maintenance database: `stc_produccion`
+   - Username: `stc_user`
+   - Password: `stc_password_2026`
+4. Click en "Save"
+
+> **Nota:** pgAdmin es opcional. Solo inícialo si necesitas administrar la base de datos visualmente.
+
+---
+
+### 8. Iniciar el Backend
 
 ```powershell
 cd backend
@@ -100,7 +134,7 @@ npm start
 
 ---
 
-### 8. Iniciar el Frontend (En otra terminal)
+### 9. Iniciar el Frontend (En otra terminal)
 
 ```powershell
 cd C:\stc-produccion-v2\frontend
@@ -123,6 +157,11 @@ VITE v5.x ready in xxx ms
 - **Base de datos:** stc_produccion
 - **Usuario:** stc_user
 - **Contraseña:** stc_password_2026
+
+### pgAdmin (Opcional)
+- **URL:** http://localhost:5050/browser/
+- **Email:** admin@stc.com
+- **Contraseña:** admin123
 
 ### API Backend
 - **URL:** http://localhost:3001
@@ -192,6 +231,27 @@ PG_PORT=5433
 
 ---
 
+### Error: "pgAdmin no carga en http://localhost:5050"
+
+**Causa:** El contenedor de pgAdmin no está corriendo o no se levantó correctamente.
+
+**Solución:**
+```powershell
+# Verificar si está corriendo
+podman ps | Select-String pgadmin
+
+# Ver los logs para diagnosticar
+podman logs stc_pgadmin
+
+# Reiniciar el contenedor
+podman restart stc_pgadmin
+
+# Si no existe, levantarlo
+podman compose up -d pgadmin
+```
+
+---
+
 ## Comandos Útiles
 
 ### Ver todos los contenedores (activos e inactivos)
@@ -207,6 +267,16 @@ podman stop stc_postgres
 ### Reiniciar PostgreSQL
 ```powershell
 podman restart stc_postgres
+```
+
+### Ver logs de pgAdmin
+```powershell
+podman logs stc_pgadmin
+```
+
+### Detener pgAdmin
+```powershell
+podman stop stc_pgadmin
 ```
 
 ### Detener todo el stack
@@ -230,8 +300,9 @@ podman compose down -v
 
 1. Podman Machine ✅
 2. PostgreSQL (contenedor) ✅
-3. Backend (Node.js) ✅
-4. Frontend (Vite) ✅
+3. pgAdmin (opcional) ✅
+4. Backend (Node.js) ✅
+5. Frontend (Vite) ✅
 
 ---
 
@@ -239,8 +310,9 @@ podman compose down -v
 
 1. Frontend (Ctrl+C en terminal)
 2. Backend (Ctrl+C en terminal)
-3. PostgreSQL: `podman stop stc_postgres` (opcional, puede quedarse corriendo)
-4. Podman Machine: `podman machine stop` (opcional)
+3. pgAdmin: `podman stop stc_pgadmin` (opcional)
+4. PostgreSQL: `podman stop stc_postgres` (opcional, puede quedarse corriendo)
+5. Podman Machine: `podman machine stop` (opcional)
 
 ---
 

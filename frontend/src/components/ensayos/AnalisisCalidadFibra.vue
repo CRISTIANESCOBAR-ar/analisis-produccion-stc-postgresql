@@ -1,75 +1,75 @@
 <template>
   <div class="flex flex-col h-full overflow-hidden bg-gradient-to-br from-slate-50 to-blue-50 p-4">
-    <div class="flex items-center justify-between mb-4 bg-white/60 backdrop-blur-sm rounded-xl px-6 py-4 shadow-sm border border-slate-200">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center shadow-md">
-          <span class="text-white text-xl">🧬</span>
-        </div>
-        <h1 class="text-2xl font-bold bg-gradient-to-r from-emerald-700 to-teal-700 bg-clip-text text-transparent">
+    <!-- Header unificado -->
+    <div class="flex items-center justify-between gap-4 mb-4 bg-white/80 backdrop-blur-sm rounded-xl px-4 py-3 shadow-sm border border-slate-200 relative z-[100]">
+      <!-- Título -->
+      <div class="flex items-center gap-2 flex-shrink-0">
+        <span class="text-xl">🧬</span>
+        <h1 class="text-lg font-bold bg-gradient-to-r from-emerald-700 to-teal-700 bg-clip-text text-transparent">
           Análisis Calidad Fibra
         </h1>
       </div>
       
-      <button
-        @click="exportToExcel"
-        :disabled="loading || filteredRows.length === 0"
-        class="px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center gap-2 shadow-md"
-      >
-        <span class="text-sm">📊</span>
-        <span class="font-semibold">Excel</span>
-      </button>
-    </div>
-
-    <!-- Controles -->
-    <div class="bg-white/80 backdrop-blur-sm rounded-xl p-4 shadow-sm border border-slate-200 mb-4">
-      <div class="flex flex-wrap items-center gap-4">
-        <!-- Radio buttons para agrupación -->
-        <div class="flex items-center gap-4 border-r border-slate-300 pr-4">
-          <label class="text-sm font-semibold text-slate-700">Agrupación:</label>
-          <label class="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              v-model="groupMode"
-              value="detailed"
-              class="w-4 h-4 text-emerald-600 focus:ring-emerald-500"
-            />
-            <span class="text-sm text-slate-700">MISTURA + SEQ</span>
-          </label>
-          <label class="flex items-center gap-2 cursor-pointer">
-            <input
-              type="radio"
-              v-model="groupMode"
-              value="aggregated"
-              class="w-4 h-4 text-emerald-600 focus:ring-emerald-500"
-            />
-            <span class="text-sm text-slate-700">Solo MISTURA</span>
-          </label>
-        </div>
-
-        <!-- Datepickers -->
-        <div class="flex items-center gap-3">
-          <label class="text-sm font-semibold text-slate-700">Desde:</label>
+      <!-- Barra separadora -->
+      <div class="h-6 w-px bg-slate-300 flex-shrink-0"></div>
+      
+      <!-- Radio buttons para agrupación -->
+      <div class="flex items-center gap-3 flex-shrink-0">
+        <label class="text-sm font-semibold text-slate-700">Agrupación:</label>
+        <label class="flex items-center gap-1.5 cursor-pointer">
           <input
-            type="date"
-            v-model="startDate"
-            class="px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+            type="radio"
+            v-model="groupMode"
+            value="detailed"
+            class="w-3.5 h-3.5 text-emerald-600 focus:ring-emerald-500"
           />
-        </div>
-        <div class="flex items-center gap-3">
-          <label class="text-sm font-semibold text-slate-700">Hasta:</label>
+          <span class="text-sm text-slate-700">MISTURA + SEQ</span>
+        </label>
+        <label class="flex items-center gap-1.5 cursor-pointer">
           <input
-            type="date"
-            v-model="endDate"
-            class="px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+            type="radio"
+            v-model="groupMode"
+            value="aggregated"
+            class="w-3.5 h-3.5 text-emerald-600 focus:ring-emerald-500"
           />
-        </div>
-        
+          <span class="text-sm text-slate-700">Solo MISTURA</span>
+        </label>
+      </div>
+
+      <!-- Barra separadora -->
+      <div class="h-6 w-px bg-slate-300 flex-shrink-0"></div>
+
+      <!-- Datepickers -->
+      <div class="flex items-center gap-3 flex-shrink-0">
+        <CustomDatepicker v-model="startDate" label="Desde" :show-buttons="false" />
+        <CustomDatepicker v-model="endDate" label="Hasta" :show-buttons="false" />
+      </div>
+      
+      <!-- Botones de acción -->
+      <div class="flex items-center gap-2 ml-auto flex-shrink-0">
         <button
           @click="loadData"
           :disabled="loading"
-          class="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-semibold text-sm shadow-md"
+          v-tippy="{ content: 'Refrescar datos', placement: 'bottom' }"
+          class="w-9 h-9 flex items-center justify-center bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-md"
         >
-          {{ loading ? 'Cargando...' : 'Refrescar' }}
+          <svg v-if="!loading" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12a9 9 0 1 1-3-6.7" stroke-linecap="round" stroke-linejoin="round"></path>
+            <polyline points="21 3 21 9 15 9" stroke-linecap="round" stroke-linejoin="round"></polyline>
+          </svg>
+          <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10" stroke-opacity="0.25"></circle>
+            <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"></path>
+          </svg>
+        </button>
+        
+        <button
+          @click="exportToExcel"
+          :disabled="loading || filteredRows.length === 0"
+          v-tippy="{ content: 'Exportar a Excel', placement: 'bottom' }"
+          class="w-9 h-9 flex items-center justify-center bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-md"
+        >
+          <span class="text-lg">📊</span>
         </button>
       </div>
     </div>
@@ -88,7 +88,7 @@
 
     <div v-else class="flex-1 overflow-auto rounded-xl border border-slate-200 bg-white shadow-md">
       <table class="min-w-full w-full table-auto divide-y divide-slate-200 text-xs">
-        <thead class="bg-gradient-to-r from-emerald-50 to-teal-50 sticky top-0 z-10">
+        <thead class="bg-gradient-to-r from-emerald-50 to-teal-50 sticky top-0 z-[5]">
           <tr>
             <th class="px-3 py-2 text-center font-semibold text-slate-700 border-b-2 border-b-slate-200">Fecha/Hora</th>
             <th class="px-3 py-2 text-center font-semibold text-slate-700 border-b-2 border-b-slate-200">MISTURA</th>
@@ -149,6 +149,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { fetchCalidadFibra } from '../../services/dataService'
 import ExcelJS from 'exceljs'
+import CustomDatepicker from '../CustomDatepicker.vue'
 
 const loading = ref(false)
 const groupMode = ref('detailed') // 'detailed' o 'aggregated'
@@ -163,11 +164,22 @@ const removeLeadingZeros = (value) => {
   return isNaN(num) ? value : String(num)
 }
 
+// Función para parsear fecha en formato DD/MM/YYYY
+const parseDate = (dateStr) => {
+  if (!dateStr) return null
+  const parts = String(dateStr).split('/')
+  if (parts.length !== 3) return null
+  // DD/MM/YYYY -> YYYY-MM-DD
+  const [day, month, year] = parts
+  const date = new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`)
+  return isNaN(date.getTime()) ? null : date
+}
+
 // Función para formatear fecha y hora
 const formatDateTime = (fecha, hora) => {
   if (!fecha) return '—'
-  const date = new Date(fecha)
-  if (isNaN(date.getTime())) return '—'
+  const date = parseDate(fecha)
+  if (!date) return '—'
   
   const day = String(date.getDate()).padStart(2, '0')
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -175,10 +187,22 @@ const formatDateTime = (fecha, hora) => {
   
   let timeStr = '00:00'
   if (hora) {
-    const horaStr = String(hora).padStart(4, '0')
-    const hh = horaStr.slice(0, 2)
-    const mm = horaStr.slice(2, 4)
-    timeStr = `${hh}:${mm}`
+    // Manejar diferentes formatos de hora
+    let horaStr = String(hora).trim()
+    
+    // Si ya tiene formato HH:MM, usarlo directamente
+    if (horaStr.includes(':')) {
+      const parts = horaStr.split(':')
+      const hh = parts[0].padStart(2, '0')
+      const mm = (parts[1] || '00').padStart(2, '0')
+      timeStr = `${hh}:${mm}`
+    } else {
+      // Si es número, convertir (ej: 205 -> 02:05, 2005 -> 20:05)
+      horaStr = horaStr.padStart(4, '0')
+      const hh = horaStr.slice(0, 2)
+      const mm = horaStr.slice(2, 4)
+      timeStr = `${hh}:${mm}`
+    }
   }
   
   return `${day}/${month}/${year} ${timeStr}`
@@ -236,11 +260,12 @@ const filteredRows = computed(() => {
   let filtered = rawData.value
   if (startDate.value || endDate.value) {
     filtered = filtered.filter(row => {
-      const fecha = row.DT_ENTRADA_PROD ? new Date(row.DT_ENTRADA_PROD) : null
-      if (!fecha || isNaN(fecha.getTime())) return false
+      const fecha = parseDate(row.DT_ENTRADA_PROD)
+      if (!fecha) return false
       
       if (startDate.value) {
         const desde = new Date(startDate.value)
+        desde.setHours(0, 0, 0, 0)
         if (fecha < desde) return false
       }
       if (endDate.value) {
@@ -456,15 +481,12 @@ async function exportToExcel() {
 }
 
 onMounted(() => {
-  // NO establecer fechas por defecto - mostrar todos los datos inicialmente
-  // El usuario puede filtrar manualmente si lo desea
-  /*
+  // Establecer fechas por defecto - últimos 30 días
   const hoy = new Date()
   endDate.value = hoy.toISOString().split('T')[0]
   const hace30Dias = new Date(hoy)
   hace30Dias.setDate(hace30Dias.getDate() - 30)
   startDate.value = hace30Dias.toISOString().split('T')[0]
-  */
   
   loadData()
 })
