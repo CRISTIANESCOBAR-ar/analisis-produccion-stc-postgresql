@@ -30,6 +30,16 @@ const routes = [
     component: () => import('./components/ensayos/AnalisisCalidadFibra.vue'),
     meta: { title: 'Análisis Calidad Fibra' }
   },
+  {
+    path: '/parametros-hvi',
+    component: () => import('./components/ensayos/ParametrosHVI.vue'),
+    meta: { title: 'Parámetros HVI' }
+  },
+  {
+    path: '/detalle-mistura-lote',
+    component: () => import('./components/ensayos/DetalleMisturaLote.vue'),
+    meta: { title: 'Detalle MISTURA por Lote' }
+  },
   { 
     path: '/resumen-diario', 
     component: () => import('./components/ensayos/ResumenDiario.vue'), 

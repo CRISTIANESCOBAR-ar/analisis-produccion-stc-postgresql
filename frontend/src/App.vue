@@ -296,6 +296,54 @@
             </router-link>
           </div>
         </div>
+
+        <!-- Configuración Group -->
+        <div class="space-y-1">
+          <button 
+            @click="toggleConfigMenu"
+            class="w-full flex items-center rounded hover:bg-blue-700 transition-colors"
+            :class="[
+              isConfigRouteActive ? 'bg-blue-700' : '',
+              sidebarExpanded ? 'justify-between px-3 py-2' : 'justify-center px-2 py-2'
+            ]"
+            :title="sidebarExpanded ? '' : 'Configuración'"
+          >
+            <div class="flex items-center gap-2">
+              <span>⚙️</span>
+              <span v-show="sidebarExpanded" class="font-medium">Configuración</span>
+            </div>
+            <svg 
+              v-show="sidebarExpanded"
+              class="w-4 h-4 transition-transform duration-200"
+              :class="{ 'rotate-180': configMenuOpen }"
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          
+          <div 
+            v-show="sidebarExpanded && configMenuOpen"
+            class="ml-4 space-y-1 border-l-2 border-blue-600 pl-2"
+          >
+            <router-link 
+              to="/parametros-hvi" 
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
+              :class="{ 'bg-blue-600': $route.path === '/parametros-hvi' }"
+            >
+              <span>🎛️</span> Parámetros HVI
+            </router-link>
+            <router-link 
+              to="/detalle-mistura-lote" 
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
+              :class="{ 'bg-blue-600': $route.path === '/detalle-mistura-lote' }"
+            >
+              <span>📊</span> Detalle MISTURA
+            </router-link>
+          </div>
+        </div>
       </nav>
     </aside>
 
@@ -331,6 +379,7 @@ const labMenuOpen = ref(localStorage.getItem('labMenuOpen') !== 'false')
 const prodMenuOpen = ref(localStorage.getItem('prodMenuOpen') !== 'false')
 const calidadMenuOpen = ref(localStorage.getItem('calidadMenuOpen') !== 'false')
 const indigoMenuOpen = ref(localStorage.getItem('indigoMenuOpen') !== 'false')
+const configMenuOpen = ref(localStorage.getItem('configMenuOpen') !== 'false')
 
 const labRoutes = ['/resumen', '/resumen-diario', '/stats', '/uster', '/tenso']
 const isLabRouteActive = computed(() => labRoutes.includes(route.path))
@@ -351,6 +400,9 @@ const indigoRoutes = [
   '/grafico-metricas-diarias'
 ]
 const isIndigoRouteActive = computed(() => indigoRoutes.includes(route.path))
+
+const configRoutes = ['/parametros-hvi', '/detalle-mistura-lote']
+const isConfigRouteActive = computed(() => configRoutes.includes(route.path))
 
 function setSidebarExpanded(value) {
   sidebarExpanded.value = value
@@ -389,6 +441,12 @@ function toggleIndigoMenu() {
   ensureSidebarExpanded()
   indigoMenuOpen.value = !indigoMenuOpen.value
   localStorage.setItem('indigoMenuOpen', indigoMenuOpen.value.toString())
+}
+
+function toggleConfigMenu() {
+  ensureSidebarExpanded()
+  configMenuOpen.value = !configMenuOpen.value
+  localStorage.setItem('configMenuOpen', configMenuOpen.value.toString())
 }
 </script>
 

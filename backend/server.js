@@ -4437,6 +4437,344 @@ app.get('/api/produccion/schema/changes-log', async (req, res) => {
 })
 
 // =====================================================
+// ENDPOINTS PARAMETROS HVI (Gestión de rangos de calidad)
+// =====================================================
+
+// GET /api/parametros-hvi - Listar todos los parámetros HVI
+app.get('/api/parametros-hvi', async (req, res) => {
+  try {
+    const activo = req.query.activo !== undefined ? req.query.activo === 'true' : undefined
+    
+    let sql = 'SELECT * FROM tb_parametros_hvi'
+    const params = []
+    
+    if (activo !== undefined) {
+      sql += ' WHERE activo = $1'
+      params.push(activo)
+    }
+    
+    sql += ' ORDER BY codigo ASC'
+    
+    const result = await query(sql, params, 'parametros-hvi-list')
+    res.json({ 
+      success: true,
+      parametros: result.rows 
+    })
+  } catch (err) {
+    console.error('Error obteniendo parámetros HVI:', err)
+    res.status(500).json({ 
+      success: false,
+      error: err.message 
+    })
+  }
+})
+
+// GET /api/parametros-hvi/:codigo - Obtener un parámetro por código
+app.get('/api/parametros-hvi/:codigo', async (req, res) => {
+  try {
+    const { codigo } = req.params
+    
+    const result = await query(
+      'SELECT * FROM tb_parametros_hvi WHERE codigo = $1',
+      [codigo.toUpperCase()],
+      'parametros-hvi-get-one'
+    )
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Parámetro HVI no encontrado' 
+      })
+    }
+    
+    res.json({ 
+      success: true,
+      parametro: result.rows[0] 
+    })
+  } catch (err) {
+    console.error('Error obteniendo parámetro HVI:', err)
+    res.status(500).json({ 
+      success: false,
+      error: err.message 
+    })
+  }
+})
+
+// POST /api/parametros-hvi - Crear un nuevo parámetro HVI
+app.post('/api/parametros-hvi', async (req, res) => {
+  try {
+    const {
+      codigo,
+      nombre,
+      descripcion,
+      grupo,
+      unidad,
+      tipo_dato,
+      decimales,
+      optimo_min,
+      optimo_max,
+      aceptable_min,
+      aceptable_max,
+      critico_min,
+      critico_max,
+      activo
+    } = req.body
+    
+    // Validaciones básicas
+    if (!codigo || !nombre || !tipo_dato) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Campos requeridos: codigo, nombre, tipo_dato' 
+      })
+    }
+    
+    const result = await query(
+      `INSERT INTO tb_parametros_hvi (
+        codigo, nombre, descripcion, grupo, unidad, tipo_dato, decimales,
+        optimo_min, optimo_max, aceptable_min, aceptable_max,
+        critico_min, critico_max, activo
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      RETURNING *`,
+      [
+        codigo.toUpperCase(),
+        nombre,
+        descripcion || null,
+        grupo || null,
+        unidad || null,
+        tipo_dato,
+        decimales !== undefined ? decimales : 2,
+        optimo_min || null,
+        optimo_max || null,
+        aceptable_min || null,
+        aceptable_max || null,
+        critico_min || null,
+        critico_max || null,
+        activo !== undefined ? activo : true
+      ],
+      'parametros-hvi-create'
+    )
+    
+    res.status(201).json({ 
+      success: true,
+      parametro: result.rows[0],
+      message: 'Parámetro HVI creado exitosamente'
+    })
+  } catch (err) {
+    console.error('Error creando parámetro HVI:', err)
+    
+    // Manejar error de código duplicado
+    if (err.code === '23505') {
+      return res.status(409).json({ 
+        success: false,
+        error: 'Ya existe un parámetro con ese código' 
+      })
+    }
+    
+    res.status(500).json({ 
+      success: false,
+      error: err.message 
+    })
+  }
+})
+
+// PUT /api/parametros-hvi/:id - Actualizar un parámetro HVI existente
+app.put('/api/parametros-hvi/:id', async (req, res) => {
+  try {
+    const { id } = req.params
+    const {
+      nombre,
+      descripcion,
+      grupo,
+      unidad,
+      tipo_dato,
+      decimales,
+      optimo_min,
+      optimo_max,
+      aceptable_min,
+      aceptable_max,
+      critico_min,
+      critico_max,
+      activo
+    } = req.body
+    
+    // Validaciones básicas
+    if (!nombre || !tipo_dato) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Campos requeridos: nombre, tipo_dato' 
+      })
+    }
+    
+    const result = await query(
+      `UPDATE tb_parametros_hvi SET
+        nombre = $1,
+        descripcion = $2,
+        grupo = $3,
+        unidad = $4,
+        tipo_dato = $5,
+        decimales = $6,
+        optimo_min = $7,
+        optimo_max = $8,
+        aceptable_min = $9,
+        aceptable_max = $10,
+        critico_min = $11,
+        critico_max = $12,
+        activo = $13
+      WHERE id = $14
+      RETURNING *`,
+      [
+        nombre,
+        descripcion || null,
+        grupo || null,
+        unidad || null,
+        tipo_dato,
+        decimales !== undefined ? decimales : 2,
+        optimo_min || null,
+        optimo_max || null,
+        aceptable_min || null,
+        aceptable_max || null,
+        critico_min || null,
+        critico_max || null,
+        activo !== undefined ? activo : true,
+        id
+      ],
+      'parametros-hvi-update'
+    )
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Parámetro HVI no encontrado' 
+      })
+    }
+    
+    res.json({ 
+      success: true,
+      parametro: result.rows[0],
+      message: 'Parámetro HVI actualizado exitosamente'
+    })
+  } catch (err) {
+    console.error('Error actualizando parámetro HVI:', err)
+    res.status(500).json({ 
+      success: false,
+      error: err.message 
+    })
+  }
+})
+
+// DELETE /api/parametros-hvi/:id - Eliminar un parámetro HVI
+app.delete('/api/parametros-hvi/:id', async (req, res) => {
+  try {
+    const { id } = req.params
+    
+    const result = await query(
+      'DELETE FROM tb_parametros_hvi WHERE id = $1 RETURNING codigo, nombre',
+      [id],
+      'parametros-hvi-delete'
+    )
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Parámetro HVI no encontrado' 
+      })
+    }
+    
+    res.json({ 
+      success: true,
+      deleted: result.rows[0],
+      message: 'Parámetro HVI eliminado exitosamente'
+    })
+  } catch (err) {
+    console.error('Error eliminando parámetro HVI:', err)
+    res.status(500).json({ 
+      success: false,
+      error: err.message 
+    })
+  }
+})
+
+// =====================================================
+// DETALLE MISTURA POR LOTE DE HILANDERÍA
+// =====================================================
+
+// GET /api/detalle-mistura/:loteFiac - Obtener detalle de mistura por LOTE_FIAC
+app.get('/api/detalle-mistura/:loteFiac', async (req, res) => {
+  try {
+    const { loteFiac } = req.params
+    
+    if (!loteFiac) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'LOTE_FIAC es requerido' 
+      })
+    }
+
+    // Formatear LOTE_FIAC con ceros adelante (10 dígitos)
+    const loteFiacFormateado = String(loteFiac).padStart(10, '0')
+    
+    console.log(`[DetalleMistura] Buscando LOTE_FIAC: ${loteFiac} → Formateado: ${loteFiacFormateado}`)
+    
+    // Helper para parsear números desde texto
+    const sqlParseNumber = (col) => `
+      CASE 
+        WHEN ${col} IS NULL OR ${col} = '' THEN NULL
+        ELSE CAST(REPLACE(REPLACE(${col}, '.', ''), ',', '.') AS NUMERIC)
+      END
+    `
+    
+    const sql = `
+      SELECT 
+        "LOTE_FIAC",
+        "PRODUTOR",
+        "LOTE",
+        ${sqlParseNumber('"QTDE"')} AS "QTDE",
+        ${sqlParseNumber('"PESO"')} AS "PESO",
+        "TP",
+        "CLASSIFIC",
+        ${sqlParseNumber('"SCI"')} AS "SCI",
+        ${sqlParseNumber('"MST"')} AS "MST",
+        ${sqlParseNumber('"MIC"')} AS "MIC",
+        ${sqlParseNumber('"MAT"')} AS "MAT",
+        ${sqlParseNumber('"UHML"')} AS "UHML",
+        ${sqlParseNumber('"UI"')} AS "UI",
+        ${sqlParseNumber('"SF"')} AS "SF",
+        ${sqlParseNumber('"STR"')} AS "STR",
+        ${sqlParseNumber('"ELG"')} AS "ELG",
+        ${sqlParseNumber('"RD"')} AS "RD",
+        ${sqlParseNumber('"PLUS_B"')} AS "PLUS_B",
+        ${sqlParseNumber('"TrCNT"')} AS "TrCNT",
+        ${sqlParseNumber('"TrAR"')} AS "TrAR",
+        ${sqlParseNumber('"TRID"')} AS "TRID"
+      FROM tb_calidad_fibra
+      WHERE "LOTE_FIAC" = $1
+        AND "TIPO_MOV" = 'MIST'
+        AND "PRODUTOR" IS NOT NULL
+        AND "PRODUTOR" != ''
+      ORDER BY "PRODUTOR", "LOTE"
+    `
+    
+    const result = await query(sql, [loteFiacFormateado], 'detalle-mistura')
+    
+    console.log(`[DetalleMistura] Filas encontradas: ${result.rows.length}`)
+    
+    res.json({ 
+      success: true,
+      loteFiac: loteFiac,
+      loteFiacFormateado: loteFiacFormateado,
+      filas: result.rows,
+      total: result.rows.length
+    })
+  } catch (err) {
+    console.error('Error obteniendo detalle de mistura:', err)
+    res.status(500).json({ 
+      success: false,
+      error: err.message 
+    })
+  }
+})
+
+// =====================================================
 // INICIAR SERVIDOR
 // =====================================================
 async function startServer() {
