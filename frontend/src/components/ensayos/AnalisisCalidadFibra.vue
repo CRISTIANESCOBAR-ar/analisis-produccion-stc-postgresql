@@ -89,28 +89,318 @@
     <div v-else class="flex-1 overflow-auto rounded-xl border border-slate-200 bg-white shadow-md">
       <table class="min-w-full w-full table-auto divide-y divide-slate-200 text-xs">
         <thead class="bg-gradient-to-r from-emerald-50 to-teal-50 sticky top-0 z-[5]">
+          <!-- Fila de Grupos -->
+          <tr class="border-b border-slate-300">
+            <th colspan="4" class="px-2 py-1.5 text-center text-[10px] font-medium text-slate-500 bg-slate-50/50 border-r-2 border-slate-300"></th>
+            <th colspan="2" class="px-2 py-1.5 text-center text-[10px] font-semibold text-teal-700 bg-teal-50 border-r-2 border-slate-300">
+              <div class="flex items-center justify-center gap-1">
+                <span>Gestión y Cálculo</span>
+                <button
+                  v-tippy="{ content: groupTooltips.gestion, delay: 0, allowHTML: true, maxWidth: 500, placement: 'bottom', interactive: true, theme: 'light' }"
+                  class="inline-flex items-center justify-center w-3.5 h-3.5 text-[9px] font-bold text-teal-600 bg-white/90 rounded-full cursor-help border border-teal-300 hover:bg-teal-50 hover:border-teal-400 transition-colors shadow-sm"
+                >i</button>
+              </div>
+            </th>
+            <th colspan="2" class="px-2 py-1.5 text-center text-[10px] font-semibold text-amber-700 bg-amber-50 border-r-2 border-slate-300">
+              <div class="flex items-center justify-center gap-1">
+                <span>Madurez y Finura</span>
+                <button
+                  v-tippy="{ content: groupTooltips.madurez, delay: 0, allowHTML: true, maxWidth: 500, placement: 'bottom', interactive: true, theme: 'light' }"
+                  class="inline-flex items-center justify-center w-3.5 h-3.5 text-[9px] font-bold text-amber-600 bg-white/90 rounded-full cursor-help border border-amber-300 hover:bg-amber-50 hover:border-amber-400 transition-colors shadow-sm"
+                >i</button>
+              </div>
+            </th>
+            <th colspan="5" class="px-2 py-1.5 text-center text-[10px] font-semibold text-blue-700 bg-blue-50 border-r-2 border-slate-300">
+              <div class="flex items-center justify-center gap-1">
+                <span>Variables Físicas</span>
+                <button
+                  v-tippy="{ content: groupTooltips.fisicas, delay: 0, allowHTML: true, maxWidth: 500, placement: 'bottom', interactive: true, theme: 'light' }"
+                  class="inline-flex items-center justify-center w-3.5 h-3.5 text-[9px] font-bold text-blue-600 bg-white/90 rounded-full cursor-help border border-blue-300 hover:bg-blue-50 hover:border-blue-400 transition-colors shadow-sm"
+                >i</button>
+              </div>
+            </th>
+            <th colspan="3" class="px-2 py-1.5 text-center text-[10px] font-semibold text-purple-700 bg-purple-50 border-r-2 border-slate-300">
+              <div class="flex items-center justify-center gap-1">
+                <span>Color y Apariencia</span>
+                <button
+                  v-tippy="{ content: groupTooltips.color, delay: 0, allowHTML: true, maxWidth: 500, placement: 'bottom', interactive: true, theme: 'light' }"
+                  class="inline-flex items-center justify-center w-3.5 h-3.5 text-[9px] font-bold text-purple-600 bg-white/90 rounded-full cursor-help border border-purple-300 hover:bg-purple-50 hover:border-purple-400 transition-colors shadow-sm"
+                >i</button>
+              </div>
+            </th>
+            <th colspan="3" class="px-2 py-1.5 text-center text-[10px] font-semibold text-orange-700 bg-orange-50">
+              <div class="flex items-center justify-center gap-1">
+                <span>Impurezas (Trash)</span>
+                <button
+                  v-tippy="{ content: groupTooltips.trash, delay: 0, allowHTML: true, maxWidth: 500, placement: 'bottom', interactive: true, theme: 'light' }"
+                  class="inline-flex items-center justify-center w-3.5 h-3.5 text-[9px] font-bold text-orange-600 bg-white/90 rounded-full cursor-help border border-orange-300 hover:bg-orange-50 hover:border-orange-400 transition-colors shadow-sm"
+                >i</button>
+              </div>
+            </th>
+          </tr>
+          <!-- Fila de Encabezados -->
           <tr>
             <th class="px-3 py-2 text-center font-semibold text-slate-700 border-b-2 border-b-slate-200">Fecha/Hora</th>
             <th class="px-3 py-2 text-center font-semibold text-slate-700 border-b-2 border-b-slate-200">MISTURA</th>
             <th class="px-3 py-2 text-center font-semibold text-slate-700 border-b-2 border-b-slate-200">
               {{ groupMode === 'detailed' ? 'SEQ' : 'SEQ Count' }}
             </th>
-            <th class="px-3 py-2 text-center font-semibold text-slate-700 border-b-2 border-b-slate-200">LOTE_FIAC</th>
-            <th class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200">SCI</th>
-            <th class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200">MST</th>
-            <th class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200">MIC</th>
-            <th class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200">MAT</th>
-            <th class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200">UHML</th>
-            <th class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200">UI</th>
-            <th class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200">SF</th>
-            <th class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200">STR</th>
-            <th class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200">ELG</th>
-            <th class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200">RD</th>
-            <th class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200">+b</th>
-            <th class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200">TIPO</th>
-            <th class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200">TrCNT</th>
-            <th class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200">TrAR</th>
-            <th class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200">TRID</th>
+            <th class="px-3 py-2 text-center font-semibold text-slate-700 border-b-2 border-b-slate-200 border-r-2 border-r-slate-300">LOTE_FIAC</th>
+            <th 
+              class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200"
+            >
+              <div class="flex flex-col items-center gap-0.5">
+                <span>SCI</span>
+                <button
+                  v-tippy="{ content: hviTooltips.SCI, delay: 0, allowHTML: true, maxWidth: 400, placement: 'bottom' }"
+                  class="inline-flex items-center text-emerald-400 hover:text-emerald-600 cursor-help"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 16v-4" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M12 8h.01" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </button>
+              </div>
+            </th>
+            <th 
+              class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200 border-r-2 border-r-slate-300"
+            >
+              <div class="flex flex-col items-center gap-0.5">
+                <span>MST</span>
+                <button
+                  v-tippy="{ content: hviTooltips.MST, delay: 0, allowHTML: true, maxWidth: 400, placement: 'bottom' }"
+                  class="inline-flex items-center text-emerald-400 hover:text-emerald-600 cursor-help"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 16v-4" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M12 8h.01" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </button>
+              </div>
+            </th>
+            <th 
+              class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200"
+            >
+              <div class="flex flex-col items-center gap-0.5">
+                <span>MIC</span>
+                <button
+                  v-tippy="{ content: hviTooltips.MIC, delay: 0, allowHTML: true, maxWidth: 400, placement: 'bottom' }"
+                  class="inline-flex items-center text-emerald-400 hover:text-emerald-600 cursor-help"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 16v-4" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M12 8h.01" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </button>
+              </div>
+            </th>
+            <th 
+              class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200 border-r-2 border-r-slate-300"
+            >
+              <div class="flex flex-col items-center gap-0.5">
+                <span>MAT</span>
+                <button
+                  v-tippy="{ content: hviTooltips.MAT, delay: 0, allowHTML: true, maxWidth: 400, placement: 'bottom' }"
+                  class="inline-flex items-center text-emerald-400 hover:text-emerald-600 cursor-help"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 16v-4" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M12 8h.01" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </button>
+              </div>
+            </th>
+            <th 
+              class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200"
+            >
+              <div class="flex flex-col items-center gap-0.5">
+                <span>UHML</span>
+                <button
+                  v-tippy="{ content: hviTooltips.UHML, delay: 0, allowHTML: true, maxWidth: 400, placement: 'bottom' }"
+                  class="inline-flex items-center text-emerald-400 hover:text-emerald-600 cursor-help"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 16v-4" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M12 8h.01" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </button>
+              </div>
+            </th>
+            <th 
+              class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200"
+            >
+              <div class="flex flex-col items-center gap-0.5">
+                <span>UI</span>
+                <button
+                  v-tippy="{ content: hviTooltips.UI, delay: 0, allowHTML: true, maxWidth: 400, placement: 'bottom' }"
+                  class="inline-flex items-center text-emerald-400 hover:text-emerald-600 cursor-help"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 16v-4" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M12 8h.01" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </button>
+              </div>
+            </th>
+            <th 
+              class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200"
+            >
+              <div class="flex flex-col items-center gap-0.5">
+                <span>SF</span>
+                <button
+                  v-tippy="{ content: hviTooltips.SF, delay: 0, allowHTML: true, maxWidth: 400, placement: 'bottom' }"
+                  class="inline-flex items-center text-emerald-400 hover:text-emerald-600 cursor-help"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 16v-4" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M12 8h.01" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </button>
+              </div>
+            </th>
+            <th 
+              class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200"
+            >
+              <div class="flex flex-col items-center gap-0.5">
+                <span>STR</span>
+                <button
+                  v-tippy="{ content: hviTooltips.STR, delay: 0, allowHTML: true, maxWidth: 400, placement: 'bottom' }"
+                  class="inline-flex items-center text-emerald-400 hover:text-emerald-600 cursor-help"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 16v-4" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M12 8h.01" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </button>
+              </div>
+            </th>
+            <th 
+              class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200 border-r-2 border-r-slate-300"
+            >
+              <div class="flex flex-col items-center gap-0.5">
+                <span>ELG</span>
+                <button
+                  v-tippy="{ content: hviTooltips.ELG, delay: 0, allowHTML: true, maxWidth: 400, placement: 'bottom' }"
+                  class="inline-flex items-center text-emerald-400 hover:text-emerald-600 cursor-help"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 16v-4" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M12 8h.01" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </button>
+              </div>
+            </th>
+            <th 
+              class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200"
+            >
+              <div class="flex flex-col items-center gap-0.5">
+                <span>RD</span>
+                <button
+                  v-tippy="{ content: hviTooltips.RD, delay: 0, allowHTML: true, maxWidth: 400, placement: 'bottom' }"
+                  class="inline-flex items-center text-emerald-400 hover:text-emerald-600 cursor-help"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 16v-4" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M12 8h.01" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </button>
+              </div>
+            </th>
+            <th 
+              class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200"
+            >
+              <div class="flex flex-col items-center gap-0.5">
+                <span>+b</span>
+                <button
+                  v-tippy="{ content: hviTooltips.PLUS_B, delay: 0, allowHTML: true, maxWidth: 400, placement: 'bottom' }"
+                  class="inline-flex items-center text-emerald-400 hover:text-emerald-600 cursor-help"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 16v-4" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M12 8h.01" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </button>
+              </div>
+            </th>
+            <th 
+              class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200 border-r-2 border-r-slate-300"
+            >
+              <div class="flex flex-col items-center gap-0.5">
+                <span>TIPO</span>
+                <button
+                  v-tippy="{ content: hviTooltips.TIPO, delay: 0, allowHTML: true, maxWidth: 400, placement: 'bottom' }"
+                  class="inline-flex items-center text-emerald-400 hover:text-emerald-600 cursor-help"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 16v-4" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M12 8h.01" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </button>
+              </div>
+            </th>
+            <th 
+              class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200"
+            >
+              <div class="flex flex-col items-center gap-0.5">
+                <span>TrCNT</span>
+                <button
+                  v-tippy="{ content: hviTooltips.TrCNT, delay: 0, allowHTML: true, maxWidth: 400, placement: 'bottom' }"
+                  class="inline-flex items-center text-emerald-400 hover:text-emerald-600 cursor-help"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 16v-4" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M12 8h.01" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </button>
+              </div>
+            </th>
+            <th 
+              class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200"
+            >
+              <div class="flex flex-col items-center gap-0.5">
+                <span>TrAR</span>
+                <button
+                  v-tippy="{ content: hviTooltips.TrAR, delay: 0, allowHTML: true, maxWidth: 400, placement: 'bottom' }"
+                  class="inline-flex items-center text-emerald-400 hover:text-emerald-600 cursor-help"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 16v-4" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M12 8h.01" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </button>
+              </div>
+            </th>
+            <th 
+              class="px-3 py-2 text-center font-semibold text-emerald-700 border-b-2 border-b-slate-200"
+            >
+              <div class="flex flex-col items-center gap-0.5">
+                <span>TRID</span>
+                <button
+                  v-tippy="{ content: hviTooltips.TRID, delay: 0, allowHTML: true, maxWidth: 400, placement: 'bottom' }"
+                  class="inline-flex items-center text-emerald-400 hover:text-emerald-600 cursor-help"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 16v-4" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M12 8h.01" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </button>
+              </div>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -122,19 +412,19 @@
             <td class="px-3 py-2 text-center text-slate-700 text-xs">{{ row.fechaHora }}</td>
             <td class="px-3 py-2 text-center text-slate-700 font-medium">{{ row.mistura }}</td>
             <td class="px-3 py-2 text-center text-slate-700">{{ row.seq }}</td>
-            <td class="px-3 py-2 text-center text-slate-700">{{ row.loteFiac }}</td>
+            <td class="px-3 py-2 text-center text-slate-700 border-r-2 border-r-slate-200">{{ row.loteFiac }}</td>
             <td class="px-3 py-2 text-center text-emerald-700">{{ row.SCI }}</td>
-            <td class="px-3 py-2 text-center text-emerald-700">{{ row.MST }}</td>
+            <td class="px-3 py-2 text-center text-emerald-700 border-r-2 border-r-slate-200">{{ row.MST }}</td>
             <td class="px-3 py-2 text-center text-emerald-700">{{ row.MIC }}</td>
-            <td class="px-3 py-2 text-center text-emerald-700">{{ row.MAT }}</td>
+            <td class="px-3 py-2 text-center text-emerald-700 border-r-2 border-r-slate-200">{{ row.MAT }}</td>
             <td class="px-3 py-2 text-center text-emerald-700">{{ row.UHML }}</td>
             <td class="px-3 py-2 text-center text-emerald-700">{{ row.UI }}</td>
             <td class="px-3 py-2 text-center text-emerald-700">{{ row.SF }}</td>
             <td class="px-3 py-2 text-center text-emerald-700">{{ row.STR }}</td>
-            <td class="px-3 py-2 text-center text-emerald-700">{{ row.ELG }}</td>
+            <td class="px-3 py-2 text-center text-emerald-700 border-r-2 border-r-slate-200">{{ row.ELG }}</td>
             <td class="px-3 py-2 text-center text-emerald-700">{{ row.RD }}</td>
             <td class="px-3 py-2 text-center text-emerald-700">{{ row.PLUS_B }}</td>
-            <td class="px-3 py-2 text-center text-emerald-700">{{ row.TIPO }}</td>
+            <td class="px-3 py-2 text-center text-emerald-700 border-r-2 border-r-slate-200">{{ row.TIPO }}</td>
             <td class="px-3 py-2 text-center text-emerald-700">{{ row.TRCNT }}</td>
             <td class="px-3 py-2 text-center text-emerald-700">{{ row.TRAR }}</td>
             <td class="px-3 py-2 text-center text-emerald-700">{{ row.TRID }}</td>
@@ -156,6 +446,386 @@ const groupMode = ref('detailed') // 'detailed' o 'aggregated'
 const startDate = ref('')
 const endDate = ref('')
 const rawData = ref([])
+
+// Información de tooltips para variables HVI
+const hviTooltips = {
+  UHML: `
+    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
+      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
+        UHML - Upper Half Mean Length
+      </div>
+      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
+        Longitud promedio de la mitad más larga de las fibras.
+      </div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: > 1.15" (29mm)</div>
+      </div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: < 1.05" (26mm)</div>
+      </div>
+      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
+        Grupo: Variables Físicas
+      </div>
+    </div>
+  `,
+  UI: `
+    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
+      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
+        UI - Uniformity Index
+      </div>
+      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
+        Relación entre longitud media y UHML. Mide regularidad.
+      </div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: > 83%</div>
+      </div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: < 79%</div>
+      </div>
+      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
+        Grupo: Variables Físicas
+      </div>
+    </div>
+  `,
+  SF: `
+    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
+      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
+        SF - Short Fiber Index
+      </div>
+      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
+        Porcentaje de fibras menores a 12.7 mm.
+      </div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: < 6%</div>
+      </div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: > 12%</div>
+      </div>
+      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
+        Grupo: Variables Físicas
+      </div>
+    </div>
+  `,
+  STR: `
+    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
+      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
+        STR - Strength
+      </div>
+      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
+        Resistencia a la rotura (tenacidad en g/tex).
+      </div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: > 30 g/tex</div>
+      </div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: < 24 g/tex</div>
+      </div>
+      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
+        Grupo: Variables Físicas
+      </div>
+    </div>
+  `,
+  ELG: `
+    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
+      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
+        ELG - Elongation
+      </div>
+      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
+        Porcentaje de estiramiento antes de la rotura.
+      </div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: > 7%</div>
+      </div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: < 5%</div>
+      </div>
+      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
+        Grupo: Variables Físicas
+      </div>
+    </div>
+  `,
+  MIC: `
+    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
+      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
+        MIC - Micronaire
+      </div>
+      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
+        Índice combinado de finura y madurez de la fibra.
+      </div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: 3.7 - 4.2</div>
+      </div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: < 3.4 o > 4.9</div>
+      </div>
+      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
+        Grupo: Madurez y Finura
+      </div>
+    </div>
+  `,
+  MAT: `
+    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
+      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
+        MAT - Maturity Index
+      </div>
+      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
+        Relación entre espesor de pared celular y diámetro.
+      </div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: > 0.85</div>
+      </div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: < 0.75</div>
+      </div>
+      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
+        Grupo: Madurez y Finura
+      </div>
+    </div>
+  `,
+  RD: `
+    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
+      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
+        Rd - Reflectance
+      </div>
+      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
+        Grado de brillo o reflectancia de la fibra.
+      </div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: 75 - 80</div>
+      </div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: < 70 (Grisáceo)</div>
+      </div>
+      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
+        Grupo: Color y Apariencia
+      </div>
+    </div>
+  `,
+  PLUS_B: `
+    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
+      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
+        +b - Yellowness
+      </div>
+      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
+        Grado de amarillamiento (pigmentación amarillenta).
+      </div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: 7 - 9</div>
+      </div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: > 12 (Amarillento)</div>
+      </div>
+      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
+        Grupo: Color y Apariencia
+      </div>
+    </div>
+  `,
+  TIPO: `
+    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
+      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
+        TIPO - Cotton Grade
+      </div>
+      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
+        Clasificación comercial basada en color, basura y preparación.
+      </div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: 11, 21</div>
+      </div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Estándar: 31, 41</div>
+      </div>
+      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
+        Grupo: Color y Apariencia
+      </div>
+    </div>
+  `,
+  TrCNT: `
+    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
+      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
+        TrCNT - Trash Count
+      </div>
+      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
+        Número total de partículas de basura en la muestra.
+      </div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: < 15</div>
+      </div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: > 50</div>
+      </div>
+      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
+        Grupo: Impurezas (Trash)
+      </div>
+    </div>
+  `,
+  TrAR: `
+    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
+      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
+        TrAR - Trash Area
+      </div>
+      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
+        Porcentaje del área total cubierto por basura.
+      </div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: < 0.20%</div>
+      </div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: > 0.60%</div>
+      </div>
+      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
+        Grupo: Impurezas (Trash)
+      </div>
+    </div>
+  `,
+  TRID: `
+    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
+      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
+        TRID - Trash ID / Grade
+      </div>
+      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
+        Grado comercial de basura (basado en TrAR).
+      </div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Rango: 1 (Limpio) al 7 (Muy sucio)</div>
+      </div>
+      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
+        Grupo: Impurezas (Trash)
+      </div>
+    </div>
+  `,
+  SCI: `
+    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
+      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
+        SCI - Spinning Consistency Index
+      </div>
+      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
+        Índice ponderado para predecir consistencia de hilado.
+      </div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Excelente: > 140</div>
+      </div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Pobre: < 100</div>
+      </div>
+      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
+        Grupo: Gestión y Cálculo
+      </div>
+    </div>
+  `,
+  MST: `
+    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
+      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
+        MST - Moisture
+      </div>
+      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
+        Contenido de humedad de la muestra analizada.
+      </div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Rango estándar HVI: 6.5% - 8.0%</div>
+      </div>
+      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
+        Grupo: Gestión y Cálculo
+      </div>
+    </div>
+  `
+}
+
+// Tooltips para los grupos de variables
+const groupTooltips = {
+  fisicas: `
+    <div style="padding: 14px; font-family: system-ui, -apple-system, sans-serif; max-width: 450px;">
+      <div style="font-weight: 700; font-size: 14px; color: #1e40af; margin-bottom: 10px; border-bottom: 2px solid #3b82f6; padding-bottom: 6px;">
+        Variables Físicas (Dimensiones y Resistencia)
+      </div>
+      <div style="font-size: 12px; color: #334155; margin-bottom: 10px; line-height: 1.6; font-weight: 600;">
+        Son el "esqueleto" de la fibra. Determinan qué tan fuerte será el hilo y qué tan eficiente será el proceso de hilatura.
+      </div>
+      <div style="background: #eff6ff; padding: 10px; border-radius: 6px; margin-bottom: 8px; border-left: 3px solid #3b82f6;">
+        <div style="font-size: 11px; color: #1e40af; font-weight: 600; margin-bottom: 4px;">📏 Qué miden:</div>
+        <div style="font-size: 11px; color: #475569; line-height: 1.5;">Longitud (UHML), uniformidad (UI), presencia de fibras cortas (SF), fuerza de rotura (STR) y elasticidad (ELG).</div>
+      </div>
+      <div style="background: #fef3c7; padding: 10px; border-radius: 6px; border-left: 3px solid #f59e0b;">
+        <div style="font-size: 11px; color: #92400e; font-weight: 600; margin-bottom: 4px;">⚡ Impacto en Denim/Flame:</div>
+        <div style="font-size: 11px; color: #78350f; line-height: 1.5;">Cruciales para evitar roturas en el telar. Si la uniformidad es baja, el hilo tendrá puntos débiles que fallarán durante el proceso de engomado o tejido.</div>
+      </div>
+    </div>
+  `,
+  madurez: `
+    <div style="padding: 14px; font-family: system-ui, -apple-system, sans-serif; max-width: 450px;">
+      <div style="font-weight: 700; font-size: 14px; color: #b45309; margin-bottom: 10px; border-bottom: 2px solid #f59e0b; padding-bottom: 6px;">
+        Variables de Madurez y Finura
+      </div>
+      <div style="font-size: 12px; color: #334155; margin-bottom: 10px; line-height: 1.6; font-weight: 600;">
+        Determinan el comportamiento de la fibra frente a los químicos y el tacto final.
+      </div>
+      <div style="background: #fef3c7; padding: 10px; border-radius: 6px; margin-bottom: 8px; border-left: 3px solid #f59e0b;">
+        <div style="font-size: 11px; color: #b45309; font-weight: 600; margin-bottom: 4px;">🔬 Qué miden:</div>
+        <div style="font-size: 11px; color: #78350f; line-height: 1.5;">El grosor y desarrollo de la pared celular de la fibra (MIC y MAT).</div>
+      </div>
+      <div style="background: #fef3c7; padding: 10px; border-radius: 6px; border-left: 3px solid #f59e0b;">
+        <div style="font-size: 11px; color: #92400e; font-weight: 600; margin-bottom: 4px;">⚡ Impacto en Denim/Flame:</div>
+        <div style="font-size: 11px; color: #78350f; line-height: 1.5;">Un Micronaire fuera de rango causa "neps" (pequeños nudos) que no absorben bien el colorante Índigo, provocando puntos blancos o teñidos desiguales en la tela.</div>
+      </div>
+    </div>
+  `,
+  color: `
+    <div style="padding: 14px; font-family: system-ui, -apple-system, sans-serif; max-width: 450px;">
+      <div style="font-weight: 700; font-size: 14px; color: #7c3aed; margin-bottom: 10px; border-bottom: 2px solid #a78bfa; padding-bottom: 6px;">
+        Variables de Color y Apariencia
+      </div>
+      <div style="font-size: 12px; color: #334155; margin-bottom: 10px; line-height: 1.6; font-weight: 600;">
+        Definen la estética y el valor comercial de la paca.
+      </div>
+      <div style="background: #f5f3ff; padding: 10px; border-radius: 6px; margin-bottom: 8px; border-left: 3px solid #a78bfa;">
+        <div style="font-size: 11px; color: #6d28d9; font-weight: 600; margin-bottom: 4px;">🎨 Qué miden:</div>
+        <div style="font-size: 11px; color: #5b21b6; line-height: 1.5;">El brillo (Rd), el tono amarillento (+b) y la clasificación comercial (TIPO).</div>
+      </div>
+      <div style="background: #fef3c7; padding: 10px; border-radius: 6px; border-left: 3px solid #f59e0b;">
+        <div style="font-size: 11px; color: #92400e; font-weight: 600; margin-bottom: 4px;">⚡ Impacto en Denim/Flame:</div>
+        <div style="font-size: 11px; color: #78350f; line-height: 1.5;">Un algodón muy amarillento (+b alto) puede alterar el tono final del azul Índigo, "ensuciando" el color deseado.</div>
+      </div>
+    </div>
+  `,
+  trash: `
+    <div style="padding: 14px; font-family: system-ui, -apple-system, sans-serif; max-width: 450px;">
+      <div style="font-weight: 700; font-size: 14px; color: #c2410c; margin-bottom: 10px; border-bottom: 2px solid #fb923c; padding-bottom: 6px;">
+        Variables de Impurezas (Trash)
+      </div>
+      <div style="font-size: 12px; color: #334155; margin-bottom: 10px; line-height: 1.6; font-weight: 600;">
+        Indican qué tan "limpio" llega el algodón del campo y el desmote.
+      </div>
+      <div style="background: #ffedd5; padding: 10px; border-radius: 6px; margin-bottom: 8px; border-left: 3px solid #fb923c;">
+        <div style="font-size: 11px; color: #c2410c; font-weight: 600; margin-bottom: 4px;">🔍 Qué miden:</div>
+        <div style="font-size: 11px; color: #9a3412; line-height: 1.5;">Cantidad de partículas (TrCNT), área que ocupan (TrAR) y grado de basura (TRID).</div>
+      </div>
+      <div style="background: #fef3c7; padding: 10px; border-radius: 6px; border-left: 3px solid #f59e0b;">
+        <div style="font-size: 11px; color: #92400e; font-weight: 600; margin-bottom: 4px;">⚡ Impacto en Denim/Flame:</div>
+        <div style="font-size: 11px; color: #78350f; line-height: 1.5;">Mucha basura causa roturas de hilo en máquinas Open-End. En hilos Flame, una mota de basura puede confundirse con un defecto del efecto flammé, restando calidad visual.</div>
+      </div>
+    </div>
+  `,
+  gestion: `
+    <div style="padding: 14px; font-family: system-ui, -apple-system, sans-serif; max-width: 450px;">
+      <div style="font-weight: 700; font-size: 14px; color: #0f766e; margin-bottom: 10px; border-bottom: 2px solid #14b8a6; padding-bottom: 6px;">
+        Variables de Gestión y Cálculo
+      </div>
+      <div style="font-size: 12px; color: #334155; margin-bottom: 10px; line-height: 1.6; font-weight: 600;">
+        Son indicadores de control de calidad y fiabilidad del test.
+      </div>
+      <div style="background: #f0fdfa; padding: 10px; border-radius: 6px; margin-bottom: 8px; border-left: 3px solid #14b8a6;">
+        <div style="font-size: 11px; color: #0f766e; font-weight: 600; margin-bottom: 4px;">📊 SCI (Spinning Consistency Index):</div>
+        <div style="font-size: 11px; color: #115e59; line-height: 1.5; margin-bottom: 6px;">Es la "nota final" del lote. Resume todo en un número.</div>
+        <div style="font-size: 10px; color: #0d9488; font-weight: 500;">• Uso: Clasificación rápida de pacas en el almacén</div>
+        <div style="font-size: 10px; color: #0d9488; font-weight: 500;">• Valores: > 140 (Premium), 100-140 (Estándar), < 100 (Riesgoso)</div>
+      </div>
+      <div style="background: #f0fdfa; padding: 10px; border-radius: 6px; border-left: 3px solid #14b8a6;">
+        <div style="font-size: 11px; color: #0f766e; font-weight: 600; margin-bottom: 4px;">💧 MST (Moisture):</div>
+        <div style="font-size: 11px; color: #115e59; line-height: 1.5; margin-bottom: 6px;">El termómetro de confianza del análisis.</div>
+        <div style="font-size: 10px; color: #0d9488; font-weight: 500; line-height: 1.4;">• Importancia: Si el algodón está muy seco (<6%), el HVI dirá que la fibra es más corta y débil de lo que realmente es. Si está muy húmedo, parecerá más fuerte pero será difícil de limpiar.</div>
+      </div>
+    </div>
+  `
+}
 
 // Función para quitar ceros a la izquierda
 const removeLeadingZeros = (value) => {
