@@ -413,21 +413,21 @@
             <td class="px-3 py-2 text-center text-slate-700 font-medium">{{ row.mistura }}</td>
             <td class="px-3 py-2 text-center text-slate-700">{{ row.seq }}</td>
             <td class="px-3 py-2 text-center text-slate-700 border-r-2 border-r-slate-200">{{ row.loteFiac }}</td>
-            <td class="px-3 py-2 text-center text-emerald-700">{{ row.SCI }}</td>
-            <td class="px-3 py-2 text-center text-emerald-700 border-r-2 border-r-slate-200">{{ row.MST }}</td>
-            <td class="px-3 py-2 text-center text-emerald-700">{{ row.MIC }}</td>
-            <td class="px-3 py-2 text-center text-emerald-700 border-r-2 border-r-slate-200">{{ row.MAT }}</td>
-            <td class="px-3 py-2 text-center text-emerald-700">{{ row.UHML }}</td>
-            <td class="px-3 py-2 text-center text-emerald-700">{{ row.UI }}</td>
-            <td class="px-3 py-2 text-center text-emerald-700">{{ row.SF }}</td>
-            <td class="px-3 py-2 text-center text-emerald-700">{{ row.STR }}</td>
-            <td class="px-3 py-2 text-center text-emerald-700 border-r-2 border-r-slate-200">{{ row.ELG }}</td>
-            <td class="px-3 py-2 text-center text-emerald-700">{{ row.RD }}</td>
-            <td class="px-3 py-2 text-center text-emerald-700">{{ row.PLUS_B }}</td>
+            <td class="px-3 py-2 text-center transition-colors" :class="getColorClass(row.SCI, 'SCI')">{{ row.SCI }}</td>
+            <td class="px-3 py-2 text-center border-r-2 border-r-slate-200 transition-colors" :class="getColorClass(row.MST, 'MST')">{{ row.MST }}</td>
+            <td class="px-3 py-2 text-center transition-colors" :class="getColorClass(row.MIC, 'MIC')">{{ row.MIC }}</td>
+            <td class="px-3 py-2 text-center border-r-2 border-r-slate-200 transition-colors" :class="getColorClass(row.MAT, 'MAT')">{{ row.MAT }}</td>
+            <td class="px-3 py-2 text-center transition-colors" :class="getColorClass(row.UHML, 'UHML')">{{ row.UHML }}</td>
+            <td class="px-3 py-2 text-center transition-colors" :class="getColorClass(row.UI, 'UI')">{{ row.UI }}</td>
+            <td class="px-3 py-2 text-center transition-colors" :class="getColorClass(row.SF, 'SF')">{{ row.SF }}</td>
+            <td class="px-3 py-2 text-center transition-colors" :class="getColorClass(row.STR, 'STR')">{{ row.STR }}</td>
+            <td class="px-3 py-2 text-center border-r-2 border-r-slate-200 transition-colors" :class="getColorClass(row.ELG, 'ELG')">{{ row.ELG }}</td>
+            <td class="px-3 py-2 text-center transition-colors" :class="getColorClass(row.RD, 'RD')">{{ row.RD }}</td>
+            <td class="px-3 py-2 text-center transition-colors" :class="getColorClass(row.PLUS_B, 'PLUS_B')">{{ row.PLUS_B }}</td>
             <td class="px-3 py-2 text-center text-emerald-700 border-r-2 border-r-slate-200">{{ row.TIPO }}</td>
-            <td class="px-3 py-2 text-center text-emerald-700">{{ row.TRCNT }}</td>
-            <td class="px-3 py-2 text-center text-emerald-700">{{ row.TRAR }}</td>
-            <td class="px-3 py-2 text-center text-emerald-700">{{ row.TRID }}</td>
+            <td class="px-3 py-2 text-center transition-colors" :class="getColorClass(row.TRCNT, 'TRCNT')">{{ row.TRCNT }}</td>
+            <td class="px-3 py-2 text-center transition-colors" :class="getColorClass(row.TRAR, 'TRAR')">{{ row.TRAR }}</td>
+            <td class="px-3 py-2 text-center transition-colors" :class="getColorClass(row.TRID, 'TRID')">{{ row.TRID }}</td>
           </tr>
         </tbody>
       </table>
@@ -450,173 +450,210 @@ const rawData = ref([])
 // Información de tooltips para variables HVI
 const hviTooltips = {
   UHML: `
-    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
-      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
+    <div style="padding: 14px; font-family: system-ui, -apple-system, sans-serif; max-width: 500px;">
+      <div style="font-weight: 700; font-size: 15px; color: #0f766e; margin-bottom: 10px; border-bottom: 2px solid #14b8a6; padding-bottom: 6px;">
         UHML - Upper Half Mean Length
       </div>
-      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
+      <div style="font-size: 12px; color: #334155; margin-bottom: 10px; line-height: 1.6; font-weight: 600;">
         Longitud promedio de la mitad más larga de las fibras.
       </div>
-      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
-        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: > 1.15" (29mm)</div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid #14b8a6;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: > 29mm (1.15")</div>
       </div>
-      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
-        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: < 1.05" (26mm)</div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #ef4444;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: < 26mm (1.05")</div>
       </div>
-      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
-        Grupo: Variables Físicas
+      <div style="background: #eff6ff; padding: 10px; border-radius: 6px; margin-bottom: 8px;">
+        <div style="font-size: 11px; color: #1e40af; font-weight: 600; margin-bottom: 4px;">🔧 Aplicación Técnica:</div>
+        <div style="font-size: 11px; color: #475569; line-height: 1.5;">Dicta el ajuste de distancias entre rodillos en la continua de hilar. Un UHML alto permite hilos más finos y resistentes.</div>
+      </div>
+      <div style="background: #fef3c7; padding: 10px; border-radius: 6px; margin-bottom: 8px;">
+        <div style="font-size: 11px; color: #92400e; font-weight: 600; margin-bottom: 4px;">⚠️ Punto Crítico:</div>
+        <div style="font-size: 11px; color: #78350f; line-height: 1.5;">Variación alta entre pacas genera irregularidad de masa (hilo con partes gruesas y delgadas no deseadas).</div>
+      </div>
+      <div style="background: #f3f4f6; padding: 8px; border-radius: 6px;">
+        <div style="font-size: 10px; color: #6b7280; line-height: 1.4;">💡 <strong>Ejemplo:</strong> Para Denim Ne 7, UHML 1.10" es aceptable, pero para Ne 12.5, si baja de 1.08", el hilo perderá resistencia.</div>
       </div>
     </div>
   `,
   UI: `
-    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
-      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
+    <div style="padding: 14px; font-family: system-ui, -apple-system, sans-serif; max-width: 500px;">
+      <div style="font-weight: 700; font-size: 15px; color: #0f766e; margin-bottom: 10px; border-bottom: 2px solid #14b8a6; padding-bottom: 6px;">
         UI - Uniformity Index
       </div>
-      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
-        Relación entre longitud media y UHML. Mide regularidad.
+      <div style="font-size: 12px; color: #334155; margin-bottom: 10px; line-height: 1.6; font-weight: 600;">
+        Mide qué tan cerca está la longitud media de las fibras más largas.
       </div>
-      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid #14b8a6;">
         <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: > 83%</div>
       </div>
-      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
-        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: < 79%</div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #ef4444;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: < 79% (< 78% = roturas en tejeduría)</div>
       </div>
-      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
-        Grupo: Variables Físicas
+      <div style="background: #eff6ff; padding: 10px; border-radius: 6px; margin-bottom: 8px;">
+        <div style="font-size: 11px; color: #1e40af; font-weight: 600; margin-bottom: 4px;">🔍 Diagnóstico:</div>
+        <div style="font-size: 11px; color: #475569; line-height: 1.5;">Un UI bajo indica que el algodón fue maltratado en el desmote, rompiendo fibras.</div>
+      </div>
+      <div style="background: #fef3c7; padding: 10px; border-radius: 6px;">
+        <div style="font-size: 11px; color: #92400e; font-weight: 600; margin-bottom: 4px;">⚠️ Impacto Visual:</div>
+        <div style="font-size: 11px; color: #78350f; line-height: 1.5;">UI < 78% = Hilo "sucio" visualmente + Roturas frecuentes en telar.</div>
       </div>
     </div>
   `,
   SF: `
-    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
-      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
+    <div style="padding: 14px; font-family: system-ui, -apple-system, sans-serif; max-width: 500px;">
+      <div style="font-weight: 700; font-size: 15px; color: #0f766e; margin-bottom: 10px; border-bottom: 2px solid #14b8a6; padding-bottom: 6px;">
         SF - Short Fiber Index
       </div>
-      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
-        Porcentaje de fibras menores a 12.7 mm.
+      <div style="font-size: 12px; color: #334155; margin-bottom: 10px; line-height: 1.6; font-weight: 600;">
+        Fibras menores a 12.7 mm. No se enganchan bien en el hilo.
       </div>
-      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid #14b8a6;">
         <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: < 6%</div>
       </div>
-      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #ef4444;">
         <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: > 12%</div>
       </div>
-      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
-        Grupo: Variables Físicas
+      <div style="background: #fef3c7; padding: 10px; border-radius: 6px; margin-bottom: 8px;">
+        <div style="font-size: 11px; color: #92400e; font-weight: 600; margin-bottom: 4px;">⚠️ Mayor Enemigo:</div>
+        <div style="font-size: 11px; color: #78350f; line-height: 1.5;">Genera "fly" (pelusa volando) en la planta, reduce eficiencia y ensucia el ambiente.</div>
+      </div>
+      <div style="background: #f3f4f6; padding: 8px; border-radius: 6px;">
+        <div style="font-size: 10px; color: #6b7280; line-height: 1.4;">💡 <strong>Hilos Flame:</strong> SF alto (>10%) hace que el hilo se desintegre en los puntos de transición del efecto flammé.</div>
       </div>
     </div>
   `,
   STR: `
-    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
-      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
-        STR - Strength
+    <div style="padding: 14px; font-family: system-ui, -apple-system, sans-serif; max-width: 500px;">
+      <div style="font-weight: 700; font-size: 15px; color: #0f766e; margin-bottom: 10px; border-bottom: 2px solid #14b8a6; padding-bottom: 6px;">
+        STR - Strength (Tenacidad)
       </div>
-      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
-        Resistencia a la rotura (tenacidad en g/tex).
+      <div style="font-size: 12px; color: #334155; margin-bottom: 10px; line-height: 1.6; font-weight: 600;">
+        Resistencia a la rotura medida rompiendo un mazo de fibras (bundle).
       </div>
-      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid #14b8a6;">
         <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: > 30 g/tex</div>
       </div>
-      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
-        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: < 24 g/tex</div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #ef4444;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: < 24 g/tex (< 25 para Denim)</div>
       </div>
-      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
-        Grupo: Variables Físicas
+      <div style="background: #eff6ff; padding: 10px; border-radius: 6px; margin-bottom: 8px;">
+        <div style="font-size: 11px; color: #1e40af; font-weight: 600; margin-bottom: 4px;">📊 Regla de Oro:</div>
+        <div style="font-size: 11px; color: #475569; line-height: 1.5;">La resistencia del hilo es aproximadamente el 50% de la resistencia de la fibra.</div>
+      </div>
+      <div style="background: #fef3c7; padding: 10px; border-radius: 6px;">
+        <div style="font-size: 11px; color: #92400e; font-weight: 600; margin-bottom: 4px;">👖 Impacto Denim:</div>
+        <div style="font-size: 11px; color: #78350f; line-height: 1.5;">El Denim se somete a lavados agresivos (stone wash, enzimas). STR < 25 = prenda puede romperse en costuras.</div>
       </div>
     </div>
   `,
   ELG: `
-    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
-      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
-        ELG - Elongation
+    <div style="padding: 14px; font-family: system-ui, -apple-system, sans-serif; max-width: 500px;">
+      <div style="font-weight: 700; font-size: 15px; color: #0f766e; margin-bottom: 10px; border-bottom: 2px solid #14b8a6; padding-bottom: 6px;">
+        ELG - Elongation (Elasticidad)
       </div>
-      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
-        Porcentaje de estiramiento antes de la rotura.
+      <div style="font-size: 12px; color: #334155; margin-bottom: 10px; line-height: 1.6; font-weight: 600;">
+        Capacidad de "resorte" de la fibra. Estiramiento antes de rotura.
       </div>
-      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid #14b8a6;">
         <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: > 7%</div>
       </div>
-      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #ef4444;">
         <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: < 5%</div>
       </div>
-      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
-        Grupo: Variables Físicas
+      <div style="background: #eff6ff; padding: 10px; border-radius: 6px; margin-bottom: 8px;">
+        <div style="font-size: 11px; color: #1e40af; font-weight: 600; margin-bottom: 4px;">🎯 Ventaja Mecánica:</div>
+        <div style="font-size: 11px; color: #475569; line-height: 1.5;">Absorbe mejor los impactos mecánicos en el telar. Reduce roturas.</div>
+      </div>
+      <div style="background: #f3f4f6; padding: 8px; border-radius: 6px;">
+        <div style="font-size: 10px; color: #6b7280; line-height: 1.4;">💡 <strong>Factor Decisivo:</strong> Entre dos algodones con mismo STR, el que tenga mayor ELG siempre trabajará mejor.</div>
       </div>
     </div>
   `,
   MIC: `
-    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
-      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
+    <div style="padding: 14px; font-family: system-ui, -apple-system, sans-serif; max-width: 500px;">
+      <div style="font-weight: 700; font-size: 15px; color: #0f766e; margin-bottom: 10px; border-bottom: 2px solid #14b8a6; padding-bottom: 6px;">
         MIC - Micronaire
       </div>
-      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
-        Índice combinado de finura y madurez de la fibra.
+      <div style="font-size: 12px; color: #334155; margin-bottom: 10px; line-height: 1.6; font-weight: 600;">
+        Medida de permeabilidad al aire. Combina finura y madurez.
       </div>
-      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
-        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: 3.7 - 4.2</div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid #14b8a6;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: 3.7 - 4.2 (Ideal Denim)</div>
       </div>
-      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
-        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: < 3.4 o > 4.9</div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #ef4444;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: < 3.4 (Inmadura) o > 4.9 (Gruesa)</div>
       </div>
-      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
-        Grupo: Madurez y Finura
+      <div style="background: #fef3c7; padding: 10px; border-radius: 6px; margin-bottom: 8px;">
+        <div style="font-size: 11px; color: #92400e; font-weight: 600; margin-bottom: 4px;">⚠️ MIC Bajo (<3.4):</div>
+        <div style="font-size: 11px; color: #78350f; line-height: 1.5;">Fibra inmadura que colapsa. Forma Neps (puntos blancos que no se tiñen con índigo).</div>
+      </div>
+      <div style="background: #fff7ed; padding: 10px; border-radius: 6px; margin-bottom: 8px;">
+        <div style="font-size: 11px; color: #c2410c; font-weight: 600; margin-bottom: 4px;">⚠️ MIC Alto (>4.9):</div>
+        <div style="font-size: 11px; color: #9a3412; line-height: 1.5;">Fibras muy maduras pero gruesas. Menos fibras en sección transversal = hilo más débil.</div>
       </div>
     </div>
   `,
   MAT: `
-    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
-      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
+    <div style="padding: 14px; font-family: system-ui, -apple-system, sans-serif; max-width: 500px;">
+      <div style="font-weight: 700; font-size: 15px; color: #0f766e; margin-bottom: 10px; border-bottom: 2px solid #14b8a6; padding-bottom: 6px;">
         MAT - Maturity Index
       </div>
-      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
-        Relación entre espesor de pared celular y diámetro.
+      <div style="font-size: 12px; color: #334155; margin-bottom: 10px; line-height: 1.6; font-weight: 600;">
+        Proporción de celulosa en la fibra. Mide desarrollo de pared celular.
       </div>
-      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
-        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: > 0.85</div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid #14b8a6;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: > 0.85 (Fibra "llena")</div>
       </div>
-      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
-        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: < 0.75</div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #ef4444;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: < 0.75 (Inmadura)</div>
       </div>
-      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
-        Grupo: Madurez y Finura
+      <div style="background: #fef3c7; padding: 10px; border-radius: 6px;">
+        <div style="font-size: 11px; color: #92400e; font-weight: 600; margin-bottom: 4px;">👖 Impacto Denim:</div>
+        <div style="font-size: 11px; color: #78350f; line-height: 1.5;">MAT bajo = Hilo moteado después del teñido índigo. Fibras inmaduras reflejan luz diferente.</div>
       </div>
     </div>
   `,
   RD: `
-    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
-      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
-        Rd - Reflectance
+    <div style="padding: 14px; font-family: system-ui, -apple-system, sans-serif; max-width: 500px;">
+      <div style="font-weight: 700; font-size: 15px; color: #0f766e; margin-bottom: 10px; border-bottom: 2px solid #14b8a6; padding-bottom: 6px;">
+        Rd - Reflectance (Brillo)
       </div>
-      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
-        Grado de brillo o reflectancia de la fibra.
+      <div style="font-size: 12px; color: #334155; margin-bottom: 10px; line-height: 1.6; font-weight: 600;">
+        Mide el brillo: blanco vs gris. Escala de Nickerson-Hunter.
       </div>
-      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
-        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: 75 - 80</div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid #14b8a6;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: 75 - 80 (Bright)</div>
       </div>
-      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #ef4444;">
         <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: < 70 (Grisáceo)</div>
       </div>
-      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
-        Grupo: Color y Apariencia
+      <div style="background: #eff6ff; padding: 10px; border-radius: 6px; margin-bottom: 8px;">
+        <div style="font-size: 11px; color: #1e40af; font-weight: 600; margin-bottom: 4px;">🎨 Combinación con +b:</div>
+        <div style="font-size: 11px; color: #475569; line-height: 1.5;">Rd y +b juntos definen el TIPO en carta Nickerson-Hunter. TIPO 41 = Estándar Denim.</div>
       </div>
     </div>
   `,
   PLUS_B: `
-    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
-      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
-        +b - Yellowness
+    <div style="padding: 14px; font-family: system-ui, -apple-system, sans-serif; max-width: 500px;">
+      <div style="font-weight: 700; font-size: 15px; color: #0f766e; margin-bottom: 10px; border-bottom: 2px solid #14b8a6; padding-bottom: 6px;">
+        +b - Yellowness (Amarillamiento)
       </div>
-      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
-        Grado de amarillamiento (pigmentación amarillenta).
+      <div style="font-size: 12px; color: #334155; margin-bottom: 10px; line-height: 1.6; font-weight: 600;">
+        Mide degradación: blanco vs amarillo. Indica envejecimiento.
       </div>
-      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid #14b8a6;">
         <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: 7 - 9</div>
       </div>
-      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
-        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: > 12 (Amarillento)</div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #ef4444;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: > 12 (Muy amarillento)</div>
       </div>
-      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
-        Grupo: Color y Apariencia
+      <div style="background: #fef3c7; padding: 10px; border-radius: 6px; margin-bottom: 8px;">
+        <div style="font-size: 11px; color: #92400e; font-weight: 600; margin-bottom: 4px;">⚠️ Causa:</div>
+        <div style="font-size: 11px; color: #78350f; line-height: 1.5;">+b alto = Algodón expuesto a lluvia o calor excesivo en campo. Debilita paredes de fibra.</div>
+      </div>
+      <div style="background: #f3f4f6; padding: 8px; border-radius: 6px;">
+        <div style="font-size: 10px; color: #6b7280; line-height: 1.4;">💡 <strong>Impacto Índigo:</strong> +b alto altera tono final del azul, "ensuciando" el color deseado en Denim.</div>
       </div>
     </div>
   `,
@@ -640,91 +677,121 @@ const hviTooltips = {
     </div>
   `,
   TrCNT: `
-    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
-      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
-        TrCNT - Trash Count
+    <div style="padding: 14px; font-family: system-ui, -apple-system, sans-serif; max-width: 500px;">
+      <div style="font-weight: 700; font-size: 15px; color: #0f766e; margin-bottom: 10px; border-bottom: 2px solid #14b8a6; padding-bottom: 6px;">
+        TrCNT - Trash Count (Cantidad)
       </div>
-      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
-        Número total de partículas de basura en la muestra.
+      <div style="font-size: 12px; color: #334155; margin-bottom: 10px; line-height: 1.6; font-weight: 600;">
+        Número de partículas de basura detectadas en la muestra.
       </div>
-      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
-        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: < 15</div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid #14b8a6;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: < 15 partículas</div>
       </div>
-      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
-        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: > 50</div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #ef4444;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: > 50 partículas</div>
       </div>
-      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
-        Grupo: Impurezas (Trash)
+      <div style="background: #eff6ff; padding: 10px; border-radius: 6px; margin-bottom: 8px;">
+        <div style="font-size: 11px; color: #1e40af; font-weight: 600; margin-bottom: 4px;">🔌 Interpretación:</div>
+        <div style="font-size: 11px; color: #475569; line-height: 1.5;">TrCNT alto + TrAR bajo = Basura muy fragmentada (pimienta), MUY difícil de limpiar en apertura.</div>
       </div>
     </div>
   `,
   TrAR: `
-    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
-      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
-        TrAR - Trash Area
+    <div style="padding: 14px; font-family: system-ui, -apple-system, sans-serif; max-width: 500px;">
+      <div style="font-weight: 700; font-size: 15px; color: #0f766e; margin-bottom: 10px; border-bottom: 2px solid #14b8a6; padding-bottom: 6px;">
+        TrAR - Trash Area (Área)
       </div>
-      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
-        Porcentaje del área total cubierto por basura.
+      <div style="font-size: 12px; color: #334155; margin-bottom: 10px; line-height: 1.6; font-weight: 600;">
+        Área superficial cubierta por basura en la muestra (%).
       </div>
-      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid #14b8a6;">
         <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: < 0.20%</div>
       </div>
-      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #ef4444;">
         <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: > 0.60%</div>
       </div>
-      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
-        Grupo: Impurezas (Trash)
+      <div style="background: #eff6ff; padding: 10px; border-radius: 6px; margin-bottom: 8px;">
+        <div style="font-size: 11px; color: #1e40af; font-weight: 600; margin-bottom: 4px;">🔍 Análisis Combinado:</div>
+        <div style="font-size: 11px; color: #475569; line-height: 1.5;">TrCNT bajo + TrAR alto = Pocas partículas pero grandes (hojas). Más fácil de limpiar que pimienta.</div>
       </div>
     </div>
   `,
   TRID: `
-    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
-      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
+    <div style="padding: 14px; font-family: system-ui, -apple-system, sans-serif; max-width: 500px;">
+      <div style="font-weight: 700; font-size: 15px; color: #0f766e; margin-bottom: 10px; border-bottom: 2px solid #14b8a6; padding-bottom: 6px;">
         TRID - Trash ID / Grade
       </div>
-      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
-        Grado comercial de basura (basado en TrAR).
+      <div style="font-size: 12px; color: #334155; margin-bottom: 10px; line-height: 1.6; font-weight: 600;">
+        Clasificación visual del 1 al 7. Basado principalmente en TrAR.
       </div>
-      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
-        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Rango: 1 (Limpio) al 7 (Muy sucio)</div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid #14b8a6;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ 1-2: Limpio (Ideal hilos finos)</div>
       </div>
-      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
-        Grupo: Impurezas (Trash)
+      <div style="background: #fef3c7; padding: 8px; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid #f59e0b;">
+        <div style="font-size: 11px; color: #92400e; font-weight: 500;">● 4-5: Manejable para Denim</div>
+      </div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #ef4444;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ 6-7: Muy sucio (Evitar)</div>
+      </div>
+      <div style="background: #f3f4f6; padding: 8px; border-radius: 6px;">
+        <div style="font-size: 10px; color: #6b7280; line-height: 1.4;">💡 <strong>Aplicación:</strong> TRID 4-5 es aceptable para Denim. Para hilos Flame o finos, buscar TRID 1-2.</div>
       </div>
     </div>
   `,
   SCI: `
-    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
-      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
+    <div style="padding: 14px; font-family: system-ui, -apple-system, sans-serif; max-width: 520px;">
+      <div style="font-weight: 700; font-size: 15px; color: #0f766e; margin-bottom: 10px; border-bottom: 2px solid #14b8a6; padding-bottom: 6px;">
         SCI - Spinning Consistency Index
       </div>
-      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
-        Índice ponderado para predecir consistencia de hilado.
+      <div style="font-size: 12px; color: #334155; margin-bottom: 10px; line-height: 1.6; font-weight: 600;">
+        Fórmula matemática ponderada. La "nota final" del lote.
       </div>
-      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
-        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Excelente: > 140</div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid #14b8a6;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Excelente: > 140 (Premium)</div>
       </div>
-      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
-        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Pobre: < 100</div>
+      <div style="background: #fef3c7; padding: 8px; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid #f59e0b;">
+        <div style="font-size: 11px; color: #92400e; font-weight: 500;">● Estándar: 100-140</div>
       </div>
-      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
-        Grupo: Gestión y Cálculo
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #ef4444;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Pobre: < 100 (Riesgoso)</div>
+      </div>
+      <div style="background: #eff6ff; padding: 10px; border-radius: 6px; margin-bottom: 8px;">
+        <div style="font-size: 11px; color: #1e40af; font-weight: 600; margin-bottom: 4px;">📊 Ponderación:</div>
+        <div style="font-size: 11px; color: #475569; line-height: 1.5;">Da más peso a STR (resistencia) y UHML (longitud). Resume todas las variables en un solo número.</div>
+      </div>
+      <div style="background: #f3f4f6; padding: 10px; border-radius: 6px;">
+        <div style="font-size: 11px; color: #374151; font-weight: 600; margin-bottom: 6px;">📎 Clasificación Sugerida en Almacén:</div>
+        <div style="font-size: 10px; color: #6b7280; line-height: 1.4; margin-bottom: 3px;">• <strong>SCI > 135:</strong> Lotes para hilos Flame (perfección requerida)</div>
+        <div style="font-size: 10px; color: #6b7280; line-height: 1.4; margin-bottom: 3px;">• <strong>SCI 110-134:</strong> Lotes para Denim estándar</div>
+        <div style="font-size: 10px; color: #6b7280; line-height: 1.4;">• <strong>SCI < 110:</strong> Tramas baja exigencia o mezclas</div>
       </div>
     </div>
   `,
   MST: `
-    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
-      <div style="font-weight: 600; font-size: 14px; color: #0f766e; margin-bottom: 8px; border-bottom: 2px solid #14b8a6; padding-bottom: 4px;">
-        MST - Moisture
+    <div style="padding: 14px; font-family: system-ui, -apple-system, sans-serif; max-width: 520px;">
+      <div style="font-weight: 700; font-size: 15px; color: #0f766e; margin-bottom: 10px; border-bottom: 2px solid #14b8a6; padding-bottom: 6px;">
+        MST - Moisture (Humedad)
       </div>
-      <div style="font-size: 12px; color: #334155; margin-bottom: 8px; line-height: 1.5;">
-        Contenido de humedad de la muestra analizada.
+      <div style="font-size: 12px; color: #334155; margin-bottom: 10px; line-height: 1.6; font-weight: 600;">
+        El "termómetro de confianza" del análisis. Fibra higroscópica.
       </div>
-      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px;">
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #14b8a6;">
         <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Rango estándar HVI: 6.5% - 8.0%</div>
       </div>
-      <div style="font-size: 10px; color: #64748b; font-style: italic; margin-top: 8px;">
-        Grupo: Gestión y Cálculo
+      <div style="background: #eff6ff; padding: 10px; border-radius: 6px; margin-bottom: 8px;">
+        <div style="font-size: 11px; color: #1e40af; font-weight: 600; margin-bottom: 4px;">💧 Propiedad Clave:</div>
+        <div style="font-size: 11px; color: #475569; line-height: 1.5;">El algodón es higroscópico. Sus propiedades físicas cambian con el agua.</div>
+      </div>
+      <div style="background: #fef3c7; padding: 10px; border-radius: 6px; margin-bottom: 8px;">
+        <div style="font-size: 11px; color: #92400e; font-weight: 600; margin-bottom: 4px;">⚠️ MST Bajo (<6%):</div>
+        <div style="font-size: 11px; color: #78350f; line-height: 1.5;">Fibra muy seca. HVI reportará fibra más corta y débil de lo real. Medición poco confiable.</div>
+      </div>
+      <div style="background: #fff7ed; padding: 10px; border-radius: 6px; margin-bottom: 8px;">
+        <div style="font-size: 11px; color: #c2410c; font-weight: 600; margin-bottom: 4px;">⚠️ MST Alto (>8%):</div>
+        <div style="font-size: 11px; color: #9a3412; line-height: 1.5;">Fibra húmeda. Parecerá más fuerte pero será difícil de limpiar en proceso.</div>
+      </div>
+      <div style="background: #f3f4f6; padding: 8px; border-radius: 6px;">
+        <div style="font-size: 10px; color: #6b7280; line-height: 1.4;">💡 <strong>Regla:</strong> Por cada 1% de aumento en humedad, STR aumenta ~1 unidad. MST fuera de rango invalida precisión del HVI.</div>
       </div>
     </div>
   `
@@ -825,6 +892,41 @@ const groupTooltips = {
       </div>
     </div>
   `
+}
+
+// Funciones para determinar color de las celdas según rangos
+const getColorClass = (value, variable) => {
+  if (!value || value === '—' || value === '') return ''
+  const numValue = parseFloat(String(value).replace(',', '.'))
+  if (isNaN(numValue)) return ''
+  
+  const ranges = {
+    UHML: { optimal: numValue > 29, critical: numValue < 26 },
+    UI: { optimal: numValue > 83, critical: numValue < 79 },
+    SF: { optimal: numValue < 6, critical: numValue > 12 },
+    STR: { optimal: numValue > 30, critical: numValue < 24 },
+    ELG: { optimal: numValue > 7, critical: numValue < 5 },
+    MIC: { optimal: numValue >= 3.7 && numValue <= 4.2, critical: numValue < 3.4 || numValue > 4.9 },
+    MAT: { optimal: numValue > 0.85, critical: numValue < 0.75 },
+    RD: { optimal: numValue >= 75 && numValue <= 80, critical: numValue < 70 },
+    PLUS_B: { optimal: numValue >= 7 && numValue <= 9, critical: numValue > 12 },
+    TRCNT: { optimal: numValue < 15, critical: numValue > 50 },
+    TRAR: { optimal: numValue < 0.20, critical: numValue > 0.60 },
+    TRID: { optimal: numValue <= 2, critical: numValue >= 6 },
+    SCI: { optimal: numValue > 140, critical: numValue < 100 },
+    MST: { optimal: numValue >= 6.5 && numValue <= 8.0, critical: numValue < 6.0 || numValue > 8.5 }
+  }
+  
+  const range = ranges[variable]
+  if (!range) return ''
+  
+  if (range.optimal) {
+    return 'bg-green-100 text-green-800 font-semibold'
+  } else if (range.critical) {
+    return 'bg-red-100 text-red-800 font-semibold'
+  } else {
+    return 'bg-yellow-50 text-yellow-800'
+  }
 }
 
 // Función para quitar ceros a la izquierda
