@@ -153,6 +153,43 @@ const getYesterday = () => {
 
 const fechaSeleccionada = ref(getYesterday())
 
+const toNumber = (value) => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0
+  }
+
+  if (value === null || value === undefined) {
+    return 0
+  }
+
+  let normalized = String(value).trim().replace(/\s+/g, '')
+  if (!normalized) return 0
+
+  const hasComma = normalized.includes(',')
+  const hasDot = normalized.includes('.')
+
+  if (hasComma && hasDot) {
+    if (normalized.lastIndexOf(',') > normalized.lastIndexOf('.')) {
+      normalized = normalized.replace(/\./g, '').replace(',', '.')
+    } else {
+      normalized = normalized.replace(/,/g, '')
+    }
+  } else if (hasComma) {
+    if (/^-?\d{1,3}(,\d{3})+$/.test(normalized)) {
+      normalized = normalized.replace(/,/g, '')
+    } else {
+      normalized = normalized.replace(',', '.')
+    }
+  } else if (hasDot) {
+    if (/^-?\d{1,3}(\.\d{3})+$/.test(normalized)) {
+      normalized = normalized.replace(/\./g, '')
+    }
+  }
+
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
 const cargarDatos = async () => {
   cargando.value = true
   try {
@@ -221,16 +258,16 @@ const chartData = computed(() => {
   }
   
   // Encontrar el valor máximo
-  const maxValue = Math.max(...datos.value.map(d => d.TotalKg))
+  const maxValue = Math.max(...datos.value.map(d => toNumber(d.TotalKg)))
   
   return {
     labels: datos.value.map(d => splitLabel(d.DESC_MOTIVO)),
     datasets: [
       {
         label: 'Kg Residuos',
-        data: datos.value.map(d => d.TotalKg),
+        data: datos.value.map(d => toNumber(d.TotalKg)),
         backgroundColor: datos.value.map((d, i) => 
-          d.TotalKg === maxValue ? '#dc2626' : (i % 2 === 0 ? '#0f172a' : '#3b82f6')
+          toNumber(d.TotalKg) === maxValue ? '#dc2626' : (i % 2 === 0 ? '#0f172a' : '#3b82f6')
         ),
         borderRadius: 4,
       }
@@ -240,7 +277,7 @@ const chartData = computed(() => {
 
 const chartOptions = computed(() => {
   const [year, month, day] = fechaSeleccionada.value.split('-')
-  const total = datos.value.reduce((sum, d) => sum + d.TotalKg, 0)
+  const total = datos.value.reduce((sum, d) => sum + toNumber(d.TotalKg), 0)
   
   // Función para formatear fecha a dd-mmm-yy
   const formatearFecha = (d, m, y) => {
@@ -325,7 +362,7 @@ const chartDataS = computed(() => {
   if (datosS.value.length === 0) return null
   
   // Encontrar el valor máximo
-  const maxValue = Math.max(...datosS.value.map(d => d.count))
+  const maxValue = Math.max(...datosS.value.map(d => toNumber(d.count)))
   const colores = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6']
   
   return {
@@ -333,9 +370,9 @@ const chartDataS = computed(() => {
     datasets: [
       {
         label: 'Cantidad de Registros',
-        data: datosS.value.map(d => d.count),
+        data: datosS.value.map(d => toNumber(d.count)),
         backgroundColor: datosS.value.map((d, i) => 
-          d.count === maxValue ? '#dc2626' : colores[i % colores.length]
+          toNumber(d.count) === maxValue ? '#dc2626' : colores[i % colores.length]
         ),
         borderRadius: 4,
       }
@@ -344,7 +381,7 @@ const chartDataS = computed(() => {
 })
 
 const chartOptionsS = computed(() => {
-  const total = datosS.value.reduce((sum, d) => sum + d.count, 0)
+  const total = datosS.value.reduce((sum, d) => sum + toNumber(d.count), 0)
   
   return {
     responsive: true,
@@ -433,16 +470,16 @@ const chartDataDia = computed(() => {
   }
   
   // Encontrar el valor máximo
-  const maxValue = Math.max(...datosDia.value.map(d => d.TotalKg))
+  const maxValue = Math.max(...datosDia.value.map(d => toNumber(d.TotalKg)))
   
   return {
     labels: datosDia.value.map(d => splitLabel(d.DESC_MOTIVO)),
     datasets: [
       {
         label: 'Kg Residuos',
-        data: datosDia.value.map(d => d.TotalKg),
+        data: datosDia.value.map(d => toNumber(d.TotalKg)),
         backgroundColor: datosDia.value.map((d, i) => 
-          d.TotalKg === maxValue ? '#dc2626' : (i % 2 === 0 ? '#0f172a' : '#3b82f6')
+          toNumber(d.TotalKg) === maxValue ? '#dc2626' : (i % 2 === 0 ? '#0f172a' : '#3b82f6')
         ),
         borderRadius: 4,
       }
@@ -452,7 +489,7 @@ const chartDataDia = computed(() => {
 
 const chartOptionsDia = computed(() => {
   const [year, month, day] = fechaSeleccionada.value.split('-')
-  const total = datosDia.value.reduce((sum, d) => sum + d.TotalKg, 0)
+  const total = datosDia.value.reduce((sum, d) => sum + toNumber(d.TotalKg), 0)
   
   const formatearFecha = (d, m, y) => {
     const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
@@ -535,7 +572,7 @@ const chartDataDiaS = computed(() => {
   if (datosDiaS.value.length === 0) return null
   
   // Encontrar el valor máximo
-  const maxValue = Math.max(...datosDiaS.value.map(d => d.count))
+  const maxValue = Math.max(...datosDiaS.value.map(d => toNumber(d.count)))
   const colores = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6']
   
   return {
@@ -543,9 +580,9 @@ const chartDataDiaS = computed(() => {
     datasets: [
       {
         label: 'Cantidad de Registros',
-        data: datosDiaS.value.map(d => d.count),
+        data: datosDiaS.value.map(d => toNumber(d.count)),
         backgroundColor: datosDiaS.value.map((d, i) => 
-          d.count === maxValue ? '#dc2626' : colores[i % colores.length]
+          toNumber(d.count) === maxValue ? '#dc2626' : colores[i % colores.length]
         ),
         borderRadius: 4,
       }
@@ -554,7 +591,7 @@ const chartDataDiaS = computed(() => {
 })
 
 const chartOptionsDiaS = computed(() => {
-  const total = datosDiaS.value.reduce((sum, d) => sum + d.count, 0)
+  const total = datosDiaS.value.reduce((sum, d) => sum + toNumber(d.count), 0)
   
   return {
     responsive: true,
@@ -625,7 +662,7 @@ const chartDataEstopaAzul = computed(() => {
   if (datosEstopaAzul.value.length === 0) return null
   
   // Encontrar el valor máximo
-  const maxValue = Math.max(...datosEstopaAzul.value.map(d => d.KgResiduo))
+  const maxValue = Math.max(...datosEstopaAzul.value.map(d => toNumber(d.KgResiduo)))
   
   return {
     labels: datosEstopaAzul.value.map(d => {
@@ -636,9 +673,9 @@ const chartDataEstopaAzul = computed(() => {
     datasets: [
       {
         label: 'Kg de Estopa Azul',
-        data: datosEstopaAzul.value.map(d => d.KgResiduo),
+        data: datosEstopaAzul.value.map(d => toNumber(d.KgResiduo)),
         backgroundColor: datosEstopaAzul.value.map((d) => 
-          d.KgResiduo === maxValue ? '#dc2626' : '#3b82f6'
+          toNumber(d.KgResiduo) === maxValue ? '#dc2626' : '#3b82f6'
         ),
         borderRadius: 4,
       }
@@ -647,7 +684,7 @@ const chartDataEstopaAzul = computed(() => {
 })
 
 const chartOptionsEstopaAzul = computed(() => {
-  const total = datosEstopaAzul.value.reduce((sum, d) => sum + d.KgResiduo, 0)
+  const total = datosEstopaAzul.value.reduce((sum, d) => sum + toNumber(d.KgResiduo), 0)
   const promedio = datosEstopaAzul.value.length > 0 ? (total / datosEstopaAzul.value.length).toFixed(0) : 0
   
   return {
@@ -727,7 +764,7 @@ const chartDataEstopaAzulDia = computed(() => {
   // Para el día, mostrar los datos diarios del mes seleccionado
   if (datosEstopaAzulDiario.value.length === 0) return null
   
-  const maxValue = Math.max(...datosEstopaAzulDiario.value.map(d => d.KgResiduo))
+  const maxValue = Math.max(...datosEstopaAzulDiario.value.map(d => toNumber(d.KgResiduo)))
   
   return {
     labels: datosEstopaAzulDiario.value.map(d => {
@@ -738,9 +775,9 @@ const chartDataEstopaAzulDia = computed(() => {
     datasets: [
       {
         label: 'Kg de Estopa Azul',
-        data: datosEstopaAzulDiario.value.map(d => d.KgResiduo),
+        data: datosEstopaAzulDiario.value.map(d => toNumber(d.KgResiduo)),
         backgroundColor: datosEstopaAzulDiario.value.map((d) => 
-          d.KgResiduo === maxValue ? '#dc2626' : '#10b981'
+          toNumber(d.KgResiduo) === maxValue ? '#dc2626' : '#10b981'
         ),
         borderRadius: 4,
       }
@@ -749,7 +786,7 @@ const chartDataEstopaAzulDia = computed(() => {
 })
 
 const chartOptionsEstopaAzulDia = computed(() => {
-  const total = datosEstopaAzulDiario.value.reduce((sum, d) => sum + d.KgResiduo, 0)
+  const total = datosEstopaAzulDiario.value.reduce((sum, d) => sum + toNumber(d.KgResiduo), 0)
   const [year, month, day] = fechaSeleccionada.value.split('-')
   
   // Función para formatear fecha a dd-mmm-yy
@@ -847,53 +884,53 @@ const copiarParaWhatsApp = async () => {
     
     // Residuos del periodo
     if (datos.value.length > 0) {
-      const total = datos.value.reduce((sum, d) => sum + d.TotalKg, 0)
+      const total = datos.value.reduce((sum, d) => sum + toNumber(d.TotalKg), 0)
       mensaje += `📦 *RESIDUOS DEL PERIODO (${mesNombre})*\n`
       mensaje += `Total: *${Math.round(total).toLocaleString()} kg*\n\n`
       
       datos.value.forEach(d => {
-        const porcentaje = ((d.TotalKg / total) * 100).toFixed(1)
-        mensaje += `• ${d.DESC_MOTIVO}: ${Math.round(d.TotalKg).toLocaleString()} kg (${porcentaje}%)\n`
+        const porcentaje = total > 0 ? ((toNumber(d.TotalKg) / total) * 100).toFixed(1) : '0.0'
+        mensaje += `• ${d.DESC_MOTIVO}: ${Math.round(toNumber(d.TotalKg)).toLocaleString()} kg (${porcentaje}%)\n`
       })
       mensaje += `\n`
     }
     
     // Producción del periodo
     if (datosS.value.length > 0) {
-      const total = datosS.value.reduce((sum, d) => sum + d.count, 0)
+      const total = datosS.value.reduce((sum, d) => sum + toNumber(d.count), 0)
       mensaje += `🏭 *PRODUCCIÓN ÍNDIGO DEL PERIODO*\n`
       mensaje += `Total registros: *${total.toLocaleString()}*\n\n`
       
       datosS.value.forEach(d => {
-        const porcentaje = ((d.count / total) * 100).toFixed(1)
-        mensaje += `• ${d.S}: ${d.count.toLocaleString()} (${porcentaje}%)\n`
+        const porcentaje = total > 0 ? ((toNumber(d.count) / total) * 100).toFixed(1) : '0.0'
+        mensaje += `• ${d.S}: ${toNumber(d.count).toLocaleString()} (${porcentaje}%)\n`
       })
       mensaje += `\n`
     }
     
     // Residuos del día
     if (datosDia.value.length > 0) {
-      const total = datosDia.value.reduce((sum, d) => sum + d.TotalKg, 0)
+      const total = datosDia.value.reduce((sum, d) => sum + toNumber(d.TotalKg), 0)
       mensaje += `━━━━━━━━━━━━━━━━━━━━━━\n`
       mensaje += `📦 *RESIDUOS DEL DÍA ${day}/${month}/${year}*\n`
       mensaje += `Total: *${Math.round(total).toLocaleString()} kg*\n\n`
       
       datosDia.value.forEach(d => {
-        const porcentaje = ((d.TotalKg / total) * 100).toFixed(1)
-        mensaje += `• ${d.DESC_MOTIVO}: ${Math.round(d.TotalKg).toLocaleString()} kg (${porcentaje}%)\n`
+        const porcentaje = total > 0 ? ((toNumber(d.TotalKg) / total) * 100).toFixed(1) : '0.0'
+        mensaje += `• ${d.DESC_MOTIVO}: ${Math.round(toNumber(d.TotalKg)).toLocaleString()} kg (${porcentaje}%)\n`
       })
       mensaje += `\n`
     }
     
     // Producción del día
     if (datosDiaS.value.length > 0) {
-      const total = datosDiaS.value.reduce((sum, d) => sum + d.count, 0)
+      const total = datosDiaS.value.reduce((sum, d) => sum + toNumber(d.count), 0)
       mensaje += `🏭 *PRODUCCIÓN ÍNDIGO DEL DÍA*\n`
       mensaje += `Total registros: *${total.toLocaleString()}*\n\n`
       
       datosDiaS.value.forEach(d => {
-        const porcentaje = ((d.count / total) * 100).toFixed(1)
-        mensaje += `• ${d.S}: ${d.count.toLocaleString()} (${porcentaje}%)\n`
+        const porcentaje = total > 0 ? ((toNumber(d.count) / total) * 100).toFixed(1) : '0.0'
+        mensaje += `• ${d.S}: ${toNumber(d.count).toLocaleString()} (${porcentaje}%)\n`
       })
     }
     
