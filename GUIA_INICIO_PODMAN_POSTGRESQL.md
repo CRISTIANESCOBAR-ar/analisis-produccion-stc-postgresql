@@ -7,6 +7,22 @@
 
 ---
 
+## 🔑 Credenciales de Acceso
+
+### PostgreSQL
+- **Host:** localhost
+- **Puerto:** 5433 (desde el host) / 5432 (interno)
+- **Base de datos:** `stc_produccion`
+- **Usuario:** `stc_user`
+- **Contraseña:** `stc_password_2026`
+
+### pgAdmin (Administración Visual)
+- **URL:** http://localhost:5050/browser/
+- **Email:** admin@stc.com
+- **Contraseña:** admin123
+
+---
+
 ## Pasos para Iniciar el Sistema
 
 ### 1. Iniciar Podman Machine
@@ -103,16 +119,16 @@ Abre tu navegador en: **http://localhost:5050/browser/**
 - **Email:** admin@stc.com
 - **Contraseña:** admin123
 
-**Configurar conexión a PostgreSQL:**
+**Configurar conexión a PostgreSQL en pgAdmin:**
 1. Click derecho en "Servers" → "Register" → "Server"
 2. En la pestaña "General":
-   - Name: `STC Produccion`
+   - **Name:** `STC Produccion`
 3. En la pestaña "Connection":
-   - Host name/address: `postgres` (nombre del contenedor)
-   - Port: `5432`
-   - Maintenance database: `stc_produccion`
-   - Username: `stc_user`
-   - Password: `stc_password_2026`
+   - **Host name/address:** `postgres` (nombre del contenedor)
+   - **Port:** `5432`
+   - **Maintenance database:** `stc_produccion`
+   - **Username:** `stc_user`
+   - **Password:** `stc_password_2026` ⚠️ No guardar la contraseña por seguridad
 4. Click en "Save"
 
 > **Nota:** pgAdmin es opcional. Solo inícialo si necesitas administrar la base de datos visualmente.

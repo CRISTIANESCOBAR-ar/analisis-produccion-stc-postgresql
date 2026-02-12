@@ -1,68 +1,90 @@
-# Informe: PostgreSQL con Podman para STC-Producción-v2
+# Informe Ejecutivo y Técnico: PostgreSQL con Podman para STC-Producción-v2
 
-**Fecha:** 8 de febrero de 2026  
+**Fecha:** 12 de febrero de 2026  
 **Proyecto:** STC-Producción-v2  
-**Tecnologías:** PostgreSQL 15+ | Podman | Node.js
+**Tecnologías:** PostgreSQL 15+ | Podman | Node.js | Vue 3 | Vite | API REST
 
 ---
 
-## Resumen Ejecutivo
+## 1) Informe Ejecutivo (Gerencia)
 
-PostgreSQL en Podman ofrece una plataforma de datos moderna, segura y escalable, diseñada desde cero para cargas de produccion. La combinacion de PostgreSQL y contenedores rootless permite alta disponibilidad, rendimiento consistente y costos operativos bajos, sin restricciones de licencias ni dependencia de proveedores.
+### 1.1 Objetivo de negocio
+Modernizar la plataforma de datos del sistema STC para mejorar rendimiento, estabilidad y seguridad, reduciendo al mismo tiempo costos recurrentes de licencias y de operación.
+
+### 1.2 Recomendación ejecutiva
+Avanzar con PostgreSQL sobre Podman como estándar de base de datos para STC-Producción-v2, iniciando con un despliegue controlado y una migración por fases con plan de respaldo y reversa.
+
+### 1.3 Beneficios clave para la gerencia
+- **Ahorro de costos**: eliminación de licencias de base de datos y herramientas propietarias.
+- **Mayor capacidad operativa**: mejor concurrencia y tiempos de respuesta más bajos en consultas y cargas.
+- **Seguridad fortalecida**: ejecución rootless con Podman, control de acceso y hardening de la base.
+- **Escalabilidad**: crecimiento vertical/horizontal sin penalidades de licenciamiento.
+- **Continuidad operativa**: backup, restauración y monitoreo con procedimientos estandarizados.
+- **Continuidad funcional**: se contempló la adaptación de consultas históricas en planillas Excel con macros y consultas SQL desde Access al nuevo esquema en PostgreSQL.
+
+### 1.4 Impacto esperado
+| Indicador | Situación actual (baseline) | Objetivo con PostgreSQL + Podman |
+|---|---|---|
+| Tiempo medio de consulta | 250 ms | 80-120 ms |
+| Inserciones por segundo | 800 | 1500-2500 |
+| Costo licencias BD anual | USD 15.000 | USD 0 |
+| Concurrencia soportada | 50 usuarios | 200+ usuarios |
+
+### 1.5 Riesgos y mitigación (resumen)
+- **Riesgo de migración de datos** → mitigado con pruebas de integridad y conteos por tabla.
+- **Riesgo de indisponibilidad en corte** → mitigado con ventana planificada y plan de rollback.
+- **Riesgo de configuración insegura** → mitigado con hardening (TLS, `pg_hba.conf`, contraseñas robustas).
+
+### 1.6 Decisión requerida
+Aprobar la ejecución del plan técnico en 7 fases, con una ventana inicial estimada de 3-4 horas para puesta en marcha controlada.
+
+### 1.6.1 Alcance funcional cubierto
+- Migración de datos y consultas operativas a PostgreSQL.
+- Adaptación de reportes y lógica de consulta que provenían de Excel con macros.
+- Adaptación de consultas SQL utilizadas desde Access.
+- Integración de frontend Vue 3 con backend Node.js mediante API REST para explotación de datos.
+
+### 1.7 Resumen de 1 página (Comité)
+
+**Conclusión ejecutiva:** La migración a PostgreSQL sobre Podman es conveniente en costo, capacidad y seguridad, con riesgos controlables mediante pruebas y despliegue por fases.
+
+1. Se recomienda **aprobar** la implementación en producción con esquema de transición controlada.
+2. La solución elimina costos de licencias de base de datos y reduce dependencia de proveedor.
+3. Se espera mejora relevante en desempeño (consultas e inserciones) y en concurrencia.
+4. Podman rootless aporta una capa adicional de seguridad operativa en infraestructura.
+5. El plan contempla respaldo, restauración y monitoreo desde el primer ciclo de operación.
+6. La migración propuesta está dividida en 7 fases con validaciones en cada etapa.
+7. Se requiere ventana de mantenimiento inicial estimada en 3-4 horas.
+8. El impacto en continuidad se mitiga con plan de rollback y verificaciones post-corte.
+9. La operación diaria queda estandarizada con backups automáticos y tareas de mantenimiento.
+10. El mayor retorno proviene de ahorro anual + mayor capacidad de crecimiento sin licencias.
+
+#### Semáforo de riesgos (Comité)
+
+| Riesgo | Nivel | Mitigación | Estado recomendado |
+|---|---|---|---|
+| Integridad de datos en migración | 🟠 Medio | Conteos por tabla, checks referenciales, pruebas de muestra | Mitigado con validación previa |
+| Indisponibilidad durante corte | 🟠 Medio | Ventana planificada + plan de rollback | Aceptable con ventana aprobada |
+| Configuración de seguridad incompleta | 🟡 Bajo-Medio | TLS, `pg_hba.conf`, rotación de contraseñas, mínimos privilegios | Controlado si se ejecuta hardening |
+| Rendimiento en Windows/WSL2 | 🟡 Bajo-Medio | Ajustes de parámetros y evaluación futura en Linux para productivo | Monitorear primer mes |
+| Dependencia operativa del equipo | 🟢 Bajo | Documentación, checklist y procedimientos | Controlado |
+
+#### Decisión para comité (sí/no)
+
+**Sí recomendado**, condicionado a:
+- aprobar ventana de mantenimiento,
+- ejecutar checklist de hardening,
+- y cerrar validación de datos con acta de conformidad.
 
 ---
 
-## Ventajas Tecnicas y Operativas
+## 2) Arquitectura de Referencia
 
-### 1) Rendimiento y concurrencia
-- **MVCC**: lecturas y escrituras concurrentes sin bloqueos.
-- **Planificador avanzado**: optimizacion de consultas, CTEs, window functions, y agregaciones complejas.
-- **Indices especializados**: B-tree, Hash, GiST, SP-GiST, GIN, BRIN para distintos patrones de datos.
-- **Paralelismo**: ejecucion en paralelo para consultas pesadas y agregaciones.
-
-### 2) Escalabilidad
-- **Vertical**: escalado por CPU/RAM sin limites de licencias.
-- **Horizontal**: particionado nativo y extensiones para sharding si se requiere.
-- **Datos a gran escala**: millones de registros sin degradacion si se usan indices y mantenimiento adecuados.
-
-### 3) Integridad y disponibilidad
-- **Transacciones ACID**: consistencia garantizada.
-- **Replica streaming**: alta disponibilidad y lectura en replicas.
-- **Recuperacion**: WAL archiving y point-in-time recovery.
-
-### 4) Analitica y flexibilidad
-- **JSON/JSONB nativo**: mezcla de datos estructurados y semiestructurados.
-- **Full-text search**: busquedas avanzadas sin dependencias externas.
-- **Extensiones**: PostGIS, pg_stat_statements, pg_trgm, TimescaleDB, entre otras.
-
-### 5) Observabilidad y mantenimiento
-- **pg_stat_statements**: diagnostico de consultas lentas.
-- **Auto-vacuum**: mantenimiento automatico de tablas.
-- **Herramientas**: pgAdmin, psql, DBeaver.
-
-### 6) Contenedores con Podman
-- **Rootless**: mayor seguridad al ejecutar sin privilegios.
-- **Compatibilidad Docker**: comandos e imagenes equivalentes.
-- **Portabilidad**: mismo entorno en desarrollo, pruebas y produccion.
-- **Rollback rapido**: cambios reversibles con imagenes versionadas.
-
----
-
-## Costos Ahorrados
-
-### Ahorros directos
-- **Licencias de base de datos**: $10,000-50,000 USD/anio (estimado, segun tamaño y concurrencia).
-- **Licencias de alta disponibilidad**: $5,000-20,000 USD/anio.
-- **Herramientas de administracion**: $1,000-5,000 USD/anio (alternativas open source).
-
-### Ahorros operativos
-- **Infraestructura eficiente**: mejor uso de CPU/RAM gracias a MVCC y planificador.
-- **Automatizacion**: backups y mantenimiento programado reducen horas de operacion.
-- **Despliegues reproducibles**: menos tiempo de soporte por inconsistencias de entorno.
-
----
-
-## Arquitectura Propuesta
+**Componentes principales de la solución:**
+- **Base de datos:** PostgreSQL 15 en contenedor Podman (rootless).
+- **Backend/API:** Node.js con pool de conexiones PostgreSQL (driver pg).
+- **Frontend:** Vue 3 + Vite para visualización, filtros y exportaciones.
+- **Integraciones heredadas:** consultas históricas de Excel con macros y Access SQL mapeadas al modelo objetivo.
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -102,7 +124,9 @@ PostgreSQL en Podman ofrece una plataforma de datos moderna, segura y escalable,
 
 ---
 
-## Pasos de Implementacion en Servidor
+## 3) Detalle Técnico de Implementación (Paso a Paso)
+
+> Esta sección describe el procedimiento operativo completo para desplegar, asegurar, migrar y dejar monitoreada la solución PostgreSQL con Podman.
 
 ### FASE 1: Preparacion del Servidor (30-45 minutos)
 
@@ -477,6 +501,17 @@ npm run dev
 curl http://localhost:3000/api/uster/parametros
 curl http://localhost:3000/api/tensorapid/parametros
 ```
+
+#### 4.3 Adaptación de consultas heredadas (Excel y Access)
+
+1. **Inventariar consultas actuales** usadas en macros de Excel y archivos Access.
+2. **Mapear tablas/campos** origen-destino (Oracle/Access/planillas → PostgreSQL).
+3. **Reescribir SQL** para compatibilidad PostgreSQL (funciones, joins, fechas, casts).
+4. **Validar resultados** comparando totales y muestras con reportes actuales.
+5. **Actualizar conexiones** de consumo (ODBC/connection strings) hacia PostgreSQL.
+6. **Documentar equivalencias** consulta original vs consulta adaptada.
+
+**Resultado esperado:** continuidad de reportes operativos en Excel y Access, usando PostgreSQL como fuente única de datos.
 
 ---
 
