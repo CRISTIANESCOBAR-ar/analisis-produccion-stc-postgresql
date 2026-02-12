@@ -4726,6 +4726,7 @@ app.get('/api/detalle-mistura/:loteFiac', async (req, res) => {
     const sql = `
       SELECT 
         "LOTE_FIAC",
+        "MISTURA",
         "PRODUTOR",
         "LOTE",
         ${sqlParseNumber('"QTDE"')} AS "QTDE",

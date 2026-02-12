@@ -1,7 +1,7 @@
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-2">
+  <div class="h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 pt-2 px-2 pb-[2px] flex flex-col overflow-hidden">
     <!-- Header -->
-    <div class="mb-2 bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-slate-200 p-3">
+    <div class="mb-2 bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-slate-200 px-3 py-2">
       <div class="flex items-center justify-between flex-wrap gap-4">
         <div class="flex items-center gap-3">
           <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-md">
@@ -11,26 +11,47 @@
             <h1 class="text-2xl font-bold bg-gradient-to-r from-blue-700 to-indigo-700 bg-clip-text text-transparent">
               Detalle MISTURA por Lote de Hilandería
             </h1>
-            <p class="text-sm text-slate-600 mt-0.5">Análisis detallado de fardos por productor y lote</p>
           </div>
         </div>
 
         <!-- Input búsqueda -->
-        <div class="flex items-center gap-3">
-          <div class="relative">
+        <div class="flex items-center gap-2">
+          <div class="flex items-center gap-1">
+            <button
+              @click="navegarLoteAnterior"
+              v-tippy="{ content: 'LOTE anterior (←)', placement: 'bottom', theme: 'custom' }"
+              :disabled="cargando || !loteFiacInput"
+              class="inline-flex items-center justify-center w-8 h-8 border border-slate-300 bg-white text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
+            </button>
             <input
+              ref="inputLote"
               v-model="loteFiacInput"
               @keyup.enter="buscarDetalle"
+              @keydown="handleKeydown"
               type="number"
-              placeholder="Ingrese LOTE_FIAC"
-              class="w-48 px-4 py-2.5 pr-10 border-2 border-blue-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-medium"
+              placeholder="LOTE"
+              class="w-16 px-3 py-1.5 border border-slate-300 rounded-lg text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             />
-            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-blue-400">🔍</span>
+            <button
+              @click="navegarLoteSiguiente"
+              v-tippy="{ content: 'LOTE siguiente (→)', placement: 'bottom', theme: 'custom' }"
+              :disabled="cargando || !loteFiacInput"
+              class="inline-flex items-center justify-center w-8 h-8 border border-slate-300 bg-white text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </button>
           </div>
           <button
             @click="buscarDetalle"
+            v-tippy="{ content: 'Buscar LOTE_FIAC (Enter)', placement: 'bottom', theme: 'custom' }"
             :disabled="cargando || !loteFiacInput"
-            class="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed font-medium flex items-center gap-2"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-blue-200 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors duration-150 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <span v-if="cargando" class="animate-spin">⏳</span>
             <span>{{ cargando ? 'Buscando...' : 'Buscar' }}</span>
@@ -39,7 +60,7 @@
             v-if="datosAgrupados.length > 0"
             @click="exportarExcel"
             :disabled="exportando"
-            class="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl hover:from-emerald-700 hover:to-teal-700 transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed font-medium flex items-center gap-2"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-emerald-200 bg-emerald-50 text-emerald-700 rounded-lg text-sm font-medium hover:bg-emerald-100 transition-colors duration-150 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <span v-if="exportando" class="animate-spin">⏳</span>
             <span>{{ exportando ? 'Exportando...' : '📊 Exportar Excel' }}</span>
@@ -64,59 +85,69 @@
     </div>
 
     <!-- Tabla de resultados -->
-    <div v-else-if="datosAgrupados.length > 0" class="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
-      <div class="overflow-x-auto" style="padding: 0; margin: 0;">
-        <table class="w-full text-xs divide-y divide-slate-200" style="border-collapse: collapse; margin: 0;">
-          <thead class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white sticky top-0">
+    <div v-else-if="datosAgrupados.length > 0" class="flex-1 min-h-0 bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
+      <div class="h-full overflow-x-auto overflow-y-auto" style="padding: 0; margin: 0;">
+        <table class="w-full text-xs divide-y divide-slate-200" style="border-collapse: separate; border-spacing: 0; margin: 0; table-layout: fixed;">
+          <thead class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white sticky top-0 z-10">
+            <tr class="border-b border-blue-300">
+              <th colspan="8" class="px-1 py-1 text-center text-[10px] font-medium text-slate-500 bg-slate-100 border-r border-emerald-300"></th>
+              <th colspan="2" class="px-1 py-1 text-center text-[10px] font-semibold text-teal-700 bg-teal-50 border-r border-amber-300">Gestión y Cálculo</th>
+              <th colspan="2" class="px-1 py-1 text-center text-[10px] font-semibold text-amber-700 bg-amber-50 border-r border-sky-300">Madurez y Finura</th>
+              <th colspan="5" class="px-1 py-1 text-center text-[10px] font-semibold text-blue-700 bg-blue-50 border-r border-purple-300">Variables Físicas</th>
+              <th colspan="3" class="px-1 py-1 text-center text-[10px] font-semibold text-purple-700 bg-purple-50 border-r border-orange-300">Color y Apariencia</th>
+              <th colspan="2" class="px-1 py-1 text-center text-[10px] font-semibold text-orange-700 bg-orange-50">Impurezas (Trash)</th>
+            </tr>
             <tr>
-              <th class="px-3 py-1 text-left font-semibold text-xs leading-tight">Lote<br>Hilandería</th>
-              <th class="px-3 py-1 text-left font-semibold text-xs">Proveedor</th>
-              <th class="px-3 py-1 text-left font-semibold text-xs leading-tight">Lote<br>Proveedor</th>
-              <th class="px-3 py-1 text-center font-semibold text-xs">Calidad</th>
-              <th class="px-3 py-1 text-right font-semibold text-xs">Fardos</th>
-              <th class="px-3 py-1 text-right font-semibold text-xs">Total (kg)</th>
-              <th class="px-3 py-1 text-right font-semibold text-xs">%</th>
-              <th class="px-3 py-1 text-right font-semibold text-xs">SCI</th>
-              <th class="px-3 py-1 text-right font-semibold text-xs">MST</th>
-              <th class="px-3 py-1 text-right font-semibold text-xs">MIC</th>
-              <th class="px-3 py-1 text-right font-semibold text-xs">MAT</th>
-              <th class="px-3 py-1 text-right font-semibold text-xs">UHML</th>
-              <th class="px-3 py-1 text-right font-semibold text-xs">UI</th>
-              <th class="px-3 py-1 text-right font-semibold text-xs">SF</th>
-              <th class="px-3 py-1 text-right font-semibold text-xs">STR</th>
-              <th class="px-3 py-1 text-right font-semibold text-xs">ELG</th>
-              <th class="px-3 py-1 text-right font-semibold text-xs">RD</th>
-              <th class="px-3 py-1 text-right font-semibold text-xs">+B</th>
-              <th class="px-3 py-1 text-right font-semibold text-xs">TrCNT</th>
-              <th class="px-3 py-1 text-right font-semibold text-xs">TrAR</th>
-              <th class="px-3 py-1 text-right font-semibold text-xs">TRID</th>
+              <th class="px-1 py-1 text-left font-semibold text-xs leading-tight text-slate-700 bg-slate-100" style="width: 3rem; min-width: 3rem; max-width: 3rem; word-break: break-word;">Lote<br>Hilan<br>dería</th>
+              <th class="px-1 py-1 text-center font-semibold text-xs text-slate-700 bg-slate-100" style="width: 3rem; min-width: 3rem; max-width: 3rem; word-break: break-word;">Mezc</th>
+              <th class="pr-3 pl-2 py-1 text-left font-semibold text-xs text-slate-700 bg-slate-100" style="width: 6.25rem; min-width: 6.25rem; max-width: 6.25rem; word-break: break-word;">Proveedor</th>
+              <th class="px-0 py-1 text-left font-semibold text-xs leading-tight text-slate-700 bg-slate-100" style="width: 2rem; min-width: 2rem; max-width: 2rem; word-break: break-word;">Lote<br>Prov</th>
+              <th class="py-1 text-center font-semibold text-xs text-slate-700 bg-slate-100" style="width: 2rem; min-width: 2rem; max-width: 2rem; word-break: break-word;">Cali<br>dad</th>
+              <th class="px-1 py-1 text-right font-semibold text-xs text-slate-700 bg-slate-100" style="width: 2rem; min-width: 2rem; max-width: 2rem;">Fardos</th>
+              <th class="px-1 py-1 text-right font-semibold text-xs text-slate-700 bg-slate-100" style="width: 5rem; min-width: 5rem; max-width: 5rem;">Total (kg)</th>
+              <th class="px-1 py-1 text-right font-semibold text-xs text-slate-700 bg-slate-100 border-r border-emerald-300" style="width: 3rem; min-width: 3rem; max-width: 3rem;">%</th>
+              <th class="px-1 py-1 text-right font-semibold text-xs text-teal-700 bg-teal-50" style="width: 3rem; min-width: 3rem; max-width: 3rem;">SCI</th>
+              <th class="px-1 py-1 text-right font-semibold text-xs text-teal-700 bg-teal-50 border-r border-amber-300" style="width: 3rem; min-width: 3rem; max-width: 3rem;">MST</th>
+              <th class="px-1 py-1 text-right font-semibold text-xs text-amber-700 bg-amber-50" style="width: 3rem; min-width: 3rem; max-width: 3rem;">MIC</th>
+              <th class="px-1 py-1 text-right font-semibold text-xs text-amber-700 bg-amber-50 border-r border-sky-300" style="width: 3rem; min-width: 3rem; max-width: 3rem;">MAT</th>
+              <th class="px-1 py-1 text-right font-semibold text-xs text-blue-700 bg-blue-50" style="width: 3rem; min-width: 3rem; max-width: 3rem;">UHML</th>
+              <th class="px-1 py-1 text-right font-semibold text-xs text-blue-700 bg-blue-50" style="width: 3rem; min-width: 3rem; max-width: 3rem;">UI</th>
+              <th class="px-1 py-1 text-right font-semibold text-xs text-blue-700 bg-blue-50" style="width: 3rem; min-width: 3rem; max-width: 3rem;">SF</th>
+              <th class="px-1 py-1 text-right font-semibold text-xs text-blue-700 bg-blue-50" style="width: 3rem; min-width: 3rem; max-width: 3rem;">STR</th>
+              <th class="px-1 py-1 text-right font-semibold text-xs text-blue-700 bg-blue-50 border-r border-purple-300" style="width: 3rem; min-width: 3rem; max-width: 3rem;">ELG</th>
+              <th class="px-1 py-1 text-right font-semibold text-xs text-purple-700 bg-purple-50" style="width: 3rem; min-width: 3rem; max-width: 3rem;">RD</th>
+              <th class="px-1 py-1 text-right font-semibold text-xs text-purple-700 bg-purple-50" style="width: 3rem; min-width: 3rem; max-width: 3rem;">+B</th>
+              <th class="px-1 py-1 text-right font-semibold text-xs text-purple-700 bg-purple-50 border-r border-orange-300" style="width: 3rem; min-width: 3rem; max-width: 3rem;">TrCNT</th>
+              <th class="px-1 py-1 text-right font-semibold text-xs text-orange-700 bg-orange-50" style="width: 3rem; min-width: 3rem; max-width: 3rem;">TrAR</th>
+              <th class="px-1 py-1 text-right font-semibold text-xs text-orange-700 bg-orange-50" style="width: 3rem; min-width: 3rem; max-width: 3rem;">TRID</th>
             </tr>
           </thead>
           <tbody>
             <template v-for="(grupo, gIdx) in datosAgrupados" :key="'grupo-' + gIdx">
               <!-- Fila subtotal PRODUTOR -->
               <tr class="bg-gradient-to-r from-blue-50 to-indigo-50 border-t-2 border-blue-300 font-bold">
-                <td class="px-3 py-2 text-slate-700">{{ formatLoteFiac(grupo.loteFiac) }}</td>
-                <td class="px-3 py-2 text-slate-700">{{ grupo.produtor }}</td>
-                <td class="px-3 py-2 text-blue-700">Total</td>
-                <td class="px-3 py-2 text-center text-slate-700">-</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.qtde, 0) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.peso, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatPercent(grupo.subtotalProductor.porcentaje) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.SCI, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.MST, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.MIC, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.MAT, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.UHML, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.UI, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.SF, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.STR, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.ELG, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.RD, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.PLUS_B, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.TrCNT, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.TrAR, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.TRID, 0) }}</td>
+                <td class="px-1 py-2 text-slate-700" style="width: 3rem; min-width: 3rem; max-width: 3rem; word-break: break-word;">{{ formatLoteFiac(grupo.loteFiac) }}</td>
+                <td class="px-1 py-2 text-center text-blue-600 text-xs" style="width: 3rem; min-width: 3rem; max-width: 3rem; word-break: break-word;">{{ misturasUnicas }}</td>
+                <td class="pr-3 pl-2 py-2 text-slate-700" style="width: 6.25rem; min-width: 6.25rem; max-width: 6.25rem; word-break: break-word;">{{ grupo.produtor }}</td>
+                <td class="px-0 py-2 text-blue-700" style="width: 2rem; min-width: 2rem; max-width: 2rem; word-break: break-word;">Total</td>
+                <td class="py-2 text-center text-slate-700" style="width: 2rem; min-width: 2rem; max-width: 2rem; word-break: break-word;">-</td>
+                <td class="px-1 py-2 text-right text-slate-700" style="width: 2rem; min-width: 2rem; max-width: 2rem;">{{ formatNumber(grupo.subtotalProductor.qtde, 0) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700" style="width: 5rem; min-width: 5rem; max-width: 5rem;">{{ formatNumber(grupo.subtotalProductor.peso, 0) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700 border-r border-emerald-300">{{ formatPercent(grupo.subtotalProductor.porcentaje) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.SCI, 1) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700 border-r border-amber-300">{{ formatNumber(grupo.subtotalProductor.MST, 1) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.MIC, 2) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700 border-r border-sky-300">{{ formatNumber(grupo.subtotalProductor.MAT, 2) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.UHML, 2) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.UI, 2) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.SF, 2) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.STR, 2) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700 border-r border-purple-300">{{ formatNumber(grupo.subtotalProductor.ELG, 2) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.RD, 2) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.PLUS_B, 2) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700 border-r border-orange-300">{{ formatNumber(grupo.subtotalProductor.TrCNT, 2) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.TrAR, 2) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.TRID, 0) }}</td>
               </tr>
 
               <!-- Filas LOTE + QUALIDADE -->
@@ -125,55 +156,59 @@
                 :key="'lote-' + gIdx + '-' + lIdx"
                 class="border-t border-slate-100 hover:bg-blue-50/30 transition-colors duration-150"
               >
-                <td class="px-3 py-2 text-slate-700">{{ formatLoteFiac(grupo.loteFiac) }}</td>
-                <td class="px-3 py-2 text-slate-700"></td>
-                <td class="px-3 py-2 pl-4 text-slate-700">{{ loteGrupo.lote }}</td>
-                <td class="px-3 py-2 text-center text-slate-700">{{ loteGrupo.qualidade }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.qtde, 0) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.peso, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatPercent(loteGrupo.subtotalLote.porcentaje) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.SCI, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.MST, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.MIC, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.MAT, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.UHML, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.UI, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.SF, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.STR, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.ELG, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.RD, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.PLUS_B, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.TrCNT, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.TrAR, 2) }}</td>
-                <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.TRID, 0) }}</td>
+                <td class="px-1 py-2 text-slate-700" style="width: 3rem; min-width: 3rem; max-width: 3rem; word-break: break-word;">{{ formatLoteFiac(grupo.loteFiac) }}</td>
+                <td class="px-1 py-2 text-center text-slate-400" style="width: 3rem; min-width: 3rem; max-width: 3rem; word-break: break-word;">-</td>
+                <td class="pr-3 pl-2 py-2 text-slate-700" style="width: 6.25rem; min-width: 6.25rem; max-width: 6.25rem; word-break: break-word;"></td>
+                <td class="px-0 py-2 text-slate-700" style="width: 2rem; min-width: 2rem; max-width: 2rem; word-break: break-word;">{{ loteGrupo.lote }}</td>
+                <td class="py-2 text-center text-slate-700" style="width: 2rem; min-width: 2rem; max-width: 2rem; word-break: break-word;">{{ loteGrupo.qualidade }}</td>
+                <td class="px-1 py-2 text-right text-slate-700" style="width: 2rem; min-width: 2rem; max-width: 2rem;">{{ formatNumber(loteGrupo.subtotalLote.qtde, 0) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700" style="width: 5rem; min-width: 5rem; max-width: 5rem;">{{ formatNumber(loteGrupo.subtotalLote.peso, 0) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700 border-r border-emerald-300">{{ formatPercent(loteGrupo.subtotalLote.porcentaje) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.SCI, 1) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700 border-r border-amber-300">{{ formatNumber(loteGrupo.subtotalLote.MST, 1) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.MIC, 2) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700 border-r border-sky-300">{{ formatNumber(loteGrupo.subtotalLote.MAT, 2) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.UHML, 2) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.UI, 2) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.SF, 2) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.STR, 2) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700 border-r border-purple-300">{{ formatNumber(loteGrupo.subtotalLote.ELG, 2) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.RD, 2) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.PLUS_B, 2) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700 border-r border-orange-300">{{ formatNumber(loteGrupo.subtotalLote.TrCNT, 2) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.TrAR, 2) }}</td>
+                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.TRID, 0) }}</td>
               </tr>
             </template>
-
-            <!-- Fila TOTAL GENERAL -->
-            <tr v-if="totalGeneral" class="bg-gradient-to-r from-indigo-100 to-blue-100 border-t-4 border-indigo-400 font-bold">
-              <td class="px-3 py-2 text-slate-700">{{ formatLoteFiac(totalGeneral.loteFiac) }}</td>
-              <td class="px-3 py-2 text-indigo-700">Total</td>
-              <td class="px-3 py-2 text-slate-700"></td>
-              <td class="px-3 py-2 text-center text-slate-700">-</td>
-              <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.qtde, 0) }}</td>
-              <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.peso, 2) }}</td>
-              <td class="px-3 py-2 text-right text-slate-700">100,00%</td>
-              <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.SCI, 2) }}</td>
-              <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.MST, 2) }}</td>
-              <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.MIC, 2) }}</td>
-              <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.MAT, 2) }}</td>
-              <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.UHML, 2) }}</td>
-              <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.UI, 2) }}</td>
-              <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.SF, 2) }}</td>
-              <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.STR, 2) }}</td>
-              <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.ELG, 2) }}</td>
-              <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.RD, 2) }}</td>
-              <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.PLUS_B, 2) }}</td>
-              <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.TrCNT, 2) }}</td>
-              <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.TrAR, 2) }}</td>
-              <td class="px-3 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.TRID, 0) }}</td>
-            </tr>
           </tbody>
+
+          <!-- Fila TOTAL GENERAL -->
+          <tfoot v-if="totalGeneral">
+            <tr class="font-bold sticky bottom-0 z-20 bg-gradient-to-r from-indigo-100 to-blue-100" style="box-shadow: inset 0 4px 0 #818cf8, 0 -4px 8px rgba(0,0,0,0.18); background-clip: padding-box;">
+              <td class="px-1 py-2 text-slate-700" style="width: 3rem; min-width: 3rem; max-width: 3rem; word-break: break-word;">{{ formatLoteFiac(totalGeneral.loteFiac) }}</td>
+              <td class="px-1 py-2 text-center text-blue-600 text-xs" style="width: 3rem; min-width: 3rem; max-width: 3rem; word-break: break-word;">{{ misturasUnicas }}</td>
+              <td class="pr-3 pl-2 py-2 text-indigo-700" style="width: 6.25rem; min-width: 6.25rem; max-width: 6.25rem; word-break: break-word;">Total</td>
+              <td class="px-0 py-2 text-slate-700" style="width: 2rem; min-width: 2rem; max-width: 2rem; word-break: break-word;"></td>
+              <td class="py-2 text-center text-slate-700" style="width: 2rem; min-width: 2rem; max-width: 2rem; word-break: break-word;">-</td>
+              <td class="px-1 py-2 text-right text-slate-700" style="width: 2rem; min-width: 2rem; max-width: 2rem;">{{ formatNumber(totalGeneral.qtde, 0) }}</td>
+              <td class="px-1 py-2 text-right text-slate-700" style="width: 5rem; min-width: 5rem; max-width: 5rem;">{{ formatNumber(totalGeneral.peso, 0) }}</td>
+              <td class="px-1 py-2 text-right text-slate-700 border-r border-emerald-300">100,0%</td>
+              <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.SCI, 1) }}</td>
+              <td class="px-1 py-2 text-right text-slate-700 border-r border-amber-300">{{ formatNumber(totalGeneral.MST, 1) }}</td>
+              <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.MIC, 2) }}</td>
+              <td class="px-1 py-2 text-right text-slate-700 border-r border-sky-300">{{ formatNumber(totalGeneral.MAT, 2) }}</td>
+              <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.UHML, 2) }}</td>
+              <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.UI, 2) }}</td>
+              <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.SF, 2) }}</td>
+              <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.STR, 2) }}</td>
+              <td class="px-1 py-2 text-right text-slate-700 border-r border-purple-300">{{ formatNumber(totalGeneral.ELG, 2) }}</td>
+              <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.RD, 2) }}</td>
+              <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.PLUS_B, 2) }}</td>
+              <td class="px-1 py-2 text-right text-slate-700 border-r border-orange-300">{{ formatNumber(totalGeneral.TrCNT, 2) }}</td>
+              <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.TrAR, 2) }}</td>
+              <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.TRID, 0) }}</td>
+            </tr>
+          </tfoot>
         </table>
       </div>
     </div>
@@ -181,7 +216,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import ExcelJS from 'exceljs'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
@@ -193,9 +228,80 @@ const cargando = ref(false)
 const exportando = ref(false)
 const busquedaRealizada = ref(false)
 const filasCrudas = ref([])
+const inputLote = ref(null)
 
 // Variables HVI para promedios ponderados
 const variablesHVI = ['SCI', 'MST', 'MIC', 'MAT', 'UHML', 'UI', 'SF', 'STR', 'ELG', 'RD', 'PLUS_B', 'TrCNT', 'TrAR', 'TRID']
+
+// Manejar navegación por teclado
+function handleKeydown(event) {
+  const input = event.target
+  const cursorPos = input.selectionStart
+  const textLength = input.value.length
+  
+  // Flecha izquierda: si el cursor está al inicio o hay texto seleccionado, navegar
+  if (event.key === 'ArrowLeft') {
+    if (cursorPos === 0 || input.selectionStart !== input.selectionEnd) {
+      event.preventDefault()
+      navegarLoteAnterior()
+    }
+  }
+  // Flecha derecha: si el cursor está al final o hay texto seleccionado, navegar
+  else if (event.key === 'ArrowRight') {
+    if (cursorPos === textLength || input.selectionStart !== input.selectionEnd) {
+      event.preventDefault()
+      navegarLoteSiguiente()
+    }
+  }
+}
+
+// Funciones de navegación
+function navegarLoteAnterior(event) {
+  if (event) event.preventDefault()
+  if (!loteFiacInput.value || cargando.value) return
+  
+  const loteActual = parseInt(loteFiacInput.value)
+  if (!isNaN(loteActual) && loteActual > 1) {
+    loteFiacInput.value = loteActual - 1
+    buscarDetalle()
+  }
+}
+
+function navegarLoteSiguiente(event) {
+  if (event) event.preventDefault()
+  if (!loteFiacInput.value || cargando.value) return
+  
+  const loteActual = parseInt(loteFiacInput.value)
+  if (!isNaN(loteActual)) {
+    loteFiacInput.value = loteActual + 1
+    buscarDetalle()
+  }
+}
+
+// Listener global de teclado para navegación cuando el input no tiene foco
+function handleGlobalKeydown(event) {
+  // Solo activar si el input no tiene el foco y no estamos en otro input/textarea
+  if (document.activeElement !== inputLote.value && 
+      document.activeElement.tagName !== 'INPUT' && 
+      document.activeElement.tagName !== 'TEXTAREA') {
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault()
+      navegarLoteAnterior()
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault()
+      navegarLoteSiguiente()
+    }
+  }
+}
+
+// Montar y desmontar listener global
+onMounted(() => {
+  window.addEventListener('keydown', handleGlobalKeydown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleGlobalKeydown)
+})
 
 // Construir columna QUALIDADE (TP + CLASSIFIC)
 function construirQualidade(tp, classific) {
@@ -240,6 +346,8 @@ async function buscarDetalle() {
     filasCrudas.value = []
   } finally {
     cargando.value = false
+    // Quitar el foco del input para permitir navegación con teclado
+    inputLote.value?.blur()
   }
 }
 
@@ -370,6 +478,22 @@ const totalGeneral = computed(() => {
   return total
 })
 
+// Misturas únicas del LOTE_FIAC (sin ceros a la izquierda, separadas por coma)
+const misturasUnicas = computed(() => {
+  if (filasCrudas.value.length === 0) return '-'
+  
+  const misturas = new Set()
+  filasCrudas.value.forEach(fila => {
+    if (fila.MISTURA) {
+      // Eliminar ceros a la izquierda
+      const misturaLimpia = String(fila.MISTURA).replace(/^0+/, '') || '0'
+      misturas.add(misturaLimpia)
+    }
+  })
+  
+  return misturas.size > 0 ? Array.from(misturas).sort((a, b) => parseInt(a) - parseInt(b)).join(', ') : '-'
+})
+
 // Formatear números
 function formatNumber(value, decimals = 2) {
   if (value === null || value === undefined || isNaN(value)) return '-'
@@ -382,7 +506,7 @@ function formatNumber(value, decimals = 2) {
 // Formatear porcentaje
 function formatPercent(value) {
   if (value === null || value === undefined || isNaN(value)) return '-'
-  return `${parseFloat(value).toFixed(2)}%`
+  return `${parseFloat(value).toFixed(1)}%`
 }
 
 // Formatear LOTE_FIAC (eliminar ceros a la izquierda)
@@ -407,6 +531,7 @@ async function exportarExcel() {
     // Configurar columnas
     worksheet.columns = [
       { header: 'Lote\nHilandería', key: 'loteFiac', width: 14 },
+      { header: 'Mezc', key: 'mistura', width: 10 },
       { header: 'Proveedor', key: 'produtor', width: 20 },
       { header: 'Lote\nProveedor', key: 'lote', width: 14 },
       { header: 'Calidad', key: 'qualidade', width: 12 },
@@ -445,6 +570,7 @@ async function exportarExcel() {
       // Fila subtotal PRODUTOR
       const subtotalRow = worksheet.addRow({
         loteFiac: parseInt(grupo.loteFiac, 10),
+        mistura: misturasUnicas.value,
         produtor: grupo.produtor,
         lote: 'Total',
         qualidade: '-',
@@ -478,15 +604,15 @@ async function exportarExcel() {
 
       // Aplicar formato numérico
       subtotalRow.getCell('qtde').numFmt = '#,##0'
-      subtotalRow.getCell('peso').numFmt = '#,##0.00'
-      subtotalRow.getCell('porcentaje').numFmt = '0.00%'
+      subtotalRow.getCell('peso').numFmt = '#,##0'
+      subtotalRow.getCell('porcentaje').numFmt = '0.0%'
       subtotalRow.getCell('porcentaje').value = grupo.subtotalProductor.porcentaje / 100
       
       // Formato variables HVI
       variablesHVI.forEach(variable => {
         const cell = subtotalRow.getCell(variable)
         if (cell.value !== null && cell.value !== undefined) {
-          cell.numFmt = ['SCI', 'TRID'].includes(variable) ? '#,##0' : '#,##0.00'
+          cell.numFmt = ['SCI', 'MST'].includes(variable) ? '#,##0.0' : (['TRID'].includes(variable) ? '#,##0' : '#,##0.00')
         }
       })
 
@@ -494,6 +620,7 @@ async function exportarExcel() {
       grupo.lotes.forEach(loteGrupo => {
         const loteRow = worksheet.addRow({
           loteFiac: parseInt(grupo.loteFiac, 10),
+          mistura: '-',
           produtor: '',
           lote: loteGrupo.lote,
           qualidade: loteGrupo.qualidade,
@@ -520,15 +647,15 @@ async function exportarExcel() {
 
         // Aplicar formato numérico
         loteRow.getCell('qtde').numFmt = '#,##0'
-        loteRow.getCell('peso').numFmt = '#,##0.00'
-        loteRow.getCell('porcentaje').numFmt = '0.00%'
+        loteRow.getCell('peso').numFmt = '#,##0'
+        loteRow.getCell('porcentaje').numFmt = '0.0%'
         loteRow.getCell('porcentaje').value = loteGrupo.subtotalLote.porcentaje / 100
         
         // Formato variables HVI
         variablesHVI.forEach(variable => {
           const cell = loteRow.getCell(variable)
           if (cell.value !== null && cell.value !== undefined) {
-            cell.numFmt = ['SCI', 'TRID'].includes(variable) ? '#,##0' : '#,##0.00'
+            cell.numFmt = ['SCI', 'MST'].includes(variable) ? '#,##0.0' : (['TRID'].includes(variable) ? '#,##0' : '#,##0.00')
           }
         })
       })
@@ -538,6 +665,7 @@ async function exportarExcel() {
     if (totalGeneral.value) {
       const totalRow = worksheet.addRow({
         loteFiac: parseInt(totalGeneral.value.loteFiac, 10),
+        mistura: misturasUnicas.value,
         produtor: 'Total',
         lote: '',
         qualidade: '-',
@@ -571,23 +699,23 @@ async function exportarExcel() {
 
       // Aplicar formato numérico
       totalRow.getCell('qtde').numFmt = '#,##0'
-      totalRow.getCell('peso').numFmt = '#,##0.00'
-      totalRow.getCell('porcentaje').numFmt = '0.00%'
+      totalRow.getCell('peso').numFmt = '#,##0'
+      totalRow.getCell('porcentaje').numFmt = '0.0%'
       totalRow.getCell('porcentaje').value = 1
       
       // Formato variables HVI
       variablesHVI.forEach(variable => {
         const cell = totalRow.getCell(variable)
         if (cell.value !== null && cell.value !== undefined) {
-          cell.numFmt = ['SCI', 'TRID'].includes(variable) ? '#,##0' : '#,##0.00'
+          cell.numFmt = ['SCI', 'MST'].includes(variable) ? '#,##0.0' : (['TRID'].includes(variable) ? '#,##0' : '#,##0.00')
         }
       })
     }
 
-    // Aplicar bordes solo a las columnas con datos (A-U, 21 columnas)
+    // Aplicar bordes solo a las columnas con datos (A-V, 22 columnas)
     worksheet.eachRow((row, rowNumber) => {
-      // Solo aplicar bordes a las primeras 21 columnas
-      for (let i = 1; i <= 21; i++) {
+      // Solo aplicar bordes a las primeras 22 columnas
+      for (let i = 1; i <= 22; i++) {
         const cell = row.getCell(i)
         cell.border = {
           top: { style: 'thin' },
