@@ -87,7 +87,7 @@
     <!-- Tabla de resultados -->
     <div v-else-if="datosAgrupados.length > 0" class="flex-1 min-h-0 bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
       <div class="h-full overflow-x-auto overflow-y-auto" style="padding: 0; margin: 0;">
-        <table class="w-full text-xs divide-y divide-slate-200" style="border-collapse: separate; border-spacing: 0; margin: 0; table-layout: fixed;">
+        <table class="min-w-full w-full table-auto divide-y divide-slate-200 text-xs" style="border-collapse: separate; border-spacing: 0; margin: 0;">
           <thead class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white sticky top-0 z-10">
             <tr class="border-b border-blue-300">
               <th colspan="8" class="px-1 py-1 text-center text-[10px] font-medium text-slate-500 bg-slate-100 border-r border-emerald-300"></th>
@@ -98,56 +98,56 @@
               <th colspan="2" class="px-1 py-1 text-center text-[10px] font-semibold text-orange-700 bg-orange-50">Impurezas (Trash)</th>
             </tr>
             <tr>
-              <th class="px-1 py-1 text-left font-semibold text-xs leading-tight text-slate-700 bg-slate-100" style="width: 3rem; min-width: 3rem; max-width: 3rem; word-break: break-word;">Lote<br>Hilan<br>dería</th>
-              <th class="px-1 py-1 text-center font-semibold text-xs text-slate-700 bg-slate-100" style="width: 3rem; min-width: 3rem; max-width: 3rem; word-break: break-word;">Mezc</th>
-              <th class="pr-3 pl-2 py-1 text-left font-semibold text-xs text-slate-700 bg-slate-100" style="width: 6.25rem; min-width: 6.25rem; max-width: 6.25rem; word-break: break-word;">Proveedor</th>
-              <th class="px-0 py-1 text-left font-semibold text-xs leading-tight text-slate-700 bg-slate-100" style="width: 2rem; min-width: 2rem; max-width: 2rem; word-break: break-word;">Lote<br>Prov</th>
-              <th class="py-1 text-center font-semibold text-xs text-slate-700 bg-slate-100" style="width: 2rem; min-width: 2rem; max-width: 2rem; word-break: break-word;">Cali<br>dad</th>
-              <th class="px-1 py-1 text-right font-semibold text-xs text-slate-700 bg-slate-100" style="width: 2rem; min-width: 2rem; max-width: 2rem;">Fardos</th>
-              <th class="px-1 py-1 text-right font-semibold text-xs text-slate-700 bg-slate-100" style="width: 5rem; min-width: 5rem; max-width: 5rem;">Total (kg)</th>
-              <th class="px-1 py-1 text-right font-semibold text-xs text-slate-700 bg-slate-100 border-r border-emerald-300" style="width: 3rem; min-width: 3rem; max-width: 3rem;">%</th>
-              <th class="px-1 py-1 text-right font-semibold text-xs text-teal-700 bg-teal-50" style="width: 3rem; min-width: 3rem; max-width: 3rem;">SCI</th>
-              <th class="px-1 py-1 text-right font-semibold text-xs text-teal-700 bg-teal-50 border-r border-amber-300" style="width: 3rem; min-width: 3rem; max-width: 3rem;">MST</th>
-              <th class="px-1 py-1 text-right font-semibold text-xs text-amber-700 bg-amber-50" style="width: 3rem; min-width: 3rem; max-width: 3rem;">MIC</th>
-              <th class="px-1 py-1 text-right font-semibold text-xs text-amber-700 bg-amber-50 border-r border-sky-300" style="width: 3rem; min-width: 3rem; max-width: 3rem;">MAT</th>
-              <th class="px-1 py-1 text-right font-semibold text-xs text-blue-700 bg-blue-50" style="width: 3rem; min-width: 3rem; max-width: 3rem;">UHML</th>
-              <th class="px-1 py-1 text-right font-semibold text-xs text-blue-700 bg-blue-50" style="width: 3rem; min-width: 3rem; max-width: 3rem;">UI</th>
-              <th class="px-1 py-1 text-right font-semibold text-xs text-blue-700 bg-blue-50" style="width: 3rem; min-width: 3rem; max-width: 3rem;">SF</th>
-              <th class="px-1 py-1 text-right font-semibold text-xs text-blue-700 bg-blue-50" style="width: 3rem; min-width: 3rem; max-width: 3rem;">STR</th>
-              <th class="px-1 py-1 text-right font-semibold text-xs text-blue-700 bg-blue-50 border-r border-purple-300" style="width: 3rem; min-width: 3rem; max-width: 3rem;">ELG</th>
-              <th class="px-1 py-1 text-right font-semibold text-xs text-purple-700 bg-purple-50" style="width: 3rem; min-width: 3rem; max-width: 3rem;">RD</th>
-              <th class="px-1 py-1 text-right font-semibold text-xs text-purple-700 bg-purple-50" style="width: 3rem; min-width: 3rem; max-width: 3rem;">+B</th>
-              <th class="px-1 py-1 text-right font-semibold text-xs text-purple-700 bg-purple-50 border-r border-orange-300" style="width: 3rem; min-width: 3rem; max-width: 3rem;">TrCNT</th>
-              <th class="px-1 py-1 text-right font-semibold text-xs text-orange-700 bg-orange-50" style="width: 3rem; min-width: 3rem; max-width: 3rem;">TrAR</th>
-              <th class="px-1 py-1 text-right font-semibold text-xs text-orange-700 bg-orange-50" style="width: 3rem; min-width: 3rem; max-width: 3rem;">TRID</th>
+              <th class="px-1 py-1 text-center font-semibold text-xs leading-tight text-slate-700 bg-slate-100 border-r border-slate-300" style="width: 2rem; min-width: 2rem; max-width: 2rem; word-break: break-word;">Lote<br>Hilan<br>dería</th>
+              <th class="px-1 py-1 text-center font-semibold text-xs text-slate-700 bg-slate-100 border-r border-slate-300" style="width: 3rem; min-width: 3rem; max-width: 3rem; word-break: break-word;">Mezc</th>
+              <th class="pr-3 pl-2 py-1 text-left font-semibold text-xs text-slate-700 bg-slate-100 border-r border-slate-300" style="width: 6.25rem; min-width: 6.25rem; max-width: 6.25rem; word-break: break-word;">Proveedor</th>
+              <th class="px-0 py-1 text-center font-semibold text-xs leading-tight text-slate-700 bg-slate-100 border-r border-slate-300" style="width: 3rem; min-width: 3rem; max-width: 3rem; word-break: break-word;">Lote<br>Prov</th>
+              <th class="py-1 text-center font-semibold text-xs text-slate-700 bg-slate-100 border-r border-slate-300" style="width: 2.5rem; min-width: 2.5rem; max-width: 2.5rem; word-break: break-word;">Cali<br>dad</th>
+              <th class="col-fardos px-1 py-1 text-right font-semibold text-xs leading-tight text-slate-700 bg-slate-100 border-r border-slate-300" style="width: 2.5rem; min-width: 2.5rem; max-width: 2.5rem;">Far<br>dos</th>
+              <th class="col-total-kg px-1 py-1 text-right font-semibold text-xs text-slate-700 bg-slate-100 border-r border-slate-300" style="width: 4.5rem; min-width: 4.5rem; max-width: 4.5rem;">Total (kg)</th>
+              <th class="px-1 py-1 text-center font-semibold text-xs text-slate-700 bg-slate-100 border-r border-emerald-300" style="width: 2rem; min-width: 2rem; max-width: 2rem;">%</th>
+              <th class="px-1 py-1 text-center font-semibold text-xs text-teal-700 bg-teal-50" style="width: 2rem; min-width: 2rem; max-width: 2rem;">SCI</th>
+              <th class="px-1 py-1 text-center font-semibold text-xs text-teal-700 bg-teal-50 border-r border-amber-300" style="width: 1.5rem; min-width: 1.5rem; max-width: 1.5rem;">MST</th>
+              <th class="px-1 py-1 text-center font-semibold text-xs text-amber-700 bg-amber-50" style="width: 2rem; min-width: 2rem; max-width: 2rem;">MIC</th>
+              <th class="px-1 py-1 text-center font-semibold text-xs text-amber-700 bg-amber-50 border-r border-sky-300" style="width: 2rem; min-width: 2rem; max-width: 2rem;">MAT</th>
+              <th class="px-1 py-1 text-center font-semibold text-xs text-blue-700 bg-blue-50" style="width: 2rem; min-width: 2rem; max-width: 2rem;">UHML</th>
+              <th class="px-1 py-1 text-center font-semibold text-xs text-blue-700 bg-blue-50" style="width: 2rem; min-width: 2rem; max-width: 2rem;">UI</th>
+              <th class="px-1 py-1 text-center font-semibold text-xs text-blue-700 bg-blue-50" style="width: 2rem; min-width: 2rem; max-width: 2rem;">SF</th>
+              <th class="px-1 py-1 text-center font-semibold text-xs text-blue-700 bg-blue-50" style="width: 2rem; min-width: 2rem; max-width: 2rem;">STR</th>
+              <th class="px-1 py-1 text-center font-semibold text-xs text-blue-700 bg-blue-50 border-r border-purple-300" style="width: 2rem; min-width: 2rem; max-width: 2rem;">ELG</th>
+              <th class="px-1 py-1 text-center font-semibold text-xs text-purple-700 bg-purple-50" style="width: 2rem; min-width: 2rem; max-width: 2rem;">RD</th>
+              <th class="px-1 py-1 text-center font-semibold text-xs text-purple-700 bg-purple-50" style="width: 2rem; min-width: 2rem; max-width: 2rem;">+B</th>
+              <th class="px-1 py-1 text-center font-semibold text-xs text-purple-700 bg-purple-50 border-r border-orange-300" style="width: 2rem; min-width: 2rem; max-width: 2rem;">TrCNT</th>
+              <th class="px-1 py-1 text-center font-semibold text-xs text-orange-700 bg-orange-50" style="width: 2rem; min-width: 2rem; max-width: 2rem;">TrAR</th>
+              <th class="px-1 py-1 text-center font-semibold text-xs text-orange-700 bg-orange-50" style="width: 2rem; min-width: 2rem; max-width: 2rem;">TRID</th>
             </tr>
           </thead>
           <tbody>
             <template v-for="(grupo, gIdx) in datosAgrupados" :key="'grupo-' + gIdx">
               <!-- Fila subtotal PRODUTOR -->
               <tr class="bg-gradient-to-r from-blue-50 to-indigo-50 border-t-2 border-blue-300 font-bold">
-                <td class="px-1 py-2 text-slate-700" style="width: 3rem; min-width: 3rem; max-width: 3rem; word-break: break-word;">{{ formatLoteFiac(grupo.loteFiac) }}</td>
-                <td class="px-1 py-2 text-center text-blue-600 text-xs" style="width: 3rem; min-width: 3rem; max-width: 3rem; word-break: break-word;">{{ misturasUnicas }}</td>
-                <td class="pr-3 pl-2 py-2 text-slate-700" style="width: 6.25rem; min-width: 6.25rem; max-width: 6.25rem; word-break: break-word;">{{ grupo.produtor }}</td>
-                <td class="px-0 py-2 text-blue-700" style="width: 2rem; min-width: 2rem; max-width: 2rem; word-break: break-word;">Total</td>
-                <td class="py-2 text-center text-slate-700" style="width: 2rem; min-width: 2rem; max-width: 2rem; word-break: break-word;">-</td>
-                <td class="px-1 py-2 text-right text-slate-700" style="width: 2rem; min-width: 2rem; max-width: 2rem;">{{ formatNumber(grupo.subtotalProductor.qtde, 0) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700" style="width: 5rem; min-width: 5rem; max-width: 5rem;">{{ formatNumber(grupo.subtotalProductor.peso, 0) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700 border-r border-emerald-300">{{ formatPercent(grupo.subtotalProductor.porcentaje) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.SCI, 1) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700 border-r border-amber-300">{{ formatNumber(grupo.subtotalProductor.MST, 1) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.MIC, 2) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700 border-r border-sky-300">{{ formatNumber(grupo.subtotalProductor.MAT, 2) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.UHML, 2) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.UI, 2) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.SF, 2) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.STR, 2) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700 border-r border-purple-300">{{ formatNumber(grupo.subtotalProductor.ELG, 2) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.RD, 2) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.PLUS_B, 2) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700 border-r border-orange-300">{{ formatNumber(grupo.subtotalProductor.TrCNT, 2) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.TrAR, 2) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(grupo.subtotalProductor.TRID, 0) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700 border-r border-slate-200" style="width: 2rem; min-width: 2rem; max-width: 2rem; word-break: break-word;">{{ formatLoteFiac(grupo.loteFiac) }}</td>
+                <td class="px-1 py-2 text-center text-blue-600 text-xs border-r border-slate-200" style="width: 3rem; min-width: 3rem; max-width: 3rem; word-break: break-word;">{{ misturasUnicas }}</td>
+                <td class="pr-3 pl-2 py-2 text-slate-700 border-r border-slate-200" style="width: 6.25rem; min-width: 6.25rem; max-width: 6.25rem; word-break: break-word;">{{ grupo.produtor }}</td>
+                <td class="px-0 py-2 text-center text-blue-700 border-r border-slate-200" style="width: 3rem; min-width: 3rem; max-width: 3rem; word-break: break-word;">Total</td>
+                <td class="py-2 text-center text-slate-700 border-r border-slate-200" style="width: 2.5rem; min-width: 2.5rem; max-width: 2.5rem; word-break: break-word;">-</td>
+                <td class="col-fardos px-1 py-2 text-right text-slate-700 border-r border-slate-200" style="width: 2.5rem; min-width: 2.5rem; max-width: 2.5rem;">{{ formatNumber(grupo.subtotalProductor.qtde, 0) }}</td>
+                <td class="col-total-kg px-1 py-2 text-right text-slate-700 border-r border-slate-200" style="width: 4.5rem; min-width: 4.5rem; max-width: 4.5rem;">{{ formatNumber(grupo.subtotalProductor.peso, 0) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700 border-r border-emerald-300">{{ formatPercent(grupo.subtotalProductor.porcentaje) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(grupo.subtotalProductor.SCI, 1) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700 border-r border-amber-300">{{ formatNumber(grupo.subtotalProductor.MST, 1) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(grupo.subtotalProductor.MIC, 2) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700 border-r border-sky-300">{{ formatNumber(grupo.subtotalProductor.MAT, 2) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(grupo.subtotalProductor.UHML, 2) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(grupo.subtotalProductor.UI, 2) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(grupo.subtotalProductor.SF, 2) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(grupo.subtotalProductor.STR, 2) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700 border-r border-purple-300">{{ formatNumber(grupo.subtotalProductor.ELG, 2) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(grupo.subtotalProductor.RD, 2) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(grupo.subtotalProductor.PLUS_B, 2) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700 border-r border-orange-300">{{ formatNumber(grupo.subtotalProductor.TrCNT, 2) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(grupo.subtotalProductor.TrAR, 2) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(grupo.subtotalProductor.TRID, 0) }}</td>
               </tr>
 
               <!-- Filas LOTE + QUALIDADE -->
@@ -156,57 +156,57 @@
                 :key="'lote-' + gIdx + '-' + lIdx"
                 class="border-t border-slate-100 hover:bg-blue-50/30 transition-colors duration-150"
               >
-                <td class="px-1 py-2 text-slate-700" style="width: 3rem; min-width: 3rem; max-width: 3rem; word-break: break-word;">{{ formatLoteFiac(grupo.loteFiac) }}</td>
-                <td class="px-1 py-2 text-center text-slate-400" style="width: 3rem; min-width: 3rem; max-width: 3rem; word-break: break-word;">-</td>
-                <td class="pr-3 pl-2 py-2 text-slate-700" style="width: 6.25rem; min-width: 6.25rem; max-width: 6.25rem; word-break: break-word;"></td>
-                <td class="px-0 py-2 text-slate-700" style="width: 2rem; min-width: 2rem; max-width: 2rem; word-break: break-word;">{{ loteGrupo.lote }}</td>
-                <td class="py-2 text-center text-slate-700" style="width: 2rem; min-width: 2rem; max-width: 2rem; word-break: break-word;">{{ loteGrupo.qualidade }}</td>
-                <td class="px-1 py-2 text-right text-slate-700" style="width: 2rem; min-width: 2rem; max-width: 2rem;">{{ formatNumber(loteGrupo.subtotalLote.qtde, 0) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700" style="width: 5rem; min-width: 5rem; max-width: 5rem;">{{ formatNumber(loteGrupo.subtotalLote.peso, 0) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700 border-r border-emerald-300">{{ formatPercent(loteGrupo.subtotalLote.porcentaje) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.SCI, 1) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700 border-r border-amber-300">{{ formatNumber(loteGrupo.subtotalLote.MST, 1) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.MIC, 2) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700 border-r border-sky-300">{{ formatNumber(loteGrupo.subtotalLote.MAT, 2) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.UHML, 2) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.UI, 2) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.SF, 2) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.STR, 2) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700 border-r border-purple-300">{{ formatNumber(loteGrupo.subtotalLote.ELG, 2) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.RD, 2) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.PLUS_B, 2) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700 border-r border-orange-300">{{ formatNumber(loteGrupo.subtotalLote.TrCNT, 2) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.TrAR, 2) }}</td>
-                <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.TRID, 0) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700 border-r border-slate-200" style="width: 2rem; min-width: 2rem; max-width: 2rem; word-break: break-word;">{{ formatLoteFiac(grupo.loteFiac) }}</td>
+                <td class="px-1 py-2 text-center text-slate-400 border-r border-slate-200" style="width: 3rem; min-width: 3rem; max-width: 3rem; word-break: break-word;">-</td>
+                <td class="pr-3 pl-2 py-2 text-slate-700 border-r border-slate-200" style="width: 6.25rem; min-width: 6.25rem; max-width: 6.25rem; word-break: break-word;"></td>
+                <td class="px-0 py-2 text-center text-slate-700 border-r border-slate-200" style="width: 3rem; min-width: 3rem; max-width: 3rem; word-break: break-word;">{{ loteGrupo.lote }}</td>
+                <td class="py-2 text-center text-slate-700 border-r border-slate-200" style="width: 2.5rem; min-width: 2.5rem; max-width: 2.5rem; word-break: break-word;">{{ loteGrupo.qualidade }}</td>
+                <td class="col-fardos px-1 py-2 text-right text-slate-700 border-r border-slate-200" style="width: 2.5rem; min-width: 2.5rem; max-width: 2.5rem;">{{ formatNumber(loteGrupo.subtotalLote.qtde, 0) }}</td>
+                <td class="col-total-kg px-1 py-2 text-right text-slate-700 border-r border-slate-200" style="width: 4.5rem; min-width: 4.5rem; max-width: 4.5rem;">{{ formatNumber(loteGrupo.subtotalLote.peso, 0) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700 border-r border-emerald-300">{{ formatPercent(loteGrupo.subtotalLote.porcentaje) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.SCI, 1) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700 border-r border-amber-300">{{ formatNumber(loteGrupo.subtotalLote.MST, 1) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.MIC, 2) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700 border-r border-sky-300">{{ formatNumber(loteGrupo.subtotalLote.MAT, 2) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.UHML, 2) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.UI, 2) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.SF, 2) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.STR, 2) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700 border-r border-purple-300">{{ formatNumber(loteGrupo.subtotalLote.ELG, 2) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.RD, 2) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.PLUS_B, 2) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700 border-r border-orange-300">{{ formatNumber(loteGrupo.subtotalLote.TrCNT, 2) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.TrAR, 2) }}</td>
+                <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(loteGrupo.subtotalLote.TRID, 0) }}</td>
               </tr>
             </template>
           </tbody>
 
           <!-- Fila TOTAL GENERAL -->
           <tfoot v-if="totalGeneral">
-            <tr class="font-bold sticky bottom-0 z-20 bg-gradient-to-r from-indigo-100 to-blue-100" style="box-shadow: inset 0 4px 0 #818cf8, 0 -4px 8px rgba(0,0,0,0.18); background-clip: padding-box;">
-              <td class="px-1 py-2 text-slate-700" style="width: 3rem; min-width: 3rem; max-width: 3rem; word-break: break-word;">{{ formatLoteFiac(totalGeneral.loteFiac) }}</td>
-              <td class="px-1 py-2 text-center text-blue-600 text-xs" style="width: 3rem; min-width: 3rem; max-width: 3rem; word-break: break-word;">{{ misturasUnicas }}</td>
-              <td class="pr-3 pl-2 py-2 text-indigo-700" style="width: 6.25rem; min-width: 6.25rem; max-width: 6.25rem; word-break: break-word;">Total</td>
-              <td class="px-0 py-2 text-slate-700" style="width: 2rem; min-width: 2rem; max-width: 2rem; word-break: break-word;"></td>
-              <td class="py-2 text-center text-slate-700" style="width: 2rem; min-width: 2rem; max-width: 2rem; word-break: break-word;">-</td>
-              <td class="px-1 py-2 text-right text-slate-700" style="width: 2rem; min-width: 2rem; max-width: 2rem;">{{ formatNumber(totalGeneral.qtde, 0) }}</td>
-              <td class="px-1 py-2 text-right text-slate-700" style="width: 5rem; min-width: 5rem; max-width: 5rem;">{{ formatNumber(totalGeneral.peso, 0) }}</td>
-              <td class="px-1 py-2 text-right text-slate-700 border-r border-emerald-300">100,0%</td>
-              <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.SCI, 1) }}</td>
-              <td class="px-1 py-2 text-right text-slate-700 border-r border-amber-300">{{ formatNumber(totalGeneral.MST, 1) }}</td>
-              <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.MIC, 2) }}</td>
-              <td class="px-1 py-2 text-right text-slate-700 border-r border-sky-300">{{ formatNumber(totalGeneral.MAT, 2) }}</td>
-              <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.UHML, 2) }}</td>
-              <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.UI, 2) }}</td>
-              <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.SF, 2) }}</td>
-              <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.STR, 2) }}</td>
-              <td class="px-1 py-2 text-right text-slate-700 border-r border-purple-300">{{ formatNumber(totalGeneral.ELG, 2) }}</td>
-              <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.RD, 2) }}</td>
-              <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.PLUS_B, 2) }}</td>
-              <td class="px-1 py-2 text-right text-slate-700 border-r border-orange-300">{{ formatNumber(totalGeneral.TrCNT, 2) }}</td>
-              <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.TrAR, 2) }}</td>
-              <td class="px-1 py-2 text-right text-slate-700">{{ formatNumber(totalGeneral.TRID, 0) }}</td>
+            <tr class="total-general-row font-bold sticky bottom-0 z-20 bg-gradient-to-r from-indigo-100 to-blue-100" style="box-shadow: inset 0 4px 0 #818cf8, 0 -4px 8px rgba(0,0,0,0.18); background-clip: padding-box;">
+              <td class="px-1 py-2 text-center text-slate-700 border-r border-slate-200" style="width: 2rem; min-width: 2rem; max-width: 2rem; word-break: break-word;">{{ formatLoteFiac(totalGeneral.loteFiac) }}</td>
+              <td class="px-1 py-2 text-center text-blue-600 text-xs border-r border-slate-200" style="width: 3rem; min-width: 3rem; max-width: 3rem; word-break: break-word;">{{ misturasUnicas }}</td>
+              <td class="pr-3 pl-2 py-2 text-indigo-700 border-r border-slate-200" style="width: 6.25rem; min-width: 6.25rem; max-width: 6.25rem; word-break: break-word;">Total</td>
+              <td class="px-0 py-2 text-center text-slate-700 border-r border-slate-200" style="width: 3rem; min-width: 3rem; max-width: 3rem; word-break: break-word;"></td>
+              <td class="py-2 text-center text-slate-700 border-r border-slate-200" style="width: 2.5rem; min-width: 2.5rem; max-width: 2.5rem; word-break: break-word;">-</td>
+              <td class="col-fardos px-1 py-2 text-right text-slate-700 border-r border-slate-200" style="width: 2.5rem; min-width: 2.5rem; max-width: 2.5rem;">{{ formatNumber(totalGeneral.qtde, 0) }}</td>
+              <td class="col-total-kg px-1 py-2 text-right text-slate-700 border-r border-slate-200" style="width: 4.5rem; min-width: 4.5rem; max-width: 4.5rem;">{{ formatNumber(totalGeneral.peso, 0) }}</td>
+              <td class="px-1 py-2 text-center text-slate-700 border-r border-emerald-300">100,0%</td>
+              <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(totalGeneral.SCI, 1) }}</td>
+              <td class="px-1 py-2 text-center text-slate-700 border-r border-amber-300">{{ formatNumber(totalGeneral.MST, 1) }}</td>
+              <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(totalGeneral.MIC, 2) }}</td>
+              <td class="px-1 py-2 text-center text-slate-700 border-r border-sky-300">{{ formatNumber(totalGeneral.MAT, 2) }}</td>
+              <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(totalGeneral.UHML, 2) }}</td>
+              <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(totalGeneral.UI, 2) }}</td>
+              <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(totalGeneral.SF, 2) }}</td>
+              <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(totalGeneral.STR, 2) }}</td>
+              <td class="px-1 py-2 text-center text-slate-700 border-r border-purple-300">{{ formatNumber(totalGeneral.ELG, 2) }}</td>
+              <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(totalGeneral.RD, 2) }}</td>
+              <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(totalGeneral.PLUS_B, 2) }}</td>
+              <td class="px-1 py-2 text-center text-slate-700 border-r border-orange-300">{{ formatNumber(totalGeneral.TrCNT, 2) }}</td>
+              <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(totalGeneral.TrAR, 2) }}</td>
+              <td class="px-1 py-2 text-center text-slate-700">{{ formatNumber(totalGeneral.TRID, 0) }}</td>
             </tr>
           </tfoot>
         </table>
@@ -755,6 +755,24 @@ async function exportarExcel() {
 table th,
 table td {
   white-space: nowrap;
+  padding: 0.25rem 0.25rem !important;
+}
+
+table th.col-fardos,
+table td.col-fardos {
+  padding: 0.25rem 0.5rem !important;
+  text-align: right !important;
+}
+
+table th.col-total-kg,
+table td.col-total-kg {
+  padding: 0.25rem 0.5rem !important;
+  text-align: right !important;
+}
+
+tr.total-general-row td {
+  padding-top: 0.375rem !important;
+  padding-bottom: 0.375rem !important;
 }
 
 table {
