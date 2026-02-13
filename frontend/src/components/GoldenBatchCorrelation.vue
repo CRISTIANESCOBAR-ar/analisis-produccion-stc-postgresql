@@ -219,7 +219,7 @@
               <thead class="bg-slate-50 sticky top-0 z-10">
                 <tr class="text-slate-500 text-[10px] uppercase tracking-wider">
                   <th colspan="3" class="px-2 py-1.5 text-center font-semibold border-b-2 border-r-2 border-slate-300 bg-slate-100">Urdidora</th>
-                  <th colspan="6" class="px-2 py-1.5 text-center font-semibold border-b-2 border-r-2 border-slate-300 bg-blue-50">Índigo</th>
+                  <th colspan="7" class="px-2 py-1.5 text-center font-semibold border-b-2 border-r-2 border-slate-300 bg-blue-50">Índigo</th>
                   <th colspan="3" class="px-2 py-1.5 text-center font-semibold border-b-2 border-r-2 border-slate-300 bg-emerald-50">Tejeduría</th>
                   <th class="px-2 py-1.5 text-center font-semibold border-b-2 border-r-2 border-slate-300 bg-amber-50">Mistura</th>
                   <th colspan="3" class="px-2 py-1.5 text-center font-semibold border-b-2 border-slate-300 bg-purple-50">HVI</th>
@@ -230,6 +230,7 @@
                   <th class="px-2 py-1.5 text-center border-b border-r border-slate-200 font-medium">Lote</th>
                   <th class="px-2 py-1.5 text-center border-b border-r-2 border-slate-300 font-medium">Rot 10⁶</th>
                   <!-- Índigo -->
+                  <th class="px-2 py-1.5 text-center border-b border-r border-slate-200 font-medium">Fecha</th>
                   <th class="px-2 py-1.5 text-center border-b border-r border-slate-200 font-medium">Base</th>
                   <th class="px-2 py-1.5 text-center border-b border-r border-slate-200 font-medium">Color</th>
                   <th class="px-2 py-1.5 text-center border-b border-r border-slate-200 font-medium">R10³</th>
@@ -255,7 +256,8 @@
                   <td class="px-2 py-1.5 text-center text-slate-600 font-mono border-r border-slate-200">{{ row.LOTE_FIBRA_TEXT }}</td>
                   <td class="px-2 py-1.5 text-center text-emerald-600 font-semibold border-r-2 border-slate-300">{{ formatNum(row.ROT_URD_URDI, 2) }}</td>
                   <!-- Índigo -->
-                  <td class="px-2 py-1.5 text-center text-slate-600 border-r border-slate-200">{{ row.INDIGO_BASE || '-' }}</td>
+                  <td class="px-2 py-1.5 text-center text-slate-500 text-xs border-r border-slate-200">{{ formatDate(row.INDIGO_FECHA) }}</td>
+                  <td class="px-2 py-1.5 text-center text-slate-600 border-r border-slate-200 text-xs">{{ (row.INDIGO_BASE || '-').substring(0, 10) }}</td>
                   <td class="px-2 py-1.5 text-center text-slate-600 border-r border-slate-200">{{ row.INDIGO_COLOR || '-' }}</td>
                   <td class="px-2 py-1.5 text-center text-slate-600 border-r border-slate-200">{{ formatNum(row.INDIGO_R, 2) }}</td>
                   <td class="px-2 py-1.5 text-center text-slate-600 border-r border-slate-200">{{ formatNum(row.INDIGO_CAVALOS, 1) }}</td>

@@ -136,6 +136,14 @@ URDIMBRES_LOTE AS (
 INDIGO_INFO AS (
     SELECT 
         "ROLADA",
+        -- Fecha inicial de la rolada en Índigo: MIN(DT_INICIO)
+        MIN(
+            CASE
+                WHEN "DT_INICIO" ~ '^[0-3][0-9]/[0-1][0-9]/[0-9]{4}' THEN to_date(substring("DT_INICIO" from 1 for 10), 'DD/MM/YYYY')
+                WHEN "DT_INICIO" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' THEN substring("DT_INICIO" from 1 for 10)::date
+                ELSE NULL
+            END
+        ) as "INDIGO_FECHA",
         MAX("BASE URDUME") as "INDIGO_BASE",
         MAX("COR") as "INDIGO_COLOR",
         -- R10³ = (Rupturas * 1000) / Metros  (misma fórmula que SeguimientoRoladas "R103")
@@ -206,6 +214,7 @@ SELECT
     t.rt_105 as "RT_105", -- Roturas Trama
     t.ru_105 as "RUB_105", -- Duplicado para compatibilidad
     u.rot_urd_urdidora as "ROT_URD_URDI",
+    i."INDIGO_FECHA",
     i."INDIGO_BASE",
     i."INDIGO_COLOR",
     i."INDIGO_R",

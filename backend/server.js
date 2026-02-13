@@ -2431,6 +2431,7 @@ app.get('/api/golden-batch/points', async (req, res) => {
         "RU_105",
         "RT_105",
         "ROT_URD_URDI",
+        "INDIGO_FECHA",
         "INDIGO_BASE",
         "INDIGO_COLOR",
         "INDIGO_R",
