@@ -37,17 +37,37 @@
       </div>
     </div>
 
+    <!-- Banner de Carga / Error -->
+    <div v-if="loading" class="bg-indigo-50 border border-indigo-200 rounded-lg p-5 mb-8 flex items-center gap-4 shadow-sm">
+      <div class="animate-spin rounded-full h-8 w-8 border-3 border-indigo-200 border-t-indigo-600 shrink-0"></div>
+      <div>
+        <div class="font-semibold text-indigo-800 text-base">Calculando correlaciones Golden Batch...</div>
+        <div class="text-sm text-indigo-600 mt-0.5">
+          {{ loadingMessage }}
+        </div>
+      </div>
+    </div>
+
+    <div v-if="errorMsg && !loading" class="bg-red-50 border border-red-200 rounded-lg p-5 mb-8 flex items-center gap-4 shadow-sm">
+      <span class="text-2xl">&#9888;</span>
+      <div class="flex-1">
+        <div class="font-semibold text-red-800">Error cargando datos</div>
+        <div class="text-sm text-red-600 mt-0.5">{{ errorMsg }}</div>
+      </div>
+      <button @click="retry" class="px-4 py-1.5 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 transition-colors">Reintentar</button>
+    </div>
+
     <!-- Summary Cards (Calculated from Filtered Data) -->
     <div v-if="filteredSummary.length" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
       <div 
         v-for="item in filteredSummary" 
         :key="item.estado"
         :class="[
-          'p-5 rounded-lg shadow border-l-4',
-
+          'p-5 rounded-lg shadow border-l-4 transition-transform duration-150 cursor-pointer hover:scale-102 hover:shadow-md',
           item.estado.includes('EXITO') ? 'bg-green-50 border-green-500' : 
           item.estado.includes('BAJA') ? 'bg-red-50 border-red-500' : 'bg-white border-blue-500'
         ]"
+        @click="openModal(item.estado)"
       >
         <h3 class="font-bold text-lg mb-2">{{ item.estado }}</h3>
         <div class="text-3xl font-extrabold mb-4">{{ item.volumen }} <span class="text-sm font-normal text-gray-500">lotes</span></div>
@@ -73,9 +93,7 @@
       </div>
     </div>
 
-    <div v-else-if="loading" class="flex flex-col justify-center items-center py-10">
-       <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mb-4"></div>
-    </div>
+
 
     <!-- Analysis Text (Dynamic) -->
     <div v-if="analysis" class="bg-blue-50 border-l-4 border-blue-500 p-6 mb-8 rounded shadow-sm">
@@ -175,6 +193,96 @@
         </table>
       </div>
     </div>
+
+    <!-- Modal Detalle por Categoría -->
+    <Teleport to="body">
+      <div v-if="isModalOpen" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" @click.self="closeModal">
+        <div class="bg-white rounded-xl shadow-2xl max-w-7xl w-full max-h-[90vh] flex flex-col">
+          <!-- Header -->
+          <div class="flex items-center justify-between px-6 py-3 border-b border-slate-200 shrink-0">
+            <div class="flex items-center gap-3">
+              <h3 class="text-lg font-bold text-slate-800">Detalle de Lotes</h3>
+              <span :class="[
+                'px-3 py-1 rounded-full text-sm font-bold',
+                modalCategory.includes('EXITO') ? 'bg-green-100 text-green-800' :
+                modalCategory.includes('BAJA') ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'
+              ]">{{ modalCategory }}</span>
+              <span class="text-sm text-slate-500">{{ modalData.length }} lotes</span>
+            </div>
+            <button @click="closeModal" class="p-1.5 hover:bg-slate-100 rounded-lg transition-colors" title="Cerrar">
+              <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <!-- Table -->
+          <div class="flex-1 overflow-auto min-h-0">
+            <table class="min-w-full text-xs border-collapse">
+              <thead class="bg-slate-50 sticky top-0 z-10">
+                <tr class="text-slate-500 text-[10px] uppercase tracking-wider">
+                  <th colspan="3" class="px-2 py-1.5 text-center font-semibold border-b-2 border-r-2 border-slate-300 bg-slate-100">Urdidora</th>
+                  <th colspan="6" class="px-2 py-1.5 text-center font-semibold border-b-2 border-r-2 border-slate-300 bg-blue-50">Índigo</th>
+                  <th colspan="3" class="px-2 py-1.5 text-center font-semibold border-b-2 border-r-2 border-slate-300 bg-emerald-50">Tejeduría</th>
+                  <th class="px-2 py-1.5 text-center font-semibold border-b-2 border-r-2 border-slate-300 bg-amber-50">Mistura</th>
+                  <th colspan="3" class="px-2 py-1.5 text-center font-semibold border-b-2 border-slate-300 bg-purple-50">HVI</th>
+                </tr>
+                <tr class="text-slate-600 text-[10px] bg-slate-50">
+                  <!-- Urdidora -->
+                  <th class="px-2 py-1.5 text-center border-b border-r border-slate-200 font-medium">Rolada</th>
+                  <th class="px-2 py-1.5 text-center border-b border-r border-slate-200 font-medium">Lote</th>
+                  <th class="px-2 py-1.5 text-center border-b border-r-2 border-slate-300 font-medium">Rot 10⁶</th>
+                  <!-- Índigo -->
+                  <th class="px-2 py-1.5 text-center border-b border-r border-slate-200 font-medium">Base</th>
+                  <th class="px-2 py-1.5 text-center border-b border-r border-slate-200 font-medium">Color</th>
+                  <th class="px-2 py-1.5 text-center border-b border-r border-slate-200 font-medium">R10³</th>
+                  <th class="px-2 py-1.5 text-center border-b border-r border-slate-200 font-medium">Cav 10⁵</th>
+                  <th class="px-2 py-1.5 text-center border-b border-r border-slate-200 font-medium">Vel.Nom</th>
+                  <th class="px-2 py-1.5 text-center border-b border-r-2 border-slate-300 font-medium">Vel.Prom</th>
+                  <!-- Tejeduría -->
+                  <th class="px-2 py-1.5 text-center border-b border-r border-slate-200 font-medium">Efic.%</th>
+                  <th class="px-2 py-1.5 text-center border-b border-r border-slate-200 font-medium">RU10⁵</th>
+                  <th class="px-2 py-1.5 text-center border-b border-r-2 border-slate-300 font-medium">RT10⁵</th>
+                  <!-- Mistura -->
+                  <th class="px-2 py-1.5 text-center border-b border-r-2 border-slate-300 font-medium">Mezcla</th>
+                  <!-- HVI -->
+                  <th class="px-2 py-1.5 text-center border-b border-r border-slate-200 font-medium">SCI Avg</th>
+                  <th class="px-2 py-1.5 text-center border-b border-r border-slate-200 font-medium">Micronaire</th>
+                  <th class="px-2 py-1.5 text-center border-b border-slate-200 font-medium">Resistencia</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <tr v-for="(row, idx) in modalData" :key="idx" class="hover:bg-slate-50 transition-colors">
+                  <!-- Urdidora -->
+                  <td class="px-2 py-1.5 text-center font-semibold text-slate-800 border-r border-slate-200">{{ row.ROLADA }}</td>
+                  <td class="px-2 py-1.5 text-center text-slate-600 font-mono border-r border-slate-200">{{ row.LOTE_FIBRA_TEXT }}</td>
+                  <td class="px-2 py-1.5 text-center text-emerald-600 font-semibold border-r-2 border-slate-300">{{ formatNum(row.ROT_URD_URDI, 2) }}</td>
+                  <!-- Índigo -->
+                  <td class="px-2 py-1.5 text-center text-slate-600 border-r border-slate-200">{{ row.INDIGO_BASE || '-' }}</td>
+                  <td class="px-2 py-1.5 text-center text-slate-600 border-r border-slate-200">{{ row.INDIGO_COLOR || '-' }}</td>
+                  <td class="px-2 py-1.5 text-center text-slate-600 border-r border-slate-200">{{ formatNum(row.INDIGO_R, 2) }}</td>
+                  <td class="px-2 py-1.5 text-center text-slate-600 border-r border-slate-200">{{ formatNum(row.INDIGO_CAVALOS, 1) }}</td>
+                  <td class="px-2 py-1.5 text-center text-slate-600 border-r border-slate-200">{{ formatNum(row.INDIGO_VEL_NOM, 0) }}</td>
+                  <td class="px-2 py-1.5 text-center text-slate-600 border-r-2 border-slate-300">{{ formatNum(row.INDIGO_VEL_REAL, 0) }}</td>
+                  <!-- Tejeduría -->
+                  <td class="px-2 py-1.5 text-center font-bold" :class="getEffClass(row.EFIC_TEJ)">{{ formatNum(row.EFIC_TEJ, 2) }}%</td>
+                  <td class="px-2 py-1.5 text-center text-slate-600 border-r border-slate-200">{{ formatNum(row.RU_105, 2) }}</td>
+                  <td class="px-2 py-1.5 text-center text-slate-600 border-r-2 border-slate-300">{{ formatNum(row.RT_105, 2) }}</td>
+                  <!-- Mistura -->
+                  <td class="px-2 py-1.5 text-center text-slate-700 font-medium border-r-2 border-slate-300">{{ row.MISTURA || '-' }}</td>
+                  <!-- HVI -->
+                  <td class="px-2 py-1.5 text-center text-purple-700 font-semibold border-r border-slate-200">{{ formatNum(row.SCI, 1) }}</td>
+                  <td class="px-2 py-1.5 text-center text-slate-600 border-r border-slate-200">{{ formatNum(row.MIC, 2) }}</td>
+                  <td class="px-2 py-1.5 text-center text-slate-600">{{ formatNum(row.STR, 2) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <!-- Footer -->
+          <div class="px-6 py-2 border-t border-slate-200 bg-slate-50 text-xs text-slate-500 shrink-0 flex justify-between">
+            <span>Rot 10⁶ = (Rupturas × 10⁶) / (Metros × NumFios) · R10³ = (Rupturas × 10³) / Metros · Cav 10⁵ = (Cavalos × 10⁵) / Metros</span>
+            <button @click="closeModal" class="px-4 py-1 bg-slate-600 text-white rounded text-xs font-medium hover:bg-slate-700 transition-colors">Cerrar</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -204,6 +312,12 @@ const errorMsg = ref('')
 // Filters
 const startDate = ref('')
 const endDate = ref('')
+const loadingMessage = ref('Conectando con la base de datos...')
+
+// Modal state
+const isModalOpen = ref(false)
+const modalCategory = ref('')
+const modalData = ref([])
 
 
 onMounted(async () => {
@@ -213,8 +327,9 @@ onMounted(async () => {
 async function loadData() {
   loading.value = true
   errorMsg.value = ''
+  loadingMessage.value = 'Conectando con la base de datos...'
   try {
-    // Solo necesitamos los puntos, el resumen lo calculamos dinámico
+    loadingMessage.value = 'Consultando vista Golden Batch (OEE)... esto puede tomar unos segundos'
     await fetchPoints()
     
     // Inicializar fechas con el rango completo de datos disponibles
@@ -228,6 +343,7 @@ async function loadData() {
       if (dates.length > 0) {
         startDate.value = dates[0]
         endDate.value = dates[dates.length - 1]
+        loadingMessage.value = `Procesando ${points.value.length} lotes del ${formatDateSimple(dates[0])} al ${formatDateSimple(dates[dates.length - 1])}...`
       }
     }
   } catch (e) {
@@ -266,15 +382,41 @@ async function fetchPoints() {
   const res = await fetch('/api/golden-batch/points')
   if (!res.ok) throw new Error(`API Points Error: ${res.statusText}`)
   const data = await res.json()
-  // Convert strings to numbers for charts
+  // Convert strings to numbers for charts and modal
   points.value = data.rows.map(r => ({
     ...r,
-    EFIC_TEJ: parseFloat(r.EFIC_TEJ),
-    SCI: parseFloat(r.SCI),
-    STR: parseFloat(r.STR),
-    MIC: parseFloat(r.MIC),
-    RU_105: parseFloat(r.RU_105)
+    EFIC_TEJ: safeFloat(r.EFIC_TEJ),
+    SCI: safeFloat(r.SCI),
+    STR: safeFloat(r.STR),
+    MIC: safeFloat(r.MIC),
+    RU_105: safeFloat(r.RU_105),
+    RT_105: safeFloat(r.RT_105),
+    ROT_URD_URDI: safeFloat(r.ROT_URD_URDI),
+    INDIGO_R: safeFloat(r.INDIGO_R),
+    INDIGO_CAVALOS: safeFloat(r.INDIGO_CAVALOS),
+    INDIGO_VEL_REAL: safeFloat(r.INDIGO_VEL_REAL),
+    INDIGO_VEL_NOM: safeFloat(r.INDIGO_VEL_NOM),
+    LOTE_FIBRA_TEXT: stripZeros(r.LOTE_FIBRA_TEXT),
+    MISTURA: stripZeros(r.MISTURA)
   }))
+}
+
+// Modal functions
+function openModal(estado) {
+  modalCategory.value = estado
+  // Filter points by category
+  modalData.value = filteredPoints.value.filter(p => {
+    if (estado.includes('EXITO')) return p.EFIC_TEJ >= 90
+    if (estado.includes('BAJA')) return p.EFIC_TEJ < 85
+    return p.EFIC_TEJ >= 85 && p.EFIC_TEJ < 90 // NORMAL
+  })
+  isModalOpen.value = true
+}
+
+function closeModal() {
+  isModalOpen.value = false
+  modalCategory.value = ''
+  modalData.value = []
 }
 
 // Computed Data
@@ -416,6 +558,17 @@ const chartOptions = {
 }
 
 // Helpers
+function safeFloat(val) {
+  if (val === null || val === undefined || val === '') return null
+  const num = parseFloat(String(val).replace(',', '.'))
+  return isNaN(num) ? null : num
+}
+
+function stripZeros(val) {
+  if (!val) return val
+  return String(val).replace(/^0+/, '') || '0'
+}
+
 function formatDate(d) {
   if (!d) return '-'
   const dateObj = new Date(d)
@@ -424,11 +577,11 @@ function formatDate(d) {
 }
 
 function formatNum(val, decimals = 2) {
-  if (val === null || val === undefined || val === '') return '-'
+  if (val === null || val === undefined || val === '' || Number.isNaN(val)) return '-'
   // Si viene como string '45,2', normalizar
   let numStr = String(val).replace(',', '.')
   let num = parseFloat(numStr)
-  if (isNaN(num)) return val
+  if (isNaN(num)) return '-'
   return num.toFixed(decimals)
 }
 

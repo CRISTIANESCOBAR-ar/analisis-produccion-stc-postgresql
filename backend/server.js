@@ -2422,17 +2422,26 @@ app.get('/api/golden-batch/points', async (req, res) => {
   try {
     const result = await query(`
       SELECT 
+        "ROLADA",
         "DATA", 
         "TURNO", 
         "ARTICULO", 
         "TEJIDO_REAL_M", 
         "EFIC_TEJ", 
+        "RU_105",
+        "RT_105",
+        "ROT_URD_URDI",
+        "INDIGO_BASE",
+        "INDIGO_COLOR",
+        "INDIGO_R",
+        "INDIGO_CAVALOS",
+        "INDIGO_VEL_NOM",
+        "INDIGO_VEL_REAL",
+        "LOTE_FIBRA_TEXT",
+        "MISTURA",
         "SCI", 
         "STR", 
-        "MIC", 
-        "RU_105", 
-        "LOTE_FIBRA_TEXT",
-        "MISTURA"
+        "MIC"
       FROM view_golden_batch_data 
       ORDER BY "DATA" DESC
     `, [], 'GoldenBatchPoints')

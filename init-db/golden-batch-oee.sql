@@ -117,12 +117,15 @@ URDIMBRES_LOTE AS (
     SELECT 
         "ROLADA",
         CAST(NULLIF(regexp_replace("LOTE FIACAO", '[^0-9]', '', 'g'), '') AS BIGINT) as lote_id,
-        -- Cálculo Roturas Urdidora (Rot 10^6)
-        -- Normalización: (Rupturas / Metros) * 1,000,000
+        -- Cálculo Roturas Urdidora (Rot 10^6) = (Rupturas * 10^6) / (Metros * NumFios)
+        -- Misma fórmula que SeguimientoRoladasFibra.vue: calcularRot106
         CASE 
-            WHEN SUM(CASE WHEN "METRAGEM" ~ '^[0-9.,]+$' THEN REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.')::numeric ELSE 0 END) = 0 THEN 0
+            WHEN SUM(CASE WHEN "METRAGEM" ~ '^[0-9.,]+$' THEN REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.')::numeric ELSE 0 END) = 0
+              OR MAX(CASE WHEN "NUM_FIOS" ~ '^[0-9.,]+$' THEN REPLACE(REPLACE("NUM_FIOS", '.', ''), ',', '.')::numeric ELSE 0 END) = 0
+            THEN 0
             ELSE (SUM(CASE WHEN "RUPTURAS" ~ '^[0-9.,]+$' THEN REPLACE(REPLACE("RUPTURAS", '.', ''), ',', '.')::numeric ELSE 0 END) * 1000000.0) / 
-                 SUM(CASE WHEN "METRAGEM" ~ '^[0-9.,]+$' THEN REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.')::numeric ELSE 0 END)
+                 (SUM(CASE WHEN "METRAGEM" ~ '^[0-9.,]+$' THEN REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.')::numeric ELSE 0 END) *
+                  MAX(CASE WHEN "NUM_FIOS" ~ '^[0-9.,]+$' THEN REPLACE(REPLACE("NUM_FIOS", '.', ''), ',', '.')::numeric ELSE 1 END))
         END as rot_urd_urdidora
     FROM tb_produccion
     WHERE "SELETOR" IN ('URDIDEIRA', 'URDIDORA') 
@@ -134,10 +137,38 @@ INDIGO_INFO AS (
         "ROLADA",
         MAX("BASE URDUME") as "INDIGO_BASE",
         MAX("COR") as "INDIGO_COLOR",
-        MAX("R") as "INDIGO_R",
-        MAX("CAVALOS") as "INDIGO_CAVALOS",
-        MAX("VELOC") as "INDIGO_VEL_NOM",
-        MAX("VELOC CALC") as "INDIGO_VEL_REAL"
+        -- R10³ = (Rupturas * 1000) / Metros  (misma fórmula que SeguimientoRoladas "R103")
+        CASE 
+            WHEN SUM(CASE WHEN "METRAGEM" ~ '^[0-9.,]+$' THEN REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.')::numeric ELSE 0 END) = 0 THEN NULL
+            ELSE ROUND((
+                SUM(CASE WHEN "RUPTURAS" ~ '^[0-9.,]+$' THEN REPLACE(REPLACE("RUPTURAS", '.', ''), ',', '.')::numeric ELSE 0 END) * 1000.0
+            ) / NULLIF(
+                SUM(CASE WHEN "METRAGEM" ~ '^[0-9.,]+$' THEN REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.')::numeric ELSE 0 END)
+            , 0), 2)
+        END as "INDIGO_R",
+        -- Cav 10⁵ = (Cavalos * 100000) / Metros  (misma fórmula que SeguimientoRoladas calcularCav105)
+        CASE 
+            WHEN SUM(CASE WHEN "METRAGEM" ~ '^[0-9.,]+$' THEN REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.')::numeric ELSE 0 END) = 0 THEN NULL
+            ELSE ROUND((
+                SUM(CASE WHEN "CAVALOS" ~ '^[0-9.,]+$' THEN REPLACE(REPLACE("CAVALOS", '.', ''), ',', '.')::numeric ELSE 0 END) * 100000.0
+            ) / NULLIF(
+                SUM(CASE WHEN "METRAGEM" ~ '^[0-9.,]+$' THEN REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.')::numeric ELSE 0 END)
+            , 0), 2)
+        END as "INDIGO_CAVALOS",
+        -- Vel.Nom = MAX(VELOC) parseado numéricamente
+        MAX(CASE WHEN "VELOC" ~ '^[0-9.,]+$' THEN REPLACE(REPLACE("VELOC", '.', ''), ',', '.')::numeric ELSE NULL END) as "INDIGO_VEL_NOM",
+        -- Vel.Prom = SUM(metragem * veloc) / SUM(metragem)  (promedio ponderado, igual que SeguimientoRoladas)
+        CASE 
+            WHEN SUM(CASE WHEN "METRAGEM" ~ '^[0-9.,]+$' THEN REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.')::numeric ELSE 0 END) = 0 THEN NULL
+            ELSE ROUND(
+                SUM(
+                    (CASE WHEN "METRAGEM" ~ '^[0-9.,]+$' THEN REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.')::numeric ELSE 0 END) *
+                    COALESCE(CASE WHEN "VELOC" ~ '^[0-9.,]+$' THEN REPLACE(REPLACE("VELOC", '.', ''), ',', '.')::numeric ELSE NULL END, 0)
+                ) / NULLIF(
+                    SUM(CASE WHEN "METRAGEM" ~ '^[0-9.,]+$' THEN REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.')::numeric ELSE 0 END)
+                , 0)::numeric
+            , 2)
+        END as "INDIGO_VEL_REAL"
     FROM tb_produccion
     WHERE "SELETOR" = 'INDIGO'
     GROUP BY "ROLADA"

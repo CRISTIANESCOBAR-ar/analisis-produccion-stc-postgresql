@@ -1,31 +1,32 @@
 <template>
   <div class="h-screen flex flex-col bg-gray-50">
+    <!-- Backdrop -->
+    <Transition name="fade">
+      <div 
+        v-if="sidebarOpen" 
+        class="fixed inset-0 bg-black/30 z-40 transition-opacity"
+        @click="closeSidebar"
+      />
+    </Transition>
+
+    <!-- Sidebar Overlay -->
     <aside 
       :class="[
-        'fixed top-0 left-0 h-full bg-blue-800 text-white z-9999 transition-all duration-300 flex flex-col',
-        sidebarExpanded ? 'w-64' : 'w-16',
-        sidebarVisible ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        'fixed top-0 left-0 h-full w-64 bg-blue-800 text-white z-50 transition-transform duration-300 flex flex-col shadow-2xl',
+        sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       ]"
     >
       <div class="flex items-center justify-between px-4 py-3 border-b border-blue-600">
-        <div class="flex items-center gap-2">
-          <h2 v-show="sidebarExpanded" class="text-lg font-bold">STC Produção</h2>
-          <span v-show="!sidebarExpanded" class="text-lg font-bold">STC</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <button
-            @click="toggleSidebarExpanded"
-            class="hidden lg:inline-flex items-center justify-center w-8 h-8 rounded hover:bg-blue-700 transition-colors"
-            :title="sidebarExpanded ? 'Colapsar menu' : 'Expandir menu'"
-          >
-            <span class="text-base">{{ sidebarExpanded ? '<' : '>' }}</span>
-          </button>
-          <button @click="sidebarVisible = false" class="lg:hidden">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
+        <h2 class="text-lg font-bold">STC Produção</h2>
+        <button
+          @click="closeSidebar"
+          class="inline-flex items-center justify-center w-8 h-8 rounded hover:bg-blue-700 transition-colors"
+          title="Cerrar menú"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
       </div>
       
       <nav class="sidebar-scroll px-2 py-2 space-y-1 overflow-y-auto flex-1 min-h-0">
@@ -33,19 +34,14 @@
         <div class="space-y-1">
           <button 
             @click="toggleLabMenu"
-            class="w-full flex items-center rounded hover:bg-blue-700 transition-colors"
-            :class="[
-              isLabRouteActive ? 'bg-blue-700' : '',
-              sidebarExpanded ? 'justify-between px-3 py-2' : 'justify-center px-2 py-2'
-            ]"
-            :title="sidebarExpanded ? '' : 'Laboratorio Hilanderia'"
+            class="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-blue-700 transition-colors"
+            :class="isLabRouteActive ? 'bg-blue-700' : ''"
           >
             <div class="flex items-center gap-2">
               <span>🧪</span>
-              <span v-show="sidebarExpanded" class="font-medium">Laboratorio Hilandería</span>
+              <span class="font-medium">Laboratorio Hilandería</span>
             </div>
             <svg 
-              v-show="sidebarExpanded"
               class="w-4 h-4 transition-transform duration-200"
               :class="{ 'rotate-180': labMenuOpen }"
               fill="none" 
@@ -57,7 +53,7 @@
           </button>
           
           <div 
-            v-show="sidebarExpanded && labMenuOpen"
+            v-show="labMenuOpen"
             class="ml-4 space-y-1 border-l-2 border-blue-600 pl-2"
           >
             <router-link 
@@ -130,19 +126,14 @@
         <div class="space-y-1">
           <button 
             @click="toggleProdMenu"
-            class="w-full flex items-center rounded hover:bg-blue-700 transition-colors"
-            :class="[
-              isProdRouteActive ? 'bg-blue-700' : '',
-              sidebarExpanded ? 'justify-between px-3 py-2' : 'justify-center px-2 py-2'
-            ]"
-            :title="sidebarExpanded ? '' : 'Produccion'"
+            class="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-blue-700 transition-colors"
+            :class="isProdRouteActive ? 'bg-blue-700' : ''"
           >
             <div class="flex items-center gap-2">
               <span>🏭</span>
-              <span v-show="sidebarExpanded" class="font-medium">Producción</span>
+              <span class="font-medium">Producción</span>
             </div>
             <svg 
-              v-show="sidebarExpanded"
               class="w-4 h-4 transition-transform duration-200"
               :class="{ 'rotate-180': prodMenuOpen }"
               fill="none" 
@@ -154,7 +145,7 @@
           </button>
           
           <div 
-            v-show="sidebarExpanded && prodMenuOpen"
+            v-show="prodMenuOpen"
             class="ml-4 space-y-1 border-l-2 border-blue-600 pl-2"
           >
             <router-link 
@@ -171,19 +162,14 @@
         <div class="space-y-1">
           <button 
             @click="toggleCalidadMenu"
-            class="w-full flex items-center rounded hover:bg-blue-700 transition-colors"
-            :class="[
-              isCalidadRouteActive ? 'bg-blue-700' : '',
-              sidebarExpanded ? 'justify-between px-3 py-2' : 'justify-center px-2 py-2'
-            ]"
-            :title="sidebarExpanded ? '' : 'Control de Calidad'"
+            class="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-blue-700 transition-colors"
+            :class="isCalidadRouteActive ? 'bg-blue-700' : ''"
           >
             <div class="flex items-center gap-2">
               <span>✅</span>
-              <span v-show="sidebarExpanded" class="font-medium">Control de Calidad</span>
+              <span class="font-medium">Control de Calidad</span>
             </div>
             <svg 
-              v-show="sidebarExpanded"
               class="w-4 h-4 transition-transform duration-200"
               :class="{ 'rotate-180': calidadMenuOpen }"
               fill="none" 
@@ -195,7 +181,7 @@
           </button>
           
           <div 
-            v-show="sidebarExpanded && calidadMenuOpen"
+            v-show="calidadMenuOpen"
             class="ml-4 space-y-1 border-l-2 border-blue-600 pl-2"
           >
             <router-link 
@@ -226,19 +212,14 @@
         <div class="space-y-1">
           <button 
             @click="toggleIndigoMenu"
-            class="w-full flex items-center rounded hover:bg-blue-700 transition-colors"
-            :class="[
-              isIndigoRouteActive ? 'bg-blue-700' : '',
-              sidebarExpanded ? 'justify-between px-3 py-2' : 'justify-center px-2 py-2'
-            ]"
-            :title="sidebarExpanded ? '' : 'Indigo'"
+            class="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-blue-700 transition-colors"
+            :class="isIndigoRouteActive ? 'bg-blue-700' : ''"
           >
             <div class="flex items-center gap-2">
               <span>💙</span>
-              <span v-show="sidebarExpanded" class="font-medium">ÍNDIGO</span>
+              <span class="font-medium">ÍNDIGO</span>
             </div>
             <svg 
-              v-show="sidebarExpanded"
               class="w-4 h-4 transition-transform duration-200"
               :class="{ 'rotate-180': indigoMenuOpen }"
               fill="none" 
@@ -250,7 +231,7 @@
           </button>
           
           <div 
-            v-show="sidebarExpanded && indigoMenuOpen"
+            v-show="indigoMenuOpen"
             class="ml-4 space-y-1 border-l-2 border-blue-600 pl-2"
           >
             <router-link 
@@ -309,19 +290,14 @@
         <div class="space-y-1">
           <button 
             @click="toggleConfigMenu"
-            class="w-full flex items-center rounded hover:bg-blue-700 transition-colors"
-            :class="[
-              isConfigRouteActive ? 'bg-blue-700' : '',
-              sidebarExpanded ? 'justify-between px-3 py-2' : 'justify-center px-2 py-2'
-            ]"
-            :title="sidebarExpanded ? '' : 'Configuración'"
+            class="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-blue-700 transition-colors"
+            :class="isConfigRouteActive ? 'bg-blue-700' : ''"
           >
             <div class="flex items-center gap-2">
               <span>⚙️</span>
-              <span v-show="sidebarExpanded" class="font-medium">Configuración</span>
+              <span class="font-medium">Configuración</span>
             </div>
             <svg 
-              v-show="sidebarExpanded"
               class="w-4 h-4 transition-transform duration-200"
               :class="{ 'rotate-180': configMenuOpen }"
               fill="none" 
@@ -333,7 +309,7 @@
           </button>
           
           <div 
-            v-show="sidebarExpanded && configMenuOpen"
+            v-show="configMenuOpen"
             class="ml-4 space-y-1 border-l-2 border-blue-600 pl-2"
           >
             <router-link 
@@ -355,19 +331,20 @@
       </nav>
     </aside>
 
+    <!-- Floating Toggle Button -->
     <button 
-      @click="sidebarVisible = !sidebarVisible" 
-      class="lg:hidden fixed top-3 left-3 z-50 text-blue-600 bg-blue-100 p-1.5 rounded-md hover:bg-blue-600 hover:text-white transition-colors shadow-sm"
+      v-show="!sidebarOpen"
+      @click="openSidebar"
+      class="fixed top-3 left-3 z-30 bg-blue-700 text-white p-2 rounded-lg shadow-lg hover:bg-blue-800 transition-all duration-200 hover:shadow-xl active:scale-95"
+      title="Abrir menú de navegación"
     >
-      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
       </svg>
     </button>
 
     <main 
-      @click="sidebarVisible = false" 
-      class="main-scroll flex-1 overflow-auto transition-all duration-300"
-      :class="sidebarExpanded ? 'lg:pl-64' : 'lg:pl-16'"
+      class="main-scroll flex-1 overflow-auto"
     >
       <router-view />
     </main>
@@ -375,21 +352,20 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
-const sidebarVisible = ref(false)
-const sidebarExpanded = ref(localStorage.getItem('sidebarExpanded') === 'true')
+const sidebarOpen = ref(false)
 
-// Laboratorio menu state (persisted in localStorage)
+// Menu group states (persisted in localStorage)
 const labMenuOpen = ref(localStorage.getItem('labMenuOpen') !== 'false')
 const prodMenuOpen = ref(localStorage.getItem('prodMenuOpen') !== 'false')
 const calidadMenuOpen = ref(localStorage.getItem('calidadMenuOpen') !== 'false')
 const indigoMenuOpen = ref(localStorage.getItem('indigoMenuOpen') !== 'false')
 const configMenuOpen = ref(localStorage.getItem('configMenuOpen') !== 'false')
 
-const labRoutes = ['/resumen', '/resumen-diario', '/stats', '/uster', '/tenso']
+const labRoutes = ['/resumen', '/resumen-semanal-hilanderia', '/analisis-calidad-fibra', '/golden-batch', '/resumen-diario', '/stats', '/uster', '/tenso']
 const isLabRouteActive = computed(() => labRoutes.includes(route.path))
 
 const prodRoutes = ['/import-control']
@@ -412,53 +388,70 @@ const isIndigoRouteActive = computed(() => indigoRoutes.includes(route.path))
 const configRoutes = ['/parametros-hvi', '/detalle-mistura-lote']
 const isConfigRouteActive = computed(() => configRoutes.includes(route.path))
 
-function setSidebarExpanded(value) {
-  sidebarExpanded.value = value
-  localStorage.setItem('sidebarExpanded', value.toString())
+function openSidebar() {
+  sidebarOpen.value = true
 }
 
-function toggleSidebarExpanded() {
-  setSidebarExpanded(!sidebarExpanded.value)
+function closeSidebar() {
+  sidebarOpen.value = false
 }
 
-function ensureSidebarExpanded() {
-  if (!sidebarExpanded.value) {
-    setSidebarExpanded(true)
+// Close sidebar on route change (user navigated)
+watch(() => route.path, () => {
+  closeSidebar()
+})
+
+// Close sidebar on Escape key
+function handleKeydown(e) {
+  if (e.key === 'Escape' && sidebarOpen.value) {
+    closeSidebar()
   }
 }
 
+onMounted(() => {
+  document.addEventListener('keydown', handleKeydown)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', handleKeydown)
+})
+
 function toggleLabMenu() {
-  ensureSidebarExpanded()
   labMenuOpen.value = !labMenuOpen.value
   localStorage.setItem('labMenuOpen', labMenuOpen.value.toString())
 }
 
 function toggleProdMenu() {
-  ensureSidebarExpanded()
   prodMenuOpen.value = !prodMenuOpen.value
   localStorage.setItem('prodMenuOpen', prodMenuOpen.value.toString())
 }
 
 function toggleCalidadMenu() {
-  ensureSidebarExpanded()
   calidadMenuOpen.value = !calidadMenuOpen.value
   localStorage.setItem('calidadMenuOpen', calidadMenuOpen.value.toString())
 }
 
 function toggleIndigoMenu() {
-  ensureSidebarExpanded()
   indigoMenuOpen.value = !indigoMenuOpen.value
   localStorage.setItem('indigoMenuOpen', indigoMenuOpen.value.toString())
 }
 
 function toggleConfigMenu() {
-  ensureSidebarExpanded()
   configMenuOpen.value = !configMenuOpen.value
   localStorage.setItem('configMenuOpen', configMenuOpen.value.toString())
 }
 </script>
 
 <style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
 .sidebar-scroll {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.45) rgba(15, 23, 42, 0.25);
