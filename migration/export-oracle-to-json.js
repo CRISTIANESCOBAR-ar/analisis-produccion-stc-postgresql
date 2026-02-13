@@ -3,6 +3,9 @@ require('dotenv').config({ path: '../carga-datos-vue/server/.env' });
 const oracledb = require('oracledb');
 const fs = require('fs');
 
+// Obtener CLOBs como strings automáticamente
+oracledb.fetchAsString = [ oracledb.CLOB ];
+
 async function exportData() {
   let connection;
   try {

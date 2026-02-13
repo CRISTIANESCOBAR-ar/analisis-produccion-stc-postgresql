@@ -446,6 +446,7 @@ const groupMode = ref('detailed') // 'detailed' o 'aggregated'
 const startDate = ref('')
 const endDate = ref('')
 const rawData = ref([])
+const parametrosHVI = ref(new Map()) // Almacena parámetros por código
 
 // Información de tooltips para variables HVI
 const hviTooltips = {
@@ -894,39 +895,71 @@ const groupTooltips = {
   `
 }
 
-// Funciones para determinar color de las celdas según rangos
+// Funciones para determinar color de las celdas según rangos dinámicos
 const getColorClass = (value, variable) => {
   if (!value || value === '—' || value === '') return ''
   const numValue = parseFloat(String(value).replace(',', '.'))
   if (isNaN(numValue)) return ''
   
-  const ranges = {
-    UHML: { optimal: numValue > 29, critical: numValue < 26 },
-    UI: { optimal: numValue > 83, critical: numValue < 79 },
-    SF: { optimal: numValue < 6, critical: numValue > 12 },
-    STR: { optimal: numValue > 30, critical: numValue < 24 },
-    ELG: { optimal: numValue > 7, critical: numValue < 5 },
-    MIC: { optimal: numValue >= 3.7 && numValue <= 4.2, critical: numValue < 3.4 || numValue > 4.9 },
-    MAT: { optimal: numValue > 0.85, critical: numValue < 0.75 },
-    RD: { optimal: numValue >= 75 && numValue <= 80, critical: numValue < 70 },
-    PLUS_B: { optimal: numValue >= 7 && numValue <= 9, critical: numValue > 12 },
-    TRCNT: { optimal: numValue < 15, critical: numValue > 50 },
-    TRAR: { optimal: numValue < 0.20, critical: numValue > 0.60 },
-    TRID: { optimal: numValue <= 2, critical: numValue >= 6 },
-    SCI: { optimal: numValue > 140, critical: numValue < 100 },
-    MST: { optimal: numValue >= 6.5 && numValue <= 8.0, critical: numValue < 6.0 || numValue > 8.5 }
+  // Buscar parámetro en el mapa cargado desde BD
+  const param = parametrosHVI.value.get(variable)
+  
+  // Si no hay parámetros cargados, no aplicar color
+  if (!param || !param.activo) return ''
+  
+  // Evaluar si está en rango óptimo
+  const enRangoOptimo = evaluarRango(
+    numValue,
+    param.optimo_min,
+    param.optimo_max
+  )
+  
+  if (enRangoOptimo) {
+    return 'bg-green-100 text-green-800 font-semibold'
   }
   
-  const range = ranges[variable]
-  if (!range) return ''
+  // Evaluar si está en rango crítico
+  const enRangoCritico = evaluarRango(
+    numValue,
+    param.critico_min,
+    param.critico_max
+  )
   
-  if (range.optimal) {
-    return 'bg-green-100 text-green-800 font-semibold'
-  } else if (range.critical) {
+  if (enRangoCritico) {
     return 'bg-red-100 text-red-800 font-semibold'
-  } else {
+  }
+  
+  // Evaluar si está en rango aceptable
+  const enRangoAceptable = evaluarRango(
+    numValue,
+    param.aceptable_min,
+    param.aceptable_max
+  )
+  
+  if (enRangoAceptable) {
     return 'bg-yellow-50 text-yellow-800'
   }
+  
+  // Si no está en ningún rango definido, sin color
+  return ''
+}
+
+// Función auxiliar para evaluar si un valor está en un rango
+const evaluarRango = (valor, min, max) => {
+  // Si ambos límites están definidos
+  if (min !== null && max !== null) {
+    return valor >= min && valor <= max
+  }
+  // Solo mínimo definido
+  if (min !== null && max === null) {
+    return valor >= min
+  }
+  // Solo máximo definido
+  if (min === null && max !== null) {
+    return valor <= max
+  }
+  // Ningún límite definido
+  return false
 }
 
 // Función para quitar ceros a la izquierda
@@ -1181,6 +1214,28 @@ const filteredRows = computed(() => {
   }
 })
 
+// Cargar parámetros HVI desde la API
+async function cargarParametrosHVI() {
+  try {
+    console.log('⚙️ Cargando parámetros HVI...')
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
+    const response = await fetch(`${API_URL}/parametros-hvi?activo=true`)
+    const data = await response.json()
+    
+    if (data.success && data.parametros) {
+      // Convertir array a Map para acceso rápido por código
+      parametrosHVI.value = new Map(
+        data.parametros.map(p => [p.codigo, p])
+      )
+      console.log('✅ Parámetros HVI cargados:', parametrosHVI.value.size, 'parámetros')
+    } else {
+      console.warn('⚠️ No se pudieron cargar parámetros HVI')
+    }
+  } catch (error) {
+    console.error('❌ Error cargando parámetros HVI:', error)
+  }
+}
+
 async function loadData() {
   loading.value = true
   try {
@@ -1252,7 +1307,7 @@ async function exportToExcel() {
   window.URL.revokeObjectURL(url)
 }
 
-onMounted(() => {
+onMounted(async () => {
   // Establecer fechas por defecto - últimos 30 días
   const hoy = new Date()
   endDate.value = hoy.toISOString().split('T')[0]
@@ -1260,6 +1315,10 @@ onMounted(() => {
   hace30Dias.setDate(hace30Dias.getDate() - 30)
   startDate.value = hace30Dias.toISOString().split('T')[0]
   
+  // Cargar parámetros HVI primero para el resaltado
+  await cargarParametrosHVI()
+  
+  // Luego cargar los datos
   loadData()
 })
 </script>

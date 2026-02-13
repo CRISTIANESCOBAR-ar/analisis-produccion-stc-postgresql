@@ -2388,6 +2388,63 @@ app.get('/api/calidad-fibra', async (req, res) => {
   }
 })
 
+// GOLDEN BATCH: Summary
+app.get('/api/golden-batch/summary', async (req, res) => {
+  console.log('>>> [GOLDEN BATCH] Requesting Summary...');
+  try {
+    const result = await query(`
+      SELECT 
+        CASE 
+          WHEN "EFIC_TEJ" >= 90 THEN 'EXITO (>90%)' 
+          WHEN "EFIC_TEJ" < 85 THEN 'BAJA (<85%)' 
+          ELSE 'NORMAL' 
+        END as estado, 
+        COUNT(*) as volumen, 
+        ROUND(AVG("SCI"), 1) as sci, 
+        ROUND(AVG("STR"), 1) as str, 
+        ROUND(AVG("MIC"), 2) as mic, 
+        ROUND(AVG("RU_105"), 1) as rot_urd 
+      FROM view_golden_batch_data 
+      GROUP BY 1 
+      ORDER BY MIN("EFIC_TEJ") DESC
+    `, [], 'GoldenBatchSummary')
+    console.log('>>> [GOLDEN BATCH] Summary Rows:', result.rows.length);
+    res.json({ rows: result.rows })
+  } catch (err) {
+    console.error('>>> [GOLDEN BATCH] Summary ERROR:', err.message);
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GOLDEN BATCH: Points
+app.get('/api/golden-batch/points', async (req, res) => {
+  console.log('>>> [GOLDEN BATCH] Requesting Points...');
+  try {
+    const result = await query(`
+      SELECT 
+        "DATA", 
+        "TURNO", 
+        "ARTICULO", 
+        "TEJIDO_REAL_M", 
+        "EFIC_TEJ", 
+        "SCI", 
+        "STR", 
+        "MIC", 
+        "RU_105", 
+        "RUB_105",
+        "LOTE_FIBRA_TEXT",
+        "MISTURA"
+      FROM view_golden_batch_data 
+      ORDER BY "DATA" DESC
+    `, [], 'GoldenBatchPoints')
+    console.log('>>> [GOLDEN BATCH] Points Rows:', result.rows.length);
+    res.json({ rows: result.rows })
+  } catch (err) {
+    console.error('>>> [GOLDEN BATCH] Points ERROR:', err.message);
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // TENSORAPID: Upload
 app.post('/api/tensorapid/upload', async (req, res) => {
   const { par, tbl } = req.body

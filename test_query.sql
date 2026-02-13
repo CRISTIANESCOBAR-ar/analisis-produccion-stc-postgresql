@@ -1,0 +1,11 @@
+SELECT 
+    "MAQUINA", 
+    "TURNO", 
+    "PONTOS_100%", 
+    "PONTOS_LIDOS", 
+    "EFICIENCIA",
+    "TOTAL MINUTOS TUR"
+FROM tb_produccion 
+WHERE "DT_BASE_PRODUCAO" = '2026-02-08' 
+  AND "MAQUINA" = '35001' 
+  AND "TURNO" = 'A';

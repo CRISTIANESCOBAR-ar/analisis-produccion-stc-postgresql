@@ -26,6 +26,11 @@ const routes = [
     meta: { title: 'Resumen Semanal Hilanderia' }
   },
   {
+    path: '/golden-batch',
+    component: () => import('./components/GoldenBatchCorrelation.vue'),
+    meta: { title: 'Motor de Correlación Golden Batch' }
+  },
+  {
     path: '/analisis-calidad-fibra',
     component: () => import('./components/ensayos/AnalisisCalidadFibra.vue'),
     meta: { title: 'Análisis Calidad Fibra' }

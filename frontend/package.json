@@ -16,6 +16,7 @@
     "exceljs": "^4.3.0",
     "html2canvas": "^1.4.1",
     "html-to-image": "^1.11.13",
+    "maska": "^2.1.11",
     "modern-screenshot": "^4.6.7",
     "pinia": "^3.0.3",
     "sweetalert2": "^11.23.0",

@@ -1,0 +1,238 @@
+
+> stc-backend-api@1.0.0 dev
+> node --watch server.js
+
+Ô£ô Conexi├│n a PostgreSQL exitosa
+­ƒÜÇ ========================================
+­ƒÜÇ STC Backend API v2 - PostgreSQL
+­ƒÜÇ Servidor corriendo en puerto 3001
+­ƒÜÇ Database: stc_produccion
+­ƒÜÇ Health check: http://localhost:3001/api/health
+­ƒÜÇ ========================================
+Ô£ô Query in 52.2ms (rows=0)
+Ô£ô Query in 3.7ms (rows=0)
+Ô£ô Query in 4.3ms (rows=0)
+Ô£ô Query in 7.5ms (rows=0)
+Ô£ô Query in 4.9ms (rows=0)
+Ô£ô Query [tb-produccion-columns-seguimiento] in 235.8ms (rows=66)
+Ô£ô Query [seguimiento-roladas] in 10767.8ms (rows=292)
+Ô£ô Query [seguimiento-roladas-fibra-hvi] in 982.1ms (rows=9198)
+PCT BCO 106: 53.612005093850456 47302.87999999999 88231.87999999993
+Restarting 'server.js'
+Ô£ô Conexi├│n a PostgreSQL exitosa
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use 0.0.0.0:3001
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '0.0.0.0',
+  port: 3001
+}
+
+Node.js v22.21.1
+Failed running 'server.js'. Waiting for file changes before restarting...
+Restarting 'server.js'
+Ô£ô Conexi├│n a PostgreSQL exitosa
+­ƒÜÇ ========================================
+­ƒÜÇ STC Backend API v2 - PostgreSQL
+­ƒÜÇ Servidor corriendo en puerto 3001
+­ƒÜÇ Database: stc_produccion
+­ƒÜÇ Health check: http://localhost:3001/api/health
+­ƒÜÇ ========================================
+Ô£ô Query in 101.4ms (rows=0)
+Ô£ô Query in 4.6ms (rows=0)
+Ô£ô Query in 3.5ms (rows=0)
+Ô£ô Query in 4.5ms (rows=0)
+Ô£ô Query in 5.8ms (rows=0)
+Failed running 'server.js'. Waiting for file changes before restarting...
+Restarting 'server.js'
+Ô£ô Conexi├│n a PostgreSQL exitosa
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use 0.0.0.0:3001
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '0.0.0.0',
+  port: 3001
+}
+
+Node.js v22.21.1
+Failed running 'server.js'. Waiting for file changes before restarting...
+Restarting 'server.js'
+Ô£ô Conexi├│n a PostgreSQL exitosa
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use 0.0.0.0:3001
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '0.0.0.0',
+  port: 3001
+}
+
+Node.js v22.21.1
+Failed running 'server.js'. Waiting for file changes before restarting...
+Restarting 'server.js'
+Restarting 'server.js'
+Ô£ô Conexi├│n a PostgreSQL exitosa
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use 0.0.0.0:3001
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '0.0.0.0',
+  port: 3001
+}
+
+Node.js v22.21.1
+Failed running 'server.js'. Waiting for file changes before restarting...
+Restarting 'server.js'
+Ô£ô Conexi├│n a PostgreSQL exitosa
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use 0.0.0.0:3001
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '0.0.0.0',
+  port: 3001
+}
+
+Node.js v22.21.1
+Failed running 'server.js'. Waiting for file changes before restarting...
+Restarting 'server.js'
+Ô£ô Conexi├│n a PostgreSQL exitosa
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use 0.0.0.0:3001
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '0.0.0.0',
+  port: 3001
+}
+
+Node.js v22.21.1
+Failed running 'server.js'. Waiting for file changes before restarting...
+Restarting 'server.js'
+Ô£ô Conexi├│n a PostgreSQL exitosa
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use 0.0.0.0:3001
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '0.0.0.0',
+  port: 3001
+}
+
+Node.js v22.21.1
+Failed running 'server.js'. Waiting for file changes before restarting...
+Restarting 'server.js'
+Ô£ô Conexi├│n a PostgreSQL exitosa
+node:events:497
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use 0.0.0.0:3001
+    at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '0.0.0.0',
+  port: 3001
+}
+
+Node.js v22.21.1
+Failed running 'server.js'. Waiting for file changes before restarting...
+Restarting 'server.js'
+file:///C:/stc-produccion-v2/backend/server.js:3665
+    const eficienciaClean = 'regexp_replace("EFICIENCIA", ''[^0-9,.-]'', '''', ''g'')'
+                                                           ^^^^^^^^^^^
+
+SyntaxError: Unexpected string
+    at compileSourceTextModule (node:internal/modules/esm/utils:346:16)
+    at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:107:18)
+    at #translate (node:internal/modules/esm/loader:546:20)
+    at afterLoad (node:internal/modules/esm/loader:596:29)
+    at ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:601:12)
+    at #createModuleJob (node:internal/modules/esm/loader:624:36)
+    at #getJobFromResolveResult (node:internal/modules/esm/loader:343:34)
+    at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:311:41)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:664:25)
+
+Node.js v22.21.1
+Failed running 'server.js'. Waiting for file changes before restarting...
