@@ -320,6 +320,13 @@
               <span>🎛️</span> Parámetros HVI
             </router-link>
             <router-link 
+              to="/hvi" 
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
+              :class="{ 'bg-blue-600': $route.path === '/hvi' }"
+            >
+              <span>🧬</span> Carga HVI (Mistura)
+            </router-link>
+            <router-link 
               to="/detalle-mistura-lote" 
               class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
               :class="{ 'bg-blue-600': $route.path === '/detalle-mistura-lote' }"
@@ -335,8 +342,8 @@
     <button 
       v-show="!sidebarOpen"
       @click="openSidebar"
-      class="fixed top-3 left-3 z-30 bg-blue-700 text-white p-2 rounded-lg shadow-lg hover:bg-blue-800 transition-all duration-200 hover:shadow-xl active:scale-95"
-      title="Abrir menú de navegación"
+      class="fixed top-3 left-3 z-30 bg-transparent text-white p-2 rounded-lg shadow-lg hover:bg-blue-800 transition-all duration-200 hover:shadow-xl active:scale-95"
+      v-tippy="{ content: 'Abrir menú de navegación', placement: 'bottom' }"
     >
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />

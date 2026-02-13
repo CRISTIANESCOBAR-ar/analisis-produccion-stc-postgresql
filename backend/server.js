@@ -4825,7 +4825,7 @@ app.get('/api/detalle-mistura/:loteFiac', async (req, res) => {
     
     console.log(`[DetalleMistura] Filas encontradas: ${result.rows.length}`)
     
-    res.json({ 
+    res.json({
       success: true,
       loteFiac: loteFiac,
       loteFiacFormateado: loteFiacFormateado,
@@ -4834,12 +4834,148 @@ app.get('/api/detalle-mistura/:loteFiac', async (req, res) => {
     })
   } catch (err) {
     console.error('Error obteniendo detalle de mistura:', err)
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      error: err.message 
+      error: err.message
     })
   }
 })
+
+// =====================================================
+// HVI: Guardar datos de ensayos en tablas específicas
+// =====================================================
+app.post('/api/hvi/save', async (req, res) => {
+  const { files } = req.body;
+  
+  if (!files || !Array.isArray(files)) {
+    return res.status(400).json({ success: false, error: 'No se enviaron datos de archivos' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 0. Asegurar que las tablas existan y tengan las columnas necesarias
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tb_hvi_ensayos (
+          id SERIAL PRIMARY KEY,
+          lote TEXT NOT NULL,
+          proveedor TEXT,
+          grado TEXT,
+          fecha TEXT,
+          muestra TEXT,
+          archivo_fuente TEXT,
+          creado_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      
+      -- Asegurar columna 'tipo' si no existe
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tb_hvi_ensayos' AND column_name='tipo') THEN
+          ALTER TABLE tb_hvi_ensayos ADD COLUMN tipo TEXT;
+        END IF;
+      END $$;
+
+      CREATE TABLE IF NOT EXISTS tb_hvi_detalles (
+          id SERIAL PRIMARY KEY,
+          ensayo_id INTEGER REFERENCES tb_hvi_ensayos(id) ON DELETE CASCADE,
+          fardo TEXT,
+          sci NUMERIC, mst NUMERIC, mic NUMERIC, mat NUMERIC, uhml NUMERIC, 
+          ui NUMERIC, sf NUMERIC, str NUMERIC, elg NUMERIC, rd NUMERIC, 
+          plus_b NUMERIC, tipo TEXT, tr_cnt NUMERIC, tr_ar NUMERIC, trid NUMERIC
+      );
+    `);
+
+    for (const file of files) {
+      const { metadata, details } = file;
+      
+      // 1. Verificar si ya existe un ensayo para este lote/proveedor/fecha/archivo para evitar duplicados
+      const existing = await client.query(
+        `SELECT id FROM tb_hvi_ensayos 
+         WHERE lote = $1 AND proveedor = $2 AND fecha = $3 AND archivo_fuente = $4`,
+        [metadata.loteEntrada, metadata.proveedor, metadata.fecha, metadata.fileName]
+      );
+
+      if (existing.rows.length > 0) {
+        // Si existe, lo eliminamos (y por CASCADE se borran sus detalles) para re-insertar
+        await client.query('DELETE FROM tb_hvi_ensayos WHERE id = $1', [existing.rows[0].id]);
+      }
+
+      // 2. Insertar Cabecera
+      const headerRes = await client.query(
+        `INSERT INTO tb_hvi_ensayos (tipo, lote, proveedor, grado, fecha, muestra, archivo_fuente)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+        [metadata.tipo, metadata.loteEntrada, metadata.proveedor, metadata.grado, metadata.fecha, metadata.muestra, metadata.fileName]
+      );
+
+      const ensayoId = headerRes.rows[0].id;
+
+      // 3. Insertar Detalles
+      for (const row of details) {
+        const toNum = (v) => {
+          if (v === null || v === undefined || v === '-' || v === '') return null;
+          const n = parseFloat(String(v).replace(',', '.'));
+          return isNaN(n) ? null : n;
+        };
+
+        const sqlDetalle = `
+          INSERT INTO tb_hvi_detalles (
+            ensayo_id, fardo, sci, mst, mic, mat, uhml, ui, sf, 
+            str, elg, rd, plus_b, tipo, tr_cnt, tr_ar, trid
+          ) VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
+          )
+        `;
+
+        const values = [
+          ensayoId, row.fardo, 
+          toNum(row.sci), toNum(row.mst), toNum(row.mic), toNum(row.mat), 
+          toNum(row.uhml), toNum(row.ui), toNum(row.sf), toNum(row.str), 
+          toNum(row.elg), toNum(row.rd), toNum(row.plusB), 
+          row.tipo, 
+          toNum(row.trCnt), toNum(row.trAr), toNum(row.trid)
+        ];
+
+        await client.query(sqlDetalle, values);
+      }
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true, message: `Se han guardado los datos correctamente.` });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error guardando datos HVI:', err);
+    res.status(500).json({ success: false, error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Endpoint para verificar archivos existentes
+app.post('/api/hvi/check-files', async (req, res) => {
+  const { fileNames } = req.body;
+  if (!fileNames || !Array.isArray(fileNames)) {
+    return res.status(400).json({ success: false, error: 'Lista de archivos inválida' });
+  }
+
+  try {
+    // Verificar si la tabla existe antes de consultar
+    const tableCheck = await query(`SELECT to_regclass('public.tb_hvi_ensayos') as exists`);
+    if (!tableCheck.rows[0].exists) {
+      return res.json({ success: true, existingNames: [] });
+    }
+
+    const result = await query(
+      `SELECT archivo_fuente FROM tb_hvi_ensayos WHERE archivo_fuente = ANY($1)`,
+      [fileNames]
+    );
+    const existingNames = result.rows.map(r => r.archivo_fuente);
+    res.json({ success: true, existingNames });
+  } catch (err) {
+    console.error('Error checking HVI files:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // =====================================================
 // INICIAR SERVIDOR

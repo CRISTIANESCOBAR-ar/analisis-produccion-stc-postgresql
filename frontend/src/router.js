@@ -41,6 +41,11 @@ const routes = [
     meta: { title: 'Parámetros HVI' }
   },
   {
+    path: '/hvi',
+    component: () => import('./components/ensayos/HVI.vue'),
+    meta: { title: 'Carga HVI' }
+  },
+  {
     path: '/detalle-mistura-lote',
     component: () => import('./components/ensayos/DetalleMisturaLote.vue'),
     meta: { title: 'Detalle MISTURA por Lote' }

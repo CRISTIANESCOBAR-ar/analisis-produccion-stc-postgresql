@@ -1,0 +1,302 @@
+
+Name      LastWriteTime
+----      -------------
+.venv     8/2/2026 22:52:22
+backend   13/2/2026 02:07:11
+backups   9/2/2026 13:54:26
+csv       7/2/2026 14:56:33
+exports   7/2/2026 17:23:18
+frontend  13/2/2026 08:55:41
+init-db   12/2/2026 21:53:24
+migration 9/2/2026 14:59:40
+scripts   12/2/2026 16:17:12
+uploads   3/2/2026 20:58:27
+
+
+Name               Directory                      Size (KB) LastWriteTime
+----               ---------                      --------- -------------
+.env               C:\stc-produccion-v2\backend        0,20 3/2/2026 21:03:45
+.env.example       C:\stc-produccion-v2\backend        0,20 3/2/2026 21:03:45
+.env               C:\stc-produccion-v2\migration      0,27 3/2/2026 23:48:09
+.env               C:\stc-produccion-v2                0,46 3/2/2026 16:33:49
+.env.example       C:\stc-produccion-v2                0,83 7/2/2026 14:40:58
+docker-compose.yml C:\stc-produccion-v2                2,23 7/2/2026 14:40:40
+Dockerfile         C:\stc-produccion-v2                0,70 7/2/2026 14:30:24
+
+CONTAINER ID  IMAGE       COMMAND     CREATED     STATUS      PORTS       NAMES
+ID            NAME          CPU %       MEM USAGE / LIMIT  MEM %       NET IO             BLOCK IO           PIDS        CPU TIME     AVG CPU %
+cd4d2aa7ba99  stc_postgres  0.66%       67.96MB / 5.092GB  1.33%       3.836kB / 1.258kB  228.1MB / 356.4kB  7           1m3.395265s  0.66%
+220182b71182  stc_pgadmin   0.59%       273.2MB / 5.092GB  5.36%       2.336kB / 1.258kB  120MB / 8.192kB    7           55.81435s    0.59%
+NETWORK ID    NAME         DRIVER
+2f259bab93aa  podman       bridge
+aacc75bb9dd5  stc_network  bridge
+
+name   : stc_network
+driver : bridge
+Scope  : 
+
+DRIVER      VOLUME NAME
+local       stc_postgres_data
+local       stc_pgadmin_data
+
+Name       : stc_postgres_data
+Mountpoint : /home/user/.local/share/containers/storage/volumes/stc_postgres_data/_data
+CreatedAt  : 2026-02-03T21:41:56.230763048-03:00
+
+version: '3.9'
+
+services:
+  # App (Frontend build + Backend API en un solo contenedor)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stc_app
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      FRONTEND_DIST: /app/frontend/dist
+      CSV_FOLDER: /data/csv
+      # Conexión a Postgres dentro de la red de compose
+      PG_HOST: postgres
+      PG_PORT: 5432
+      PG_DATABASE: stc_produccion
+      PG_USER: stc_user
+      PG_PASSWORD: stc_password_2026
+      # Reintentos de conexión al arrancar (evita fallos por timing)
+      PG_CONNECT_ATTEMPTS: 60
+      PG_CONNECT_DELAY_MS: 1000
+    ports:
+      - "3001:3001"
+    volumes:
+      # Monta la carpeta de CSV del host dentro del contenedor.
+      # En servidor, define STC_CSV_HOST_PATH en un .env junto al compose.
+      - ${STC_CSV_HOST_PATH:-./csv}:/data/csv
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    networks:
+      - stc_network
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: stc_postgres
+    environment:
+      POSTGRES_DB: stc_produccion
+      POSTGRES_USER: stc_user
+      POSTGRES_PASSWORD: stc_password_2026
+      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=es_ES.UTF-8"
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stc_user -d stc_produccion"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - stc_network
+
+  # pgAdmin (Opcional - para administración visual)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: stc_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@stc.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    restart: unless-stopped
+    networks:
+      - stc_network
+
+volumes:
+  postgres_data:
+    name: stc_postgres_data
+  pgadmin_data:
+    name: stc_pgadmin_data
+
+networks:
+  stc_network:
+    name: stc_network
+    driver: bridge
+# Database Configuration
+DATABASE_URL=postgresql://stc_user:stc_password_2026@localhost:5433/stc_produccion
+POSTGRES_DB=stc_produccion
+POSTGRES_USER=stc_user
+POSTGRES_PASSWORD=stc_password_2026
+
+# API Configuration
+NODE_ENV=development
+PORT=3002
+API_HOST=0.0.0.0
+
+# Security
+JWT_SECRET=dev-secret-key-2026
+CORS_ORIGIN=http://localhost:5173
+
+# Data Import
+CSV_FOLDER=C:\STC
+IMPORT_BATCH_SIZE=1000
+
+# Logging
+LOG_LEVEL=info
+LOG_FILE=./logs/app.log
+                                         version                                          
+------------------------------------------------------------------------------------------
+ PostgreSQL 16.11 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit
+(1 row)
+
+                   List of relations
+ Schema |            Name            | Type  |  Owner   
+--------+----------------------------+-------+----------
+ public | tb_calidad                 | table | stc_user
+ public | tb_calidad_fibra           | table | stc_user
+ public | tb_column_warnings_history | table | stc_user
+ public | tb_costo_item_alias        | table | stc_user
+ public | tb_costo_items             | table | stc_user
+ public | tb_costo_mensual           | table | stc_user
+ public | tb_defectos                | table | stc_user
+ public | tb_fichas                  | table | stc_user
+ public | tb_import_metadata         | table | stc_user
+ public | tb_metas                   | table | stc_user
+ public | tb_paradas                 | table | stc_user
+ public | tb_parametros_hvi          | table | stc_user
+ public | tb_proceso                 | table | stc_user
+ public | tb_produccion              | table | stc_user
+ public | tb_produccion_oe           | table | stc_user
+ public | tb_residuos_indigo         | table | stc_user
+ public | tb_residuos_por_sector     | table | stc_user
+ public | tb_schema_changes_log      | table | stc_user
+ public | tb_sync_history            | table | stc_user
+ public | tb_tensorapid_par          | table | stc_user
+ public | tb_tensorapid_tbl          | table | stc_user
+ public | tb_testes                  | table | stc_user
+ public | tb_uster_par               | table | stc_user
+ public | tb_uster_tbl               | table | stc_user
+(24 rows)
+
+ db_size 
+---------
+ 305 MB
+(1 row)
+
+
+Name                               Size (KB) LastWriteTime
+----                               --------- -------------
+01-schema-OLD-backup.sql                7,76 3/2/2026 16:26:55
+01-schema.sql                           7,76 5/2/2026 09:05:05
+02-recreate-prod-tables.sql            12,16 4/2/2026 16:37:18
+03-create-sync-history.sql              1,52 5/2/2026 13:36:49
+04-recreate-tb-produccion.sql           2,40 5/2/2026 14:41:19
+05-recreate-tb-calidad.sql              2,74 5/2/2026 15:35:26
+06-recreate-tb-testes.sql               1,38 5/2/2026 16:18:36
+07-recreate-tb-defectos.sql             1,22 5/2/2026 16:23:31
+08-recreate-tb-produccion-oe.sql        2,02 5/2/2026 16:38:42
+09-recreate-tb-paradas.sql              2,10 5/2/2026 16:57:27
+10-recreate-tb-residuos-indigo.sql      1,88 5/2/2026 18:39:41
+11-recreate-tb-proceso.sql              1,88 5/2/2026 19:06:05
+12-recreate-tb-calidad-fibra.sql        2,48 5/2/2026 19:21:30
+13-create-tb-parametros-hvi.sql         7,25 11/2/2026 10:23:11
+14-add-grupo-to-parametros-hvi.sql      1,11 11/2/2026 11:17:17
+fix-columns.sql                         6,03 4/2/2026 16:30:04
+golden-batch-oee.sql                   12,31 13/2/2026 02:05:38
+golden-batch.sql                        5,42 12/2/2026 21:05:31
+sqlite-schema-completo.sql             17,44 4/2/2026 16:35:59
+sqlite-schema-original.sql              1,23 4/2/2026 16:33:10
+
+
+Name                     Size (MB) LastWriteTime
+----                     --------- -------------
+fichaArtigo.csv               0,97 7/2/2026 13:54:49
+RelResIndigo.csv              0,00 7/2/2026 13:53:35
+rpsPosicaoEstoquePRD.csv      0,03 7/2/2026 14:04:54
+rptAcompDiarioPBI.csv         0,96 7/2/2026 14:06:27
+rptDefPeca.csv                1,86 7/2/2026 13:58:36
+rptMovimMP.csv                6,54 7/2/2026 13:56:55
+rptParadaMaquinaPRD.csv       0,12 7/2/2026 13:52:52
+rptPrdTestesFisicos.csv       0,02 7/2/2026 13:55:20
+rptProducaoMaquina.csv        0,76 7/2/2026 13:51:51
+rptProducaoOE.csv             0,09 7/2/2026 13:57:29
+rptResiduosPorSetor.csv       0,01 7/2/2026 13:54:12
+
+# Multi-stage build: frontend (Vite) + backend (Express)
+
+# 1) Build frontend
+FROM node:22-alpine AS build-frontend
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+# 2) Install backend dependencies (production only)
+FROM node:22-alpine AS build-backend
+WORKDIR /app/backend
+COPY backend/package*.json ./
+RUN npm ci --omit=dev
+COPY backend/ ./
+
+# 3) Runtime
+FROM node:22-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=3001
+ENV FRONTEND_DIST=/app/frontend/dist
+
+COPY --from=build-backend /app/backend ./backend
+COPY --from=build-frontend /app/frontend/dist ./frontend/dist
+
+EXPOSE 3001
+CMD ["node", "backend/server.js"]
+
+name         : stc-backend-api
+version      : 1.0.0
+description  : Backend API para STC Producción V2 - PostgreSQL
+dependencies : @{cors=^2.8.5; csv-parse=^5.6.0; dotenv=^16.3.1; express=^4.18.2; pg=^8.11.3; pg-copy-streams=^7.0.0}
+
+
+name         : stc-frontend
+version      : 1.0.0
+dependencies : @{@heroicons/vue=^2.2.0; chart.js=^4.5.1; chartjs-plugin-datalabels=^2.2.0; echarts=^6.0.0; exceljs=^4.3.0; html2canvas=^1.4.1; html-to-image=^1.11.13; maska=^2.1.11; modern-screenshot=^4.6.7; pinia=^3.0.3; sweetalert2=^11.23.0; tippy.js=^6.3.7; vue=^3.5.21; vue-chartjs=^5.3.3; vue-router=^4.6.3; vue-tippy=^6.7.1; vue3-select-component=^0.12.3; xlsx=^0.18.5}
+
+
+Name                 Size (KB) LastWriteTime
+----                 --------- -------------
+backup-database.ps1       1,52 6/2/2026 10:07:18
+restore-database.ps1      2,03 6/2/2026 10:07:19
+
+
+Name                                   Size (MB) LastWriteTime
+----                                   --------- -------------
+stc_produccion_2026-02-09_13-54-26.sql    184,63 9/2/2026 13:54:59
+stc_produccion_2026-02-06_11-36-49.sql    184,08 6/2/2026 11:37:59
+stc_produccion_2026-02-06_10-07-33.sql    183,28 6/2/2026 10:08:22
+
+
+Name                             Size (KB) LastWriteTime
+----                             --------- -------------
+BACKUP_RECOVERY.md                    4,62 6/2/2026 10:07:19
+CHECKLIST_FASE1.md                    5,07 3/2/2026 16:27:27
+CHECKLIST_REUNION_IT.md               6,83 13/2/2026 10:37:01
+COMANDOS_DEMO_IT.md                   7,85 13/2/2026 10:37:49
+GOLDEN_BATCH_LOGIC.md                 4,79 13/2/2026 00:18:42
+GUIA_IMPLEMENTACION_SERVIDOR.md      52,61 13/2/2026 11:11:41
+GUIA_INICIO_PODMAN_POSTGRESQL.md      6,30 11/2/2026 11:14:12
+INFORME_POSTGRESQL_PODMAN.md         27,69 12/2/2026 13:15:39
+MIGRACION_ORACLE_POSTGRESQL.md       23,85 9/2/2026 14:33:21
+README.md                             6,30 7/2/2026 14:19:08
+SOLUCION_ACCESO_ARCHIVOS_RED.md      18,06 13/2/2026 11:12:02
+VALIDACION_TB_DEFECTOS.md             6,33 5/2/2026 16:25:53
+VALIDACION_TB_FICHAS.md               4,25 5/2/2026 14:12:36
+VALIDACION_TB_TESTES.md               6,41 5/2/2026 16:19:52
+WINDOWS_VS_LINUX_SERVIDOR.md         11,56 13/2/2026 11:11:30

@@ -4,6 +4,13 @@
       <!-- Filtros en línea sin contenedor adicional -->
       <div class="flex items-center justify-between gap-4 mb-3">
       <div class="flex items-center gap-4">
+        <!-- Logo Santana -->
+        <img 
+          src="/LogoSantana.jpg" 
+          alt="Logo Santana" 
+          class="h-8 w-auto object-contain flex-shrink-0"
+        />
+        
         <div class="filter-inline fecha-nav">
           <label class="sr-only">Fecha:</label>
           <div class="fecha-controls">
