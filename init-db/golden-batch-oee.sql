@@ -116,7 +116,8 @@ TEJIDOS_AGREGADO AS (
 URDIMBRES_LOTE AS (
     SELECT 
         "ROLADA",
-        CAST(NULLIF(regexp_replace("LOTE FIACAO", '[^0-9]', '', 'g'), '') AS BIGINT) as lote_id,
+        -- Un solo lote_id por ROLADA (MAX para elegir el principal, igual que SeguimientoRoladas)
+        MAX(CAST(NULLIF(regexp_replace("LOTE FIACAO", '[^0-9]', '', 'g'), '') AS BIGINT)) as lote_id,
         -- Cálculo Roturas Urdidora (Rot 10^6) = (Rupturas * 10^6) / (Metros * NumFios)
         -- Misma fórmula que SeguimientoRoladasFibra.vue: calcularRot106
         CASE 
@@ -130,7 +131,7 @@ URDIMBRES_LOTE AS (
     FROM tb_produccion
     WHERE "SELETOR" IN ('URDIDEIRA', 'URDIDORA') 
       AND "LOTE FIACAO" IS NOT NULL
-    GROUP BY "ROLADA", "LOTE FIACAO"
+    GROUP BY "ROLADA"
 ),
 INDIGO_INFO AS (
     SELECT 
