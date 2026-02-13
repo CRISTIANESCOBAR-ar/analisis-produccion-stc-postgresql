@@ -2431,7 +2431,6 @@ app.get('/api/golden-batch/points', async (req, res) => {
         "STR", 
         "MIC", 
         "RU_105", 
-        "RUB_105",
         "LOTE_FIBRA_TEXT",
         "MISTURA"
       FROM view_golden_batch_data 

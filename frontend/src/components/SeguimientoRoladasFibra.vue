@@ -1,7 +1,7 @@
 <template>
   <div class="w-full h-screen flex flex-col p-1 relative">
     <!-- Overlay de carga para toda la pantalla -->
-    <div v-if="cargando" class="fixed inset-0 bg-white/40 backdrop-blur-[2px] flex items-center justify-center z-[9999] transition-all duration-300">
+    <div v-if="cargando" class="fixed inset-0 bg-white/40 backdrop-blur-xs flex items-center justify-center z-9999 transition-all duration-300">
       <div class="flex flex-col items-center gap-4 bg-white/90 px-10 py-8 rounded-2xl shadow-2xl border border-blue-100">
         <div class="relative">
           <div class="animate-spin rounded-full h-16 w-16 border-4 border-blue-50 border-t-blue-600"></div>
@@ -18,7 +18,7 @@
     
     <main ref="mainContentRef" class="w-full flex-1 min-h-0 bg-white rounded-xl shadow-sm px-4 py-3 border border-slate-200/60 flex flex-col relative">
       <!-- Header -->
-      <div class="flex items-center justify-between gap-4 flex-shrink-0 mb-3 pb-3 border-b border-slate-100">
+      <div class="flex items-center justify-between gap-4 shrink-0 mb-3 pb-3 border-b border-slate-100">
         <div class="flex items-center gap-5">
           <img src="/LogoSantana.jpg" alt="Santana Textiles" class="h-9 w-auto object-contain opacity-90" />
           <div>
@@ -91,7 +91,7 @@
           <thead class="sticky top-0 z-20">
             <!-- Fila superior - Grupos -->
             <tr class="text-slate-500 text-[10px] uppercase tracking-wider">
-              <th scope="col" rowspan="3" class="px-2 py-2 font-semibold text-center border-r-2 border-slate-300 border-b-2 border-b-slate-300 text-slate-700 bg-slate-50 sticky left-0 z-30 min-w-[55px]">Rolada</th>
+              <th scope="col" rowspan="3" class="px-2 py-2 font-semibold text-center border-r-2 border-slate-300 border-b-2 border-b-slate-300 text-slate-700 bg-slate-50 sticky left-0 z-30 min-w-13.75">Rolada</th>
               <th scope="col" colspan="3" class="px-2 py-1.5 font-semibold text-center border-r-2 border-slate-300 border-b border-b-slate-300 text-slate-700 bg-slate-50">Urdidora</th>
               <th scope="col" colspan="8" class="px-2 py-1.5 font-semibold text-center border-r-2 border-slate-300 border-b border-b-slate-300 text-slate-700 bg-slate-50">Índigo</th>
               <th scope="col" colspan="4" class="px-2 py-1.5 font-semibold text-center border-r-2 border-slate-300 border-b border-b-slate-300 text-slate-700 bg-slate-50">Tejeduría</th>
@@ -101,53 +101,53 @@
             <!-- Fila media - Columnas y Variables -->
             <tr class="text-slate-600 text-[10px] bg-slate-50">
               <!-- Urdidora -->
-              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[40px]">Maq</th>
-              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px]">Lote</th>
-              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r-2 border-slate-300 border-b-2 border-b-slate-300 min-w-[40px]">R10⁶</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-10">Maq</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-8.75">Lote</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r-2 border-slate-300 border-b-2 border-b-slate-300 min-w-10">R10⁶</th>
               <!-- Índigo -->
-              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[70px]">Fecha</th>
-              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[75px]">Base</th>
-              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px]">Color</th>
-              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[50px]">Metros</th>
-              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px]">R10³</th>
-              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[30px]"><span class="block leading-tight">Cav<br>10⁵</span></th>
-              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px]">VNom</th>
-              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r-2 border-slate-300 border-b-2 border-b-slate-300 min-w-[35px]">VPro</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-17.5">Fecha</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-18.75">Base</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-8.75">Color</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-12.5">Metros</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-8.75">R10³</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-7.5"><span class="block leading-tight">Cav<br>10⁵</span></th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-8.75">VNom</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r-2 border-slate-300 border-b-2 border-b-slate-300 min-w-8.75">VPro</th>
               <!-- Tejeduría -->
-              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[50px]">Metros</th>
-              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[40px]">Efi%</th>
-              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[40px]">RU10⁵</th>
-              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r-2 border-slate-300 border-b-2 border-b-slate-300 min-w-[40px]">RT10⁵</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-12.5">Metros</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-10">Efi%</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-10">RU10⁵</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r-2 border-slate-300 border-b-2 border-b-slate-300 min-w-10">RT10⁵</th>
               <!-- Calidad -->
-              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[50px]">Metros</th>
-              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[40px]">Cal%</th>
-              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r-2 border-slate-300 border-b-2 border-b-slate-300 min-w-[50px]">Pts100</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-12.5">Metros</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-10">Cal%</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r-2 border-slate-300 border-b-2 border-b-slate-300 min-w-12.5">Pts100</th>
               <!-- Fibra HVI -->
-              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[40px] bg-amber-50">Mezc</th>
-              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[70px] bg-amber-50">F.Ingr</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-10 bg-amber-50">Mezc</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-17.5 bg-amber-50">F.Ingr</th>
               
               <!-- Variables HVI (Stats expandidos) -->
-              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b border-slate-300 bg-blue-50" title="Índice de Color">SCI</th>
-              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b border-slate-300 bg-blue-50" title="Humedad">MST</th>
-              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b border-slate-300 bg-blue-50" title="Micronaire">MIC</th>
-              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b border-slate-300 bg-blue-50" title="Madurez">MAT</th>
-              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b border-slate-300 bg-green-50" title="Longitud media">UHML</th>
-              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b border-slate-300 bg-green-50" title="Uniformidad">UI</th>
-              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b border-slate-300 bg-green-50" title="Fibras cortas">SF</th>
-              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b border-slate-300 bg-yellow-50" title="Resistencia">STR</th>
-              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b border-slate-300 bg-yellow-50" title="Elongación">ELG</th>
-              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b border-slate-300 bg-yellow-50" title="Reflectancia">RD</th>
-              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b border-slate-300 bg-yellow-50" title="Amarillez">+b</th>
-              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b border-slate-300 bg-purple-50">TrCNT</th>
-              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b border-slate-300 bg-purple-50">TrAR</th>
-              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r-2 border-slate-300 border-b border-slate-300 bg-purple-50">TRID</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-r-slate-200 border-b border-b-slate-300 bg-blue-50" title="Índice de Color">SCI</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-r-slate-200 border-b border-b-slate-300 bg-blue-50" title="Humedad">MST</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-r-slate-200 border-b border-b-slate-300 bg-blue-50" title="Micronaire">MIC</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-r-slate-200 border-b border-b-slate-300 bg-blue-50" title="Madurez">MAT</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-r-slate-200 border-b border-b-slate-300 bg-green-50" title="Longitud media">UHML</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-r-slate-200 border-b border-b-slate-300 bg-green-50" title="Uniformidad">UI</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-r-slate-200 border-b border-b-slate-300 bg-green-50" title="Fibras cortas">SF</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-r-slate-200 border-b border-b-slate-300 bg-yellow-50" title="Resistencia">STR</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-r-slate-200 border-b border-b-slate-300 bg-yellow-50" title="Elongación">ELG</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-r-slate-200 border-b border-b-slate-300 bg-yellow-50" title="Reflectancia">RD</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-r-slate-200 border-b border-b-slate-300 bg-yellow-50" title="Amarillez">+b</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-r-slate-200 border-b border-b-slate-300 bg-purple-50">TrCNT</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r border-r-slate-200 border-b border-b-slate-300 bg-purple-50">TrAR</th>
+              <th scope="col" colspan="4" class="px-1 py-1.5 font-medium text-center border-r-2 border-b border-slate-300 bg-purple-50">TRID</th>
               
               <!-- Colores (Sin stats) -->
-              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px] bg-orange-50">BCO</th>
-              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px] bg-orange-50">GRI</th>
-              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px] bg-orange-50">LG</th>
-              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-[35px] bg-orange-50">AMA</th>
-              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-b-2 border-b-slate-300 min-w-[35px] bg-orange-50">LA</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-8.75 bg-orange-50">BCO</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-8.75 bg-orange-50">GRI</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-8.75 bg-orange-50">LG</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-r border-slate-200 border-b-2 border-b-slate-300 min-w-8.75 bg-orange-50">AMA</th>
+              <th scope="col" rowspan="2" class="px-1 py-1.5 font-medium text-center border-b-2 border-b-slate-300 min-w-8.75 bg-orange-50">LA</th>
             </tr>
             <!-- Fila inferior - Subcolumnas Stats -->
             <tr class="text-slate-600 text-[9px] bg-slate-50">
@@ -384,7 +384,7 @@
     <div v-if="showModalMistura" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-2">
       <div class="bg-white rounded-xl shadow-2xl max-w-7xl w-full max-h-[95vh] flex flex-col">
         <!-- Header del modal -->
-        <div class="flex items-center justify-between px-6 py-2 border-b border-slate-200 flex-shrink-0">
+        <div class="flex items-center justify-between px-6 py-2 border-b border-slate-200 shrink-0">
           <div class="flex items-center gap-4">
             <h3 class="text-lg font-semibold text-slate-800">Detalle de MISTURA</h3>
             <div class="px-3 py-1 bg-blue-100 rounded-lg">
@@ -455,7 +455,7 @@
                     <th 
                       v-for="seq in seqsOrdenados" 
                       :key="seq.SEQ"
-                      class="px-2 py-1 text-center font-semibold text-slate-700 border border-slate-300 min-w-[40px]"
+                      class="px-2 py-1 text-center font-semibold text-slate-700 border border-slate-300 min-w-10"
                     >
                       {{ quitarCeros(seq.SEQ) }}
                     </th>
@@ -527,7 +527,7 @@
     <!-- Popover con gráfico de variable -->
     <div 
       v-if="hoveredVariable && datosGraficoVariable.length > 0"
-      class="fixed bg-white rounded-lg shadow-2xl border border-slate-300 p-4 z-[60] pointer-events-none"
+      class="fixed bg-white rounded-lg shadow-2xl border border-slate-300 p-4 z-60 pointer-events-none"
       :style="{
         left: hoverPosition.x + 'px',
         top: hoverPosition.y + 'px',

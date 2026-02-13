@@ -2,7 +2,7 @@
   <div class="h-screen flex flex-col bg-gray-50">
     <aside 
       :class="[
-        'fixed top-0 left-0 h-full bg-blue-800 text-white z-[9999] transition-all duration-300 flex flex-col',
+        'fixed top-0 left-0 h-full bg-blue-800 text-white z-9999 transition-all duration-300 flex flex-col',
         sidebarExpanded ? 'w-64' : 'w-16',
         sidebarVisible ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
       ]"

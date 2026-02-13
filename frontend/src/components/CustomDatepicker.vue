@@ -20,7 +20,7 @@
         v-if="showCalendar"
         ref="dropdownRef"
         :class="[
-          'calendar-dropdown absolute top-[calc(100%+4px)] bg-white border border-slate-200 rounded-lg shadow-xl p-3 z-50 min-w-[280px]',
+          'calendar-dropdown absolute top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl p-3 z-50 min-w-70',
           alignRight ? 'right-0' : 'left-0'
         ]"
       >
@@ -74,28 +74,28 @@
     
     <div v-if="showButtons" class="flex gap-1">
       <button 
-        class="inline-flex items-center justify-center px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-md text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm h-[34px]" 
+        class="inline-flex items-center justify-center px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-md text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm h-8.5" 
         @click="cambiarMes(-1)" 
         @mousedown.prevent
         tabindex="-1"
         v-tippy="{ content: 'Mes anterior', placement: 'bottom' }"
       >&lt;&lt;</button>
       <button 
-        class="inline-flex items-center justify-center px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-md text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm h-[34px]" 
+        class="inline-flex items-center justify-center px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-md text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm h-8.5" 
         @click="cambiarFecha(-1)" 
         @mousedown.prevent
         tabindex="-1"
         v-tippy="{ content: 'Día anterior (←)', placement: 'bottom' }"
       >&lt;</button>
       <button 
-        class="inline-flex items-center justify-center px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-md text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm h-[34px]" 
+        class="inline-flex items-center justify-center px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-md text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm h-8.5" 
         @click="cambiarFecha(1)" 
         @mousedown.prevent
         tabindex="-1"
         v-tippy="{ content: 'Día siguiente (→)', placement: 'bottom' }"
       >&gt;</button>
       <button 
-        class="inline-flex items-center justify-center px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-md text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm h-[34px]" 
+        class="inline-flex items-center justify-center px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-md text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm h-8.5" 
         @click="cambiarMes(1)" 
         @mousedown.prevent
         tabindex="-1"

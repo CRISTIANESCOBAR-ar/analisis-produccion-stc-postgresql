@@ -4,13 +4,7 @@
 DROP VIEW IF EXISTS view_golden_batch_data CASCADE;
 
 CREATE VIEW view_golden_batch_data AS
-WITH IND AS (
-    -- Filtramos solo Roladas de Índigo Filial 05
-    SELECT DISTINCT "ROLADA"
-    FROM tb_produccion
-    WHERE "SELETOR" = 'INDIGO' AND "FILIAL" = '05'
-),
--- 1. Calcular Minutos de Parada NO Atribuibles al Proceso (Exógenas)
+WITH -- 1. Calcular Minutos de Parada NO Atribuibles al Proceso (Exógenas)
 PARADAS_EXOGENAS AS (
     SELECT 
         -- Casteo robusto de fecha: formato DD/MM/YY o DD/MM/YYYY
@@ -49,6 +43,7 @@ PRODUCCION_AJUSTADA AS (
         COALESCE(CASE WHEN p."PONTOS_100%" ~ '^[0-9.,]+$' THEN REPLACE(REPLACE(p."PONTOS_100%", '.', ''), ',', '.')::numeric ELSE 0 END, 0) as ptos_teorico,
         COALESCE(CASE WHEN p."METRAGEM" ~ '^[0-9.,]+$' THEN REPLACE(REPLACE(p."METRAGEM", '.', ''), ',', '.')::numeric ELSE 0 END, 0) as metros_real,
         COALESCE(CASE WHEN p."PARADA TEC URDUME" ~ '^[0-9.,]+$' THEN REPLACE(REPLACE(p."PARADA TEC URDUME", '.', ''), ',', '.')::numeric ELSE 0 END, 0) as paradas_urd,
+        COALESCE(CASE WHEN p."PARADA TEC TRAMA" ~ '^[0-9.,]+$' THEN REPLACE(REPLACE(p."PARADA TEC TRAMA", '.', ''), ',', '.')::numeric ELSE 0 END, 0) as paradas_trama,
         -- Tiempo Total del Turno (Asumimos 480 min si no está o calculamos)
         COALESCE(
            CASE WHEN p."TOTAL MINUTOS TUR" ~ '^[0-9]+$' THEN p."TOTAL MINUTOS TUR"::numeric ELSE 480 END, 
@@ -104,7 +99,14 @@ TEJIDOS_AGREGADO AS (
         CASE 
             WHEN SUM(metros_real) = 0 THEN 0
             ELSE (SUM(paradas_urd) * 100000.0) / (SUM(metros_real) * 1000.0)
-        END as ru_105
+        END as ru_105,
+        
+        -- Roturas Trama (Nueva métrica)
+        CASE 
+            WHEN SUM(metros_real) = 0 THEN 0
+            ELSE (SUM(paradas_trama) * 100000.0) / (SUM(metros_real) * 1000.0)
+        END as rt_105
+
     FROM PRODUCCION_AJUSTADA
     -- Filtro Crítico: Solo consideramos registros donde HUBO intención de producir (Metros > 0 o Puntos > 0)
     -- O donde hubo paradas exógenas que justifican el 0.
@@ -114,11 +116,31 @@ TEJIDOS_AGREGADO AS (
 URDIMBRES_LOTE AS (
     SELECT 
         "ROLADA",
-        CAST(NULLIF(regexp_replace("LOTE FIACAO", '[^0-9]', '', 'g'), '') AS BIGINT) as lote_id
+        CAST(NULLIF(regexp_replace("LOTE FIACAO", '[^0-9]', '', 'g'), '') AS BIGINT) as lote_id,
+        -- Cálculo Roturas Urdidora (Rot 10^6)
+        -- Normalización: (Rupturas / Metros) * 1,000,000
+        CASE 
+            WHEN SUM(CASE WHEN "METRAGEM" ~ '^[0-9.,]+$' THEN REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.')::numeric ELSE 0 END) = 0 THEN 0
+            ELSE (SUM(CASE WHEN "RUPTURAS" ~ '^[0-9.,]+$' THEN REPLACE(REPLACE("RUPTURAS", '.', ''), ',', '.')::numeric ELSE 0 END) * 1000000.0) / 
+                 SUM(CASE WHEN "METRAGEM" ~ '^[0-9.,]+$' THEN REPLACE(REPLACE("METRAGEM", '.', ''), ',', '.')::numeric ELSE 0 END)
+        END as rot_urd_urdidora
     FROM tb_produccion
     WHERE "SELETOR" IN ('URDIDEIRA', 'URDIDORA') 
       AND "LOTE FIACAO" IS NOT NULL
     GROUP BY "ROLADA", "LOTE FIACAO"
+),
+INDIGO_INFO AS (
+    SELECT 
+        "ROLADA",
+        MAX("BASE URDUME") as "INDIGO_BASE",
+        MAX("COR") as "INDIGO_COLOR",
+        MAX("R") as "INDIGO_R",
+        MAX("CAVALOS") as "INDIGO_CAVALOS",
+        MAX("VELOC") as "INDIGO_VEL_NOM",
+        MAX("VELOC CALC") as "INDIGO_VEL_REAL"
+    FROM tb_produccion
+    WHERE "SELETOR" = 'INDIGO'
+    GROUP BY "ROLADA"
 ),
 FIBRA_AGREGADA AS (
     SELECT 
@@ -149,7 +171,15 @@ SELECT
     t."TEJIDO_REAL_M",
     t.efic_tej as "EFIC_TEJ",
     t.ru_105 as "RU_105",
-    t.ru_105 as "RUB_105", -- Duplicado para compatibilidad si backend lo pide diferente
+    t.rt_105 as "RT_105", -- Roturas Trama
+    t.ru_105 as "RUB_105", -- Duplicado para compatibilidad
+    u.rot_urd_urdidora as "ROT_URD_URDI",
+    i."INDIGO_BASE",
+    i."INDIGO_COLOR",
+    i."INDIGO_R",
+    i."INDIGO_CAVALOS",
+    i."INDIGO_VEL_NOM",
+    i."INDIGO_VEL_REAL",
     f."LOTE_FIBRA_TEXT",
     f."MISTURA",
     f.sci as "SCI",
@@ -157,6 +187,6 @@ SELECT
     f.mic as "MIC",
     f.mst, f.mat, f.uhml, f.ui, f.sf, f.elg, f.trcnt
 FROM TEJIDOS_AGREGADO t
-JOIN IND i ON t."ROLADA" = i."ROLADA"
 JOIN URDIMBRES_LOTE u ON t."ROLADA" = u."ROLADA"
+LEFT JOIN INDIGO_INFO i ON t."ROLADA" = i."ROLADA"
 JOIN FIBRA_AGREGADA f ON u.lote_id = f.lote_id;
