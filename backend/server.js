@@ -6,10 +6,18 @@ import pg from 'pg'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getImportStatus, importCSV, importAll, importSpecificTables, importForceAll, renameduplicateHeaders, getTableColumns, compareColumns, addColumnsToTable } from './import-manager.js'
+import configStandardsRouter from './config-standards.js';
 
 const { Pool } = pg
 const app = express()
+
+app.use(express.json());
+app.use(cors());
+
+// Rutas de configuración
+app.use('/api/config', configStandardsRouter);
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -5132,6 +5140,126 @@ app.get('/api/hvi/comparacion-muestra', async (req, res) => {
   } catch (err) {
     console.error('Error en comparación HVI:', err);
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/hvi/predecir-hilatura', async (req, res) => {
+  try {
+    const { lote, pacas, metadata, contexto } = req.body;
+    const apiKey = process.env.GOOGLE_API_KEY;
+    
+    if (!apiKey) {
+      return res.status(500).json({ success: false, error: 'GOOGLE_API_KEY no configurada' });
+    }
+
+    // Permitir selección de modelo desde el frontend (req.body.model) o usar el default
+    // Default actualizamos a Gemini 3 Pro (Preview) a petición del usuario para desarrollo
+    const modelName = req.body.model || "gemini-3-pro-preview";
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: modelName });
+
+    // Procesamiento de datos para la estructura requerida por el Prompt
+    // Separar Muestras (Mue) y Entradas (Ent)
+    const muestras = pacas.filter(p => p.tipo === 'Mue' || p.Tipo === 'Mue');
+    const entradas = pacas.filter(p => p.tipo === 'Ent' || p.Tipo === 'Ent');
+
+    // Si no hay distinción clara en el array enviado, asumimos que todo es 'Ent' y buscamos si hay referencia en metadatos
+    // O si es un análisis simple de un solo lote.
+    
+    // Cálculo de promedios auxiliares
+    const calcularPromedios = (items) => {
+        if (!items.length) return {};
+        const sum = items.reduce((acc, curr) => ({
+            sci: acc.sci + (parseFloat(curr.sci || curr.SCI) || 0),
+            str: acc.str + (parseFloat(curr.str || curr.STR) || 0),
+            sf: acc.sf + (parseFloat(curr.sf || curr.SF) || 0),
+            rd: acc.rd + (parseFloat(curr.rd || curr.RD) || 0),
+            plus_b: acc.plus_b + (parseFloat(curr.plusb || curr['+b']) || 0),
+            mic: acc.mic + (parseFloat(curr.mic || curr.MIC) || 0),
+            trash: acc.trash + (parseFloat(curr.trash || curr.Trash) || 0)
+        }), { sci: 0, str: 0, sf: 0, rd: 0, plus_b: 0, mic: 0, trash: 0 });
+        
+        return {
+            sci: parseFloat((sum.sci / items.length).toFixed(1)),
+            str: parseFloat((sum.str / items.length).toFixed(1)),
+            sf: parseFloat((sum.sf / items.length).toFixed(1)),
+            rd: parseFloat((sum.rd / items.length).toFixed(1)),
+            plus_b: parseFloat((sum.plus_b / items.length).toFixed(1)),
+            mic: parseFloat((sum.mic / items.length).toFixed(2)),
+            trash: parseFloat((sum.trash / items.length).toFixed(2))
+        };
+    };
+
+    const datosPromedioMue = calcularPromedios(muestras);
+    const datosPromedioEnt = calcularPromedios(entradas);
+
+    // Construcción del JSON estructurado para el Prompt
+    const datosParaPrompt = {
+        referencia_muestra: muestras.length > 0 ? {
+            lote: muestras[0].lote || muestras[0].Lote || "Desconocido",
+            tot: muestras.length,
+            prom: datosPromedioMue
+        } : null,
+        lote_recibido: entradas.length > 0 ? {
+            lote: entradas[0].lote || entradas[0].Lote || lote, 
+            tot: entradas.length,
+            prom: datosPromedioEnt
+        } : {
+            lote: lote,
+            tot: pacas.length,
+            prom: calcularPromedios(pacas)
+        },
+        // INCORPORAMOS LOS 30 PEORES FARDOS (Reducido drásticamente para evitar quota limits)
+        // Minificamos la data antes de enviarla
+        fardos_criticos: (entradas.length > 0 ? entradas : pacas)
+           .sort((a,b) => (parseFloat(a.sci) || 0) - (parseFloat(b.sci) || 0))
+           .slice(0, 30)
+           .map(f => ({
+               id: f.fardo, 
+               sci: Math.round(f.sci||f.SCI), 
+               str: parseFloat(f.str||f.STR).toFixed(1), 
+               mic: parseFloat(f.mic||f.MIC).toFixed(2)
+           }))
+    };
+
+    // Si tenemos ambos, es un cruce. Si solo tenemos uno, es análisis individual.
+    // El usuario pidió explícitamente lógica de cruce, pero debemos ser robustos.
+
+    const prompt = `Actúa como un Ingeniero Senior de Planta de Denim. Tu misión principal es la Auditoría de Cumplimiento de Compra.
+    IMPORTANTE: Responde de manera EJECUTIVA y RÁPIDA.
+
+    LÓGICA DE RELACIÓN (CRUCE DE DATOS):
+    Te estoy enviando dos conjuntos de datos o uno según disponibilidad: la Muestra (Tipo: 'Mue') y la Entrada (Tipo: 'Ent').
+    
+    Debes usar el valor de la columna lote de la Muestra para compararlo con el valor de la columna muestra de la Entrada (si existen).
+    
+    Es obligatorio calcular la variación porcentual entre ambos: ((Promedio_Ent / Promedio_Mue) - 1) * 100. (Solo si hay datos de referencia).
+
+    REGLAS DE EVALUACIÓN TÉCNICA:
+    1. Foco en Denim: Analiza aptitud para 7/1 a 10/1 (Trama), 10/1 Flame y 12.5/1 a 16/1 (Urdimbre).
+    2. Penalización por Desviación: Si el STR o el SCI caen más de un 5% respecto a la muestra, califica el lote como 'No Conforme/Reclamo Directo'.
+    3. Análisis de Color (Rd y +b): Compara el brillo y la amarillez. Si la entrada es más amarilla (+b mayor) que la muestra, advierte sobre 'Variación de Tono en el Lote Final'.
+
+    ESTRUCTURA DEL REPORTE:
+    1. Tabla Comparativa de Desviación: (Mue vs Ent) para SCI, STR, MIC, SF y Trash. Incluye columnas: Muestra, Entrada, Var %, Estado.
+    2. Diagnóstico de Procesabilidad: Impacto en paros de rotor y cortes en telar basado en la caída de calidad.
+    3. Conclusión de Compra: Dictamen final para el sector adquisiciones (Aceptar, Aceptar con descuento, o Rechazar).
+
+    DATOS DE ENTRADA (JSON):
+    ${JSON.stringify(datosParaPrompt, null, 2)}
+
+    NOTA ADICIONAL DE CONTEXTO:
+    Si solo recibes 'lote_recibido' sin 'referencia_muestra', realiza la evaluación técnica absoluta basada en estándares de Denim (SCI > 130, STR > 28, etc.) pero indica que falta la muestra para la comparativa contractual.
+    `;
+
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+
+    res.json({ success: true, insight: text });
+  } catch (error) {
+    console.error("Error Gemini:", error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
