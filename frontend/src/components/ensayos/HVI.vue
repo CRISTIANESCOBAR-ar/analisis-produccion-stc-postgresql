@@ -10,6 +10,15 @@
       </div>
       
       <div class="flex items-center gap-2 flex-1 max-w-2xl justify-end">
+        <!-- Acción: Comparación Muestra -->
+        <button 
+          @click="mostrarComparativa = true"
+          title="Ver Comparativa Muestra vs Entrega"
+          class="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase tracking-widest rounded-lg transition-all shadow-lg shadow-indigo-200 active:scale-95"
+        >
+          <span>⚖️ Comparar Muestras</span>
+        </button>
+
         <div class="relative flex-1 group max-w-md">
           <input 
             v-model="folderPath"
@@ -394,6 +403,24 @@
         </div>
       </div>
     </Teleport>
+
+    <!-- Modal Comparativa -->
+    <Teleport to="body">
+      <div v-if="mostrarComparativa" class="fixed inset-0 z-60 flex items-center justify-center bg-slate-900/40 backdrop-blur-md p-4 animate-in fade-in duration-300">
+        <div class="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-7xl max-h-[90vh] overflow-auto relative">
+          <button 
+            @click="mostrarComparativa = false"
+            class="absolute top-6 right-6 p-2 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-full transition-all active:scale-95"
+          >
+             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          
+          <EnsayoHVICompare />
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -401,6 +428,7 @@
 import { ref, reactive, computed, onMounted } from 'vue';
 import Swal from 'sweetalert2';
 import AnalizadorHVI from './AnalizadorHVI.vue';
+import EnsayoHVICompare from './EnsayoHVICompare.vue';
 
 // =====================================================
 // PARÁMETROS HVI INTERNACIONALES PARA CLASIFICACIÓN
@@ -549,6 +577,7 @@ function clasificarFila(row) {
 // State
 const folderPath = ref(localStorage.getItem('hvi_last_folder_path') || '');
 const mostrarAnalizador = ref(false);
+const mostrarComparativa = ref(false);
 const filesList = ref([]);
 const folderInput = ref(null);
 const parsedFiles = ref([]);

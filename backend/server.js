@@ -4894,7 +4894,8 @@ app.post('/api/hvi/save', async (req, res) => {
           fardo TEXT,
           sci NUMERIC, mst NUMERIC, mic NUMERIC, mat NUMERIC, uhml NUMERIC, 
           ui NUMERIC, sf NUMERIC, str NUMERIC, elg NUMERIC, rd NUMERIC, 
-          plus_b NUMERIC, tipo TEXT, tr_cnt NUMERIC, tr_ar NUMERIC, trid NUMERIC
+          plus_b NUMERIC, tipo TEXT, tr_cnt NUMERIC, tr_ar NUMERIC, trid NUMERIC,
+          estado_fardo TEXT DEFAULT 'OK'
       );
     `);
 
@@ -5042,6 +5043,94 @@ app.post('/api/hvi/get-metadata', async (req, res) => {
     res.json({ success: true, metadata: map });
   } catch (err) {
     console.error('Error getting HVI metadata:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Endpoint: Comparación Calidad (Muestra vs Entrega)
+app.get('/api/hvi/comparacion-muestra', async (req, res) => {
+  try {
+    const sql = `
+      WITH promedios_lote AS (
+          SELECT 
+              e.id AS ensayo_id,
+              e.lote,
+              e.tipo,
+              e.muestra,
+              AVG(d.sci) as sci_avg,
+              AVG(d.str) as str_avg,
+              AVG(d.sf) as sf_avg,
+              COUNT(d.id) as fardos
+          FROM tb_hvi_ensayos e
+          JOIN tb_hvi_detalles d ON e.id = d.ensayo_id
+          GROUP BY e.id, e.lote, e.tipo, e.muestra
+      )
+      SELECT 
+          ent.lote as lote_ent,
+          mue.lote as lote_mue,
+          
+          ent.sci_avg as sci_ent,
+          mue.sci_avg as sci_mue,
+          ((ent.sci_avg / NULLIF(mue.sci_avg, 0)) - 1) * 100 as var_sci,
+          
+          ent.str_avg as str_ent,
+          mue.str_avg as str_mue,
+          ((ent.str_avg / NULLIF(mue.str_avg, 0)) - 1) * 100 as var_str,
+          
+          ent.sf_avg as sf_ent,
+          mue.sf_avg as sf_mue,
+          ((ent.sf_avg / NULLIF(mue.sf_avg, 0)) - 1) * 100 as var_sf
+      FROM promedios_lote ent
+      LEFT JOIN promedios_lote mue ON ent.muestra = mue.lote
+      WHERE ent.tipo = 'Ent' AND (mue.tipo = 'Mue' OR mue.tipo IS NULL)
+      ORDER BY ent.lote ASC
+    `;
+
+    const result = await query(sql, [], 'hvi-comparacion-muestra');
+    
+    const formatted = result.rows.map(r => {
+      const sci_mue = r.sci_mue || 0;
+      const sci_ent = r.sci_ent || 0;
+      const str_mue = r.str_mue || 0;
+      const str_ent = r.str_ent || 0;
+      const sf_mue = r.sf_mue || 0;
+      const sf_ent = r.sf_ent || 0;
+
+      const var_sci = sci_mue > 0 ? ((sci_ent / sci_mue) - 1) * 100 : 0;
+      const var_str = str_mue > 0 ? ((str_ent / str_mue) - 1) * 100 : 0;
+      const var_sf = sf_mue > 0 ? ((sf_ent / sf_mue) - 1) * 100 : 0;
+
+      let alerta = '';
+      let critico = false;
+
+      if (sci_mue > 0) {
+        if (var_str < -5 || var_sci < -5 || var_sf > 5) {
+          alerta = '⚠️ ALERTA DE RECLAMO: Calidad inferior a la muestra aprobada';
+          critico = true;
+        }
+      }
+
+      return {
+          lote: r.lote_ent,
+          muestra: r.lote_mue || 'No vinculada',
+          sci_mue: sci_mue > 0 ? parseFloat(sci_mue).toFixed(1) : '---',
+          sci_ent: parseFloat(sci_ent).toFixed(1),
+          var_sci: sci_mue > 0 ? var_sci.toFixed(1) + '%' : '---',
+          str_mue: str_mue > 0 ? parseFloat(str_mue).toFixed(1) : '---',
+          str_ent: parseFloat(str_ent).toFixed(1),
+          var_str: str_mue > 0 ? var_str.toFixed(1) + '%' : '---',
+          sf_mue: sf_mue > 0 ? parseFloat(sf_mue).toFixed(1) : '---',
+          sf_ent: parseFloat(sf_ent).toFixed(1),
+          var_sf: sf_mue > 0 ? var_sf.toFixed(1) + '%' : '---',
+          alerta,
+          critico,
+          estado: sci_mue === 0 ? 'SIN MUESTRA' : (critico ? 'RECHAZADO' : 'ACEPTADO')
+      };
+    });
+
+    res.json({ success: true, data: formatted });
+  } catch (err) {
+    console.error('Error en comparación HVI:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
