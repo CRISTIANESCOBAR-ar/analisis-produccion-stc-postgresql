@@ -8,7 +8,7 @@
         <img 
           src="/LogoSantana.jpg" 
           alt="Logo Santana" 
-          class="h-8 w-auto object-contain flex-shrink-0"
+          class="h-8 w-auto object-contain shrink-0"
         />
         
         <div class="filter-inline fecha-nav">
@@ -117,9 +117,9 @@
       <!-- Tabla Izquierda: Resumen por Revisor -->
       <div class="flex flex-col gap-2">
         <span class="text-sm font-semibold text-slate-700">{{ calidadData.length }} revisores</span>
-        <div class="overflow-auto w-full rounded-xl border border-slate-200 max-h-[500px]">
+        <div class="overflow-auto w-full rounded-xl border border-slate-200 max-h-125">
           <table class="min-w-full w-full table-auto divide-y divide-slate-200 text-xs tabla-resumen">
-            <thead class="bg-gradient-to-r from-slate-50 to-slate-100 sticky top-0 z-20">
+            <thead class="bg-linear-to-r from-slate-50 to-slate-100 sticky top-0 z-20">
               <tr>
                 <th class="col-revisor px-2 py-[0.3rem] text-center font-semibold text-slate-700 border-b border-slate-200">Revisor</th>
                 <th class="col-metros px-2 py-[0.3rem] text-center font-semibold text-slate-700 border-b border-slate-200">Metros Día</th>
@@ -166,9 +166,9 @@
         <span class="text-sm font-semibold text-slate-700">
           {{ selectedRevisor ? `Detalle - ${selectedRevisor.Revisor}` : 'Seleccione un revisor' }}
         </span>
-        <div v-if="selectedRevisor && detalleRevisor.length > 0" class="overflow-auto w-full rounded-xl border border-slate-200 max-h-[500px]">
+        <div v-if="selectedRevisor && detalleRevisor.length > 0" class="overflow-auto w-full rounded-xl border border-slate-200 max-h-125">
           <table class="min-w-full w-full table-auto divide-y divide-slate-200 text-xs tabla-detalle">
-            <thead class="bg-gradient-to-r from-slate-50 to-slate-100 sticky top-0 z-20">
+            <thead class="bg-linear-to-r from-slate-50 to-slate-100 sticky top-0 z-20">
               <tr>
                 <th class="px-2 py-[0.3rem] text-center font-semibold text-slate-700 border-b border-slate-200">Hora</th>
                 <th class="px-2 py-[0.3rem] text-center font-semibold text-slate-700 border-b border-slate-200">Nombre Artículo</th>
@@ -246,9 +246,9 @@
         <span class="text-slate-600">Trama:</span>
         <span class="ml-1 font-bold text-slate-900 text-base">{{ detallePartida[0]?.TRAMA || 'N/A' }}</span>
       </div>
-      <div class="overflow-auto w-full rounded-xl border border-slate-200 max-h-[400px]">
+      <div class="overflow-auto w-full rounded-xl border border-slate-200 max-h-100">
         <table class="min-w-full w-full table-auto divide-y divide-slate-200 text-xs">
-          <thead class="bg-gradient-to-r from-slate-50 to-slate-100 sticky top-0 z-20">
+          <thead class="bg-linear-to-r from-slate-50 to-slate-100 sticky top-0 z-20">
             <tr>
               <th class="px-2 py-[0.3rem] text-center font-semibold text-slate-700 border-b border-slate-200">Grupo</th>
               <th class="px-2 py-[0.3rem] text-center font-semibold text-slate-700 border-b border-slate-200">Código</th>
@@ -353,7 +353,7 @@
             </div>
             <div class="overflow-auto rounded-lg border border-slate-200">
               <table class="min-w-full divide-y divide-slate-200 text-xs">
-                <thead class="bg-gradient-to-r from-slate-50 to-slate-100 sticky top-0">
+                <thead class="bg-linear-to-r from-slate-50 to-slate-100 sticky top-0">
                   <tr>
                     <th class="px-3 py-2 text-left font-semibold text-slate-700 border-b border-slate-200">#</th>
                     <th class="px-3 py-2 text-left font-semibold text-slate-700 border-b border-slate-200">Partida</th>

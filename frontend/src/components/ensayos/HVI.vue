@@ -1,79 +1,68 @@
 <template>
   <div class="flex flex-col w-full h-screen p-4 bg-slate-50 overflow-hidden">
     <!-- Header / Selector -->
-    <div class="bg-white rounded-xl shadow-md border border-slate-200 p-5 mb-4 shrink-0">
-      <h2 class="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
-        <span class="p-2 bg-blue-100 text-blue-600 rounded-lg">🧬</span>
-        Carga de Archivos HVI (Calculo de Mistura)
-      </h2>
-      
-      <div class="flex flex-col md:flex-row md:items-end gap-4">
-        <div class="flex-1">
-          <label class="block text-sm font-semibold text-slate-700 mb-2">Carpeta de archivos HVI (.txt):</label>
-          <div class="flex gap-2">
-            <div class="relative flex-1 group">
-              <input 
-                v-model="folderPath"
-                type="text" 
-                placeholder="Seleccione la carpeta o escriba la ruta..."
-                class="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-slate-50 group-hover:bg-white"
-                @change="saveFolderPath"
-              />
-              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7a2 2 0 012-2h3l2 3h6a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
-                </svg>
-              </span>
-            </div>
-            <button 
-              @click="triggerFolderSelector"
-              class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-bold transition-all shadow-lg shadow-blue-200 flex items-center gap-2 shrink-0 active:scale-95"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-              </svg>
-              Seleccionar Carpeta
-            </button>
-            <button 
-              v-if="hasPersistedHandle"
-              @click="refreshFolder"
-              class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-bold transition-all border border-slate-300 flex items-center gap-2 shrink-0 active:scale-95"
-              title="Actualizar lista de archivos"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              Actualizar
-            </button>
-          </div>
-        </div>
-        
-        <div class="flex gap-2 shrink-0">
-          <button 
-            @click="processFiles"
-            :disabled="!filesList.length"
-            class="px-6 py-2.5 bg-green-600 hover:bg-green-700 disabled:bg-slate-300 text-white rounded-lg text-sm font-bold transition-all shadow-lg shadow-green-200 flex items-center gap-2 active:scale-95"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-            </svg>
-            Procesar {{ filesList.length ? `(${filesList.length})` : '' }}
-          </button>
-        </div>
+    <div class="mb-4 shrink-0 flex items-center justify-between gap-2">
+      <div class="flex flex-col ml-8">
+        <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+          <span class="p-1.5 bg-blue-100 text-blue-600 rounded-lg">🧬</span>
+          Carga de Archivos HVI (Mistura)
+        </h2>
       </div>
       
-      <p class="text-[11px] text-slate-500 mt-3 flex items-center gap-1">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        Los archivos deben tener el formato: <b>Tipo_Lote_Proveedor_Grado_Fecha.txt</b> (ej: Ent_616_CARAM_C-1-2_21-01-2026.txt)
-      </p>
+      <div class="flex items-center gap-2 flex-1 max-w-2xl justify-end">
+        <div class="relative flex-1 group max-w-md">
+          <input 
+            v-model="folderPath"
+            type="text" 
+            placeholder="Ruta de la carpeta..."
+            class="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-slate-50 group-hover:bg-white"
+            @change="saveFolderPath"
+          />
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7a2 2 0 012-2h3l2 3h6a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+            </svg>
+          </span>
+        </div>
+
+        <button 
+          @click="triggerFolderSelector"
+          title="Seleccionar Carpeta"
+          class="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all shadow-lg shadow-blue-200 shrink-0 active:scale-95"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+          </svg>
+        </button>
+
+        <button 
+          v-if="hasPersistedHandle"
+          @click="refreshFolder"
+          title="Actualizar lista"
+          class="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg border border-slate-300 transition-all shrink-0 active:scale-95"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        </button>
+
+        <button 
+          @click="processFiles"
+          :disabled="!filesList.length"
+          :title="filesList.length ? `Procesar (${filesList.length} archivos)` : 'Sin archivos'"
+          class="p-2 bg-green-600 hover:bg-green-700 disabled:bg-slate-300 text-white rounded-lg transition-all shadow-lg shadow-green-200 shrink-0 active:scale-95"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+        </button>
+      </div>
     </div>
 
     <!-- Table Container -->
-    <div class="flex flex-1 gap-4 overflow-hidden min-h-0">
-      <!-- Left Table: TXT Files List -->
-      <div class="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden flex flex-col w-[750px] shrink-0">
+    <div class="flex flex-col flex-1 gap-4 overflow-hidden min-h-0">
+      <!-- Top Table: TXT Files List -->
+      <div class="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden flex flex-col h-[35%] shrink-0">
         <!-- Radiobutton Filters -->
         <div class="px-4 py-2 bg-slate-50 border-b border-slate-200 flex items-center gap-4 shrink-0">
           <span class="text-[10px] font-bold text-slate-500 uppercase">Mostrar:</span>
@@ -94,14 +83,17 @@
           <table class="w-full text-left border-collapse table-fixed">
             <thead class="sticky top-0 z-10 bg-slate-100 border-b border-slate-200 shadow-sm">
               <tr>
-                <th class="w-16 px-3 py-3 text-[10px] font-bold text-slate-700 uppercase tracking-wider">Tipo</th>
-                <th class="w-16 px-3 py-3 text-[10px] font-bold text-slate-700 uppercase tracking-wider">Lote</th>
-                <th class="flex-1 px-3 py-3 text-[10px] font-bold text-slate-700 uppercase tracking-wider">Prov.</th>
-                <th class="w-20 px-3 py-3 text-[10px] font-bold text-slate-700 uppercase tracking-wider">Grado</th>
-                <th class="w-24 px-3 py-3 text-[10px] font-bold text-slate-700 uppercase tracking-wider">Muestra</th>
-                <th class="w-14 px-3 py-3 text-[10px] font-bold text-slate-700 uppercase tracking-wider">Cant.</th>
-                <th class="w-20 px-3 py-3 text-[10px] font-bold text-slate-700 uppercase tracking-wider">Color</th>
-                <th class="w-16 px-3 py-2 text-[10px] font-bold text-slate-700 uppercase tracking-wider text-center">Estado</th>
+                <th class="w-8 px-1 py-3 text-xs font-bold text-slate-700 tracking-wider">Tipo</th>
+                <th class="w-10 px-1 py-3 text-xs font-bold text-slate-700 tracking-wider">Lote</th>
+                <th class="w-30 px-1 py-3 text-xs font-bold text-slate-700 tracking-wider">Prov.</th>
+                <th class="w-10 px-1 py-3 text-xs font-bold text-slate-700 tracking-wider">Grado</th>
+                <th class="w-10 px-1 py-3 text-xs font-bold text-slate-700 tracking-wider">Muestra</th>
+                <th class="w-8 px-1 py-3 text-xs font-bold text-slate-700 tracking-wider text-center">Cant.</th>
+                <th class="w-11 px-1 py-3 text-xs font-bold text-slate-700 tracking-wider">Color</th>
+                <th class="w-8 px-1 py-3 text-xs font-bold text-slate-700 tracking-wider text-center">Cort</th>
+                <th class="w-120 px-1 py-3 text-xs font-bold text-slate-700 tracking-wider">Obs</th>
+                <th class="w-14 px-1 py-3 text-xs font-bold text-slate-700 tracking-wider text-center">Acción</th>
+                <th class="w-10 px-1 py-2 text-xs font-bold text-slate-700 tracking-wider text-center">Estado</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
@@ -112,63 +104,102 @@
                 class="hover:bg-blue-50/50 transition-colors group cursor-pointer"
                 :class="{ 'bg-blue-50 border-l-4 border-blue-500': selectedFileName === item.fileName }"
               >
-                <td class="px-3 py-2 text-xs">
+                <td class="px-1 py-2 text-xs">
                   <span 
-                    class="px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase"
+                    class="px-1.5 py-0.5 rounded-full font-mono"
                     :class="item.tipo === 'Ent' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'"
                   >
                     {{ item.tipo }}
                   </span>
                 </td>
-                <td class="px-3 py-2 text-xs font-mono text-slate-700 font-semibold">{{ item.loteEntrada }}</td>
-                <td class="px-3 py-2 text-xs text-slate-600 truncate" :title="item.proveedor">{{ item.proveedor }}</td>
-                <td class="px-3 py-2 text-xs text-slate-600 font-medium truncate">{{ item.grado }}</td>
-                <td class="px-2 py-1 text-xs" @click.stop>
-                  <input 
+                <td class="px-1 py-2 text-xs font-mono text-slate-700">{{ item.loteEntrada }}</td>
+                <td class="px-1 py-2 text-xs text-slate-600 truncate" :title="item.proveedor">{{ item.proveedor }}</td>
+                <td class="px-1 py-2 text-xs text-slate-600 truncate">{{ item.grado }}</td>
+                <td class="px-1 py-1 text-xs" @click.stop>
+                  <input
                     v-model="item.muestra"
-                    type="text" 
-                    placeholder="Muestra..."
-                    class="w-full px-2 py-1 border border-slate-200 rounded text-[10px] focus:ring-1 focus:ring-blue-500 outline-none disabled:bg-slate-50 disabled:opacity-50"
+                    type="text"
+                    :class="[
+                      'w-full px-2 py-1 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-blue-500 outline-none disabled:bg-slate-50 disabled:opacity-50',
+                      selectedFileName === item.fileName ? 'bg-white' : ''
+                    ]"
                   />
                 </td>
-                <td class="px-2 py-1 text-xs" @click.stop>
+                <td class="px-1 py-1 text-xs text-center" @click.stop>
                   <input 
                     v-model="item.cantidad"
                     type="number" 
                     :readonly="item.tipo === 'Ent'"
-                    :class="{ 'bg-slate-50 font-semibold italic text-blue-700': item.tipo === 'Ent' }"
-                    class="w-full px-1 py-1 border border-slate-200 rounded text-[10px] focus:ring-1 focus:ring-blue-500 outline-none no-spinner"
+                    :class="[ item.tipo === 'Ent' ? 'bg-slate-50 text-blue-700' : '', selectedFileName === item.fileName ? 'bg-white' : '' ]"
+                    class="w-full px-1 py-1 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-blue-500 outline-none no-spinner text-center"
                   />
                 </td>
-                <td class="px-2 py-1 text-xs" @click.stop>
+                <td class="px-1 py-1 text-xs" @click.stop>
                   <select 
                     v-model="item.color"
-                    class="w-full px-1 py-1 border border-slate-200 rounded text-[10px] focus:ring-1 focus:ring-blue-500 outline-none bg-white disabled:bg-slate-50 disabled:opacity-50 cursor-pointer"
+                    class="w-full px-1 py-1 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-blue-500 outline-none bg-white disabled:bg-slate-50 disabled:opacity-50 cursor-pointer"
                   >
-                    <option value="">-</option>
-                    <option v-for="c in ['LG', 'BCO', 'LA', 'COR', 'GRI', 'AMA']" :key="c" :value="c">{{ c }}</option>
+                    <option v-for="c in ['LG', 'BCO', 'LA', 'GRI', 'AMA']" :key="c" :value="c">{{ c }}</option>
                   </select>
                 </td>
-                <td class="px-3 py-2 text-xs text-center">
-                  <span 
-                    v-if="item.estado === 'Procesado'" 
-                    class="inline-flex items-center gap-1 text-[9px] font-bold text-green-600"
+                <td class="px-1 py-1 text-xs" @click.stop>
+                  <select
+                    v-model="item.cort"
+                    :disabled="item.tipo === 'Mue'"
+                    :class="[ 'w-full px-1 py-1 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-blue-500 outline-none disabled:bg-slate-50 disabled:opacity-50 cursor-pointer', selectedFileName === item.fileName ? 'bg-white' : '' ]"
                   >
-                    <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                    Listo
-                  </span>
-                  <span 
-                    v-else
-                    class="inline-flex items-center gap-1 text-[9px] font-bold text-amber-600"
-                  >
-                    <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                    Pend.
-                  </span>
+                    <option v-for="n in [1, 2, 3]" :key="n" :value="n">{{ n }}</option>
+                  </select>
+                </td>
+                <td class="px-1 py-1 text-xs" @click.stop>
+                  <input 
+                    v-model="item.obs"
+                    type="text" 
+                    :class="[ 'w-full px-1 py-1 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-blue-500 outline-none', selectedFileName === item.fileName ? 'bg-white' : '' ]"
+                  />
+                </td>
+                <td class="px-1 py-1 text-xs text-center" @click.stop>
+                  <div class="flex items-center justify-center gap-1.5">
+                    <button 
+                      @click="handleSaveFromRow(item)"
+                      :disabled="item.estado === 'Procesado'"
+                      v-tippy="{ content: 'Guardar ensayo' }"
+                      class="p-1.5 rounded-md transition-all sm:p-1"
+                      :class="item.estado === 'Procesado' ? 'text-slate-300 cursor-not-allowed' : 'text-green-600 hover:bg-green-50 active:scale-95 border border-transparent hover:border-green-200'"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                      </svg>
+                    </button>
+                    <button 
+                      @click="handleEditFromRow(item)"
+                      :disabled="item.estado !== 'Procesado'"
+                      v-tippy="{ content: 'Editar metadatos' }"
+                      class="p-1.5 rounded-md transition-all sm:p-1"
+                      :class="item.estado !== 'Procesado' ? 'text-slate-200 cursor-not-allowed' : 'text-blue-600 hover:bg-blue-50 active:scale-95 border border-transparent hover:border-blue-200'"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </button>
+                  </div>
+                </td>
+                <td class="px-1 py-2 text-xs text-center">
+                  <div v-if="item.estado === 'Procesado'" title="Guardado" class="flex justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <div v-else title="Pendiente de guardar" class="flex justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
                 </td>
               </tr>
               
               <tr v-if="parsedFiles.length === 0">
-                <td colspan="6" class="px-4 py-16 text-center">
+                <td colspan="10" class="px-4 py-16 text-center">
                   <p class="text-xs text-slate-400">No hay archivos</p>
                 </td>
               </tr>
@@ -182,61 +213,87 @@
         </div>
       </div>
 
-      <!-- Right Table: HVI Detailed Data -->
+      <!-- Bottom Table: HVI Detailed Data -->
       <div class="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden flex flex-col flex-1 min-w-0">
         <div v-if="selectedFileName" class="bg-slate-50 px-4 py-2 border-b border-slate-200 flex justify-between items-center shrink-0">
-          <span class="text-xs font-bold text-slate-700 truncate">Detalles: <span class="text-blue-600">{{ selectedFileName }}</span></span>
+          <div class="flex items-center gap-3 flex-1">
+            <span class="text-xs font-bold text-slate-700 truncate">Detalles: <span class="text-blue-600">{{ selectedFileName }}</span></span>
+            <span class="text-[10px] text-slate-500 flex items-center gap-1 ml-2">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Formato: <b>Tipo_Lote_Proveedor_Grado_Fecha.txt</b>
+            </span>
+          </div>
+          <!-- Botón Analizar -->
           <button 
-            @click="processFiles"
-            class="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-[10px] font-bold rounded shadow-sm transition-all flex items-center gap-1.5"
-            :disabled="!hviDetails.length"
+            v-if="hviDetails.length > 0"
+            @click="mostrarAnalizador = true"
+            class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-medium rounded-lg transition-all shadow-md active:scale-95"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
-            GUARDAR COMPLETO
+            Análisis Técnico
           </button>
         </div>
 
         <div class="overflow-auto flex-1 h-full">
-          <table class="w-full text-left border-collapse table-fixed min-w-[1200px]">
+          <table class="w-full text-left border-collapse table-fixed min-w-300">
             <thead class="sticky top-0 z-10 bg-slate-100 border-b border-slate-200">
               <tr>
-                <th class="w-20 px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider">Fardo</th>
-                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider">SCI</th>
-                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider">MST</th>
-                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider">MIC</th>
-                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider">MAT</th>
-                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider">UHML</th>
-                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider">UI</th>
-                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider">SF</th>
-                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider">STR</th>
-                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider">ELG</th>
-                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider">RD</th>
-                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider">+b</th>
-                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider">TIPO</th>
-                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider">TrCNT</th>
-                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider">TrAR</th>
-                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-wider">TRID</th>
+                <th class="w-20 px-4 py-3 text-xs font-bold text-slate-700 tracking-wider">Fardo</th>
+                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 tracking-wider">SCI</th>
+                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 tracking-wider">MST</th>
+                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 tracking-wider">MIC</th>
+                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 tracking-wider">MAT</th>
+                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 tracking-wider">UHML</th>
+                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 tracking-wider">UI</th>
+                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 tracking-wider">SF</th>
+                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 tracking-wider">STR</th>
+                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 tracking-wider">ELG</th>
+                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 tracking-wider">RD</th>
+                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 tracking-wider">+b</th>
+                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 tracking-wider">TIPO</th>
+                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 tracking-wider">TrCNT</th>
+                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 tracking-wider">TrAR</th>
+                <th class="w-16 px-4 py-3 text-xs font-bold text-slate-700 tracking-wider">TRID</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
-              <tr v-for="(row, idx) in hviDetails" :key="idx" class="hover:bg-slate-50 transition-colors">
-                <td class="px-4 py-2 text-xs font-mono text-slate-700">{{ row.fardo }}</td>
-                <td class="px-4 py-2 text-xs text-slate-600">{{ row.sci }}</td>
+              <tr v-for="(row, idx) in hviDetails" :key="idx" 
+                  :class="[
+                    'hover:bg-slate-50 transition-colors',
+                    clasificarFila(row).alertas.some(a => a.tipo === 'bandera-roja') ? 'ring-2 ring-red-400 ring-inset' : ''
+                  ]">
+                <td class="px-4 py-2 text-xs font-mono text-slate-700 relative">
+                  {{ row.fardo }}
+                  <!-- Indicadores de alerta -->
+                  <div v-if="clasificarFila(row).alertas.length" class="absolute -right-1 top-0 flex flex-col gap-0.5">
+                    <span v-for="(alerta, ai) in clasificarFila(row).alertas" :key="ai"
+                          :title="alerta.mensaje"
+                          :class="[
+                            'w-2.5 h-2.5 rounded-full cursor-help',
+                            alerta.tipo === 'bandera-roja' ? 'bg-red-500' : '',
+                            alerta.tipo === 'riesgo-tenido' ? 'bg-purple-500' : '',
+                            alerta.tipo === 'fibra-opaca' ? 'bg-amber-500' : ''
+                          ]"></span>
+                  </div>
+                </td>
+                <td :class="['px-4 py-2 text-xs font-medium', getClaseColor(clasificarFila(row).sci)]">{{ row.sci }}</td>
                 <td class="px-4 py-2 text-xs text-slate-600">{{ row.mst }}</td>
-                <td class="px-4 py-2 text-xs text-slate-600">{{ row.mic }}</td>
+                <td :class="['px-4 py-2 text-xs font-medium', getClaseColor(clasificarFila(row).mic)]">{{ row.mic }}</td>
                 <td class="px-4 py-2 text-xs text-slate-600">{{ row.mat }}</td>
-                <td class="px-4 py-2 text-xs text-slate-600">{{ row.uhml }}</td>
-                <td class="px-4 py-2 text-xs text-slate-600">{{ row.ui }}</td>
-                <td class="px-4 py-2 text-xs text-slate-600">{{ row.sf }}</td>
-                <td class="px-4 py-2 text-xs text-slate-600">{{ row.str }}</td>
+                <td :class="['px-4 py-2 text-xs font-medium', getClaseColor(clasificarFila(row).uhml)]">{{ row.uhml }}</td>
+                <td :class="['px-4 py-2 text-xs font-medium', getClaseColor(clasificarFila(row).ui)]">{{ row.ui }}</td>
+                <td :class="['px-4 py-2 text-xs font-medium', getClaseColor(clasificarFila(row).sf)]">{{ row.sf }}</td>
+                <td :class="['px-4 py-2 text-xs font-medium', getClaseColor(clasificarFila(row).str)]">{{ row.str }}</td>
                 <td class="px-4 py-2 text-xs text-slate-600">{{ row.elg }}</td>
-                <td class="px-4 py-2 text-xs text-slate-600">{{ row.rd }}</td>
-                <td class="px-4 py-2 text-xs text-slate-600">{{ row.plusB }}</td>
+                <td :class="['px-4 py-2 text-xs font-medium', getClaseColor(clasificarFila(row).rd)]">{{ row.rd }}</td>
+                <td :class="['px-4 py-2 text-xs font-medium', getClaseColor(clasificarFila(row).plusB)]">{{ row.plusB }}</td>
                 <td class="px-4 py-2 text-xs text-slate-600">{{ row.tipo }}</td>
                 <td class="px-4 py-2 text-xs text-slate-600">{{ row.trCnt }}</td>
-                <td class="px-4 py-2 text-xs text-slate-600">{{ row.trAr }}</td>
+                <td :class="['px-4 py-2 text-xs font-medium', getClaseColor(clasificarFila(row).trAr)]">{{ row.trAr }}</td>
                 <td class="px-4 py-2 text-xs text-slate-600">{{ row.trid }}</td>
               </tr>
               <tr v-if="!hviDetails.length">
@@ -253,25 +310,52 @@
             <!-- Footer fijo con promedios -->
             <tfoot v-if="hviDetails.length" class="sticky bottom-0 z-10 bg-blue-50 border-t-2 border-blue-200">
               <tr class="font-bold text-blue-900 shadow-[0_-2px_4px_rgba(0,0,0,0.05)]">
-                <td class="px-4 py-3 text-xs bg-blue-100/50">n = {{ hviDetails.length }}</td>
-                <td class="px-4 py-3 text-xs">{{ hviAverages.sci }}</td>
+                <td class="px-4 py-3 text-xs bg-blue-100/50">n = {{ hviDetails.length }} (Prom)</td>
+                <td :class="['px-4 py-3 text-xs', getClaseColor(clasificarMayorMejor(hviAverages.sci, PARAMETROS_HVI_INTERNACIONAL.SCI))]">{{ hviAverages.sci }}</td>
                 <td class="px-4 py-3 text-xs">{{ hviAverages.mst }}</td>
-                <td class="px-4 py-3 text-xs">{{ hviAverages.mic }}</td>
+                <td :class="['px-4 py-3 text-xs', getClaseColor(clasificarMIC(hviAverages.mic))]">{{ hviAverages.mic }}</td>
                 <td class="px-4 py-3 text-xs">{{ hviAverages.mat }}</td>
-                <td class="px-4 py-3 text-xs">{{ hviAverages.uhml }}</td>
-                <td class="px-4 py-3 text-xs">{{ hviAverages.ui }}</td>
-                <td class="px-4 py-3 text-xs">{{ hviAverages.sf }}</td>
-                <td class="px-4 py-3 text-xs">{{ hviAverages.str }}</td>
+                <td :class="['px-4 py-3 text-xs', getClaseColor(clasificarMayorMejor(hviAverages.uhml, PARAMETROS_HVI_INTERNACIONAL.UHML))]">{{ hviAverages.uhml }}</td>
+                <td :class="['px-4 py-3 text-xs', getClaseColor(clasificarMayorMejor(hviAverages.ui, PARAMETROS_HVI_INTERNACIONAL.UI))]">{{ hviAverages.ui }}</td>
+                <td :class="['px-4 py-3 text-xs', getClaseColor(clasificarMenorMejor(hviAverages.sf, PARAMETROS_HVI_INTERNACIONAL.SF))]">{{ hviAverages.sf }}</td>
+                <td :class="['px-4 py-3 text-xs', getClaseColor(clasificarMayorMejor(hviAverages.str, PARAMETROS_HVI_INTERNACIONAL.STR))]">{{ hviAverages.str }}</td>
                 <td class="px-4 py-3 text-xs">{{ hviAverages.elg }}</td>
-                <td class="px-4 py-3 text-xs">{{ hviAverages.rd }}</td>
-                <td class="px-4 py-3 text-xs">{{ hviAverages.plusB }}</td>
-                <td class="px-4 py-3 text-xs italic text-blue-400">Prom.</td>
+                <td :class="['px-4 py-3 text-xs', getClaseColor(clasificarMayorMejor(hviAverages.rd, PARAMETROS_HVI_INTERNACIONAL.RD))]">{{ hviAverages.rd }}</td>
+                <td :class="['px-4 py-3 text-xs', getClaseColor(clasificarMenorMejor(hviAverages.plusB, PARAMETROS_HVI_INTERNACIONAL.PLUS_B))]">{{ hviAverages.plusB }}</td>
+                <td class="px-4 py-3 text-xs">{{ hviAverages.tipo }}</td>
                 <td class="px-4 py-3 text-xs">{{ hviAverages.trCnt }}</td>
-                <td class="px-4 py-3 text-xs">{{ hviAverages.trAr }}</td>
+                <td :class="['px-4 py-3 text-xs', getClaseColor(clasificarMenorMejor(hviAverages.trAr, PARAMETROS_HVI_INTERNACIONAL.TRAR))]">{{ hviAverages.trAr }}</td>
                 <td class="px-4 py-3 text-xs">{{ hviAverages.trid }}</td>
               </tr>
             </tfoot>
           </table>
+        </div>
+        
+        <!-- Leyenda de clasificación HVI -->
+        <div v-if="hviDetails.length" class="mt-3 px-3 py-2 bg-slate-50 rounded-lg border border-slate-200">
+          <div class="flex flex-wrap items-center gap-4 text-xs">
+            <span class="font-semibold text-slate-600">Clasificación:</span>
+            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-green-100 border border-green-300"></span> Excelente</span>
+            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-yellow-50 border border-yellow-300"></span> Aceptable</span>
+            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-orange-100 border border-orange-300"></span> Crítico</span>
+            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-red-100 border border-red-300"></span> Fuera de rango</span>
+            <span class="border-l border-slate-300 pl-4 font-semibold text-slate-600">Alertas:</span>
+            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-red-500"></span> Bandera Roja (STR/SF)</span>
+            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-purple-500"></span> Riesgo Teñido (MIC)</span>
+            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-amber-500"></span> Fibra Opaca (RD)</span>
+          </div>
+          <!-- Resumen de alertas -->
+          <div v-if="resumenAlertas.total > 0" class="mt-2 pt-2 border-t border-slate-200 flex flex-wrap gap-3 text-xs">
+            <span v-if="resumenAlertas.banderaRoja" class="px-2 py-1 bg-red-100 text-red-700 rounded font-medium">
+              {{ resumenAlertas.banderaRoja }} pacas con Bandera Roja
+            </span>
+            <span v-if="resumenAlertas.riesgoTenido" class="px-2 py-1 bg-purple-100 text-purple-700 rounded font-medium">
+              {{ resumenAlertas.riesgoTenido }} pacas con Riesgo de Teñido
+            </span>
+            <span v-if="resumenAlertas.fibraOpaca" class="px-2 py-1 bg-amber-100 text-amber-700 rounded font-medium">
+              {{ resumenAlertas.fibraOpaca }} pacas con Fibra Opaca
+            </span>
+          </div>
         </div>
       </div>
     </div>
@@ -286,15 +370,185 @@
       class="hidden" 
       @change="handleFolderChange"
     />
+
+    <!-- Modal Analizador HVI -->
+    <Teleport to="body">
+      <div v-if="mostrarAnalizador" 
+           class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+           @click.self="mostrarAnalizador = false">
+        <div class="relative w-full max-w-5xl max-h-[90vh] overflow-auto rounded-2xl shadow-2xl">
+          <!-- Botón cerrar -->
+          <button 
+            @click="mostrarAnalizador = false"
+            class="absolute top-4 right-4 z-10 p-2 bg-slate-700 hover:bg-slate-600 text-white rounded-full transition-colors shadow-lg"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <!-- Componente Analizador -->
+          <AnalizadorHVI 
+            :pacas="hviDetails" 
+            :metadata="selectedFileItem"
+          />
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue';
 import Swal from 'sweetalert2';
+import AnalizadorHVI from './AnalizadorHVI.vue';
+
+// =====================================================
+// PARÁMETROS HVI INTERNACIONALES PARA CLASIFICACIÓN
+// =====================================================
+const PARAMETROS_HVI_INTERNACIONAL = {
+  // --- Variables de Hilabilidad ---
+  SCI:  { min_excelente: 120, min_aceptable: 100, critico: 85 },
+  STR:  { min_excelente: 30,  min_aceptable: 27,  critico: 24 }, // g/tex
+  SF:   { max_excelente: 7.5, max_aceptable: 11.0, critico: 13.5 }, // %
+  UI:   { min_excelente: 83,  min_aceptable: 81,  critico: 79 }, // %
+  UHML: { min_excelente: 28.5, min_aceptable: 27.0, critico: 25.5 }, // mm
+
+  // --- Variables de Madurez y Teñido ---
+  MIC:  { 
+    rango_premium: [3.8, 4.2], 
+    rango_aceptable: [3.5, 4.9], 
+    descuento_por_madurez: 3.4, // <3.4 Riesgo de neps de teñido
+    descuento_por_finura: 5.0    // >5.0 Fibra muy gruesa/tosca
+  },
+  
+  // --- Variables de Color (Daño Climático) ---
+  RD:   { min_excelente: 75, min_aceptable: 70, critico: 65 }, // Brillo/Reflectancia
+  PLUS_B: { max_excelente: 8.5, max_aceptable: 10.5, critico: 12.0 }, // Amarillez (Daño por calor/hongos)
+
+  // --- Variables de Limpieza ---
+  TRAR: { max_excelente: 0.35, max_aceptable: 0.55, critico: 0.80 } // % de Área de basura
+};
+
+// =====================================================
+// FUNCIONES DE CLASIFICACIÓN HVI
+// =====================================================
+
+/**
+ * Clasifica un valor "mayor es mejor" (SCI, STR, UI, UHML, RD)
+ * Retorna: 'excelente' | 'aceptable' | 'critico' | 'fuera'
+ */
+function clasificarMayorMejor(valor, params) {
+  const v = parseFloat(valor);
+  if (isNaN(v)) return 'sin-dato';
+  if (v >= params.min_excelente) return 'excelente';
+  if (v >= params.min_aceptable) return 'aceptable';
+  if (v >= params.critico) return 'critico';
+  return 'fuera';
+}
+
+/**
+ * Clasifica un valor "menor es mejor" (SF, PLUS_B, TRAR)
+ * Retorna: 'excelente' | 'aceptable' | 'critico' | 'fuera'
+ */
+function clasificarMenorMejor(valor, params) {
+  const v = parseFloat(valor);
+  if (isNaN(v)) return 'sin-dato';
+  if (v <= params.max_excelente) return 'excelente';
+  if (v <= params.max_aceptable) return 'aceptable';
+  if (v <= params.critico) return 'critico';
+  return 'fuera';
+}
+
+/**
+ * Clasifica MIC (dentro de rango es mejor)
+ * Retorna: 'premium' | 'aceptable' | 'riesgo-tenido' | 'fibra-gruesa'
+ */
+function clasificarMIC(valor) {
+  const v = parseFloat(valor);
+  if (isNaN(v)) return 'sin-dato';
+  const p = PARAMETROS_HVI_INTERNACIONAL.MIC;
+  
+  if (v >= p.rango_premium[0] && v <= p.rango_premium[1]) return 'premium';
+  if (v >= p.rango_aceptable[0] && v <= p.rango_aceptable[1]) return 'aceptable';
+  if (v < p.descuento_por_madurez) return 'riesgo-tenido';
+  if (v > p.descuento_por_finura) return 'fibra-gruesa';
+  return 'fuera';
+}
+
+/**
+ * Evalúa una paca completa y retorna alertas especiales
+ */
+function evaluarAlertasPaca(row) {
+  const alertas = [];
+  const str = parseFloat(row.str);
+  const sf = parseFloat(row.sf);
+  const mic = parseFloat(row.mic);
+  const rd = parseFloat(row.rd);
+  const sci = parseFloat(row.sci);
+  
+  // Bandera Roja de Producción: STR o SF críticos (sin importar SCI alto)
+  if (!isNaN(str) && str < PARAMETROS_HVI_INTERNACIONAL.STR.critico) {
+    alertas.push({ tipo: 'bandera-roja', mensaje: `STR crítico (${str} < ${PARAMETROS_HVI_INTERNACIONAL.STR.critico})` });
+  }
+  if (!isNaN(sf) && sf > PARAMETROS_HVI_INTERNACIONAL.SF.critico) {
+    alertas.push({ tipo: 'bandera-roja', mensaje: `SF crítico (${sf} > ${PARAMETROS_HVI_INTERNACIONAL.SF.critico})` });
+  }
+  
+  // Riesgo de Teñido: MIC fuera del rango aceptable
+  if (!isNaN(mic)) {
+    const micParams = PARAMETROS_HVI_INTERNACIONAL.MIC;
+    if (mic < micParams.rango_aceptable[0] || mic > micParams.rango_aceptable[1]) {
+      alertas.push({ tipo: 'riesgo-tenido', mensaje: `MIC fuera de rango (${mic})` });
+    }
+  }
+  
+  // Fibra Opaca / Posible daño por humedad: RD < 70
+  if (!isNaN(rd) && rd < PARAMETROS_HVI_INTERNACIONAL.RD.min_aceptable) {
+    alertas.push({ tipo: 'fibra-opaca', mensaje: `RD bajo (${rd} < 70) - Posible daño por humedad` });
+  }
+  
+  return alertas;
+}
+
+/**
+ * Obtiene la clase CSS para una celda según su clasificación
+ */
+function getClaseColor(clasificacion) {
+  const clases = {
+    'excelente': 'bg-green-100 text-green-800',
+    'premium': 'bg-green-100 text-green-800',
+    'aceptable': 'bg-yellow-50 text-yellow-800',
+    'critico': 'bg-orange-100 text-orange-800',
+    'fuera': 'bg-red-100 text-red-800',
+    'riesgo-tenido': 'bg-purple-100 text-purple-800',
+    'fibra-gruesa': 'bg-orange-100 text-orange-800',
+    'sin-dato': 'text-slate-400'
+  };
+  return clases[clasificacion] || '';
+}
+
+/**
+ * Clasifica todos los parámetros de una fila
+ */
+function clasificarFila(row) {
+  const P = PARAMETROS_HVI_INTERNACIONAL;
+  return {
+    sci: clasificarMayorMejor(row.sci, P.SCI),
+    str: clasificarMayorMejor(row.str, P.STR),
+    sf: clasificarMenorMejor(row.sf, P.SF),
+    ui: clasificarMayorMejor(row.ui, P.UI),
+    uhml: clasificarMayorMejor(row.uhml, P.UHML),
+    mic: clasificarMIC(row.mic),
+    rd: clasificarMayorMejor(row.rd, P.RD),
+    plusB: clasificarMenorMejor(row.plusB, P.PLUS_B),
+    trAr: clasificarMenorMejor(row.trAr, P.TRAR),
+    alertas: evaluarAlertasPaca(row)
+  };
+}
 
 // State
 const folderPath = ref(localStorage.getItem('hvi_last_folder_path') || '');
+const mostrarAnalizador = ref(false);
 const filesList = ref([]);
 const folderInput = ref(null);
 const parsedFiles = ref([]);
@@ -321,7 +575,7 @@ const filteredFiles = computed(() => {
 const hviAverages = computed(() => {
   if (!hviDetails.value.length) return {};
   
-  const keys = ['sci', 'mst', 'mic', 'mat', 'uhml', 'ui', 'sf', 'str', 'elg', 'rd', 'plusB', 'trCnt', 'trAr', 'trid'];
+  const keys = ['sci', 'mst', 'mic', 'mat', 'uhml', 'ui', 'sf', 'str', 'elg', 'rd', 'plusB', 'tipo', 'trCnt', 'trAr', 'trid'];
   const sums = {};
   keys.forEach(k => sums[k] = 0);
   
@@ -342,14 +596,47 @@ const hviAverages = computed(() => {
   keys.forEach(k => {
     if (validCounts[k] > 0) {
       const avg = sums[k] / validCounts[k];
-      // Convertimos a string con coma decimal para visualizar como en tb_calidad_fibra
-      averages[k] = avg.toFixed(2).replace('.', ',');
+      
+      // Ajustar precisión según el tipo de campo
+      let precision = 2;
+      if (['sci', 'mst', 'tipo'].includes(k)) precision = 1;
+      if (['trCnt', 'trid'].includes(k)) precision = 0;
+
+      // Para 'tipo' mostramos punto como solicitó el usuario, para el resto seguimos con coma
+      if (k === 'tipo') {
+        averages[k] = avg.toFixed(precision);
+      } else {
+        averages[k] = avg.toFixed(precision).replace('.', ',');
+      }
     } else {
       averages[k] = '-';
     }
   });
   
   return averages;
+});
+
+// Computed que resume las alertas de todas las pacas
+const resumenAlertas = computed(() => {
+  if (!hviDetails.value.length) return { total: 0, banderaRoja: 0, riesgoTenido: 0, fibraOpaca: 0 };
+  
+  let banderaRoja = 0;
+  let riesgoTenido = 0;
+  let fibraOpaca = 0;
+  
+  hviDetails.value.forEach(row => {
+    const alertas = evaluarAlertasPaca(row);
+    if (alertas.some(a => a.tipo === 'bandera-roja')) banderaRoja++;
+    if (alertas.some(a => a.tipo === 'riesgo-tenido')) riesgoTenido++;
+    if (alertas.some(a => a.tipo === 'fibra-opaca')) fibraOpaca++;
+  });
+  
+  return {
+    total: banderaRoja + riesgoTenido + fibraOpaca,
+    banderaRoja,
+    riesgoTenido,
+    fibraOpaca
+  };
 });
 
 // Computed
@@ -451,11 +738,46 @@ async function scanDirectory(dirHandle) {
         });
         const result = await response.json();
         if (result.success) {
+          // Marcar procesados
           results.forEach(f => {
             if (result.existingNames.includes(f.fileName)) {
               f.estado = 'Procesado';
             }
           });
+
+          // Traer metadatos guardados para los archivos procesados y mezclarlos
+          if (result.existingNames.length > 0) {
+            try {
+              const metaResp = await fetch('/api/hvi/get-metadata', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fileNames: result.existingNames })
+              });
+              const metaJson = await metaResp.json();
+              if (metaJson.success && metaJson.metadata) {
+                      // aplicar metadata a los resultados de forma segura
+                      results.forEach(f => {
+                        const m = metaJson.metadata[f.fileName];
+                        if (m) {
+                          if (m.muestra !== undefined && m.muestra !== null) f.muestra = m.muestra;
+                          if (m.cantidad !== undefined && m.cantidad !== null) f.cantidad = m.cantidad;
+                          if (m.color !== undefined && m.color !== null) f.color = m.color;
+                          if (m.cort !== undefined && m.cort !== null) f.cort = m.cort;
+                          if (m.obs !== undefined && m.obs !== null) f.obs = m.obs;
+                          // normalizar cabecera
+                          if (m.tipo !== undefined && m.tipo !== null) f.tipo = m.tipo;
+                          if (m.loteEntrada !== undefined && m.loteEntrada !== null) f.loteEntrada = m.loteEntrada;
+                          else if (m.lote !== undefined && m.lote !== null) f.loteEntrada = m.lote;
+                          if (m.proveedor !== undefined && m.proveedor !== null) f.proveedor = m.proveedor;
+                          if (m.grado !== undefined && m.grado !== null) f.grado = m.grado;
+                          if (m.fecha !== undefined && m.fecha !== null) f.fecha = m.fecha;
+                        }
+                      });
+              }
+            } catch (err) {
+              console.warn('Error fetching HVI metadata:', err);
+            }
+          }
         }
       } catch (err) {
         console.warn('Error checking files status:', err);
@@ -499,11 +821,38 @@ const handleFolderChange = async (event) => {
       });
       const result = await response.json();
       if (result.success) {
+        // Marcar procesados
         results.forEach(f => {
           if (result.existingNames.includes(f.fileName)) {
             f.estado = 'Procesado';
           }
         });
+
+        // Traer metadatos guardados y mezclarlos
+        if (result.existingNames.length > 0) {
+          try {
+            const metaResp = await fetch('/api/hvi/get-metadata', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ fileNames: result.existingNames })
+            });
+            const metaJson = await metaResp.json();
+            if (metaJson.success && metaJson.metadata) {
+              results.forEach(f => {
+                const m = metaJson.metadata[f.fileName];
+                if (m) {
+                  if (m.muestra !== undefined && m.muestra !== null) f.muestra = m.muestra;
+                  if (m.cantidad !== undefined && m.cantidad !== null) f.cantidad = m.cantidad;
+                  if (m.color !== undefined && m.color !== null) f.color = m.color;
+                  if (m.cort !== undefined && m.cort !== null) f.cort = m.cort;
+                  if (m.obs !== undefined && m.obs !== null) f.obs = m.obs;
+                }
+              });
+            }
+          } catch (err) {
+            console.warn('Error fetching HVI metadata:', err);
+          }
+        }
       }
     } catch (err) {
       console.warn('Error checking files status:', err);
@@ -534,8 +883,9 @@ const parseFileName = (fileName, handle = null, file = null) => {
   const parts = nameOnly.split('_');
   
   // 3. Extraer según lógica solicitada
-  // Tipo: 3 primeras letras (o parte 0)
-  const tipo = parts[0] ? parts[0].substring(0, 3) : "???";
+  // Tipo: 3 primeras letras (o parte 0) - Normalizar a Título (Ent, Mue)
+  let rawTipo = parts[0] ? parts[0].substring(0, 3).toLowerCase() : "???";
+  const tipo = rawTipo === 'ent' ? 'Ent' : (rawTipo === 'mue' ? 'Mue' : parts[0]);
   
   // Lote/Entrada: desde el cuarto carácter hasta que aparece un _ (o parte 1)
   const loteEntrada = parts[1] || "";
@@ -573,6 +923,8 @@ const parseFileName = (fileName, handle = null, file = null) => {
     muestra: "", // Input para el usuario
     cantidad: "", // Cantidad (Nuevo)
     color: "",    // Color (Nuevo)
+    cort: "",     // Cort (Nuevo)
+    obs: "",      // Observaciones (Nuevo)
     estado: "Pendiente"
   };
 };
@@ -603,6 +955,20 @@ const selectFile = async (item) => {
     }
   } catch (err) {
     console.error('Error reading HVI file', err);
+  }
+};
+
+const handleSaveFromRow = async (item) => {
+  if (selectedFileName.value !== item.fileName) {
+    await selectFile(item);
+  }
+  processFiles();
+};
+
+const handleEditFromRow = (item) => {
+  // Simplemente selecciona la fila para permitir editar los campos en la tabla
+  if (selectedFileName.value !== item.fileName) {
+    selectFile(item);
   }
 };
 
@@ -640,9 +1006,9 @@ const parseHviDetails = (content) => {
 
     if (columns.length < 16) continue;
     
-    // El usuario solicita que en la columna TIPO (grado de color) se cambie el "-" por ","
-    // Ejemplo: 23-2 -> 23,2 para ser compatible con tb_calidad_fibra
-    const tipoFormateado = columns[12] ? columns[12].replace('-', ',') : '';
+    // El usuario solicita que en la columna TIPO (grado de color) se cambie el "-" por "."
+    // internamente para cálculos, aunque se muestre con coma en la tabla.
+    const tipoFormateado = columns[12] ? columns[12].replace('-', '.') : '';
     
     detailRows.push({
       fardo: columns[0],
@@ -673,6 +1039,32 @@ const processFiles = async () => {
       position: 'top-end',
       icon: 'warning',
       title: 'Seleccione un archivo con datos',
+      showConfirmButton: false,
+      timer: 3000
+    });
+    return;
+  }
+
+  // Validación de Color
+  if (!selectedFileItem.value.color) {
+    Swal.fire({
+      toast: true,
+      position: 'top-end',
+      icon: 'warning',
+      title: 'Debe seleccionar un Color',
+      showConfirmButton: false,
+      timer: 3000
+    });
+    return;
+  }
+
+  // Validación de Cort (solo para Ent)
+  if (selectedFileItem.value.tipo !== 'Mue' && !selectedFileItem.value.cort) {
+    Swal.fire({
+      toast: true,
+      position: 'top-end',
+      icon: 'warning',
+      title: 'Debe seleccionar un valor para Cort',
       showConfirmButton: false,
       timer: 3000
     });
@@ -715,7 +1107,9 @@ const processFiles = async () => {
             fecha: selectedFileItem.value.fecha,
             muestra: selectedFileItem.value.muestra,
             cantidad: selectedFileItem.value.cantidad,
-            color: selectedFileItem.value.color
+            color: selectedFileItem.value.color,
+            cort: selectedFileItem.value.tipo === 'Mue' ? null : selectedFileItem.value.cort,
+            obs: selectedFileItem.value.obs
           },
           details: hviDetails.value
         }
@@ -743,6 +1137,15 @@ const processFiles = async () => {
         timer: 3000
       });
       selectedFileItem.value.estado = "Procesado";
+
+      // Si no quedan archivos en la tabla 1 o todos están procesados,
+      // limpiar la selección y los detalles (tabla 2) para que no persistan.
+      const allProcessed = parsedFiles.value.length === 0 || parsedFiles.value.every(f => f.estado === 'Procesado');
+      if (allProcessed) {
+        selectedFileName.value = '';
+        selectedFileItem.value = null;
+        hviDetails.value = [];
+      }
     } else {
       Swal.fire({
         icon: 'error',
@@ -786,11 +1189,13 @@ onMounted(async () => {
 .no-spinner::-webkit-inner-spin-button,
 .no-spinner::-webkit-outer-spin-button {
   -webkit-appearance: none;
+  appearance: none;
   margin: 0;
 }
 
 .no-spinner {
   -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 .overflow-auto::-webkit-scrollbar {

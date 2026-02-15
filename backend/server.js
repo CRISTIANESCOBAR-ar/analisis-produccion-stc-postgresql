@@ -4874,6 +4874,18 @@ app.post('/api/hvi/save', async (req, res) => {
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tb_hvi_ensayos' AND column_name='tipo') THEN
           ALTER TABLE tb_hvi_ensayos ADD COLUMN tipo TEXT;
         END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tb_hvi_ensayos' AND column_name='cantidad') THEN
+          ALTER TABLE tb_hvi_ensayos ADD COLUMN cantidad INTEGER;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tb_hvi_ensayos' AND column_name='color') THEN
+          ALTER TABLE tb_hvi_ensayos ADD COLUMN color TEXT;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tb_hvi_ensayos' AND column_name='cort') THEN
+          ALTER TABLE tb_hvi_ensayos ADD COLUMN cort INTEGER;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tb_hvi_ensayos' AND column_name='obs') THEN
+          ALTER TABLE tb_hvi_ensayos ADD COLUMN obs TEXT;
+        END IF;
       END $$;
 
       CREATE TABLE IF NOT EXISTS tb_hvi_detalles (
@@ -4903,9 +4915,9 @@ app.post('/api/hvi/save', async (req, res) => {
 
       // 2. Insertar Cabecera
       const headerRes = await client.query(
-        `INSERT INTO tb_hvi_ensayos (tipo, lote, proveedor, grado, fecha, muestra, archivo_fuente)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-        [metadata.tipo, metadata.loteEntrada, metadata.proveedor, metadata.grado, metadata.fecha, metadata.muestra, metadata.fileName]
+        `INSERT INTO tb_hvi_ensayos (tipo, lote, proveedor, grado, fecha, muestra, cantidad, color, cort, obs, archivo_fuente)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+        [metadata.tipo, metadata.loteEntrada, metadata.proveedor, metadata.grado, metadata.fecha, metadata.muestra, metadata.cantidad || null, metadata.color || null, metadata.cort || null, metadata.obs || null, metadata.fileName]
       );
 
       const ensayoId = headerRes.rows[0].id;
@@ -4973,6 +4985,63 @@ app.post('/api/hvi/check-files', async (req, res) => {
     res.json({ success: true, existingNames });
   } catch (err) {
     console.error('Error checking HVI files:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Endpoint para obtener metadatos guardados de archivos HVI
+app.post('/api/hvi/get-metadata', async (req, res) => {
+  const { fileNames } = req.body;
+  if (!fileNames || !Array.isArray(fileNames)) {
+    return res.status(400).json({ success: false, error: 'Lista de archivos inválida' });
+  }
+
+  try {
+    // Asegurar que las columnas adicionales existan antes de consultar
+    await query(`
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tb_hvi_ensayos' AND column_name='cantidad') THEN
+          ALTER TABLE tb_hvi_ensayos ADD COLUMN cantidad INTEGER;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tb_hvi_ensayos' AND column_name='color') THEN
+          ALTER TABLE tb_hvi_ensayos ADD COLUMN color TEXT;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tb_hvi_ensayos' AND column_name='cort') THEN
+          ALTER TABLE tb_hvi_ensayos ADD COLUMN cort INTEGER;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tb_hvi_ensayos' AND column_name='obs') THEN
+          ALTER TABLE tb_hvi_ensayos ADD COLUMN obs TEXT;
+        END IF;
+      END $$;
+    `);
+
+    const result = await query(
+      `SELECT archivo_fuente, tipo, lote, proveedor, grado, fecha, muestra, cantidad, color, cort, obs
+       FROM tb_hvi_ensayos WHERE archivo_fuente = ANY($1)`,
+      [fileNames]
+    );
+
+    // Devolver un mapa por nombre de archivo
+    const map = {};
+    result.rows.forEach(r => {
+      map[r.archivo_fuente] = {
+        tipo: r.tipo,
+        loteEntrada: r.lote,
+        proveedor: r.proveedor,
+        grado: r.grado,
+        fecha: r.fecha,
+        muestra: r.muestra,
+        cantidad: r.cantidad,
+        color: r.color,
+        cort: r.cort,
+        obs: r.obs
+      };
+    });
+
+    res.json({ success: true, metadata: map });
+  } catch (err) {
+    console.error('Error getting HVI metadata:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
