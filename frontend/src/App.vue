@@ -333,6 +333,13 @@
             >
               <span>📊</span> Detalle MISTURA
             </router-link>
+            <router-link 
+              to="/configuracion-estandares" 
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
+              :class="{ 'bg-blue-600': $route.path === '/configuracion-estandares' }"
+            >
+              <span>⚙️</span> Estándares y Mezclas
+            </router-link>
           </div>
         </div>
       </nav>
@@ -390,20 +397,20 @@ const indigoRoutes = [
   '/seguimiento-roladas-fibra',
   '/grafico-metricas-diarias'
 ]
-const isIndigoRouteActive = computed(() => indigoRoutes.includes(route.path))
+  const isIndigoRouteActive = computed(() => indigoRoutes.includes(route.path)) 
+  
+  const configRoutes = ['/parametros-hvi', '/detalle-mistura-lote', '/configuracion-estandares']
+  const isConfigRouteActive = computed(() => configRoutes.includes(route.path))
 
-const configRoutes = ['/parametros-hvi', '/detalle-mistura-lote']
-const isConfigRouteActive = computed(() => configRoutes.includes(route.path))
+  function openSidebar() {
+    sidebarOpen.value = true
+  }
 
-function openSidebar() {
-  sidebarOpen.value = true
-}
+  function closeSidebar() {
+    sidebarOpen.value = false
+  }
 
-function closeSidebar() {
-  sidebarOpen.value = false
-}
-
-// Close sidebar on route change (user navigated)
+  // Close sidebar on route change (user navigated)
 watch(() => route.path, () => {
   closeSidebar()
 })

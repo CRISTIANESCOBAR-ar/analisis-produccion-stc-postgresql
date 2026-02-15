@@ -120,6 +120,11 @@ const routes = [
     path: '/grafico-metricas-diarias',
     component: () => import('./components/GraficoMetricasDiarias.vue'),
     meta: { title: 'Grafico de Metricas Diarias' }
+  },
+  {
+    path: '/configuracion-estandares',
+    component: () => import('./components/configuracion/ConfiguracionEstandares.vue'),
+    meta: { title: 'Configuración Estándares y Mezclas' }
   }
 ]
 
