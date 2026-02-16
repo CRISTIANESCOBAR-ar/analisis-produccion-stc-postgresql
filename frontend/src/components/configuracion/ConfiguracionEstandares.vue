@@ -91,36 +91,92 @@
           </h3>
         </div>
         
-        <div class="p-6 flex flex-col gap-6">
+        <div class="p-6 flex flex-col gap-6 overflow-auto max-h-[800px]">
           <p class="text-xs text-slate-500 leading-relaxed">
-            Habilita la <b>inteligencia de mezclado</b>. El sistema validará que el lote cumpla con la homogeneidad entes de sugerir su uso.
+            Habilita la <b>inteligencia de mezclado</b>. Define Promedios Objetivo, Límites Absolutos (Hard Caps) y Rangos de Tolerancia.
           </p>
 
-          <div v-for="(tol, idx) in toleranciasConfig" :key="idx" class="relative pl-4 border-l-4 border-amber-400 bg-amber-50/50 p-4 rounded-r-lg">
-            <div class="flex justify-between items-start mb-2">
-              <span class="font-black text-slate-700 text-sm">{{ tol.parametro }}</span>
-              <span class="text-[10px] font-bold px-2 py-0.5 bg-white rounded border border-amber-200 text-amber-600">
+          <div v-for="(tol, idx) in toleranciasConfig" :key="idx" class="relative pl-4 border-l-4 border-amber-400 bg-amber-50/50 p-4 rounded-r-lg group">
+            
+            <!-- Header de la Regla -->
+            <div class="flex justify-between items-center mb-3">
+              <div class="flex items-center gap-2">
+                  <span class="font-black text-slate-700 text-base">{{ tol.parametro }}</span>
+                  <!-- Tooltip informativo -->
+                  <div class="relative group/tooltip">
+                    <span class="cursor-help text-slate-400 text-xs">ⓘ</span>
+                    <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-800 text-white text-[10px] rounded shadow-lg opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all z-10 text-center pointer-events-none">
+                      El "Hard Cap" rechaza lotes fuera de límite.
+                      <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
+                    </div>
+                  </div>
+              </div>
+              <span class="text-[10px] font-bold px-2 py-0.5 bg-white rounded border border-amber-200 text-amber-600 shadow-sm">
                 Regla {{ tol.porcentaje_min_ideal }}/{{ 100 - tol.porcentaje_min_ideal }}
               </span>
             </div>
             
-            <div class="grid grid-cols-2 gap-4 text-xs">
-              <div>
-                <label class="block text-slate-400 mb-1">Ideal ({{ tol.porcentaje_min_ideal }}%)</label>
-                <div class="flex items-center gap-1">
-                   <span class="font-bold text-slate-600">></span>
-                   <input type="number"Step="0.1" v-model.number="tol.valor_ideal_min" class="w-full bg-white border border-amber-200 rounded px-2 py-1 text-slate-800 font-bold focus:ring-2 focus:ring-amber-400 outline-none" />
+            <!-- Grid de Configuración (2 filas x 2 columnas) -->
+            <div class="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
+              
+              <!-- Objetivo (Ideal) -->
+              <div class="col-span-1">
+                <label class="block text-slate-500 font-semibold mb-1" title="Promedio Objetivo que la mayoría del lote debe cumplir">
+                  Promedio Objetivo
+                </label>
+                <div class="flex items-center relative">
+                   <!-- Icono condicional < o > -->
+                   <span class="absolute left-2 font-bold text-slate-400 z-10">
+                     {{ tol.parametro === '+b' ? '<' : '>' }}
+                   </span>
+                   <input 
+                      v-if="tol.parametro !== '+b'"
+                      type="number" step="0.01" 
+                      v-model.number="tol.valor_ideal_min" 
+                      class="w-full pl-6 pr-2 py-1.5 bg-white border border-amber-300 rounded text-slate-800 font-bold focus:ring-2 focus:ring-amber-500 outline-none shadow-sm" 
+                   />
+                   <input 
+                      v-else
+                      type="number" step="0.01" 
+                      v-model.number="tol.promedio_objetivo_max" 
+                      class="w-full pl-6 pr-2 py-1.5 bg-white border border-amber-300 rounded text-slate-800 font-bold focus:ring-2 focus:ring-amber-500 outline-none shadow-sm" 
+                   />
                 </div>
               </div>
               
-              <div>
-                <label class="block text-slate-400 mb-1">Tolerancia ({{ 100 - tol.porcentaje_min_ideal }}%)</label>
-                <div class="flex items-center gap-1">
-                   <input type="number" step="0.1" v-model.number="tol.rango_tol_min" class="w-16 bg-white border border-slate-200 rounded px-1 py-1 text-center" />
-                   <span class="text-slate-400">-</span>
-                   <input type="number" step="0.1" v-model.number="tol.rango_tol_max" class="w-16 bg-white border border-slate-200 rounded px-1 py-1 text-center" />
+              <!-- Hard Cap (Límite Absoluto) -->
+              <div class="col-span-1">
+                <label class="block text-slate-500 font-semibold mb-1 text-red-500" title="Valor máximo/absoluto permitido. Lotes fuera de esto se rechazan.">
+                  Límite Máximo (Hard)
+                </label>
+                <div class="flex items-center relative">
+                   <span class="absolute left-2 font-bold text-red-300 z-10">≤</span>
+                   <input 
+                      type="number" step="0.01" 
+                      v-model.number="tol.limite_max_absoluto" 
+                      class="w-full pl-6 pr-2 py-1.5 bg-white border border-red-200 rounded text-slate-800 font-bold focus:ring-2 focus:ring-red-400 outline-none shadow-sm" 
+                   />
                 </div>
               </div>
+
+              <!-- Rango Tolerancia (Min - Max) -->
+              <div class="col-span-2 bg-slate-50 p-2 rounded border border-slate-100">
+                <label class="block text-slate-400 mb-1 text-[10px] uppercase font-bold tracking-wider">
+                  Rango Tolerancia ({{ 100 - tol.porcentaje_min_ideal }}%)
+                </label>
+                <div class="flex items-center gap-2">
+                   <div class="relative w-full">
+                     <span class="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]">Min</span>
+                     <input type="number" step="0.01" v-model.number="tol.rango_tol_min" class="w-full pl-8 py-1 bg-white border border-slate-200 rounded text-center text-slate-600 focus:border-indigo-300 outline-none" />
+                   </div>
+                   <span class="text-slate-300 font-bold">-</span>
+                   <div class="relative w-full">
+                     <span class="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]">Max</span>
+                     <input type="number" step="0.01" v-model.number="tol.rango_tol_max" class="w-full pl-8 py-1 bg-white border border-slate-200 rounded text-center text-slate-600 focus:border-indigo-300 outline-none" />
+                   </div>
+                </div>
+              </div>
+
             </div>
           </div>
 
@@ -147,7 +203,27 @@ const fetchConfig = async () => {
     const data = await res.json();
     if(data.success) {
       if(data.hilos.length) hilosConfig.value = data.hilos;
-      if(data.tolerancias.length) toleranciasConfig.value = data.tolerancias;
+      
+      let tols = data.tolerancias || [];
+      // Asegurar que existan RD y +b
+      const requiredParams = ['MIC', 'LEN', 'STR', 'ELG', 'RD', '+b'];
+      requiredParams.forEach(p => {
+         if (!tols.find(t => t.parametro === p)) {
+            tols.push({
+               parametro: p,
+               version_nombre: currentVersion.value,
+               valor_ideal_min: p === 'RD' ? 72 : 0,
+               promedio_objetivo_max: p === '+b' ? 10.5 : null,
+               limite_max_absoluto: p === '+b' ? 12.0 : null,
+               rango_tol_min: p === 'RD' ? 68 : 0,
+               rango_tol_max: p === 'RD' ? 70 : 0,
+               porcentaje_min_ideal: 80
+            });
+         }
+      });
+      
+      toleranciasConfig.value = tols;
+      
       if(data.version_actual) currentVersion.value = data.version_actual;
     }
   } catch (e) {

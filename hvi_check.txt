@@ -236,26 +236,12 @@
           </div>
           <!-- Botones de Acción -->
           <div class="flex items-center gap-2">
-            
-            <!-- Selector Modelo -->
-            <div v-if="hviDetails.length > 0" class="relative group">
-              <select v-model="selectedModel" class="appearance-none pl-2 pr-5 py-1.5 text-[10px] uppercase font-bold bg-white border border-indigo-200 rounded-lg text-indigo-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer hover:border-indigo-400 transition-colors">
-                <option value="gemini-3-pro-preview">Gemini 3 Pro</option>
-                <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
-                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-                <option value="gemini-2.0-flash-exp">Gemini 2.0 Exp</option>
-              </select>
-              <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1 text-indigo-400 group-hover:text-indigo-600">
-                <svg class="fill-current h-3 w-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
-              </div>
-            </div>
-
             <!-- NUEVO: Botón Análisis IA -->
             <button 
               v-if="hviDetails.length > 0"
               @click="solicitarAnalisisAI"
               :disabled="cargandoAI"
-              class="flex items-center gap-1.5 px-3 py-1.5 bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs font-bold rounded-lg transition-all shadow-md active:scale-95 disabled:opacity-50"
+              class="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs font-bold rounded-lg transition-all shadow-md active:scale-95 disabled:opacity-50"
             >
               <span v-if="cargandoAI" class="animate-spin text-[10px]">🌀</span>
               <span v-else>✨ Análisis IA</span>
@@ -452,9 +438,9 @@
 
     <!-- Modal para el resultado de la IA -->
     <Teleport to="body">
-      <div v-if="mostrarModalAI" class="fixed inset-0 z-100 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+      <div v-if="mostrarModalAI" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
         <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]">
-          <div class="px-6 py-4 bg-linear-to-br from-purple-700 via-indigo-800 to-blue-900 text-white flex justify-between items-center">
+          <div class="px-6 py-4 bg-gradient-to-br from-purple-700 via-indigo-800 to-blue-900 text-white flex justify-between items-center">
             <div>
               <h3 class="font-bold text-base">Gemini 3: Predicción Técnica</h3>
               <p class="text-[10px] opacity-80 uppercase tracking-widest font-bold">Inteligencia Artificial aplicada a Fibras</p>
@@ -463,7 +449,7 @@
                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
             </button>
           </div>
-          <div class="p-8 overflow-auto bg-slate-50 min-h-75">
+          <div class="p-8 overflow-auto bg-slate-50 min-h-[300px]">
             <div v-if="cargandoAI" class="flex flex-col items-center justify-center py-20">
               <div class="w-12 h-12 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mb-4"></div>
               <p class="text-sm text-slate-500 font-medium text-center">Analizando fardo por fardo para predecir neps y resistencia...</p>
@@ -473,7 +459,7 @@
             </div>
           </div>
           <div class="px-6 py-3 bg-white border-t flex justify-between items-center text-[10px] text-slate-400 font-mono">
-            <span>MODEL: {{ selectedModel.toUpperCase() }}</span>
+            <span>MODEL: GEMINI-3-FLASH (PREVIEW)</span>
             <span>DATA: FULL BALE FEEDBACK</span>
           </div>
         </div>
@@ -650,13 +636,6 @@ const filterStatus = ref('No guardados'); // Todos, No guardados, Guardados
 // ESTADOS PARA IA (Gemini 3)
 // =====================================================
 const aiInsight = ref('');
-const selectedModel = ref('gemini-2.0-flash'); // Default rápido y estable
-const modelosDisponibles = [
-  { value: 'gemini-3-pro-preview', label: 'Gemini 3 Pro (Preview) - Potente' },
-  { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash (Preview) - Veloz' },
-  { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash - Producción' },
-  { value: 'gemini-2.0-flash-exp', label: 'Gemini 2.0 Flash (Exp)' }
-];
 const cargandoAI = ref(false);
 const mostrarModalAI = ref(false);
 
@@ -684,7 +663,6 @@ const solicitarAnalisisAI = async () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: selectedModel.value,
         lote,
         proveedor: selectedFileItem.value.proveedor,
         pacas: hviDetails.value,

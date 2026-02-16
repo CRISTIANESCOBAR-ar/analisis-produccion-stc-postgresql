@@ -16,20 +16,85 @@ const pool = new Pool({
     password: process.env.PG_PASSWORD || 'stc_password_2026'
 });
 
+// Auto-migración al iniciar (asegura columnas y tablas nuevas)
+async function ensureSchema() {
+    const client = await pool.connect();
+    try {
+        await client.query(`
+            ALTER TABLE tb_config_tolerancias 
+            ADD COLUMN IF NOT EXISTS limite_max_absoluto DECIMAL(5,2),
+            ADD COLUMN IF NOT EXISTS promedio_objetivo_max DECIMAL(5,2);
+            
+            ALTER TABLE tb_config_tolerancias
+            ALTER COLUMN valor_ideal_min TYPE DECIMAL(5,2);
+
+            CREATE TABLE IF NOT EXISTS tb_historico_configuraciones (
+                id SERIAL PRIMARY KEY,
+                version_nombre VARCHAR(50) NOT NULL,
+                fecha_guardado TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                snapshot_json JSONB NOT NULL,
+                usuario_responsable VARCHAR(100)
+            );
+        `);
+        console.log('✓ Config Schema Updated');
+    } catch (e) {
+        console.error('Migration error (Config):', e);
+    } finally {
+        client.release();
+    }
+}
+// Ejecutar migración en segundo plano al cargar módulo
+ensureSchema();
+
 // GET /api/config/standards
-// Obtiene la configuración activa, por defecto la primera que encuentra o un filtro por 'activa'.
+// Obtiene la configuración más reciente.
 router.get('/standards', async (req, res) => {
     try {
         const client = await pool.connect();
-        const configHilos = await client.query('SELECT * FROM tb_config_hilos ORDER BY id ASC');
-        const configTolerancias = await client.query('SELECT * FROM tb_config_tolerancias ORDER BY id ASC');
+
+        // 1. Identificar la versión más reciente (por fecha de creación de hilos)
+        const versionResult = await client.query(`
+            SELECT version_nombre 
+            FROM tb_config_hilos 
+            ORDER BY created_at DESC 
+            LIMIT 1
+        `);
+
+        let activeVersion = 'Estándar 2026';
+        if (versionResult.rows.length > 0) {
+            activeVersion = versionResult.rows[0].version_nombre;
+        }
+
+        // 2. Obtener datos de esa versión
+        const configHilos = await client.query(
+            'SELECT * FROM tb_config_hilos WHERE version_nombre = $1 ORDER BY id ASC',
+            [activeVersion]
+        );
+        const configTolerancias = await client.query(
+            'SELECT * FROM tb_config_tolerancias WHERE version_nombre = $1 ORDER BY id ASC',
+            [activeVersion]
+        );
         client.release();
+
+        // Limpieza básica de duplicados en memoria si la base de datos está sucia
+        // Esto ayuda a recuperarse de estados inconsistentes previos.
+        const uniqueHilos = configHilos.rows.reduce((acc, current) => {
+            const x = acc.find(item => item.titulo_ne === current.titulo_ne);
+            if (!x) return acc.concat([current]);
+            else return acc;
+        }, []);
+
+        const uniqueTolerancias = configTolerancias.rows.reduce((acc, current) => {
+            const x = acc.find(item => item.parametro === current.parametro);
+            if (!x) return acc.concat([current]);
+            else return acc; // Si ya existe uno con ese parámetro, ignoramos duplicados
+        }, []);
 
         res.json({
             success: true,
-            hilos: configHilos.rows,
-            tolerancias: configTolerancias.rows,
-            version_actual: configHilos.rows.length > 0 ? configHilos.rows[0].version_nombre : 'N/A'
+            hilos: uniqueHilos,
+            tolerancias: uniqueTolerancias,
+            version_actual: activeVersion
         });
     } catch (err) {
         console.error('Error fetching standards:', err);
@@ -48,8 +113,9 @@ router.post('/standards', async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        // Desactivar versiones anteriores si se marca esta como activa (opcional, por ahora solo insertamos nueva version)
-        // await client.query('UPDATE tb_config_hilos SET activa = false WHERE version_nombre != $1', [version_nombre]);
+        // 1. Eliminar datos previos de esta misma versión para evitar duplicados
+        await client.query('DELETE FROM tb_config_hilos WHERE version_nombre = $1', [version_nombre]);
+        await client.query('DELETE FROM tb_config_tolerancias WHERE version_nombre = $1', [version_nombre]);
 
         // Insertar Hilos
         for (const hilo of hilos) {
@@ -63,11 +129,20 @@ router.post('/standards', async (req, res) => {
         // Insertar Tolerancias
         for (const tol of tolerancias) {
             await client.query(
-                `INSERT INTO tb_config_tolerancias (version_nombre, parametro, valor_ideal_min, rango_tol_min, rango_tol_max, porcentaje_min_ideal)
-                 VALUES ($1, $2, $3, $4, $5, $6)`,
-                [version_nombre, tol.parametro, tol.valor_ideal_min, tol.rango_tol_min, tol.rango_tol_max, tol.porcentaje_min_ideal]
+                `INSERT INTO tb_config_tolerancias (version_nombre, parametro, valor_ideal_min, rango_tol_min, rango_tol_max, porcentaje_min_ideal, limite_max_absoluto, promedio_objetivo_max)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+                [version_nombre, tol.parametro, tol.valor_ideal_min, tol.rango_tol_min, tol.rango_tol_max, tol.porcentaje_min_ideal, tol.limite_max_absoluto, tol.promedio_objetivo_max]
             );
         }
+
+        // Guardar Snapshot Histórico
+        const snapshot = {
+            version: version_nombre,
+            fecha: new Date(),
+            hilos,
+            tolerancias
+        };
+        await client.query('INSERT INTO tb_historico_configuraciones (version_nombre, snapshot_json) VALUES ($1, $2)', [version_nombre, JSON.stringify(snapshot)]);
 
         await client.query('COMMIT');
         res.json({ success: true, message: 'Configuración guardada exitosamente' });
