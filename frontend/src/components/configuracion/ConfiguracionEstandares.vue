@@ -24,6 +24,36 @@
       </div>
     </div>
 
+    <!-- TOOLTIP AMBIENTE FLOTANTE (Teleport) -->
+    <!-- Se recomienda montarlo al body si usáramos Teleport, pero para simpleza en Vue puro sin tanta configuración lo pondremos fixed arriba de todo -->
+    <div 
+       v-if="tooltipVisible"
+       :style="{ 
+          top: tooltipPosition.top, 
+          left: tooltipPosition.left,
+          transform: tooltipPlacement === 'top' ? 'translate(-50%, -100%)' :  
+                     tooltipPlacement === 'bottom' ? 'translate(-50%, 0)' : 
+                     tooltipPlacement === 'left' ? 'translate(-100%, 0)' : 'translate(0, 0)'
+       }"
+       class="fixed z-[9999] w-[320px] bg-white text-slate-700 rounded-lg shadow-2xl border border-slate-200 pointer-events-none transition-opacity duration-200 animate-in fade-in zoom-in-95"
+    >
+        <div class="p-2" v-html="hviTooltips[tooltipVisible] || '<div>Sin Info</div>'"></div>
+        
+         <!-- Flecha (Estilos condicionales según placement) -->
+         <div 
+           v-if="tooltipPlacement === 'top'"
+           class="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-8 border-transparent border-t-white drop-shadow-sm"
+         ></div>
+         <div 
+           v-if="tooltipPlacement === 'bottom'"
+           class="absolute bottom-full left-1/2 -translate-x-1/2 -mb-px border-8 border-transparent border-b-white drop-shadow-sm"
+         ></div>
+         <div 
+           v-if="tooltipPlacement === 'left'"
+           class="absolute top-4 left-full -ml-px border-8 border-transparent border-l-white drop-shadow-sm"
+         ></div>
+    </div>
+    
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       
       <!-- SECCIÓN A: Matriz de Títulos (Hilos) -->
@@ -100,15 +130,20 @@
             
             <!-- Header de la Regla -->
             <div class="flex justify-between items-center mb-3">
-              <div class="flex items-center gap-2">
+              <div class="flex items-center gap-2 relative">
                   <span class="font-black text-slate-700 text-base">{{ tol.parametro }}</span>
-                  <!-- Tooltip informativo -->
-                  <div class="relative group/tooltip">
-                    <span class="cursor-help text-slate-400 text-xs">ⓘ</span>
-                    <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-800 text-white text-[10px] rounded shadow-lg opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all z-10 text-center pointer-events-none">
-                      El "Hard Cap" rechaza lotes fuera de límite.
-                      <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
-                    </div>
+                  <!-- Tooltip informativo V3 (Posición Dinámica + Icono SVG) -->
+                  <div 
+                    class="relative inline-flex items-center justify-center"
+                    @mouseenter="showTooltip($event, tol.parametro)"
+                    @mouseleave="hideTooltip"
+                    @click="showTooltip($event, tol.parametro)"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-emerald-400 hover:text-emerald-600 cursor-help transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <circle cx="12" cy="12" r="10" />
+                      <path d="M12 16v-4" stroke-linecap="round" stroke-linejoin="round" />
+                      <path d="M12 8h.01" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
                   </div>
               </div>
               <span class="text-[10px] font-bold px-2 py-0.5 bg-white rounded border border-amber-200 text-amber-600 shadow-sm">
@@ -196,6 +231,190 @@ const saving = ref(false);
 
 const hilosConfig = ref([]);
 const toleranciasConfig = ref([]);
+const tooltipVisible = ref(null); // Almacena el ID del parámetro cuyo tooltip se muestra
+const tooltipPosition = ref({ top: '0px', left: '0px' });
+const tooltipPlacement = ref('top'); // top, bottom, left, right
+
+// Tooltips HTML extraídos de AnalisisCalidadFibra V2 (Estilos Originales Claros)
+const hviTooltips = {
+  MIC: `
+    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
+      <div style="font-weight: 700; font-size: 15px; color: #0f766e; margin-bottom: 10px; border-bottom: 2px solid #14b8a6; padding-bottom: 6px;">
+        MIC - Micronaire
+      </div>
+      <div style="font-size: 12px; color: #334155; margin-bottom: 10px; line-height: 1.6; font-weight: 600;">
+        Medida de permeabilidad al aire. Combina finura y madurez.
+      </div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid #14b8a6;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: 3.7 - 4.2 (Ideal Denim)</div>
+      </div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #ef4444;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: < 3.4 (Inmadura) o > 4.9 (Gruesa)</div>
+      </div>
+      <div style="background: #fef3c7; padding: 10px; border-radius: 6px; margin-bottom: 8px;">
+        <div style="font-size: 11px; color: #92400e; font-weight: 600; margin-bottom: 4px;">⚠️ MIC Bajo (<3.4):</div>
+        <div style="font-size: 11px; color: #78350f; line-height: 1.5;">Fibra inmadura que colapsa. Forma Neps (puntos blancos).</div>
+      </div>
+      <div style="background: #fff7ed; padding: 10px; border-radius: 6px;">
+        <div style="font-size: 11px; color: #c2410c; font-weight: 600; margin-bottom: 4px;">⚠️ MIC Alto (>4.9):</div>
+        <div style="font-size: 11px; color: #9a3412; line-height: 1.5;">Fibras gruesas = menos fibras en sección transversal = hilo más débil.</div>
+      </div>
+    </div>
+  `,
+  LEN: `
+    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
+      <div style="font-weight: 700; font-size: 15px; color: #0f766e; margin-bottom: 10px; border-bottom: 2px solid #14b8a6; padding-bottom: 6px;">
+        LEN - Length (Longitud UHML)
+      </div>
+      <div style="font-size: 12px; color: #334155; margin-bottom: 10px; line-height: 1.6; font-weight: 600;">
+        Longitud promedio de la mitad más larga de las fibras.
+      </div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid #14b8a6;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: > 28mm (1.11")</div>
+      </div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #ef4444;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: < 26mm (1.03")</div>
+      </div>
+      <div style="background: #eff6ff; padding: 10px; border-radius: 6px; margin-bottom: 8px;">
+        <div style="font-size: 11px; color: #1e40af; font-weight: 600; margin-bottom: 4px;">🔧 Impacto Hilatura:</div>
+        <div style="font-size: 11px; color: #475569; line-height: 1.5;">Dicta el ajuste de rodillos. Mayor longitud permite hilos más finos.</div>
+      </div>
+       <div style="background: #fef3c7; padding: 8px; border-radius: 6px;">
+        <div style="font-size: 11px; color: #92400e; font-weight: 600; margin-bottom: 2px;">⚠️ Variación:</div>
+        <div style="font-size: 11px; color: #78350f; line-height: 1.5;">Mezclar fibras cortas y largas sin control genera partes gruesas y delgadas.</div>
+      </div>
+    </div>
+  `,
+  STR: `
+    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
+      <div style="font-weight: 700; font-size: 15px; color: #0f766e; margin-bottom: 10px; border-bottom: 2px solid #14b8a6; padding-bottom: 6px;">
+        STR - Strength (Resistencia)
+      </div>
+      <div style="font-size: 12px; color: #334155; margin-bottom: 10px; line-height: 1.6; font-weight: 600;">
+        Resistencia a la rotura medida en g/tex.
+      </div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid #14b8a6;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: > 30 g/tex</div>
+      </div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #ef4444;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: < 25 g/tex (Riesgo Denim)</div>
+      </div>
+      <div style="background: #eff6ff; padding: 10px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #1e40af; font-weight: 600; margin-bottom: 4px;">📊 Regla de Oro:</div>
+        <div style="font-size: 11px; color: #475569; line-height: 1.5;">Resistencia del hilo ≈ 50-60% de la resistencia de la fibra.</div>
+      </div>
+      <div style="background: #fef3c7; padding: 8px; border-radius: 6px;">
+        <div style="font-size: 11px; color: #92400e; font-weight: 600; margin-bottom: 2px;">👖 Lavado Stone Wash:</div>
+        <div style="font-size: 11px; color: #78350f; line-height: 1.5;">Denim sufre estrés mecánico. STR bajo = roturas en costuras.</div>
+      </div>
+    </div>
+  `,
+  ELG: `
+    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
+      <div style="font-weight: 700; font-size: 15px; color: #0f766e; margin-bottom: 10px; border-bottom: 2px solid #14b8a6; padding-bottom: 6px;">
+        ELG - Elongation (Elasticidad)
+      </div>
+      <div style="font-size: 12px; color: #334155; margin-bottom: 10px; line-height: 1.6; font-weight: 600;">
+        Capacidad de estiramiento antes de rotura. "Resorte" natural.
+      </div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid #14b8a6;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: > 7%</div>
+      </div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #ef4444;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: < 5%</div>
+      </div>
+      <div style="background: #eff6ff; padding: 10px; border-radius: 6px; margin-bottom: 6px;">
+        <div style="font-size: 11px; color: #1e40af; font-weight: 600; margin-bottom: 2px;">🎯 Ventaja Mecánica:</div>
+        <div style="font-size: 11px; color: #475569; line-height: 1.5;">Absorbe impactos del telar (golpe del peine). Reduce paradas.</div>
+      </div>
+    </div>
+  `,
+  RD: `
+    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
+      <div style="font-weight: 700; font-size: 15px; color: #0f766e; margin-bottom: 10px; border-bottom: 2px solid #14b8a6; padding-bottom: 6px;">
+        Rd - Reflectance (Brillo)
+      </div>
+      <div style="font-size: 12px; color: #334155; margin-bottom: 10px; line-height: 1.6; font-weight: 600;">
+        Grado de reflectancia (blanco vs gris). Escala Nickerson-Hunter.
+      </div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid #14b8a6;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: 75 - 82 (Bright)</div>
+      </div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #ef4444;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: < 70 (Grisáceo/Spotted)</div>
+      </div>
+      <div style="background: #eff6ff; padding: 10px; border-radius: 6px;">
+        <div style="font-size: 11px; color: #1e40af; font-weight: 600; margin-bottom: 2px;">🎨 Clasificación Visual:</div>
+        <div style="font-size: 11px; color: #475569; line-height: 1.5;">Rd bajo oscurece el tono final del hilo, incluso después del teñido.</div>
+      </div>
+    </div>
+  `,
+  '+b': `
+    <div style="padding: 12px; font-family: system-ui, -apple-system, sans-serif;">
+      <div style="font-weight: 700; font-size: 15px; color: #0f766e; margin-bottom: 10px; border-bottom: 2px solid #14b8a6; padding-bottom: 6px;">
+        +b - Yellowness (Amarillamiento)
+      </div>
+      <div style="font-size: 12px; color: #334155; margin-bottom: 10px; line-height: 1.6; font-weight: 600;">
+        Grado de amarillo. Indica oxidación o envejecimiento.
+      </div>
+      <div style="background: #f0fdfa; padding: 8px; border-radius: 6px; margin-bottom: 6px; border-left: 3px solid #14b8a6;">
+        <div style="font-size: 11px; color: #059669; font-weight: 500;">✓ Óptimo: < 9.5 (Blanco)</div>
+      </div>
+      <div style="background: #fef2f2; padding: 8px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #ef4444;">
+        <div style="font-size: 11px; color: #dc2626; font-weight: 500;">✗ Crítico: > 12.0 (Tinged/Yellow)</div>
+      </div>
+       <div style="background: #fef3c7; padding: 8px; border-radius: 6px;">
+        <div style="font-size: 11px; color: #92400e; font-weight: 600; margin-bottom: 2px;">⚠️ Problema de Teñido:</div>
+        <div style="font-size: 11px; color: #78350f; line-height: 1.5;">Algodón amarillo absorbe índigo diferente = barrados en tela.</div>
+      </div>
+    </div>
+  `
+};
+
+const showTooltip = (event, paramId) => {
+  tooltipVisible.value = paramId;
+  const el = event.target;
+  const rect = el.getBoundingClientRect();
+  
+  // Ajustes de dimensiones
+  const tooltipWidth = 320; 
+  const tooltipHeightEstimate = 400; // Altura máxima estimada
+  const gap = 12; // Espacio entre el icono y el tooltip
+
+  const screenH = window.innerHeight;
+  const screenW = window.innerWidth;
+  
+  // 1. Preferencia 1: Arriba
+  // Si hay espacio arriba (rect.top > tooltipHeight)
+  if (rect.top > tooltipHeightEstimate + gap) {
+     tooltipPlacement.value = 'top';
+     tooltipPosition.value = {
+        top: `${rect.top - gap}px`,
+        left: `${rect.left + rect.width / 2}px`
+     };
+  }
+  // 2. Preferencia 2: Abajo (si no cabe arriba, pero cabe abajo)
+  else if ((screenH - rect.bottom) > tooltipHeightEstimate + gap) {
+     tooltipPlacement.value = 'bottom';
+     tooltipPosition.value = {
+        top: `${rect.bottom + gap}px`,
+        left: `${rect.left + rect.width / 2}px`
+     };
+  }
+  // 3. Fallback: Izquierda (tooltip a la izquierda del icono)
+  else {
+      tooltipPlacement.value = 'left';
+      // Alineado al top del icono
+       tooltipPosition.value = {
+        top: `${rect.top}px`,
+        left: `${rect.left - gap}px`
+     };
+  }
+};
+
+const hideTooltip = () => {
+    tooltipVisible.value = null;
+};
 
 const fetchConfig = async () => {
   try {

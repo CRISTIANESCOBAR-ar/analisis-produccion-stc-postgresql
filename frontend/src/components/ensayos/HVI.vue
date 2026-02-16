@@ -237,6 +237,18 @@
           <!-- Botones de Acción -->
           <div class="flex items-center gap-2">
             
+            <!-- Botón Exportar Excel -->
+            <button 
+              v-if="hviDetails.length > 0"
+              @click="exportarExcel"
+              title="Exportar a Excel"
+              class="flex items-center justify-center p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-all shadow-md active:scale-95"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </button>
+
             <!-- Selector Modelo -->
             <div v-if="hviDetails.length > 0" class="relative group">
               <select v-model="selectedModel" class="appearance-none pl-2 pr-5 py-1.5 text-[10px] uppercase font-bold bg-white border border-indigo-200 rounded-lg text-indigo-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer hover:border-indigo-400 transition-colors">
@@ -259,6 +271,18 @@
             >
               <span v-if="cargandoAI" class="animate-spin text-[10px]">🌀</span>
               <span v-else>✨ Análisis IA</span>
+            </button>
+
+             <!-- NUEVO: Botón Auditoría Contrato -->
+            <button 
+              v-if="hviDetails.length > 0"
+              @click="verificarContrato(true)"
+              :disabled="loadingAudit"
+              class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold rounded-lg transition-all shadow-md active:scale-95 disabled:opacity-50"
+              title="Verificar contra Contrato y Tolerancias"
+            >
+              <span v-if="loadingAudit" class="animate-spin text-[10px]">⏳</span>
+              <span v-else>📋 Verificar Contrato</span>
             </button>
 
             <!-- Botón Analizar -->
@@ -317,20 +341,20 @@
                           ]"></span>
                   </div>
                 </td>
-                <td :class="['px-4 py-2 text-xs font-medium', getClaseColor(clasificarFila(row).sci)]">{{ row.sci }}</td>
+                <td :class="['px-4 py-2 text-xs font-medium', isBaleFailed(row.fardo, toAuditKey('sci')) ? 'bg-red-500 text-white font-bold' : getClaseColor(clasificarFila(row).sci)]">{{ row.sci }}</td>
                 <td class="px-4 py-2 text-xs text-slate-600">{{ row.mst }}</td>
-                <td :class="['px-4 py-2 text-xs font-medium', getClaseColor(clasificarFila(row).mic)]">{{ row.mic }}</td>
+                <td :class="['px-4 py-2 text-xs font-medium', isBaleFailed(row.fardo, toAuditKey('mic')) ? 'bg-red-500 text-white font-bold' : getClaseColor(clasificarFila(row).mic)]">{{ row.mic }}</td>
                 <td class="px-4 py-2 text-xs text-slate-600">{{ row.mat }}</td>
-                <td :class="['px-4 py-2 text-xs font-medium', getClaseColor(clasificarFila(row).uhml)]">{{ row.uhml }}</td>
-                <td :class="['px-4 py-2 text-xs font-medium', getClaseColor(clasificarFila(row).ui)]">{{ row.ui }}</td>
-                <td :class="['px-4 py-2 text-xs font-medium', getClaseColor(clasificarFila(row).sf)]">{{ row.sf }}</td>
-                <td :class="['px-4 py-2 text-xs font-medium', getClaseColor(clasificarFila(row).str)]">{{ row.str }}</td>
+                <td :class="['px-4 py-2 text-xs font-medium', isBaleFailed(row.fardo, toAuditKey('uhml')) ? 'bg-red-500 text-white font-bold' : getClaseColor(clasificarFila(row).uhml)]">{{ row.uhml }}</td>
+                <td :class="['px-4 py-2 text-xs font-medium', isBaleFailed(row.fardo, toAuditKey('ui')) ? 'bg-red-500 text-white font-bold' : getClaseColor(clasificarFila(row).ui)]">{{ row.ui }}</td>
+                <td :class="['px-4 py-2 text-xs font-medium', isBaleFailed(row.fardo, toAuditKey('sf')) ? 'bg-red-500 text-white font-bold' : getClaseColor(clasificarFila(row).sf)]">{{ row.sf }}</td>
+                <td :class="['px-4 py-2 text-xs font-medium', isBaleFailed(row.fardo, toAuditKey('str')) ? 'bg-red-500 text-white font-bold' : getClaseColor(clasificarFila(row).str)]">{{ row.str }}</td>
                 <td class="px-4 py-2 text-xs text-slate-600">{{ row.elg }}</td>
-                <td :class="['px-4 py-2 text-xs font-medium', getClaseColor(clasificarFila(row).rd)]">{{ row.rd }}</td>
-                <td :class="['px-4 py-2 text-xs font-medium', getClaseColor(clasificarFila(row).plusB)]">{{ row.plusB }}</td>
+                <td :class="['px-4 py-2 text-xs font-medium', isBaleFailed(row.fardo, toAuditKey('rd')) ? 'bg-red-500 text-white font-bold' : getClaseColor(clasificarFila(row).rd)]">{{ row.rd }}</td>
+                <td :class="['px-4 py-2 text-xs font-medium', isBaleFailed(row.fardo, toAuditKey('plusB')) ? 'bg-red-500 text-white font-bold' : getClaseColor(clasificarFila(row).plusB)]">{{ row.plusB }}</td>
                 <td class="px-4 py-2 text-xs text-slate-600">{{ row.tipo }}</td>
-                <td class="px-4 py-2 text-xs text-slate-600">{{ row.trCnt }}</td>
-                <td :class="['px-4 py-2 text-xs font-medium', getClaseColor(clasificarFila(row).trAr)]">{{ row.trAr }}</td>
+                <td :class="['px-4 py-2 text-xs font-medium', isBaleFailed(row.fardo, toAuditKey('trCnt')) ? 'bg-red-500 text-white font-bold' : 'text-slate-600']">{{ row.trCnt }}</td>
+                <td :class="['px-4 py-2 text-xs font-medium', isBaleFailed(row.fardo, toAuditKey('trAr')) ? 'bg-red-500 text-white font-bold' : getClaseColor(clasificarFila(row).trAr)]">{{ row.trAr }}</td>
                 <td class="px-4 py-2 text-xs text-slate-600">{{ row.trid }}</td>
               </tr>
               <tr v-if="!hviDetails.length">
@@ -348,20 +372,50 @@
             <tfoot v-if="hviDetails.length" class="sticky bottom-0 z-10 bg-blue-50 border-t-2 border-blue-200">
               <tr class="font-bold text-blue-900 shadow-[0_-2px_4px_rgba(0,0,0,0.05)]">
                 <td class="px-4 py-3 text-xs bg-blue-100/50">n = {{ hviDetails.length }} (Prom)</td>
-                <td :class="['px-4 py-3 text-xs', getClaseColor(clasificarMayorMejor(hviAverages.sci, PARAMETROS_HVI_INTERNACIONAL.SCI))]">{{ hviAverages.sci }}</td>
+                <td :title="getAuditTooltip(toAuditKey('sci'))" 
+                    :class="['px-4 py-3 text-xs', getAuditClass(toAuditKey('sci'), getClaseColor(clasificarMayorMejor(hviAverages.sci, PARAMETROS_HVI_INTERNACIONAL.SCI)))]">
+                    {{ hviAverages.sci }}
+                </td>
                 <td class="px-4 py-3 text-xs">{{ hviAverages.mst }}</td>
-                <td :class="['px-4 py-3 text-xs', getClaseColor(clasificarMIC(hviAverages.mic))]">{{ hviAverages.mic }}</td>
+                <td :title="getAuditTooltip(toAuditKey('mic'))"
+                    :class="['px-4 py-3 text-xs', getAuditClass(toAuditKey('mic'), getClaseColor(clasificarMIC(hviAverages.mic)))]">
+                    {{ hviAverages.mic }}
+                </td>
                 <td class="px-4 py-3 text-xs">{{ hviAverages.mat }}</td>
-                <td :class="['px-4 py-3 text-xs', getClaseColor(clasificarMayorMejor(hviAverages.uhml, PARAMETROS_HVI_INTERNACIONAL.UHML))]">{{ hviAverages.uhml }}</td>
-                <td :class="['px-4 py-3 text-xs', getClaseColor(clasificarMayorMejor(hviAverages.ui, PARAMETROS_HVI_INTERNACIONAL.UI))]">{{ hviAverages.ui }}</td>
-                <td :class="['px-4 py-3 text-xs', getClaseColor(clasificarMenorMejor(hviAverages.sf, PARAMETROS_HVI_INTERNACIONAL.SF))]">{{ hviAverages.sf }}</td>
-                <td :class="['px-4 py-3 text-xs', getClaseColor(clasificarMayorMejor(hviAverages.str, PARAMETROS_HVI_INTERNACIONAL.STR))]">{{ hviAverages.str }}</td>
+                <td :title="getAuditTooltip(toAuditKey('uhml'))"
+                    :class="['px-4 py-3 text-xs', getAuditClass(toAuditKey('uhml'), getClaseColor(clasificarMayorMejor(hviAverages.uhml, PARAMETROS_HVI_INTERNACIONAL.UHML)))]">
+                    {{ hviAverages.uhml }}
+                </td>
+                <td :title="getAuditTooltip(toAuditKey('ui'))"
+                    :class="['px-4 py-3 text-xs', getAuditClass(toAuditKey('ui'), getClaseColor(clasificarMayorMejor(hviAverages.ui, PARAMETROS_HVI_INTERNACIONAL.UI)))]">
+                    {{ hviAverages.ui }}
+                </td>
+                <td :title="getAuditTooltip(toAuditKey('sf'))"
+                    :class="['px-4 py-3 text-xs', getAuditClass(toAuditKey('sf'), getClaseColor(clasificarMenorMejor(hviAverages.sf, PARAMETROS_HVI_INTERNACIONAL.SF)))]">
+                    {{ hviAverages.sf }}
+                </td>
+                <td :title="getAuditTooltip(toAuditKey('str'))"
+                    :class="['px-4 py-3 text-xs', getAuditClass(toAuditKey('str'), getClaseColor(clasificarMayorMejor(hviAverages.str, PARAMETROS_HVI_INTERNACIONAL.STR)))]">
+                    {{ hviAverages.str }}
+                </td>
                 <td class="px-4 py-3 text-xs">{{ hviAverages.elg }}</td>
-                <td :class="['px-4 py-3 text-xs', getClaseColor(clasificarMayorMejor(hviAverages.rd, PARAMETROS_HVI_INTERNACIONAL.RD))]">{{ hviAverages.rd }}</td>
-                <td :class="['px-4 py-3 text-xs', getClaseColor(clasificarMenorMejor(hviAverages.plusB, PARAMETROS_HVI_INTERNACIONAL.PLUS_B))]">{{ hviAverages.plusB }}</td>
+                <td :title="getAuditTooltip(toAuditKey('rd'))"
+                    :class="['px-4 py-3 text-xs', getAuditClass(toAuditKey('rd'), getClaseColor(clasificarMayorMejor(hviAverages.rd, PARAMETROS_HVI_INTERNACIONAL.RD)))]">
+                    {{ hviAverages.rd }}
+                </td>
+                <td :title="getAuditTooltip(toAuditKey('plusB'))"
+                    :class="['px-4 py-3 text-xs', getAuditClass(toAuditKey('plusB'), getClaseColor(clasificarMenorMejor(hviAverages.plusB, PARAMETROS_HVI_INTERNACIONAL.PLUS_B)))]">
+                    {{ hviAverages.plusB }}
+                </td>
                 <td class="px-4 py-3 text-xs">{{ hviAverages.tipo }}</td>
-                <td class="px-4 py-3 text-xs">{{ hviAverages.trCnt }}</td>
-                <td :class="['px-4 py-3 text-xs', getClaseColor(clasificarMenorMejor(hviAverages.trAr, PARAMETROS_HVI_INTERNACIONAL.TRAR))]">{{ hviAverages.trAr }}</td>
+                <td :title="getAuditTooltip(toAuditKey('trCnt'))"
+                    :class="['px-4 py-3 text-xs', getAuditClass(toAuditKey('trCnt'), '')]">
+                    {{ hviAverages.trCnt }}
+                </td>
+                <td :title="getAuditTooltip(toAuditKey('trAr'))"
+                    :class="['px-4 py-3 text-xs', getAuditClass(toAuditKey('trAr'), getClaseColor(clasificarMenorMejor(hviAverages.trAr, PARAMETROS_HVI_INTERNACIONAL.TRAR)))]">
+                    {{ hviAverages.trAr }}
+                </td>
                 <td class="px-4 py-3 text-xs">{{ hviAverages.trid }}</td>
               </tr>
             </tfoot>
@@ -483,10 +537,13 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted, watch } from 'vue';
 import Swal from 'sweetalert2';
-import AnalizadorHVI from './AnalizadorHVI.vue';
+import ExcelJS from 'exceljs';
+import AnalizadorHVI from './AnalizadorHVI.vue';  
 import EnsayoHVICompare from './EnsayoHVICompare.vue';
+
+// (Moved watch/toAuditKey further down to fix initialization error)
 
 // =====================================================
 // PARÁMETROS HVI INTERNACIONALES PARA CLASIFICACIÓN
@@ -632,6 +689,12 @@ function clasificarFila(row) {
   };
 }
 
+// Helper to map lowercase frontend keys to uppercase backend keys
+const toAuditKey = (k) => {
+  const map = { 'sci': 'SCI', 'mic': 'MIC', 'mat': 'MAT', 'uhml': 'LEN', 'ui': 'UNF', 'sf': 'SFI', 'str': 'STR', 'elg': 'ELG', 'rd': 'RD', 'plusB': '+b', 'trCnt': 'TRASH' };
+  return map[k] || k.toUpperCase();
+};
+
 // State
 const folderPath = ref(localStorage.getItem('hvi_last_folder_path') || '');
 const mostrarAnalizador = ref(false);
@@ -646,6 +709,15 @@ const selectedFileItem = ref(null);
 const hviDetails = ref([]);
 const filterStatus = ref('No guardados'); // Todos, No guardados, Guardados
 
+// Watch for data changes to auto-audit
+watch(hviDetails, (newVal) => {
+  if (newVal && newVal.length > 0) {
+    verificarContrato(false); // Auto-audit, no alerts
+  } else {
+    auditResult.value = null;
+  }
+});
+
 // =====================================================
 // ESTADOS PARA IA (Gemini 3)
 // =====================================================
@@ -659,6 +731,107 @@ const modelosDisponibles = [
 ];
 const cargandoAI = ref(false);
 const mostrarModalAI = ref(false);
+const auditResult = ref(null);
+const loadingAudit = ref(false);
+
+const verificarContrato = async (isManual = false) => {
+  if (!hviDetails.value.length) return;
+  
+  loadingAudit.value = true;
+  auditResult.value = null; // Reset
+  
+  try {
+    const response = await fetch('http://localhost:3001/api/config/audit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bales: hviDetails.value.map(b => ({ ...b, LOTE: b.fardo })),
+        version_nombre: 'Estándar 2026' // O tomar seleccionada si agregamos selector
+      })
+    });
+    
+    const json = await response.json();
+    if (json.success) {
+      auditResult.value = json.data;
+      
+      // Feedback visual inmediato si hay rechazo
+      if (json.data.overallStatus === 'RECHAZO') {
+        const hasDistribFailure = json.data.details.some(d => d.includes('Dispersión Alta'));
+        let mensaje = "El lote no cumple con los estándares de mezcla configurados.";
+        
+        if (hasDistribFailure) {
+           mensaje = "ALERTA DE MEZCLA: Lote rechazado por exceso de fardos en zona de tolerancia (> 20%).";
+           aiInsight.value = mensaje + " Revise celdas rojas de MIC/SCI."; 
+        } else {
+           mensaje = "Violaciones de límites absolutos (Hard Cap) o promedios detectadas.";
+           aiInsight.value = json.data.details.join('\n');
+        }
+
+        // Mostrar Swal solo si fue clic manual
+        if (isManual === true) { 
+             Swal.fire({
+                title: 'Lote Rechazado por Auditoría',
+                html: `<div class="text-left text-sm">${json.data.details.map(d => `• ${d}`).join('<br>')}</div>`,
+                icon: 'error',
+                confirmButtonText: 'Entendido'
+            });
+        }
+      } else if (json.data.overallStatus === 'ADVERTENCIA') {
+          if (isManual === true) {
+            Swal.fire({
+                title: 'Advertencia de Calidad',
+                text: 'El lote presenta desviaciones menores en la distribución.',
+                icon: 'warning'
+            });
+          }
+      } else {
+         // Éxito
+         if (isManual === true) { 
+             Swal.fire({
+                title: 'Lote Aprobado',
+                text: 'Cumple con Estándar 2026 (Promedios, Hard Caps y Distribución)',
+                icon: 'success',
+                timer: 2000,
+                showConfirmButton: false
+             });
+         }
+      }
+    }
+  } catch (e) {
+    console.error("Audit error", e);
+    Swal.fire('Error', 'No se pudo conectar con el servicio de auditoría', 'error');
+  } finally {
+    loadingAudit.value = false;
+  }
+};
+
+const getAuditTooltip = (param) => {
+  if (!auditResult.value || !auditResult.value.parameterResults[param]) return null;
+  const res = auditResult.value.parameterResults[param];
+  let text = `Promedio: ${res.avg} (${res.status})`;
+  if (res.hardCapViolations > 0) text += ` | HARD CAP: ${res.hardCapViolations} pacas`;
+  if (res.distribution && res.distribution.outliersPct > 0) {
+    text += ` | Fuera Rango: ${res.distribution.outliersPct}%`;
+  }
+  return text;
+};
+
+const getAuditClass = (param, originalClass) => {
+  if (!auditResult.value || !auditResult.value.parameterResults[param]) return originalClass;
+  const status = auditResult.value.parameterResults[param].status;
+  if (status === 'RECHAZO') return 'bg-red-600 text-white font-black animate-pulse'; // Carmesí fuerte
+  if (status === 'ADVERTENCIA') return 'bg-amber-100 text-amber-800';
+  return originalClass;
+};
+
+// Check if specific cell failed audit
+const isBaleFailed = (rowId, param) => {
+  if (!auditResult.value) return false;
+  const pRes = auditResult.value.parameterResults[param];
+  if (!pRes || !pRes.failedBales) return false;
+  // Match rowId (string/int loose check)
+  return pRes.failedBales.some(fb => fb.id == rowId);
+};
 
 const solicitarAnalisisAI = async () => {
   if (!selectedFileItem.value || !hviDetails.value.length) {
@@ -1181,6 +1354,140 @@ const parseHviDetails = (content) => {
     });
   }
   hviDetails.value = detailRows;
+};
+
+// -----------------------------------------------------
+// Exportar a Excel
+// -----------------------------------------------------
+const exportarExcel = async () => {
+  if (hviDetails.value.length === 0) {
+    Swal.fire({
+      icon: 'info',
+      title: 'Sin datos',
+      text: 'No hay datos HVI para exportar'
+    });
+    return;
+  }
+
+  try {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Datos HVI');
+
+    // Configurar columnas con los nombres de la interfaz
+    worksheet.columns = [
+      { header: 'Fardo', key: 'fardo', width: 14 },
+      { header: 'SCI', key: 'sci', width: 8 },
+      { header: 'MST', key: 'mst', width: 8 },
+      { header: 'MIC', key: 'mic', width: 8 },
+      { header: 'MAT', key: 'mat', width: 8 },
+      { header: 'UHML', key: 'uhml', width: 8 },
+      { header: 'UI', key: 'ui', width: 8 },
+      { header: 'SF', key: 'sf', width: 8 },
+      { header: 'STR', key: 'str', width: 8 },
+      { header: 'ELG', key: 'elg', width: 8 },
+      { header: 'Rd', key: 'rd', width: 8 },
+      { header: '+b', key: 'plusB', width: 8 },
+      { header: 'TIPO', key: 'tipo', width: 10 },
+      { header: 'TrCnt', key: 'trCnt', width: 8 },
+      { header: 'TrAr', key: 'trAr', width: 8 },
+      { header: 'TrID', key: 'trid', width: 8 },
+    ];
+
+    // Datos
+    hviDetails.value.forEach(row => {
+      worksheet.addRow({
+        fardo: row.fardo,
+        sci: parseFloat(row.sci) || 0,
+        mst: parseFloat(row.mst) || 0,
+        mic: parseFloat(row.mic) || 0,
+        mat: parseFloat(row.mat) || 0,
+        uhml: parseFloat(row.uhml) || 0,
+        ui: parseFloat(row.ui) || 0,
+        sf: parseFloat(row.sf) || 0,
+        str: parseFloat(row.str) || 0,
+        elg: parseFloat(row.elg) || 0,
+        rd: parseFloat(row.rd) || 0,
+        plusB: parseFloat(row.plusB) || 0,
+        tipo: row.tipo, // String usually
+        trCnt: parseFloat(row.trCnt) || 0,
+        trAr: parseFloat(row.trAr) || 0,
+        trid: parseFloat(row.trid) || 0
+      });
+    });
+
+    // Estilo de Cabecera (Azul Oscuro, Texto Blanco)
+    const headerRow = worksheet.getRow(1);
+    headerRow.eachCell((cell) => {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF1E293B' } // slate-800 equivalent
+      };
+      cell.font = {
+        color: { argb: 'FFFFFFFF' },
+        bold: true
+      };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+    });
+
+    // Estilo de datos (Bordes y Centrado)
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        
+        // Formato condicional simple (ejemplo: alternar gris claro)
+        if (rowNumber % 2 === 0) {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFF8FAFC' } // slate-50
+          };
+        }
+      });
+    });
+
+    // Generar Buffer y Descargar
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    
+    // Crear link temporal
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `HVI_Export_${selectedFileName.value || 'data'}.xlsx`;
+    anchor.click();
+    window.URL.revokeObjectURL(url);
+
+    Swal.fire({
+      toast: true,
+      position: 'top-end',
+      icon: 'success',
+      title: 'Excel exportado correctamente',
+      showConfirmButton: false,
+      timer: 2000
+    });
+
+  } catch (error) {
+    console.error('Error exportando Excel:', error);
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: 'No se pudo exportar el archivo Excel'
+    });
+  }
 };
 
 const processFiles = async () => {

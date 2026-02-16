@@ -3,6 +3,7 @@ import express from 'express';
 import pg from 'pg';
 import path from 'path';
 import 'dotenv/config';
+import { auditMix } from './services/audit-service.js';
 
 const { Pool } = pg;
 const router = express.Router();
@@ -23,6 +24,7 @@ async function ensureSchema() {
         await client.query(`
             ALTER TABLE tb_config_tolerancias 
             ADD COLUMN IF NOT EXISTS limite_max_absoluto DECIMAL(5,2),
+            ADD COLUMN IF NOT EXISTS limite_min_absoluto DECIMAL(5,2),
             ADD COLUMN IF NOT EXISTS promedio_objetivo_max DECIMAL(5,2);
             
             ALTER TABLE tb_config_tolerancias
@@ -152,6 +154,43 @@ router.post('/standards', async (req, res) => {
         res.status(500).json({ success: false, error: err.message });
     } finally {
         client.release();
+    }
+});
+
+// POST /api/config/audit
+// Recibe un array de pacas (objetos) y la configuración a aplicar.
+// Retorna el análisis de calidad.
+router.post('/audit', async (req, res) => {
+    try {
+        const { bales, config, version_nombre } = req.body;
+        
+        let configToUse = config;
+
+        // Si no envían config, buscamos la versión activa o la especificada
+        if (!configToUse) {
+            const client = await pool.connect();
+            try {
+                let version = version_nombre;
+                if (!version) {
+                     const vRes = await client.query('SELECT version_nombre FROM tb_config_hilos ORDER BY created_at DESC LIMIT 1');
+                     if (vRes.rows.length > 0) version = vRes.rows[0].version_nombre;
+                }
+                
+                if (version) {
+                    const tolRes = await client.query('SELECT * FROM tb_config_tolerancias WHERE version_nombre = $1', [version]);
+                    configToUse = { tolerancias: tolRes.rows };
+                }
+            } finally {
+                client.release();
+            }
+        }
+
+        const auditResult = auditMix(bales || [], configToUse);
+        res.json({ success: true, data: auditResult });
+
+    } catch (err) {
+        console.error('Error auditing:', err);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
