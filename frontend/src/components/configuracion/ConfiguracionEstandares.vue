@@ -35,7 +35,7 @@
                      tooltipPlacement === 'bottom' ? 'translate(-50%, 0)' : 
                      tooltipPlacement === 'left' ? 'translate(-100%, 0)' : 'translate(0, 0)'
        }"
-       class="fixed z-[9999] w-[320px] bg-white text-slate-700 rounded-lg shadow-2xl border border-slate-200 pointer-events-none transition-opacity duration-200 animate-in fade-in zoom-in-95"
+       class="fixed z-50 w-[320px] bg-white text-slate-700 rounded-lg shadow-2xl border border-slate-200 pointer-events-none transition-opacity duration-200 animate-in fade-in zoom-in-95"
     >
         <div class="p-2" v-html="hviTooltips[tooltipVisible] || '<div>Sin Info</div>'"></div>
         
@@ -121,7 +121,7 @@
           </h3>
         </div>
         
-        <div class="p-6 flex flex-col gap-6 overflow-auto max-h-[800px]">
+        <div class="p-6 flex flex-col gap-6 overflow-auto max-h-200">
           <p class="text-xs text-slate-500 leading-relaxed">
             Habilita la <b>inteligencia de mezclado</b>. Define Promedios Objetivo, Límites Absolutos (Hard Caps) y Rangos de Tolerancia.
           </p>
@@ -181,7 +181,7 @@
               
               <!-- Hard Cap (Límite Absoluto) -->
               <div class="col-span-1">
-                <label class="block text-slate-500 font-semibold mb-1 text-red-500" title="Valor máximo/absoluto permitido. Lotes fuera de esto se rechazan.">
+                <label class="block font-semibold mb-1 text-red-500" title="Valor máximo/absoluto permitido. Lotes fuera de esto se rechazan.">
                   Límite Máximo (Hard)
                 </label>
                 <div class="flex items-center relative">

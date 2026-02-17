@@ -276,7 +276,7 @@
              <!-- NUEVO: Botón Auditoría Contrato -->
             <button 
               v-if="hviDetails.length > 0"
-              @click="verificarContrato(true)"
+              @click="mostrarVerificarContrato = true"
               :disabled="loadingAudit"
               class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold rounded-lg transition-all shadow-md active:scale-95 disabled:opacity-50"
               title="Verificar contra Contrato y Tolerancias"
@@ -504,6 +504,37 @@
       </div>
     </Teleport>
 
+    <!-- Modal Verificar Contrato -->
+    <Teleport to="body">
+      <div v-if="mostrarVerificarContrato"
+             class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+             @click.self="mostrarVerificarContrato = false">
+          <div class="relative w-full max-w-7xl max-h-[90vh] overflow-auto rounded-2xl shadow-2xl bg-white">
+            <!-- Botón cerrar -->
+            <button
+              @click="mostrarVerificarContrato = false"
+              class="absolute top-4 right-4 z-10 p-2 bg-slate-700 hover:bg-slate-600 text-white rounded-full transition-colors shadow-lg"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <VerificarContrato
+              :pacas="hviDetails"
+              :metadata="{
+                loteEntrada: selectedFileItem?.loteEntrada || 'Lote Mix',
+                proveedor: selectedFileItem?.proveedor || 'N/A',
+                grado: selectedFileItem?.grado,
+                fecha: selectedFileItem?.fecha,
+                color: selectedFileItem?.color,
+                cort: selectedFileItem?.cort,
+                obs: selectedFileItem?.obs
+              }"
+            />
+          </div>
+      </div>
+    </Teleport>
+
     <!-- Modal para el resultado de la IA -->
     <Teleport to="body">
       <div v-if="mostrarModalAI" class="fixed inset-0 z-100 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
@@ -540,7 +571,8 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue';
 import Swal from 'sweetalert2';
 import ExcelJS from 'exceljs';
-import AnalizadorHVI from './AnalizadorHVI.vue';  
+import AnalizadorHVI from './AnalizadorHVI.vue'; 
+import VerificarContrato from './VerificarContrato.vue'; 
 import EnsayoHVICompare from './EnsayoHVICompare.vue';
 
 // (Moved watch/toAuditKey further down to fix initialization error)
@@ -698,6 +730,7 @@ const toAuditKey = (k) => {
 // State
 const folderPath = ref(localStorage.getItem('hvi_last_folder_path') || '');
 const mostrarAnalizador = ref(false);
+const mostrarVerificarContrato = ref(false);
 const mostrarComparativa = ref(false);
 const filesList = ref([]);
 const folderInput = ref(null);

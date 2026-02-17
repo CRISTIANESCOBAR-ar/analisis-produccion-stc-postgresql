@@ -175,6 +175,16 @@ export function auditMix(bales, config) {
             avg: avg.toFixed(2),
             min: min.toFixed(2),
             max: max.toFixed(2),
+            // Expose Targets for Frontend Comparison
+            targets: {
+                minAvg: rule.valor_ideal_min,
+                maxAvg: rule.promedio_objetivo_max,
+                hardMax: rule.limite_max_absoluto,
+                hardMin: rule.limite_min_absoluto,
+                toleranceMin: rule.rango_tol_min,
+                toleranceMax: rule.rango_tol_max,
+                minIdealPct: rule.porcentaje_min_ideal
+            },
             count: values.length,
             hardCapViolations: hardCapIssues,
             distribution: {
