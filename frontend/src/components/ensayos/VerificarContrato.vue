@@ -26,9 +26,55 @@
           </div>
 
           <div class="flex items-center gap-4">
-            <!-- Veredicto Global Badge -->
+            
+            <!-- Grado Argentino Badge (S.A.) -->
+            <div v-if="argentineGrade" class="relative group cursor-help">
+                <div class="px-5 py-3 bg-white border-2 border-slate-200 rounded-xl shadow-sm flex items-center gap-3 hover:border-indigo-300 transition-colors">
+                    <div class="flex flex-col items-start">
+                        <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Grado Sugerido (S.A.)</span>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xl font-black text-slate-800">{{ argentineGrade.finalGrade }}</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tooltip Desglose -->
+                <div class="absolute top-full right-0 mt-2 w-72 bg-white rounded-xl shadow-2xl border border-slate-100 p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 transform translate-y-2 group-hover:translate-y-0">
+                    <h4 class="text-sm font-bold text-slate-800 mb-2 border-b pb-2">Desglose Técnico</h4>
+                    
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between items-center">
+                            <span class="text-slate-500">Color (Rd, +b):</span>
+                            <!-- Color Grade is min(Rd, +b) -->
+                            <span class="font-mono font-bold" :class="getGradeColorClass(technicalGradeColor)">
+                                {{ technicalGradeColor }}
+                            </span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-slate-500">Basura (Tr):</span>
+                            <span class="font-mono font-bold" :class="getGradeColorClass(argentineGrade.components.trash.grade)">
+                                {{ argentineGrade.components.trash.grade }}
+                            </span>
+                        </div>
+                        <div class="mt-2 pt-2 border-t border-slate-100 flex justify-between items-center">
+                            <span class="font-bold text-slate-700">Veredicto Final:</span>
+                            <span class="font-black text-indigo-600">{{ argentineGrade.finalGrade }}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3 bg-slate-50 p-2 rounded text-xs text-slate-600 leading-snug font-mono border border-slate-200">
+                       {{ argentineGrade.diagnostic }}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Veredicto Global Badge (Existente) -->
             <div class="px-6 py-3 rounded-xl border-2 shadow-sm uppercase font-black tracking-widest text-sm flex items-center gap-3"
                  :class="veredictoGlobalClass">
+
               <span class="text-2xl">{{ veredictoGlobalIcon }}</span>
               {{ veredictoGlobalTexto }}
             </div>
@@ -276,6 +322,32 @@ const veredictoGlobalIcon = computed(() => {
   if (!auditData.value) return '❔';
   return auditData.value.overallStatus === 'IDEAL' ? '✅' : auditData.value.overallStatus === 'RECHAZO' ? '⛔' : '⚠️';
 });
+
+// Grado Argentino Computed
+const argentineGrade = computed(() => {
+    return auditData.value ? auditData.value.argentineGrade : null;
+});
+
+const technicalGradeColor = computed(() => {
+    if (!argentineGrade.value) return '-';
+    // Logic: Min score between Rd and +b
+    const rdScore = argentineGrade.value.components.rd.score;
+    const pbScore = argentineGrade.value.components.plusB.score;
+    const minScore = Math.min(rdScore, pbScore);
+    
+    // Find label match (assuming we don't have the definitions here, we use what we have)
+    // Easier way: Compare labels if scores match?
+    // We only have the labels in the components.
+    if (rdScore === minScore) return argentineGrade.value.components.rd.grade;
+    return argentineGrade.value.components.plusB.grade;
+});
+
+function getGradeColorClass(grade) {
+    if (!grade) return 'text-slate-400';
+    if (grade.startsWith('C')) return 'text-green-600';
+    if (grade.startsWith('D')) return 'text-amber-600';
+    return 'text-red-600';
+}
 
 
 // Helpers UI

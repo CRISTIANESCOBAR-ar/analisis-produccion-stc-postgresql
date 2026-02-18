@@ -18,8 +18,161 @@ const PARAM_MAP = {
     'MST': 'MST'
 };
 
+/* --- ARGENTINE GRADE CLASSIFICATION CONFIG --- */
+// Higher score = Better grade.
+// The "min" logic will take the lowest score among Rd, +b, and Trash.
+const GRADE_DEFINITIONS = [
+    { label: 'C', score: 5 },
+    { label: 'C 1/4', score: 4 },
+    { label: 'C 1/2', score: 3 },
+    { label: 'C 3/4', score: 2 },
+    { label: 'D', score: 1 },
+    { label: 'Fuera de Estándar', score: 0 }
+];
+
+// Configuration for thresholds
+// Each parameter logic returns a score.
+const ARGENTINE_GRADE_CONFIG = {
+    // Rd (Higher is better)
+    rd: [
+        { min: 75, score: 5 },  // > 75 -> C
+        { min: 74, score: 4 },  // 74-75 -> C 1/4
+        { min: 72, score: 3 },  // 72-74 -> C 1/2
+        { min: 71, score: 2 },  // 71-72 -> C 3/4
+        { min: 69, score: 1 },  // 69-71 -> D
+        { min: 0, score: 0 }    // < 69 -> Fuera
+    ],
+    // +b (Lower is better generally for "White" grades, but specific ranges apply)
+    // User specs: C (8.5-9.5), C 1/2 (10.0-11.0), D (> 11.5)
+    // Inferred Gaps: C 1/4 (9.5-10.0), C 3/4 (11.0-11.5)
+    // Handling < 8.5? Assuming it's acceptable/good (C) or handled elsewhere. 
+    // For now, will strict check max bounds.
+    plusB: [
+        { max: 9.5, score: 5 },   // <= 9.5 -> C (Includes < 8.5)
+        { max: 10.0, score: 4 },  // 9.5 - 10.0 -> C 1/4
+        { max: 11.0, score: 3 },  // 10.0 - 11.0 -> C 1/2
+        { max: 11.5, score: 2 },  // 11.0 - 11.5 -> C 3/4
+        { max: 999, score: 1 }    // > 11.5 -> D (Actually mapped to D, but if way off could be 0)
+    ],
+    // Trash (Area/TrAr) (Lower is better)
+    // User specs updated: 
+    // < 0.5 -> C
+    // 0.6 - 1.2 -> C 1/2
+    // > 1.2 -> D (or D+)
+    // Inferred Gaps: 0.5 - 0.6 (C 1/4)
+    trash: [
+        { max: 0.5, score: 5 },   // < 0.5 -> C
+        { max: 0.6, score: 4 },   // 0.5-0.6 -> C 1/4
+        { max: 1.2, score: 3 },   // 0.6-1.2 -> C 1/2
+        { max: 999, score: 1 }    // > 1.2 -> D
+    ]
+};
+
+function getGradeFromScore(score) {
+    return GRADE_DEFINITIONS.find(g => g.score === score) || GRADE_DEFINITIONS[GRADE_DEFINITIONS.length - 1]; // Fallback to last
+}
+
+/**
+ * Determines the Argentine Grade component for a single value based on rules.
+ * @param {number} val Value to check
+ * @param {Array} rules
+ * @param {string} type 'min' (val >= rule.min) or 'max' (val <= rule.max)
+ */
+function evaluateComponent(val, rules, type) {
+    if (val === null || val === undefined) return { score: -1, label: 'Dato Insuficiente' }; // -1 indicates missing
+    
+    for (const rule of rules) {
+        if (type === 'min') {
+            if (val >= rule.min) return getGradeFromScore(rule.score);
+        } else if (type === 'max') {
+            if (val <= rule.max) return getGradeFromScore(rule.score);
+        }
+    }
+    return getGradeFromScore(0);
+}
+
+export function classifyArgentineGrade(rd, plusB, trash) {
+    // 1. Evaluate individual components
+    const gradeRd = evaluateComponent(rd, ARGENTINE_GRADE_CONFIG.rd, 'min');
+    
+    // Special handling for +b
+    const gradePlusB = evaluateComponent(plusB, ARGENTINE_GRADE_CONFIG.plusB, 'max');
+
+    const gradeTrash = evaluateComponent(trash, ARGENTINE_GRADE_CONFIG.trash, 'max');
+
+    // 2. Determine Limiting Factor (Min Score) ignoring missing data
+    // Filter out missing data scores (-1)
+    const scores = [
+        { key: 'rd', s: gradeRd.score }, 
+        { key: 'plusB', s: gradePlusB.score }, 
+        { key: 'trash', s: gradeTrash.score }
+    ].filter(x => x.s !== -1);
+
+    if (scores.length === 0) {
+        return {
+            finalGrade: 'Dato Insuficiente',
+            components: {
+                rd: { val: rd, grade: 'N/A', score: 0 },
+                plusB: { val: plusB, grade: 'N/A', score: 0 },
+                trash: { val: trash, grade: 'N/A', score: 0 }
+            },
+            diagnostic: 'No hay suficientes datos válidos para clasificar el grado.'
+        };
+    }
+
+    const minScore = Math.min(...scores.map(x => x.s));
+    
+    // Find label for minScore
+    const finalGradeObj = getGradeFromScore(minScore);
+    const finalGradeLabel = finalGradeObj ? finalGradeObj.label : 'Fuera de Estándar';
+
+    // 3. Generate Diagnostic
+    const factors = [];
+    if (gradeRd.score === minScore) factors.push(`Brillo (Rd: ${rd?.toFixed(1)})`);
+    if (gradePlusB.score === minScore) factors.push(`Amarillez (+b: ${plusB?.toFixed(1)})`);
+    if (gradeTrash.score === minScore) factors.push(`Basura (TrAr: ${trash?.toFixed(2)})`);
+
+    let diagnostic = `Grado Estimado: ${finalGradeLabel}.`;
+    if (minScore < 5) { // If not Perfect C
+        diagnostic += ` Limitado por: ${factors.join(', ')}.`;
+        
+        const details = [];
+        if (gradeRd.score !== -1 && gradeRd.score < 5) details.push(`Rd es ${gradeRd.label}`);
+        if (gradePlusB.score !== -1 && gradePlusB.score < 5) details.push(`+b es ${gradePlusB.label}`);
+        if (gradeTrash.score !== -1 && gradeTrash.score < 5) details.push(`TrAr es ${gradeTrash.label}`);
+        
+        if (details.length > 0) diagnostic += ` Motivo: ${details.join(', ')}.`;
+    } else {
+        diagnostic += ` Calidad Premium (C) en parámetros disponibles.`;
+    }
+    
+    // Add warnings for missing data
+    if (scores.length < 3) {
+         const missing = [];
+         if (gradeRd.score === -1) missing.push('Rd');
+         if (gradePlusB.score === -1) missing.push('+b');
+         if (gradeTrash.score === -1) missing.push('TrAr');
+         diagnostic += ` (Nota: Faltan datos de ${missing.join(', ')} para evaluación completa).`;
+    }
+
+    return {
+        finalGrade: finalGradeLabel,
+        components: {
+            rd: { val: rd, grade: gradeRd.label, score: gradeRd.score },
+            plusB: { val: plusB, grade: gradePlusB.label, score: gradePlusB.score },
+            trash: { val: trash, grade: gradeTrash.label, score: gradeTrash.score }
+        },
+        diagnostic
+    };
+}
+
+
 function parseVal(val) {
     if (val === null || val === undefined || val === '') return null;
+    // Normalize comma to dot for parsing (European/Latam format support)
+    if (typeof val === 'string') {
+        val = val.replace(',', '.');
+    }
     const num = parseFloat(val);
     return isNaN(num) ? null : num;
 }
@@ -196,9 +349,40 @@ export function auditMix(bales, config) {
         };
     });
 
+    // Calulate Argentine Grade for the WHOLE MIX (Average)
+    // Needs direct access to bale data values for Rd, +b, and Trash if not present in "results" (results only has configured params)
+    // We compute the averages manually from the bales array to ensure we have them even if not in "config.tolerancias".
+    
+    const calculateAverage = (keyVariants) => {
+        let total = 0;
+        let count = 0;
+        bales.forEach(b => {
+             // Find property
+             let val = undefined;
+             for (const k of keyVariants) {
+                 if (b[k] !== undefined) { val = b[k]; break; }
+                 if (b[k.toLowerCase()] !== undefined) { val = b[k.toLowerCase()]; break; }
+                 if (b[k.toUpperCase()] !== undefined) { val = b[k.toUpperCase()]; break; }
+             }
+             const parsed = parseVal(val);
+             if (parsed !== null) {
+                 total += parsed;
+                 count++;
+             }
+        });
+        return count > 0 ? total / count : null;
+    };
+
+    const avgRd = calculateAverage(['RD', 'Rd', 'Reflectance']);
+    const avgPlusB = calculateAverage(['PLUS_B', '+b', 'plus_b', 'Yellow']);
+    const avgTrash = calculateAverage(['TrAr', 'TrArea', 'TrashArea', 'TRASH_AREA']); // Use TrAr as requested
+
+    const argentineGrade = classifyArgentineGrade(avgRd, avgPlusB, avgTrash);
+
     return {
         overallStatus,
         details: conclusionDetails,
-        parameterResults: results
+        parameterResults: results,
+        argentineGrade 
     };
 }
