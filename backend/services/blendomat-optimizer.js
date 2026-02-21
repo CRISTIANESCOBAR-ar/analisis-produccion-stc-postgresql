@@ -164,9 +164,12 @@ function optimizeBlendStability(stock, rules, supervisionSettings, blendSize) {
                 }
             });
 
-            // Solo validar hard caps (bales individuales) y dispersión de tolerancia.
-            // El target guía la optimización de calidad pero NO bloquea la generación.
-            const passesRules = validateRecipeAgainstRules(recipeFardos, activeRules, supervisionSettings, blendSize);
+            // Modo Golden Batch: solo el hardCap individual bloquea.
+            // La tolerancia (cupo % de lotes B) es INFORMATIVA en este modo:
+            // si el stock propio tiene 50%+ de lotes en zona tolerancia,
+            // no se puede cumplir el cupo sin excluir stock válido.
+            // El hardCap ya fue aplicado en classifyStock (lotes C no llegan aquí).
+            const passesRules = validateRecipeAgainstRules(recipeFardos, activeRules, supervisionSettings, blendSize, true);
             if (passesRules) break;
 
             blockDuration -= 1;
@@ -232,13 +235,13 @@ function optimizeBlendStability(stock, rules, supervisionSettings, blendSize) {
 
 /**
  * Valida una receta contra las reglas activas.
- * Solo verifica:
- *  - hardCap: si algún fardo individual supera límites absolutos (red de seguridad; classifyStock ya excluye los críticos).
- *  - tolerance: si la cantidad de fardos de categoría B supera el cupo de dispersión permitido.
- * El 'target' (promedio deseado) NO bloquea la generación — guía la optimización de calidad,
- * pero si el stock no permite alcanzarlo, el plan se genera igual con la mejor aproximación posible.
+ * @param {boolean} hardCapOnly - Si true (modo estabilidad), solo verifica hardCap individual.
+ *   La tolerancia (cupo % B) se omite porque el stock puede ser mayoritariamente B,
+ *   y excluirlos destruiría la distribución proporcional del Golden Batch.
+ *   Si false (modo estándar), además valida el cupo de dispersión de categoría B.
+ * El 'target' nunca bloquea generación en ningún modo.
  */
-function validateRecipeAgainstRules(recipeFardos, activeRules, supervisionSettings, blendSize) {
+function validateRecipeAgainstRules(recipeFardos, activeRules, supervisionSettings, blendSize, hardCapOnly = false) {
     for (const rule of activeRules) {
         const uiKey = rule.parametro === 'LEN' ? 'UHML' : (rule.parametro === '+b' ? 'PLUS_B' : rule.parametro);
         const settings = supervisionSettings[uiKey];
@@ -259,7 +262,9 @@ function validateRecipeAgainstRules(recipeFardos, activeRules, supervisionSettin
         }
 
         // Tolerancia: cupo de dispersión de lotes B
-        if (settings.tolerance) {
+        // En modo hardCapOnly (estabilidad) se omite: si el stock mismo es mayoritariamente
+        // zona tolerancia, obligar el cupo vacía el plan completo.
+        if (!hardCapOnly && settings.tolerance) {
             const minIdealPct = toOptionalNumber(rule.porcentaje_min_ideal);
             if (minIdealPct !== null) {
                 const maxTolerancePct = 100 - minIdealPct;
@@ -272,7 +277,7 @@ function validateRecipeAgainstRules(recipeFardos, activeRules, supervisionSettin
                 if (toleranceCount > maxToleranceCount) return false;
             }
         }
-        // NOTE: 'target' guía optimizeRecipeQuality; no bloquea generación.
+        // NOTE: 'target' no bloquea generación en ningún modo.
     }
 
     return true;
