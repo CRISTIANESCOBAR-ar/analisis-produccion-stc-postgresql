@@ -158,6 +158,42 @@
           </div>
         </div>
 
+        <!-- Inventario Group -->
+        <div class="space-y-1">
+          <button 
+            @click="toggleInventoryMenu"
+            class="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-blue-700 transition-colors"
+            :class="isInventoryRouteActive ? 'bg-blue-700' : ''"
+          >
+            <div class="flex items-center gap-2">
+              <span>📦</span>
+              <span class="font-medium">Inventarios</span>
+            </div>
+            <svg 
+              class="w-4 h-4 transition-transform duration-200"
+              :class="{ 'rotate-180': inventoryMenuOpen }"
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          
+          <div 
+            v-show="inventoryMenuOpen"
+            class="ml-4 space-y-1 border-l-2 border-blue-600 pl-2"
+          >
+            <router-link 
+              to="/inventario" 
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
+              :class="{ 'bg-blue-600': $route.path === '/inventario' }"
+            >
+              <span>🧶</span> Materia Prima
+            </router-link>
+          </div>
+        </div>
+
         <!-- Control de Calidad Group -->
         <div class="space-y-1">
           <button 
@@ -378,12 +414,16 @@ const prodMenuOpen = ref(localStorage.getItem('prodMenuOpen') !== 'false')
 const calidadMenuOpen = ref(localStorage.getItem('calidadMenuOpen') !== 'false')
 const indigoMenuOpen = ref(localStorage.getItem('indigoMenuOpen') !== 'false')
 const configMenuOpen = ref(localStorage.getItem('configMenuOpen') !== 'false')
+const inventoryMenuOpen = ref(localStorage.getItem('inventoryMenuOpen') !== 'false')
 
 const labRoutes = ['/resumen', '/resumen-semanal-hilanderia', '/analisis-calidad-fibra', '/golden-batch', '/resumen-diario', '/stats', '/uster', '/tenso']
 const isLabRouteActive = computed(() => labRoutes.includes(route.path))
 
 const prodRoutes = ['/import-control']
 const isProdRouteActive = computed(() => prodRoutes.includes(route.path))
+
+const inventoryRoutes = ['/inventario']
+const isInventoryRouteActive = computed(() => inventoryRoutes.includes(route.path))
 
 const calidadRoutes = ['/revision-cq', '/analisis-mesa-test', '/calidad-sectores']
 const isCalidadRouteActive = computed(() => calidadRoutes.includes(route.path))
@@ -448,6 +488,11 @@ function toggleCalidadMenu() {
 function toggleIndigoMenu() {
   indigoMenuOpen.value = !indigoMenuOpen.value
   localStorage.setItem('indigoMenuOpen', indigoMenuOpen.value.toString())
+}
+
+function toggleInventoryMenu() {
+  inventoryMenuOpen.value = !inventoryMenuOpen.value
+  localStorage.setItem('inventoryMenuOpen', inventoryMenuOpen.value.toString())
 }
 
 function toggleConfigMenu() {

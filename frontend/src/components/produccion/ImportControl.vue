@@ -90,7 +90,7 @@
     <!-- Alertas de Columnas -->
     <div v-if="showColumnWarnings && columnWarnings.length > 0" class="mb-4 bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r-lg">
       <div class="flex items-start">
-        <div class="flex-shrink-0">
+        <div class="shrink-0">
           <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
             <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
           </svg>
@@ -147,7 +147,7 @@
     <div v-if="showSyncModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         <!-- Header -->
-        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-500 to-blue-600">
+        <div class="px-6 py-4 border-b border-gray-200 bg-linear-to-r from-blue-500 to-blue-600">
           <h3 class="text-xl font-bold text-white flex items-center gap-2">
             <span>🔄</span>
             Sincronizar Columnas de CSV a PostgreSQL
@@ -405,7 +405,7 @@
     <div v-if="showHistoryModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         <!-- Header -->
-        <div class="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-purple-500 to-purple-600">
+        <div class="px-6 py-4 border-b border-gray-200 bg-linear-to-r from-purple-500 to-purple-600">
           <div class="flex items-center justify-between">
             <h3 class="text-xl font-bold text-white flex items-center gap-2">
               <span>📋</span>
@@ -652,11 +652,14 @@ async function fetchColumnWarnings() {
       const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
       columnWarnings.value = data.warnings.filter(w => {
         const warnDate = new Date(w.timestamp)
-        return warnDate > oneDayAgo && w.hasDifferences
+        // Solo mostrar warning si hay columnas EXTRA en el CSV que faltan en la DB.
+        // Si solo faltan columnas en el CSV (missingColumns), no es un warning accionable.
+        return warnDate > oneDayAgo && w.extraColumns && w.extraColumns.length > 0
       })
-      showColumnWarnings.value = true
+      showColumnWarnings.value = columnWarnings.value.length > 0
     } else {
       columnWarnings.value = []
+      showColumnWarnings.value = false
     }
   } catch (err) {
     console.error('Error al obtener warnings de columnas:', err)

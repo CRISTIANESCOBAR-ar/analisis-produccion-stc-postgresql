@@ -125,6 +125,11 @@ const routes = [
     path: '/configuracion-estandares',
     component: () => import('./components/configuracion/ConfiguracionEstandares.vue'),
     meta: { title: 'Configuración Estándares y Mezclas' }
+  },
+  {
+    path: '/inventario',
+    component: () => import('./components/inventario/InventoryManager.vue'),
+    meta: { title: 'Gestión de Inventario (MP)' }
   }
 ]
 

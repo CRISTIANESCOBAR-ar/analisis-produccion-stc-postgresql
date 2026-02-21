@@ -107,9 +107,23 @@ export function optimizeBlend(stock, rules, supervisionSettings, blendSize) {
         }
     }
 
-    // 2. BLENDING (Agrupación por Estabilidad de Receta)
+    // 2. BLENDING (Estrategia de Reemplazo de Lote Completo)
     const blends = [];
     let blendIndex = 1;
+
+    // Helper: Calcular promedio de un parámetro en una receta
+    const calculateRecipeAverage = (recipe, paramKey) => {
+        let totalVal = 0;
+        let totalCount = 0;
+        recipe.forEach(b => {
+            const val = Number(b[paramKey]);
+            if (!isNaN(val)) {
+                totalVal += val;
+                totalCount++;
+            }
+        });
+        return totalCount > 0 ? totalVal / totalCount : 0;
+    };
 
     // Función auxiliar para verificar si podemos añadir un fardo Categoría B a la receta actual
     const canAddToleranceBaleToRecipe = (bale, currentRecipeArr) => {
@@ -134,85 +148,245 @@ export function optimizeBlend(stock, rules, supervisionSettings, blendSize) {
         return true;
     };
 
-    let keepBlending = true;
-    while (keepBlending) {
-        // Filtrar lotes que aún tienen stock
+    // Función para construir una receta desde cero (Round Robin priorizando lotes ancla)
+    const buildRecipe = () => {
         let availableLots = classifiedStock.filter(b => b._availableCount > 0);
-        if (availableLots.length === 0) break;
-
-        // Ordenar por stock disponible (descendente) para que los lotes más grandes reciban los fardos "extra" del round robin
+        if (availableLots.length === 0) return null;
+        
+        // Prioridad de Lotes 'Ancla': Ordenar por stock disponible descendente
         availableLots.sort((a, b) => b._availableCount - a._availableCount);
 
-        let currentRecipe = [];
-        let recipeCounts = new Map(); // Para llevar la cuenta de cuántos fardos de cada lote hay en la receta
-        availableLots.forEach(l => recipeCounts.set(l, 0));
-
+        let recipe = [];
         let lotIndex = 0;
         let attempts = 0;
+        let tempCounts = new Map(); // Para no exceder el stock disponible durante la creación
 
-        // Construir la receta ideal para 1 mezcla
-        while (currentRecipe.length < blendSize && attempts < availableLots.length) {
-            const baleToUse = availableLots[lotIndex];
-            let added = false;
+        while (recipe.length < blendSize && attempts < availableLots.length) {
+            const lot = availableLots[lotIndex];
+            const usedInRecipe = tempCounts.get(lot) || 0;
 
-            // Verificar si el lote tiene stock suficiente para aportar a la receta
-            if (recipeCounts.get(baleToUse) < baleToUse._availableCount) {
-                if (baleToUse._category === 'A' || (baleToUse._category === 'B' && canAddToleranceBaleToRecipe(baleToUse, currentRecipe))) {
-                    currentRecipe.push({ ...baleToUse });
-                    recipeCounts.set(baleToUse, recipeCounts.get(baleToUse) + 1);
-                    added = true;
+            if (usedInRecipe < lot._availableCount) {
+                if (lot._category === 'A' || (lot._category === 'B' && canAddToleranceBaleToRecipe(lot, recipe))) {
+                    recipe.push({ ...lot });
+                    tempCounts.set(lot, usedInRecipe + 1);
+                    attempts = 0;
+                    lotIndex = (lotIndex + 1) % availableLots.length;
+                    continue;
                 }
             }
-
+            attempts++;
             lotIndex = (lotIndex + 1) % availableLots.length;
+        }
 
-            if (added) {
-                attempts = 0;
-            } else {
-                attempts++;
+        // OPTIMIZACIÓN DE PROMEDIOS (NUEVO)
+        if (recipe.length === blendSize) {
+            let improvementMade = true;
+            let iterations = 0;
+            const maxIterations = blendSize * 2; // Evitar bucles infinitos
+
+            while (improvementMade && iterations < maxIterations) {
+                improvementMade = false;
+                iterations++;
+
+                // Verificar cada regla activa para promedios
+                for (const rule of activeRules) {
+                    const uiKey = rule.parametro === 'LEN' ? 'UHML' : (rule.parametro === '+b' ? 'PLUS_B' : rule.parametro);
+                    
+                    // Obtener objetivos de promedio
+                    // Usamos valor_ideal_min como Objetivo Mínimo Promedio (según UI "Promedio Objetivo")
+                    const targetMin = Number(rule.valor_ideal_min); 
+                    const targetMax = Number(rule.promedio_objetivo_max); // Nuevo campo en DB
+
+                    const currentAvg = calculateRecipeAverage(recipe, uiKey);
+
+                    // Casos donde el promedio falla
+                    const failMin = !isNaN(targetMin) && currentAvg < targetMin;
+                    const failMax = !isNaN(targetMax) && currentAvg > targetMax;
+
+                    if (failMin || failMax) {
+                        // Buscar el "peor" fardo en la receta para reemplazar
+                        // Si falla min, buscamos el valor más bajo. Si falla max, el más alto.
+                        let worstBaleIndex = -1;
+                        let worstValue = failMin ? Infinity : -Infinity;
+
+                        recipe.forEach((b, idx) => {
+                            const val = Number(b[uiKey]);
+                            if (failMin && val < worstValue) {
+                                worstValue = val;
+                                worstBaleIndex = idx;
+                            } else if (failMax && val > worstValue) {
+                                worstValue = val;
+                                worstBaleIndex = idx;
+                            }
+                        });
+
+                        if (worstBaleIndex === -1) continue;
+
+                        // Buscar un mejor candidato en el stock disponible (que no esté en receta actual?? No, usamos tempCounts para trackear uso interno)
+                        // IMPORTANTE: availableLots contiene todos los lotes con _availableCount global > 0.
+                        // Pero dentro de buildRecipe estamos simulando consumo con tempCounts.
+                        
+                        // Candidatos: Lotes con stock disponible (tempCounts < _availableCount)
+                        // Y que mejoren el promedio (val > worstValue si failMin, val < worstValue si failMax)
+                        const candidates = availableLots.filter(l => {
+                            const used = tempCounts.get(l) || 0;
+                            if (used >= l._availableCount) return false; // Sin stock
+
+                            // Verificar reglas de tolerancia si es B
+                            // Nota: Al reemplazar, la receta cambia, así que habría que re-verificar dispersion.
+                            // Simplificación: Solo permitimos si cumple canAddTolerance (considerando que sacamos uno).
+                            // Pero canAddTolerance usa la receta actual. Si sacamos uno, la cuenta baja.
+                            
+                            const val = Number(l[uiKey]);
+                            if (failMin && val <= worstValue) return false; // No mejora
+                            if (failMax && val >= worstValue) return false; // No mejora
+
+                            return true;
+                        });
+
+                        // Ordenar candidatos por "mejor impacto" (mayor diferencia)
+                        candidates.sort((a, b) => {
+                            const valA = Number(a[uiKey]);
+                            const valB = Number(b[uiKey]);
+                            if (failMin) return valB - valA; // Mayor es mejor
+                            return valA - valB; // Menor es mejor
+                        });
+
+                        // Intentar swap
+                        for (const candidate of candidates) {
+                            // Validar compatibilidad completa (Tolerancia en otras reglas)
+                            // Clonamos receta temporalmente sin el worstBale
+                            const tempRecipe = [...recipe];
+                            tempRecipe.splice(worstBaleIndex, 1);
+
+                            if (candidate._category === 'A' || canAddToleranceBaleToRecipe(candidate, tempRecipe)) {
+                                // Realizar Swap
+                                const oldBale = recipe[worstBaleIndex];
+                                
+                                // Actualizar contadores
+                                tempCounts.set(oldBale, tempCounts.get(oldBale) - 1);
+                                tempCounts.set(candidate, (tempCounts.get(candidate) || 0) + 1);
+
+                                // Actualizar receta
+                                recipe[worstBaleIndex] = { ...candidate };
+                                improvementMade = true;
+                                break; // Salir al siguiente loop de mejora
+                            }
+                        }
+                    }
+                    if (improvementMade) break; // Reiniciar chequeo de reglas desde 0
+                }
             }
         }
 
-        // Si no pudimos completar una receta del tamaño requerido, terminamos
-        if (currentRecipe.length < blendSize) {
-            keepBlending = false;
-            break;
-        }
+        return recipe.length === blendSize ? recipe : null;
+    };
+
+    let currentRecipe = buildRecipe();
+
+    while (currentRecipe) {
+        // Contar cuántos fardos de cada lote hay en la receta actual
+        const recipeCounts = new Map();
+        currentRecipe.forEach(f => {
+            // Usar una clave única para identificar el lote original
+            const origLot = classifiedStock.find(l => l.LOTE === f.LOTE && l.PRODUTOR === f.PRODUTOR);
+            recipeCounts.set(origLot, (recipeCounts.get(origLot) || 0) + 1);
+        });
 
         // Calcular cuántas veces podemos repetir esta receta exacta
         let maxRepeats = Infinity;
+        let depletedLots = [];
+
         for (const [lot, countInRecipe] of recipeCounts.entries()) {
-            if (countInRecipe > 0) {
-                const possibleRepeats = Math.floor(lot._availableCount / countInRecipe);
-                if (possibleRepeats < maxRepeats) {
-                    maxRepeats = possibleRepeats;
-                }
+            const possibleRepeats = Math.floor(lot._availableCount / countInRecipe);
+            if (possibleRepeats < maxRepeats) {
+                maxRepeats = possibleRepeats;
+                depletedLots = [lot];
+            } else if (possibleRepeats === maxRepeats) {
+                depletedLots.push(lot);
             }
         }
 
-        if (maxRepeats === Infinity || maxRepeats <= 0) {
-            keepBlending = false;
-            break;
-        }
+        if (maxRepeats === 0 || maxRepeats === Infinity) break;
 
         // Generar las mezclas idénticas
         for (let i = 0; i < maxRepeats; i++) {
-            // Clonar los fardos para cada mezcla independiente
-            const blendFardos = currentRecipe.map(b => ({ ...b }));
             blends.push({
-                index: blendIndex,
-                fardos: blendFardos
+                index: blendIndex++,
+                fardos: currentRecipe.map(b => ({ ...b }))
             });
-            blendIndex++;
         }
 
-        // Descontar el stock utilizado por todas las repeticiones
+        // Descontar el stock utilizado
         for (const [lot, countInRecipe] of recipeCounts.entries()) {
-            if (countInRecipe > 0) {
-                const totalUsed = countInRecipe * maxRepeats;
-                lot._availableCount -= totalUsed;
-                lot._usedCount += totalUsed;
+            const totalUsed = countInRecipe * maxRepeats;
+            lot._availableCount -= totalUsed;
+            lot._usedCount += totalUsed;
+        }
+
+        // Lógica de Agotamiento (Swap): Reemplazar lotes agotados
+        let swapSuccessful = true;
+        let nextRecipe = currentRecipe.map(b => ({ ...b })); // Clonar para modificar
+
+        for (const depletedLot of depletedLots) {
+            const neededCount = recipeCounts.get(depletedLot);
+            
+            // Buscar candidatos para reemplazo (mismo categoría, con stock suficiente, no en la receta actual)
+            let candidates = classifiedStock.filter(l => 
+                l._availableCount >= neededCount && 
+                l._category === depletedLot._category &&
+                !recipeCounts.has(l)
+            );
+            
+            // Ordenar candidatos por stock (priorizar nuevos anclas)
+            candidates.sort((a, b) => b._availableCount - a._availableCount);
+
+            let replacement = null;
+            for (const candidate of candidates) {
+                // Verificar si el candidato cumple las reglas si es B
+                let testRecipe = nextRecipe.filter(f => f.LOTE !== depletedLot.LOTE || f.PRODUTOR !== depletedLot.PRODUTOR);
+                let isValid = true;
+                if (candidate._category === 'B') {
+                    for(let i=0; i<neededCount; i++) {
+                        if (!canAddToleranceBaleToRecipe(candidate, testRecipe)) {
+                            isValid = false;
+                            break;
+                        }
+                        testRecipe.push({...candidate});
+                    }
+                }
+                if (isValid) {
+                    replacement = candidate;
+                    break;
+                }
             }
+
+            if (replacement) {
+                // Realizar el Swap en nextRecipe
+                let replacedCount = 0;
+                for (let i = 0; i < nextRecipe.length; i++) {
+                    if (nextRecipe[i].LOTE === depletedLot.LOTE && nextRecipe[i].PRODUTOR === depletedLot.PRODUTOR) {
+                        nextRecipe[i] = { ...replacement };
+                        replacedCount++;
+                        if (replacedCount === neededCount) break;
+                    }
+                }
+                // Actualizar recipeCounts para el siguiente depletedLot en este mismo ciclo
+                recipeCounts.delete(depletedLot);
+                recipeCounts.set(replacement, neededCount);
+            } else {
+                // Si no encontramos un reemplazo 1:1 directo, fallamos el swap
+                swapSuccessful = false;
+                break;
+            }
+        }
+
+        if (swapSuccessful) {
+            currentRecipe = nextRecipe;
+        } else {
+            // Si no se pudo hacer swap (ej. no hay un lote con suficientes fardos), 
+            // recalculamos una nueva receta desde cero con el stock restante.
+            currentRecipe = buildRecipe();
         }
     }
 

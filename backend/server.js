@@ -9,6 +9,7 @@ import { fileURLToPath } from 'url'
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getImportStatus, importCSV, importAll, importSpecificTables, importForceAll, renameduplicateHeaders, getTableColumns, compareColumns, addColumnsToTable } from './import-manager.js'
 import configStandardsRouter from './config-standards.js';
+import { optimizeBlend } from './services/blendomat-optimizer.js';
 
 const { Pool } = pg
 const app = express()
@@ -474,6 +475,36 @@ app.get('/api/health', async (req, res) => {
     res.status(500).json({ ok: false, error: err.message })
   }
 })
+
+// =====================================================
+// INVENTARIO
+// =====================================================
+app.get('/api/inventory/cotton-bales', async (req, res) => {
+  try {
+    const { rows } = await query('SELECT * FROM tb_est_mp ORDER BY id DESC LIMIT 5000', [], 'Get Cotton Bales')
+    res.json(rows)
+  } catch (err) {
+    console.error(err)
+    // Return empty array on error to prevent frontend crash if table missing
+    res.json([]) 
+  }
+})
+
+app.post('/api/inventory/blendomat', async (req, res) => {
+  try {
+    const { stock, rules, supervisionSettings, blendSize } = req.body;
+
+    if (!stock || !rules || !supervisionSettings || !blendSize) {
+      return res.status(400).json({ error: 'Faltan parámetros requeridos (stock, rules, supervisionSettings, blendSize)' });
+    }
+
+    const result = optimizeBlend(stock, rules, supervisionSettings, blendSize);
+    res.json(result);
+  } catch (err) {
+    console.error('Error en BlendomatOptimizer:', err);
+    res.status(500).json({ error: err.message || 'Error interno al calcular mezclas' });
+  }
+});
 
 async function costosTablesReady() {
   await ensureCostosSchema()

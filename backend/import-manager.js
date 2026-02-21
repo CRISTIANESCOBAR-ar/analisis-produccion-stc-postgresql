@@ -11,7 +11,8 @@ const { Pool } = pkg;
 const FULL_TRUNCATE_TABLES = new Set([
   'tb_fichas',
   'tb_calidad_fibra',
-  'tb_proceso'
+  'tb_proceso',
+  'tb_est_mp'
 ]);
 
 // Tablas con estrategia incremental: borrar solo fechas presentes en el CSV
@@ -725,6 +726,7 @@ const CSV_TO_TABLE_MAP = {
   'RelResIndigo.csv': 'tb_RESIDUOS_INDIGO',
   'rptAcompDiarioPBI.csv': 'tb_calidad',
   'rptMovimMP.csv': 'tb_calidad_fibra',
+  'rptEstMP.csv': 'tb_est_mp',
   'rpsPosicaoEstoquePRD.csv': 'tb_proceso',
   'rptDefPeca.csv': 'tb_defectos'  // Minúsculas como está en PostgreSQL
 }

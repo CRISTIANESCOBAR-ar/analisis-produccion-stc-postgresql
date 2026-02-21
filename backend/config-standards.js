@@ -111,6 +111,13 @@ router.post('/standards', async (req, res) => {
     
     if (!version_nombre) return res.status(400).json({ success: false, error: 'version_nombre required' });
 
+    // Helper para sanitizar valores numéricos que vienen del frontend como strings vacíos
+    const toNum = (val) => {
+        if (val === '' || val === null || val === undefined) return null;
+        const n = Number(val);
+        return isNaN(n) ? null : n;
+    };
+
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
@@ -124,16 +131,38 @@ router.post('/standards', async (req, res) => {
             await client.query(
                 `INSERT INTO tb_config_hilos (version_nombre, titulo_ne, aplicacion, sci_min, str_min, mic_min, mic_max, sf_max)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-                [version_nombre, hilo.titulo_ne, hilo.aplicacion, hilo.sci_min, hilo.str_min, hilo.mic_min, hilo.mic_max, hilo.sf_max]
+                [
+                    version_nombre, 
+                    hilo.titulo_ne, 
+                    hilo.aplicacion, 
+                    toNum(hilo.sci_min), 
+                    toNum(hilo.str_min), 
+                    toNum(hilo.mic_min), 
+                    toNum(hilo.mic_max), 
+                    toNum(hilo.sf_max)
+                ]
             );
         }
 
         // Insertar Tolerancias
         for (const tol of tolerancias) {
             await client.query(
-                `INSERT INTO tb_config_tolerancias (version_nombre, parametro, valor_ideal_min, rango_tol_min, rango_tol_max, porcentaje_min_ideal, limite_max_absoluto, promedio_objetivo_max)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-                [version_nombre, tol.parametro, tol.valor_ideal_min, tol.rango_tol_min, tol.rango_tol_max, tol.porcentaje_min_ideal, tol.limite_max_absoluto, tol.promedio_objetivo_max]
+                `INSERT INTO tb_config_tolerancias (
+                    version_nombre, parametro, valor_ideal_min, rango_tol_min, rango_tol_max, 
+                    porcentaje_min_ideal, limite_max_absoluto, limite_min_absoluto, promedio_objetivo_max
+                )
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+                [
+                    version_nombre, 
+                    tol.parametro, 
+                    toNum(tol.valor_ideal_min), 
+                    toNum(tol.rango_tol_min), 
+                    toNum(tol.rango_tol_max), 
+                    toNum(tol.porcentaje_min_ideal), 
+                    toNum(tol.limite_max_absoluto),
+                    toNum(tol.limite_min_absoluto),
+                    toNum(tol.promedio_objetivo_max)
+                ]
             );
         }
 
