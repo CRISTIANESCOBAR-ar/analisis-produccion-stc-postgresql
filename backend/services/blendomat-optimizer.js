@@ -138,6 +138,76 @@ function optimizeBlendStability(stock, rules, supervisionSettings, blendSize, en
         return candidates.filter(c => c.assigned > 0);
     };
 
+    /**
+     * GB + Norma: dado un array de candidates (con .assigned y .capacity),
+     * recorta los lotes B al cupo máximo permitido por cada regla de tolerancia
+     * y redistribuye los slots liberados a lotes A con capacidad disponible.
+     * Retorna los candidates modificados, o null si no es posible completar blendSize.
+     */
+    const capToleranceInRecipe = (candidates) => {
+        // Clonar asignaciones para no mutar hasta confirmar éxito
+        const caps = candidates.map(c => ({ ...c }));
+
+        for (const rule of activeRules) {
+            const uiKey = rule.parametro === 'LEN' ? 'UHML' : (rule.parametro === '+b' ? 'PLUS_B' : rule.parametro);
+            const settings = supervisionSettings[uiKey];
+            if (!settings || !settings.tolerance) continue;
+
+            const minIdealPct = toOptionalNumber(rule.porcentaje_min_ideal);
+            if (minIdealPct === null) continue;
+
+            const maxBCount = Math.floor(blendSize * ((100 - minIdealPct) / 100));
+
+            // Lotes B por esta variable
+            const bCaps = caps.filter(c =>
+                c.lot._category === 'B' &&
+                Array.isArray(c.lot._toleranceReasons) &&
+                c.lot._toleranceReasons.includes(rule.parametro)
+            );
+
+            const currentBCount = bCaps.reduce((sum, c) => sum + c.assigned, 0);
+            if (currentBCount <= maxBCount) continue;
+
+            // Reducir lotes B ordenados por mayor asignado primero
+            let toFree = currentBCount - maxBCount;
+            bCaps.sort((a, b) => b.assigned - a.assigned);
+            for (const bc of bCaps) {
+                if (toFree <= 0) break;
+                const reduce = Math.min(bc.assigned - 1, toFree); // dejar min 1 si tenían asignación
+                if (reduce > 0) { bc.assigned -= reduce; toFree -= reduce; }
+            }
+            // Si todavía hay exceso (todos B llegan a 1 y aún supera cupo), llevar a 0 los menos importantes
+            if (toFree > 0) {
+                bCaps.sort((a, b) => a.assigned - b.assigned);
+                for (const bc of bCaps) {
+                    if (toFree <= 0) break;
+                    const reduce = Math.min(bc.assigned, toFree);
+                    bc.assigned -= reduce; toFree -= reduce;
+                }
+            }
+
+            // Redistribuir slots liberados a lotes A con capacidad disponible
+            const freed = (currentBCount - maxBCount) - toFree;
+            const aCaps = caps.filter(c => c.lot._category === 'A' && c.assigned < c.capacity)
+                .sort((a, b) => (b.capacity - b.assigned) - (a.capacity - a.assigned));
+
+            let toFill = freed;
+            for (const ac of aCaps) {
+                if (toFill <= 0) break;
+                const canAdd = Math.min(ac.capacity - ac.assigned, toFill);
+                ac.assigned += canAdd;
+                toFill -= canAdd;
+            }
+
+            // Si no se pudieron redistribuir todos los slots, el plan no alcanza blendSize → null
+            if (toFill > 0) return null;
+        }
+
+        const total = caps.reduce((sum, c) => sum + c.assigned, 0);
+        if (total !== blendSize) return null;
+        return caps.filter(c => c.assigned > 0);
+    };
+
     while (remainingLots.length > 0 && iterations < MAX_ITERATIONS) {
         iterations++;
 
@@ -159,9 +229,19 @@ function optimizeBlendStability(stock, rules, supervisionSettings, blendSize, en
 
             // Modo Golden Batch: NO se optimiza calidad aquí.
             // La distribución proporcional de todos los lotes ES el Golden Batch.
-            // Ajustar la receta hacia lotes "mejores" destruye la proporcionalidad
-            // y reduce la duración del bloque idéntico (N).
             activeRecipe = rawRecipe;
+
+            // GB + Norma: recortar lotes B al cupo de tolerancia y redistribuir a lotes A.
+            // Si los lotes A no tienen capacidad suficiente para absorber los slots liberados,
+            // retorna null → reducir blockDuration (a H menor, la capacidad de A lotses aumenta).
+            if (enforceToleranceCap) {
+                const capped = capToleranceInRecipe(rawRecipe);
+                if (!capped) {
+                    blockDuration -= 1;
+                    continue;
+                }
+                activeRecipe = capped;
+            }
 
             recipeFardos = [];
             activeRecipe.forEach(item => {
