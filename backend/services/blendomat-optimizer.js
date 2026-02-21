@@ -20,7 +20,9 @@ export function optimizeBlend(stock, rules, supervisionSettings, blendSize, algo
 
     // Despachador de algoritmos
     if (algorithm === 'stability') {
-        return optimizeBlendStability(stock, rules, supervisionSettings, blendSize);
+        return optimizeBlendStability(stock, rules, supervisionSettings, blendSize, false);
+    } else if (algorithm === 'stability-strict') {
+        return optimizeBlendStability(stock, rules, supervisionSettings, blendSize, true);
     } else {
         return optimizeBlendStandard(stock, rules, supervisionSettings, blendSize);
     }
@@ -35,7 +37,11 @@ function toOptionalNumber(value) {
 // =================================================================================================
 // ALGORITMO 2: ESTABILIDAD (GOLDEN BATCH / PROPORCIONAL)
 // =================================================================================================
-function optimizeBlendStability(stock, rules, supervisionSettings, blendSize) {
+/**
+ * @param {boolean} enforceToleranceCap - false = Golden Batch puro (max N, tolerancia informativa)
+ *                                        true  = Golden Batch estricto (respeta cupo % B, N menor)
+ */
+function optimizeBlendStability(stock, rules, supervisionSettings, blendSize, enforceToleranceCap = false) {
     const classifiedStock = classifyStock(stock, rules, supervisionSettings);
     const activeRules = rules.filter(r => {
         const uiKey = r.parametro === 'LEN' ? 'UHML' : (r.parametro === '+b' ? 'PLUS_B' : r.parametro);
@@ -164,12 +170,12 @@ function optimizeBlendStability(stock, rules, supervisionSettings, blendSize) {
                 }
             });
 
-            // Modo Golden Batch: solo el hardCap individual bloquea.
-            // La tolerancia (cupo % de lotes B) es INFORMATIVA en este modo:
-            // si el stock propio tiene 50%+ de lotes en zona tolerancia,
-            // no se puede cumplir el cupo sin excluir stock válido.
-            // El hardCap ya fue aplicado en classifyStock (lotes C no llegan aquí).
-            const passesRules = validateRecipeAgainstRules(recipeFardos, activeRules, supervisionSettings, blendSize, true);
+            // enforceToleranceCap=false (Golden Batch puro): solo hardCap individual bloquea.
+            //   Si el stock tiene mayoria de lotes B, el cupo de tolerancia es imposible
+            //   de cumplir sin excluir stock valido. Tolerancia aparece como aviso en el resultado.
+            // enforceToleranceCap=true (Golden Batch estricto): tambien valida cupo % B.
+            //   N resultante puede ser menor, pero el plan cumple las reglas de mezcla.
+            const passesRules = validateRecipeAgainstRules(recipeFardos, activeRules, supervisionSettings, blendSize, !enforceToleranceCap);
             if (passesRules) break;
 
             blockDuration -= 1;

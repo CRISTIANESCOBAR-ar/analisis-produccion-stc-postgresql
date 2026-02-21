@@ -57,13 +57,41 @@
             />
           </div>
 
-          <!-- Modo Estabilidad -->
-          <div class="flex items-center space-x-2 shrink-0 ml-2">
-            <label class="inline-flex items-center cursor-pointer">
-              <input type="checkbox" v-model="useStabilityLogic" class="sr-only peer">
-              <div class="relative w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-              <span class="ms-2 text-sm font-medium text-gray-700">Modo Estabilidad</span>
-            </label>
+          <!-- Selector de Algoritmo -->
+          <div class="flex items-center shrink-0 ml-2 gap-2">
+            <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Algoritmo:</span>
+            <div class="inline-flex rounded-lg border border-gray-200 bg-gray-100 p-0.5 shadow-inner">
+              <button
+                @click="blendAlgorithm = 'standard'"
+                :class="[
+                  'px-3 py-1 rounded-md text-xs font-semibold transition-all duration-150 whitespace-nowrap',
+                  blendAlgorithm === 'standard'
+                    ? 'bg-white text-gray-800 shadow-sm ring-1 ring-gray-200'
+                    : 'text-gray-500 hover:text-gray-700'
+                ]"
+                title="Round Robin: consume lotes secuencialmente"
+              >Estándar</button>
+              <button
+                @click="blendAlgorithm = 'stability'"
+                :class="[
+                  'px-3 py-1 rounded-md text-xs font-semibold transition-all duration-150 whitespace-nowrap',
+                  blendAlgorithm === 'stability'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                ]"
+                title="Golden Batch: máximo N idénticas. La tolerancia es informativa."
+              >Golden Batch</button>
+              <button
+                @click="blendAlgorithm = 'stability-strict'"
+                :class="[
+                  'px-3 py-1 rounded-md text-xs font-semibold transition-all duration-150 whitespace-nowrap',
+                  blendAlgorithm === 'stability-strict'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                ]"
+                title="Golden Batch Estricto: respeta cupo de tolerancia. N puede ser menor."
+              >GB + Norma</button>
+            </div>
           </div>
         </div>
 
@@ -558,7 +586,8 @@ const filters = reactive({
   fardos: null
 });
 
-const useStabilityLogic = ref(true);
+// 'standard' | 'stability' | 'stability-strict'
+const blendAlgorithm = ref('stability');
 
 // Reactive Supervision State: For every param, user toggles what to see
 // Example: { MIC: { target: false, hardCap: false, tolerance: false }, ... }
@@ -923,7 +952,11 @@ const handleMezclas = async () => {
 
   isCalculatingBlend.value = true;
   appliedRulesSummary.value = buildAppliedRulesSummary();
-  appliedAlgorithmLabel.value = useStabilityLogic.value ? 'Modo Estabilidad (Golden Batch)' : 'Modo Estándar (Round Robin)';
+  appliedAlgorithmLabel.value = blendAlgorithm.value === 'stability'
+    ? 'Golden Batch (máx N, tolerancia informativa)'
+    : blendAlgorithm.value === 'stability-strict'
+      ? 'Golden Batch Estricto (norma respetada)'
+      : 'Estándar (Round Robin)';
   appliedCalculationTimestamp.value = new Date().toLocaleString('es-ES');
   try {
     const response = await fetch('http://localhost:3001/api/inventory/blendomat', {
@@ -934,7 +967,7 @@ const handleMezclas = async () => {
         rules: activeRules.value,
         supervisionSettings: supervisionSettings,
         blendSize: filters.fardos,
-        algorithm: useStabilityLogic.value ? 'stability' : 'standard'
+        algorithm: blendAlgorithm.value
       })
     });
 
