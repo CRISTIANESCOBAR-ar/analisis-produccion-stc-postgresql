@@ -82,10 +82,19 @@ function optimizeBlendStability(stock, rules, supervisionSettings, blendSize) {
 
     const buildRecipeForHorizon = (lots, horizon) => {
         const total = lots.reduce((sum, l) => sum + l._availableCount, 0);
+        // Contar lotes con capacidad >= 1 para decidir si aplicar garantía de mínimo 1
+        const eligibleCount = lots.filter(l => Math.floor(l._availableCount / horizon) >= 1).length;
+        const guaranteeMin1 = eligibleCount <= blendSize;
+
         const candidates = lots.map((lot) => {
             const ideal = (lot._availableCount / total) * blendSize;
             const capacity = Math.floor(lot._availableCount / horizon);
-            const assigned = Math.min(Math.floor(ideal), capacity);
+            // Golden Batch: todos los lotes elegibles (capacity >= 1) reciben al menos 1 fardo
+            // para mantener la distribución proporcional completa del stock.
+            // Solo aplica si el total de elegibles <= blendSize (si hay más lotes que fardos,
+            // la proporcionalidad estricta es imposible).
+            const minAssign = (guaranteeMin1 && capacity >= 1) ? 1 : 0;
+            const assigned = Math.min(Math.max(Math.floor(ideal), minAssign), capacity);
             return {
                 lot,
                 idealShare: ideal,
@@ -142,9 +151,11 @@ function optimizeBlendStability(stock, rules, supervisionSettings, blendSize) {
                 continue;
             }
 
-            // Fase de optimización de calidad: reasignar fardos de lotes de baja calidad
-            // a lotes de mejor calidad para acercarse a los targets (STR, LEN, MIC)
-            activeRecipe = optimizeRecipeQuality(rawRecipe, activeRules, supervisionSettings);
+            // Modo Golden Batch: NO se optimiza calidad aquí.
+            // La distribución proporcional de todos los lotes ES el Golden Batch.
+            // Ajustar la receta hacia lotes "mejores" destruye la proporcionalidad
+            // y reduce la duración del bloque idéntico (N).
+            activeRecipe = rawRecipe;
 
             recipeFardos = [];
             activeRecipe.forEach(item => {
