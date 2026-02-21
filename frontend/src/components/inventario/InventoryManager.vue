@@ -56,6 +56,15 @@
               placeholder="0"
             />
           </div>
+
+          <!-- Modo Estabilidad -->
+          <div class="flex items-center space-x-2 shrink-0 ml-2">
+            <label class="inline-flex items-center cursor-pointer">
+              <input type="checkbox" v-model="useStabilityLogic" class="sr-only peer">
+              <div class="relative w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+              <span class="ms-2 text-sm font-medium text-gray-700">Modo Estabilidad</span>
+            </label>
+          </div>
         </div>
 
         <!-- Bloque Derecha: Botones de Configuración -->
@@ -198,6 +207,28 @@
           >
             Volver al Inventario
           </button>
+        </div>
+
+        <div v-if="appliedRulesSummary.length || appliedAlgorithmLabel || appliedCalculationTimestamp" class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <h3 class="text-sm font-bold text-blue-800 mb-2">Reglas aplicadas en este cálculo</h3>
+          <div v-if="appliedAlgorithmLabel" class="text-xs text-blue-900">
+            <span class="font-semibold">Algoritmo usado:</span>
+            <span class="ml-1">{{ appliedAlgorithmLabel }}</span>
+          </div>
+          <div v-if="appliedCalculationTimestamp" class="mb-2 text-xs text-blue-900">
+            <span class="font-semibold">Ejecutado:</span>
+            <span class="ml-1">{{ appliedCalculationTimestamp }}</span>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+            <div
+              v-for="(rule, idx) in appliedRulesSummary"
+              :key="`${rule.parametro}-${idx}`"
+              class="bg-white border border-blue-100 rounded px-2 py-1.5 text-xs"
+            >
+              <div class="font-semibold text-blue-900">{{ rule.parametro }}</div>
+              <div class="text-gray-700">{{ rule.detalle }}</div>
+            </div>
+          </div>
         </div>
 
         <div v-if="isCalculatingBlend" class="text-center py-8 text-blue-600 font-bold">
@@ -505,6 +536,9 @@ const activeRules = ref([]);
 const isBlendMode = ref(false);
 const blendPlan = ref(null);
 const isCalculatingBlend = ref(false);
+const appliedRulesSummary = ref([]);
+const appliedAlgorithmLabel = ref('');
+const appliedCalculationTimestamp = ref('');
 
 // Params to supervise
 const monitoredParams = [
@@ -523,6 +557,8 @@ const filters = reactive({
   searchText: '',
   fardos: null
 });
+
+const useStabilityLogic = ref(true);
 
 // Reactive Supervision State: For every param, user toggles what to see
 // Example: { MIC: { target: false, hardCap: false, tolerance: false }, ... }
@@ -830,6 +866,43 @@ const formatValue = (value, key) => {
   return value;
 };
 
+const buildAppliedRulesSummary = () => {
+  const summary = [];
+
+  monitoredParams.forEach(({ key, label }) => {
+    const settings = supervisionSettings[key];
+    if (!settings) return;
+
+    const isSelected = settings.target || settings.hardCap || settings.tolerance;
+    if (!isSelected) return;
+
+    const rule = getRuleFor(key);
+    const details = [];
+
+    if (settings.target) {
+      const v = getRuleDisplay(rule, 'target');
+      details.push(`Target${v ? `: ${v}` : ''}`);
+    }
+
+    if (settings.hardCap) {
+      const v = getRuleDisplay(rule, 'hardCap');
+      details.push(`Hard Cap${v ? `: ${v}` : ''}`);
+    }
+
+    if (settings.tolerance) {
+      const v = getRuleDisplay(rule, 'tolerance');
+      details.push(`Tolerancia${v ? `: ${v}` : ''}`);
+    }
+
+    summary.push({
+      parametro: label,
+      detalle: details.join(' | ') || 'Sin detalle de regla'
+    });
+  });
+
+  return summary;
+};
+
 // Acción para el botón Mezclas
 const handleMezclas = async () => {
   if (!filters.fardos || filters.fardos <= 0) {
@@ -849,6 +922,9 @@ const handleMezclas = async () => {
   }
 
   isCalculatingBlend.value = true;
+  appliedRulesSummary.value = buildAppliedRulesSummary();
+  appliedAlgorithmLabel.value = useStabilityLogic.value ? 'Modo Estabilidad (Golden Batch)' : 'Modo Estándar (Round Robin)';
+  appliedCalculationTimestamp.value = new Date().toLocaleString('es-ES');
   try {
     const response = await fetch('http://localhost:3001/api/inventory/blendomat', {
       method: 'POST',
@@ -857,7 +933,8 @@ const handleMezclas = async () => {
         stock: filteredData.value, // Enviar solo el stock filtrado (ej. por búsqueda)
         rules: activeRules.value,
         supervisionSettings: supervisionSettings,
-        blendSize: filters.fardos
+        blendSize: filters.fardos,
+        algorithm: useStabilityLogic.value ? 'stability' : 'standard'
       })
     });
 

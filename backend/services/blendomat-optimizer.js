@@ -4,10 +4,13 @@
  * Este servicio recibe el stock disponible, las reglas de mezcla activas,
  * las variables seleccionadas por el usuario y el tamaño de la mezcla (fardos).
  * 
- * Devuelve un plan de mezclas optimizado (Round Robin) y un reporte de lotes no usados.
+ * Devuelve un plan de mezclas optimizado.
+ * Soporta dos algoritmos:
+ * 1. 'standard' (Round Robin): Optimiza el uso secuencial.
+ * 2. 'stability' (Golden Batch/Proporcional): Optimiza la duración de bloques idénticos distribuyendo el consumo proporcionalmente al stock.
  */
 
-export function optimizeBlend(stock, rules, supervisionSettings, blendSize) {
+export function optimizeBlend(stock, rules, supervisionSettings, blendSize, algorithm = 'standard') {
     if (!blendSize || blendSize <= 0) {
         throw new Error("El tamaño de la mezcla (fardos) debe ser mayor a 0.");
     }
@@ -15,99 +18,347 @@ export function optimizeBlend(stock, rules, supervisionSettings, blendSize) {
         throw new Error("No hay stock disponible para procesar.");
     }
 
-    // 1. PRE-PROCESAMIENTO: Clasificación de Fardos
-    const classifiedStock = [];
-    const rejectedStock = []; // Lotes que violan Hard Caps (Categoría C)
+    // Despachador de algoritmos
+    if (algorithm === 'stability') {
+        return optimizeBlendStability(stock, rules, supervisionSettings, blendSize);
+    } else {
+        return optimizeBlendStandard(stock, rules, supervisionSettings, blendSize);
+    }
+}
 
-    // Mapeo de nombres de variables (UI/DB -> Reglas)
-    const mapVarToRule = (v) => {
-        if (v === 'UHML') return 'LEN';
-        if (v === 'PLUS_B') return '+b';
-        return v;
-    };
+function toOptionalNumber(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const n = Number(value);
+    return Number.isNaN(n) ? null : n;
+}
 
-    // Filtrar solo las reglas que el usuario seleccionó en supervisionSettings
+// =================================================================================================
+// ALGORITMO 2: ESTABILIDAD (GOLDEN BATCH / PROPORCIONAL)
+// =================================================================================================
+function optimizeBlendStability(stock, rules, supervisionSettings, blendSize) {
+    const classifiedStock = classifyStock(stock, rules, supervisionSettings);
     const activeRules = rules.filter(r => {
         const uiKey = r.parametro === 'LEN' ? 'UHML' : (r.parametro === '+b' ? 'PLUS_B' : r.parametro);
         const s = supervisionSettings[uiKey];
         return s && (s.target || s.hardCap || s.tolerance);
     });
+    
+    // Validar lotes disponibles (excluir rechazados)
+    const availableLots = classifiedStock.filter(b => b._category !== 'C' && b._availableCount > 0);
+    
+    if (availableLots.length === 0) {
+        return generateEmptyResult(classifiedStock, "No hay stock válido disponible.");
+    }
 
-    for (const bale of stock) {
-        let isRejected = false;
-        let rejectReason = '';
-        let isTolerance = false;
-        const toleranceReasons = [];
+    const blends = [];
+    let blendIndex = 1;
 
-        // Evaluar cada regla activa
-        for (const rule of activeRules) {
-            const uiKey = rule.parametro === 'LEN' ? 'UHML' : (rule.parametro === '+b' ? 'PLUS_B' : rule.parametro);
-            const settings = supervisionSettings[uiKey];
-            if (!settings) continue;
+    let iterations = 0;
+    const MAX_ITERATIONS = 100;
+    let remainingLots = [...availableLots];
 
-            const val = Number(bale[uiKey]);
-            if (isNaN(val)) continue;
+    const findMaxHorizon = (lots) => {
+        const total = lots.reduce((sum, l) => sum + l._availableCount, 0);
+        let low = 1;
+        let high = Math.floor(total / blendSize);
+        let best = 0;
 
-            // A. Chequeo de Hard Caps (Categoría C)
-            if (settings.hardCap) {
-                const hasMaxAbs = rule.limite_max_absoluto !== null && rule.limite_max_absoluto !== '';
-                const hasMinAbs = rule.limite_min_absoluto !== null && rule.limite_min_absoluto !== '';
-                
-                const maxAbs = Number(rule.limite_max_absoluto);
-                const minAbs = Number(rule.limite_min_absoluto);
-
-                if (hasMaxAbs && !isNaN(maxAbs) && val > maxAbs) {
-                    isRejected = true;
-                    rejectReason = `${rule.parametro} Crítica: Por encima del máximo de ${maxAbs}.`;
-                    break;
-                }
-                if (hasMinAbs && !isNaN(minAbs) && val < minAbs) {
-                    isRejected = true;
-                    rejectReason = `${rule.parametro} Crítica: Por debajo del mínimo de ${minAbs}.`;
-                    break;
-                }
-            }
-
-            // B. Chequeo de Tolerancia (Categoría B)
-            // Solo se marca como tolerancia si el usuario activó la supervisión de tolerancia
-            // y el valor cae dentro del rango.
-            if (settings.tolerance) {
-                const hasTolMin = rule.rango_tol_min !== null && rule.rango_tol_min !== '';
-                const hasTolMax = rule.rango_tol_max !== null && rule.rango_tol_max !== '';
-                const tolMin = Number(rule.rango_tol_min);
-                const tolMax = Number(rule.rango_tol_max);
-
-                if (hasTolMin && hasTolMax && !isNaN(tolMin) && !isNaN(tolMax)) {
-                    if (val >= tolMin && val <= tolMax) {
-                        isTolerance = true;
-                        toleranceReasons.push(rule.parametro);
-                    }
-                }
-            }
-            
-            // Nota: Si no cumple Hard Cap (o no está activo) y no entra en Tolerancia (o no está activo),
-            // el fardo se considera Categoría A (Normal/Ideal) y puede usarse libremente.
-            // Ya no rechazamos fardos implícitamente por no cumplir el ideal o la tolerancia.
-        }
-
-        // Clonar el fardo para no mutar el original y añadir metadatos
-        const processedBale = { 
-            ...bale, 
-            _category: isRejected ? 'C' : (isTolerance ? 'B' : 'A'),
-            _rejectReason: rejectReason,
-            _toleranceReasons: toleranceReasons,
-            _usedCount: 0,
-            _availableCount: Number(bale.QTDE_ESTOQUE) || 0
+        const feasible = (h) => {
+            const capacity = lots.reduce((sum, l) => sum + Math.floor(l._availableCount / h), 0);
+            return capacity >= blendSize;
         };
 
-        if (isRejected) {
-            rejectedStock.push(processedBale);
-        } else if (processedBale._availableCount > 0) {
-            classifiedStock.push(processedBale);
+        while (low <= high) {
+            const mid = Math.floor((low + high) / 2);
+            if (feasible(mid)) {
+                best = mid;
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+        return best;
+    };
+
+    const buildRecipeForHorizon = (lots, horizon) => {
+        const total = lots.reduce((sum, l) => sum + l._availableCount, 0);
+        const candidates = lots.map((lot) => {
+            const ideal = (lot._availableCount / total) * blendSize;
+            const capacity = Math.floor(lot._availableCount / horizon);
+            const assigned = Math.min(Math.floor(ideal), capacity);
+            return {
+                lot,
+                idealShare: ideal,
+                capacity,
+                assigned,
+                remainder: ideal - Math.floor(ideal)
+            };
+        });
+
+        let assignedTotal = candidates.reduce((sum, c) => sum + c.assigned, 0);
+        let needed = blendSize - assignedTotal;
+
+        if (needed > 0) {
+            candidates.sort((a, b) => {
+                const slackA = a.capacity - a.assigned;
+                const slackB = b.capacity - b.assigned;
+                if (slackB !== slackA) return slackB - slackA;
+                return b.remainder - a.remainder;
+            });
+
+            let idx = 0;
+            while (needed > 0 && idx < candidates.length) {
+                const c = candidates[idx];
+                if (c.assigned < c.capacity) {
+                    c.assigned += 1;
+                    needed -= 1;
+                } else {
+                    idx += 1;
+                }
+                if (idx >= candidates.length && needed > 0) idx = 0;
+            }
+        }
+
+        if (needed > 0) return null;
+        return candidates.filter(c => c.assigned > 0);
+    };
+
+    while (remainingLots.length > 0 && iterations < MAX_ITERATIONS) {
+        iterations++;
+
+        const totalStock = remainingLots.reduce((sum, l) => sum + l._availableCount, 0);
+        if (totalStock < blendSize) break;
+
+        let blockDuration = findMaxHorizon(remainingLots);
+        if (blockDuration <= 0) break;
+
+        let activeRecipe = null;
+        let recipeFardos = null;
+
+        while (blockDuration > 0) {
+            const rawRecipe = buildRecipeForHorizon(remainingLots, blockDuration);
+            if (!rawRecipe) {
+                blockDuration -= 1;
+                continue;
+            }
+
+            // Fase de optimización de calidad: reasignar fardos de lotes de baja calidad
+            // a lotes de mejor calidad para acercarse a los targets (STR, LEN, MIC)
+            activeRecipe = optimizeRecipeQuality(rawRecipe, activeRules, supervisionSettings);
+
+            recipeFardos = [];
+            activeRecipe.forEach(item => {
+                for (let k = 0; k < item.assigned; k++) {
+                    recipeFardos.push({ ...item.lot });
+                }
+            });
+
+            // Solo validar hard caps (bales individuales) y dispersión de tolerancia.
+            // El target guía la optimización de calidad pero NO bloquea la generación.
+            const passesRules = validateRecipeAgainstRules(recipeFardos, activeRules, supervisionSettings, blendSize);
+            if (passesRules) break;
+
+            blockDuration -= 1;
+        }
+
+        if (!activeRecipe || !recipeFardos || blockDuration <= 0) break;
+
+        for (let i = 0; i < blockDuration; i++) {
+            const mezclaFardos = recipeFardos.map(f => ({ ...f }));
+
+            blends.push({
+                index: blendIndex++,
+                fardos: mezclaFardos
+            });
+        }
+
+        activeRecipe.forEach(item => {
+            const consumed = item.assigned * blockDuration;
+            item.lot._availableCount -= consumed;
+            item.lot._usedCount += consumed;
+        });
+
+        remainingLots = remainingLots.filter(l => l._availableCount > 0);
+    }
+
+    // 4. Agrupar
+    const groupedBlends = [];
+    if (blends.length > 0) {
+        let currentGroup = {
+            start: blends[0].index,
+            end: blends[0].index,
+            signature: getBlendSignature(blends[0].fardos),
+            fardos: blends[0].fardos
+        };
+
+        for (let i = 1; i < blends.length; i++) {
+            const blend = blends[i];
+            const signature = getBlendSignature(blend.fardos);
+            
+            if (signature === currentGroup.signature) {
+                currentGroup.end = blend.index;
+            } else {
+                groupedBlends.push({
+                    id: currentGroup.start === currentGroup.end ? `M${currentGroup.start}` : `M${currentGroup.start}-M${currentGroup.end}`,
+                    fardos: currentGroup.fardos
+                });
+                currentGroup = {
+                    start: blend.index,
+                    end: blend.index,
+                    signature: signature,
+                    fardos: blend.fardos
+                };
+            }
+        }
+        groupedBlends.push({
+            id: currentGroup.start === currentGroup.end ? `M${currentGroup.start}` : `M${currentGroup.start}-M${currentGroup.end}`,
+            fardos: currentGroup.fardos
+        });
+    }
+
+    return generateResult(classifiedStock, groupedBlends, rules, supervisionSettings);
+}
+
+/**
+ * Valida una receta contra las reglas activas.
+ * Solo verifica:
+ *  - hardCap: si algún fardo individual supera límites absolutos (red de seguridad; classifyStock ya excluye los críticos).
+ *  - tolerance: si la cantidad de fardos de categoría B supera el cupo de dispersión permitido.
+ * El 'target' (promedio deseado) NO bloquea la generación — guía la optimización de calidad,
+ * pero si el stock no permite alcanzarlo, el plan se genera igual con la mejor aproximación posible.
+ */
+function validateRecipeAgainstRules(recipeFardos, activeRules, supervisionSettings, blendSize) {
+    for (const rule of activeRules) {
+        const uiKey = rule.parametro === 'LEN' ? 'UHML' : (rule.parametro === '+b' ? 'PLUS_B' : rule.parametro);
+        const settings = supervisionSettings[uiKey];
+        if (!settings) continue;
+
+        const values = recipeFardos
+            .map(f => Number(f[uiKey]))
+            .filter(v => !Number.isNaN(v));
+
+        if (values.length === 0) continue;
+
+        // Hard cap individual (red de seguridad)
+        if (settings.hardCap) {
+            const maxAbs = toOptionalNumber(rule.limite_max_absoluto);
+            const minAbs = toOptionalNumber(rule.limite_min_absoluto);
+            const violatesHardCap = values.some(v => (maxAbs !== null && v > maxAbs) || (minAbs !== null && v < minAbs));
+            if (violatesHardCap) return false;
+        }
+
+        // Tolerancia: cupo de dispersión de lotes B
+        if (settings.tolerance) {
+            const minIdealPct = toOptionalNumber(rule.porcentaje_min_ideal);
+            if (minIdealPct !== null) {
+                const maxTolerancePct = 100 - minIdealPct;
+                const maxToleranceCount = Math.floor(blendSize * (maxTolerancePct / 100));
+                const toleranceCount = recipeFardos.filter(f =>
+                    f._category === 'B' &&
+                    Array.isArray(f._toleranceReasons) &&
+                    f._toleranceReasons.includes(rule.parametro)
+                ).length;
+                if (toleranceCount > maxToleranceCount) return false;
+            }
+        }
+        // NOTE: 'target' guía optimizeRecipeQuality; no bloquea generación.
+    }
+
+    return true;
+}
+
+/**
+ * Optimización de calidad de la receta (hill climbing).
+ * Reasigna fardos de lotes con peor calidad hacia lotes con mejor calidad
+ * para acercarse a los targets (STR >= x, LEN >= x, MIC >= x).
+ * Respeta las capacidades por horizonte.
+ */
+function optimizeRecipeQuality(candidates, activeRules, supervisionSettings) {
+    // Calcular promedio ponderado de una variable en la receta actual
+    const paramAvg = (cands, uiKey) => {
+        let sum = 0, count = 0;
+        cands.forEach(c => {
+            if (c.assigned <= 0) return;
+            const v = Number(c.lot[uiKey]);
+            if (!Number.isNaN(v)) { sum += v * c.assigned; count += c.assigned; }
+        });
+        return count > 0 ? sum / count : 0;
+    };
+
+    let improved = true;
+    let maxIter = candidates.length * 5;
+
+    while (improved && maxIter-- > 0) {
+        improved = false;
+
+        for (const rule of activeRules) {
+            const uiKey = rule.parametro === 'LEN' ? 'UHML' : (rule.parametro === '+b' ? 'PLUS_B' : rule.parametro);
+            const settings = supervisionSettings ? supervisionSettings[uiKey] : null;
+            if (!settings || !settings.target) continue;
+
+            const targetMin = toOptionalNumber(rule.valor_ideal_min);
+            const targetMax = toOptionalNumber(rule.promedio_objetivo_max);
+
+            const avg = paramAvg(candidates, uiKey);
+            const belowTarget = targetMin !== null && avg < targetMin;
+            const aboveTarget = targetMax !== null && avg > targetMax;
+
+            if (!belowTarget && !aboveTarget) continue;
+
+            // Lote de peor calidad con al menos 1 fardo asignado (candidato a reducir)
+            let worstIdx = -1;
+            let worstVal = belowTarget ? Infinity : -Infinity;
+            candidates.forEach((c, idx) => {
+                if (c.assigned <= 0) return;
+                const v = Number(c.lot[uiKey]);
+                if (Number.isNaN(v)) return;
+                if (belowTarget && v < worstVal) { worstVal = v; worstIdx = idx; }
+                if (aboveTarget && v > worstVal) { worstVal = v; worstIdx = idx; }
+            });
+            if (worstIdx === -1) continue;
+
+            // Lote de mejor calidad con capacidad disponible (candidato a aumentar)
+            let bestIdx = -1;
+            let bestVal = belowTarget ? -Infinity : Infinity;
+            candidates.forEach((c, idx) => {
+                if (idx === worstIdx) return;
+                if (c.assigned >= c.capacity) return; // sin margen de capacidad
+                const v = Number(c.lot[uiKey]);
+                if (Number.isNaN(v)) return;
+                // Solo vale si mejora respecto al peor
+                if (belowTarget && v > worstVal && v > bestVal) { bestVal = v; bestIdx = idx; }
+                if (aboveTarget && v < worstVal && v < bestVal) { bestVal = v; bestIdx = idx; }
+            });
+            if (bestIdx === -1) continue;
+
+            // Intercambio: quitar 1 del peor, dar 1 al mejor
+            candidates[worstIdx].assigned -= 1;
+            candidates[bestIdx].assigned += 1;
+            improved = true;
+            break; // reiniciar con el promedio actualizado
         }
     }
 
-    // 2. BLENDING (Estrategia de Reemplazo de Lote Completo)
+    return candidates.filter(c => c.assigned > 0);
+}
+
+// Helper para firma de mezcla (necesario moverlo a scope superior o duplicar si no es accesible)
+function getBlendSignature(blendFardos) {
+    const counts = {};
+    blendFardos.forEach(f => {
+        const key = `${f.PRODUTOR}_${f.LOTE}`;
+        counts[key] = (counts[key] || 0) + 1;
+    });
+    return Object.keys(counts).sort().map(k => `${k}:${counts[k]}`).join('|');
+}
+
+
+// =================================================================================================
+// ALGORITMO 1: ESTÁNDAR (ROUND ROBIN / ORIGINAL)
+// =================================================================================================
+function optimizeBlendStandard(stock, rules, supervisionSettings, blendSize) {
+    const classifiedStock = classifyStock(stock, rules, supervisionSettings);
+    
     const blends = [];
     let blendIndex = 1;
 
@@ -125,41 +376,41 @@ export function optimizeBlend(stock, rules, supervisionSettings, blendSize) {
         return totalCount > 0 ? totalVal / totalCount : 0;
     };
 
-    // Función auxiliar para verificar si podemos añadir un fardo Categoría B a la receta actual
-    const canAddToleranceBaleToRecipe = (bale, currentRecipeArr) => {
-        if (bale._category === 'A') return true; // Siempre podemos añadir A
+    const activeRules = rules.filter(r => {
+        const uiKey = r.parametro === 'LEN' ? 'UHML' : (r.parametro === '+b' ? 'PLUS_B' : r.parametro);
+        const s = supervisionSettings[uiKey];
+        return s && (s.target || s.hardCap || s.tolerance);
+    });
 
-        // Si es B, verificar restricciones de dispersión para cada regla que incumple
+    const canAddToleranceBaleToRecipe = (bale, currentRecipeArr) => {
+        if (bale._category === 'A') return true; 
+
         for (const param of bale._toleranceReasons) {
             const rule = activeRules.find(r => r.parametro === param);
             if (!rule) continue;
 
             const minIdealPct = Number(rule.porcentaje_min_ideal) || 100;
-            const maxTolerancePct = 100 - minIdealPct; // Ej. 100 - 80 = 20%
+            const maxTolerancePct = 100 - minIdealPct; 
             const maxToleranceCount = Math.floor(blendSize * (maxTolerancePct / 100));
 
-            // Contar cuántos fardos en la receta actual ya están en tolerancia para este parámetro
             const currentToleranceCount = currentRecipeArr.filter(b => b._category === 'B' && b._toleranceReasons.includes(param)).length;
 
             if (currentToleranceCount >= maxToleranceCount) {
-                return false; // Límite alcanzado para este parámetro
+                return false; 
             }
         }
         return true;
     };
 
-    // Función para construir una receta desde cero (Round Robin priorizando lotes ancla)
-    const buildRecipe = () => {
-        let availableLots = classifiedStock.filter(b => b._availableCount > 0);
+    const buildRecipe = (availableLots) => {
         if (availableLots.length === 0) return null;
         
-        // Prioridad de Lotes 'Ancla': Ordenar por stock disponible descendente
         availableLots.sort((a, b) => b._availableCount - a._availableCount);
 
         let recipe = [];
         let lotIndex = 0;
         let attempts = 0;
-        let tempCounts = new Map(); // Para no exceder el stock disponible durante la creación
+        let tempCounts = new Map(); 
 
         while (recipe.length < blendSize && attempts < availableLots.length) {
             const lot = availableLots[lotIndex];
@@ -178,34 +429,28 @@ export function optimizeBlend(stock, rules, supervisionSettings, blendSize) {
             lotIndex = (lotIndex + 1) % availableLots.length;
         }
 
-        // OPTIMIZACIÓN DE PROMEDIOS (NUEVO)
+        // OPTIMIZACIÓN DE PROMEDIOS
         if (recipe.length === blendSize) {
             let improvementMade = true;
             let iterations = 0;
-            const maxIterations = blendSize * 2; // Evitar bucles infinitos
+            const maxIterations = blendSize * 2; 
 
             while (improvementMade && iterations < maxIterations) {
                 improvementMade = false;
                 iterations++;
 
-                // Verificar cada regla activa para promedios
                 for (const rule of activeRules) {
                     const uiKey = rule.parametro === 'LEN' ? 'UHML' : (rule.parametro === '+b' ? 'PLUS_B' : rule.parametro);
                     
-                    // Obtener objetivos de promedio
-                    // Usamos valor_ideal_min como Objetivo Mínimo Promedio (según UI "Promedio Objetivo")
                     const targetMin = Number(rule.valor_ideal_min); 
-                    const targetMax = Number(rule.promedio_objetivo_max); // Nuevo campo en DB
+                    const targetMax = Number(rule.promedio_objetivo_max);
 
                     const currentAvg = calculateRecipeAverage(recipe, uiKey);
 
-                    // Casos donde el promedio falla
                     const failMin = !isNaN(targetMin) && currentAvg < targetMin;
                     const failMax = !isNaN(targetMax) && currentAvg > targetMax;
 
                     if (failMin || failMax) {
-                        // Buscar el "peor" fardo en la receta para reemplazar
-                        // Si falla min, buscamos el valor más bajo. Si falla max, el más alto.
                         let worstBaleIndex = -1;
                         let worstValue = failMin ? Infinity : -Infinity;
 
@@ -222,59 +467,39 @@ export function optimizeBlend(stock, rules, supervisionSettings, blendSize) {
 
                         if (worstBaleIndex === -1) continue;
 
-                        // Buscar un mejor candidato en el stock disponible (que no esté en receta actual?? No, usamos tempCounts para trackear uso interno)
-                        // IMPORTANTE: availableLots contiene todos los lotes con _availableCount global > 0.
-                        // Pero dentro de buildRecipe estamos simulando consumo con tempCounts.
-                        
-                        // Candidatos: Lotes con stock disponible (tempCounts < _availableCount)
-                        // Y que mejoren el promedio (val > worstValue si failMin, val < worstValue si failMax)
                         const candidates = availableLots.filter(l => {
                             const used = tempCounts.get(l) || 0;
-                            if (used >= l._availableCount) return false; // Sin stock
-
-                            // Verificar reglas de tolerancia si es B
-                            // Nota: Al reemplazar, la receta cambia, así que habría que re-verificar dispersion.
-                            // Simplificación: Solo permitimos si cumple canAddTolerance (considerando que sacamos uno).
-                            // Pero canAddTolerance usa la receta actual. Si sacamos uno, la cuenta baja.
-                            
+                            if (used >= l._availableCount) return false; 
+                           
                             const val = Number(l[uiKey]);
-                            if (failMin && val <= worstValue) return false; // No mejora
-                            if (failMax && val >= worstValue) return false; // No mejora
+                            if (failMin && val <= worstValue) return false; 
+                            if (failMax && val >= worstValue) return false; 
 
                             return true;
                         });
 
-                        // Ordenar candidatos por "mejor impacto" (mayor diferencia)
                         candidates.sort((a, b) => {
                             const valA = Number(a[uiKey]);
                             const valB = Number(b[uiKey]);
-                            if (failMin) return valB - valA; // Mayor es mejor
-                            return valA - valB; // Menor es mejor
+                            if (failMin) return valB - valA; 
+                            return valA - valB; 
                         });
 
-                        // Intentar swap
                         for (const candidate of candidates) {
-                            // Validar compatibilidad completa (Tolerancia en otras reglas)
-                            // Clonamos receta temporalmente sin el worstBale
                             const tempRecipe = [...recipe];
                             tempRecipe.splice(worstBaleIndex, 1);
 
                             if (candidate._category === 'A' || canAddToleranceBaleToRecipe(candidate, tempRecipe)) {
-                                // Realizar Swap
                                 const oldBale = recipe[worstBaleIndex];
-                                
-                                // Actualizar contadores
                                 tempCounts.set(oldBale, tempCounts.get(oldBale) - 1);
                                 tempCounts.set(candidate, (tempCounts.get(candidate) || 0) + 1);
-
-                                // Actualizar receta
                                 recipe[worstBaleIndex] = { ...candidate };
                                 improvementMade = true;
-                                break; // Salir al siguiente loop de mejora
+                                break; 
                             }
                         }
                     }
-                    if (improvementMade) break; // Reiniciar chequeo de reglas desde 0
+                    if (improvementMade) break; 
                 }
             }
         }
@@ -282,18 +507,16 @@ export function optimizeBlend(stock, rules, supervisionSettings, blendSize) {
         return recipe.length === blendSize ? recipe : null;
     };
 
-    let currentRecipe = buildRecipe();
+    let availableLots = classifiedStock.filter(b => b._availableCount > 0);
+    let currentRecipe = buildRecipe(availableLots);
 
     while (currentRecipe) {
-        // Contar cuántos fardos de cada lote hay en la receta actual
         const recipeCounts = new Map();
         currentRecipe.forEach(f => {
-            // Usar una clave única para identificar el lote original
             const origLot = classifiedStock.find(l => l.LOTE === f.LOTE && l.PRODUTOR === f.PRODUTOR);
             recipeCounts.set(origLot, (recipeCounts.get(origLot) || 0) + 1);
         });
 
-        // Calcular cuántas veces podemos repetir esta receta exacta
         let maxRepeats = Infinity;
         let depletedLots = [];
 
@@ -309,7 +532,6 @@ export function optimizeBlend(stock, rules, supervisionSettings, blendSize) {
 
         if (maxRepeats === 0 || maxRepeats === Infinity) break;
 
-        // Generar las mezclas idénticas
         for (let i = 0; i < maxRepeats; i++) {
             blends.push({
                 index: blendIndex++,
@@ -317,81 +539,17 @@ export function optimizeBlend(stock, rules, supervisionSettings, blendSize) {
             });
         }
 
-        // Descontar el stock utilizado
         for (const [lot, countInRecipe] of recipeCounts.entries()) {
             const totalUsed = countInRecipe * maxRepeats;
             lot._availableCount -= totalUsed;
-            lot._usedCount += totalUsed;
+            lot._usedCount += totalUsed; // Track used count
         }
 
-        // Lógica de Agotamiento (Swap): Reemplazar lotes agotados
-        let swapSuccessful = true;
-        let nextRecipe = currentRecipe.map(b => ({ ...b })); // Clonar para modificar
-
-        for (const depletedLot of depletedLots) {
-            const neededCount = recipeCounts.get(depletedLot);
-            
-            // Buscar candidatos para reemplazo (mismo categoría, con stock suficiente, no en la receta actual)
-            let candidates = classifiedStock.filter(l => 
-                l._availableCount >= neededCount && 
-                l._category === depletedLot._category &&
-                !recipeCounts.has(l)
-            );
-            
-            // Ordenar candidatos por stock (priorizar nuevos anclas)
-            candidates.sort((a, b) => b._availableCount - a._availableCount);
-
-            let replacement = null;
-            for (const candidate of candidates) {
-                // Verificar si el candidato cumple las reglas si es B
-                let testRecipe = nextRecipe.filter(f => f.LOTE !== depletedLot.LOTE || f.PRODUTOR !== depletedLot.PRODUTOR);
-                let isValid = true;
-                if (candidate._category === 'B') {
-                    for(let i=0; i<neededCount; i++) {
-                        if (!canAddToleranceBaleToRecipe(candidate, testRecipe)) {
-                            isValid = false;
-                            break;
-                        }
-                        testRecipe.push({...candidate});
-                    }
-                }
-                if (isValid) {
-                    replacement = candidate;
-                    break;
-                }
-            }
-
-            if (replacement) {
-                // Realizar el Swap en nextRecipe
-                let replacedCount = 0;
-                for (let i = 0; i < nextRecipe.length; i++) {
-                    if (nextRecipe[i].LOTE === depletedLot.LOTE && nextRecipe[i].PRODUTOR === depletedLot.PRODUTOR) {
-                        nextRecipe[i] = { ...replacement };
-                        replacedCount++;
-                        if (replacedCount === neededCount) break;
-                    }
-                }
-                // Actualizar recipeCounts para el siguiente depletedLot en este mismo ciclo
-                recipeCounts.delete(depletedLot);
-                recipeCounts.set(replacement, neededCount);
-            } else {
-                // Si no encontramos un reemplazo 1:1 directo, fallamos el swap
-                swapSuccessful = false;
-                break;
-            }
-        }
-
-        if (swapSuccessful) {
-            currentRecipe = nextRecipe;
-        } else {
-            // Si no se pudo hacer swap (ej. no hay un lote con suficientes fardos), 
-            // recalculamos una nueva receta desde cero con el stock restante.
-            currentRecipe = buildRecipe();
-        }
+        availableLots = classifiedStock.filter(b => b._availableCount > 0);
+        currentRecipe = buildRecipe(availableLots);
     }
 
-    // 2.5 AGRUPACIÓN POR ESTABILIDAD DE RECETA
-    // Agrupar mezclas consecutivas que sean exactamente iguales
+    // Agrupación
     const getBlendSignature = (blendFardos) => {
         const counts = {};
         blendFardos.forEach(f => {
@@ -435,56 +593,119 @@ export function optimizeBlend(stock, rules, supervisionSettings, blendSize) {
         });
     }
 
-    // 3. OUTPUT: Generar Reporte de Remanentes
-    const unusedStock = [];
-    
-    // Añadir los rechazados por Hard Cap
-    rejectedStock.forEach(b => {
-        unusedStock.push({
-            PRODUTOR: b.PRODUTOR,
-            LOTE: b.LOTE,
-            MIC: b.MIC,
-            STR: b.STR,
-            LEN: b.UHML || b.LEN,
-            Fardos: Number(b.QTDE_ESTOQUE),
-            Peso: Number(b.PESO),
-            Motivo: b._rejectReason
-        });
+    return generateResult(classifiedStock, groupedBlends, rules, supervisionSettings);
+}
+
+// =================================================================================================
+// HELPERS COMUNES
+// =================================================================================================
+
+function classifyStock(stock, rules, supervisionSettings) {
+    const activeRules = rules.filter(r => {
+        const uiKey = r.parametro === 'LEN' ? 'UHML' : (r.parametro === '+b' ? 'PLUS_B' : r.parametro);
+        const s = supervisionSettings[uiKey];
+        return s && (s.target || s.hardCap || s.tolerance);
     });
 
-    // Añadir los remanentes (Categoría A o B que sobraron)
-    classifiedStock.forEach(b => {
-        if (b._availableCount > 0) {
-            // Calcular peso proporcional sobrante
-            const pesoUnitario = Number(b.PESO) / (Number(b.QTDE_ESTOQUE) || 1);
-            const pesoSobrante = pesoUnitario * b._availableCount;
+    return stock.map(bale => {
+        let isRejected = false;
+        let rejectReason = '';
+        let isTolerance = false;
+        const toleranceReasons = [];
 
-            let motivo = 'Sobrante de stock.';
-            if (b._category === 'B') {
-                motivo = 'Agotamiento de fibra de soporte (Límite de dispersión alcanzado).';
+        for (const rule of activeRules) {
+            const uiKey = rule.parametro === 'LEN' ? 'UHML' : (rule.parametro === '+b' ? 'PLUS_B' : rule.parametro);
+            const settings = supervisionSettings[uiKey];
+            if (!settings) continue;
+
+            const val = Number(bale[uiKey]);
+            if (isNaN(val)) continue;
+
+            if (settings.hardCap) {
+                const maxAbs = toOptionalNumber(rule.limite_max_absoluto);
+                const minAbs = toOptionalNumber(rule.limite_min_absoluto);
+                if (maxAbs !== null && val > maxAbs) {
+                    isRejected = true; rejectReason = `${rule.parametro} > Max ${maxAbs}`; break;
+                }
+                if (minAbs !== null && val < minAbs) {
+                    isRejected = true; rejectReason = `${rule.parametro} < Min ${minAbs}`; break;
+                }
             }
 
-            unusedStock.push({
+            if (settings.tolerance) {
+                const tolMin = toOptionalNumber(rule.rango_tol_min);
+                const tolMax = toOptionalNumber(rule.rango_tol_max);
+                if (tolMin !== null && tolMax !== null) {
+                    if (val >= tolMin && val <= tolMax) {
+                        isTolerance = true; toleranceReasons.push(rule.parametro);
+                    }
+                }
+            }
+        }
+
+        return {
+            ...bale,
+            _category: isRejected ? 'C' : (isTolerance ? 'B' : 'A'),
+            _rejectReason: rejectReason,
+            _toleranceReasons: toleranceReasons,
+            _usedCount: 0,
+            _availableCount: Number(bale.QTDE_ESTOQUE) || 0
+        };
+    });
+}
+
+function generateEmptyResult(stock, message) {
+    return {
+        success: true, // Frontend expects success=true to render, even if empty plan
+        plan: [],
+        columnasMezcla: [],
+        remanentes: stock.map(b => ({
+            PRODUTOR: b.PRODUTOR,
+            LOTE: b.LOTE,
+            Fardos: b._availableCount, // Puede ser 0 o lo que había
+            Motivo: b._rejectReason || message
+        })),
+        estadisticas: {}
+    };
+}
+
+function generateResult(classifiedStock, groupedBlends, rules, supervisionSettings) {
+    // Regenerar activeRules para estadísticas (podría pasarse como argumento para no recalcular)
+    const activeRules = rules.filter(r => {
+        const uiKey = r.parametro === 'LEN' ? 'UHML' : (r.parametro === '+b' ? 'PLUS_B' : r.parametro);
+        const s = supervisionSettings[uiKey];
+        return s && (s.target || s.hardCap || s.tolerance);
+    });
+
+    // Generar Reporte de Remanentes
+    const unusedStock = [];
+    classifiedStock.forEach(b => {
+        // Incluye los C (rechazados) y los A/B que sobraron (_availableCount > 0)
+        let motivo = '';
+        if (b._category === 'C') motivo = b._rejectReason;
+        else if (b._availableCount > 0) {
+             motivo = b._category === 'B' ? 'Sobrante (Tolerancia/Exceso)' : 'Sobrante';
+        }
+
+        // Si _usedCount > 0, significa que se usó parcialmente
+        // Si _availableCount > 0, significa que sobró
+        if (b._category === 'C' || b._availableCount > 0) {
+             unusedStock.push({
                 PRODUTOR: b.PRODUTOR,
                 LOTE: b.LOTE,
                 MIC: b.MIC,
                 STR: b.STR,
                 LEN: b.UHML || b.LEN,
-                Fardos: b._availableCount,
-                Peso: pesoSobrante,
+                Fardos: b._category === 'C' ? Number(b.QTDE_ESTOQUE) : b._availableCount,
+                Peso: (Number(b.PESO) / (Number(b.QTDE_ESTOQUE)||1)) * (b._category === 'C' ? Number(b.QTDE_ESTOQUE) : b._availableCount),
                 Motivo: motivo
             });
         }
     });
 
-    // 4. OUTPUT: Formatear Plan de Mezclas para la UI
-    // Agrupar por Lote para mostrar filas consolidadas
     const planRows = {};
-    
     groupedBlends.forEach((blend, bIndex) => {
         const blendId = blend.id;
-        
-        // Contar fardos por lote en esta mezcla
         const loteCounts = {};
         blend.fardos.forEach(f => {
             const key = `${f.PRODUTOR}_${f.LOTE}`;
@@ -492,13 +713,12 @@ export function optimizeBlend(stock, rules, supervisionSettings, blendSize) {
             loteCounts[key].count++;
         });
 
-        // Añadir a las filas del plan
         Object.values(loteCounts).forEach(({ count, ref }) => {
             const key = `${ref.PRODUTOR}_${ref.LOTE}`;
             if (!planRows[key]) {
                 planRows[key] = {
                     PRODUTOR: ref.PRODUTOR,
-                    Estado: ref._category === 'A' ? 'USO' : 'TOLER.',
+                    Estado: ref._category === 'A' ? 'USO' : (ref._category === 'B' ? 'TOLER.' : 'RECH.'),
                     LOTE: ref.LOTE,
                     MIC: ref.MIC,
                     STR: ref.STR,
@@ -510,16 +730,21 @@ export function optimizeBlend(stock, rules, supervisionSettings, blendSize) {
         });
     });
 
+    // Asegurarse de que planRows sea un array
+    const planArray = Object.values(planRows);
+    
+    // Ordenar por Productor y Lote 
+    planArray.sort((a,b) => (a.PRODUTOR > b.PRODUTOR) ? 1 : ((b.PRODUTOR > a.PRODUTOR) ? -1 : 0));
+
     return {
         success: true,
-        plan: Object.values(planRows),
+        plan: planArray,
         columnasMezcla: groupedBlends.map(b => b.id),
         remanentes: unusedStock,
         estadisticas: calcularEstadisticas(groupedBlends, activeRules)
     };
 }
 
-// Función auxiliar para calcular el pie de tabla
 function calcularEstadisticas(blends, activeRules) {
     const stats = {};
     
@@ -536,12 +761,10 @@ function calcularEstadisticas(blends, activeRules) {
             variables: {}
         };
 
-        // Calcular promedios para variables clave (MIC, STR, LEN)
         ['MIC', 'STR', 'UHML'].forEach(vKey => {
             const ruleParam = vKey === 'UHML' ? 'LEN' : vKey;
             const rule = activeRules.find(r => r.parametro === ruleParam);
             
-            // Promedio general ponderado por peso
             const sumPonderada = fardos.reduce((s, f) => s + ((Number(f[vKey]) || 0) * (Number(f.PESO) / (Number(f.QTDE_ESTOQUE)||1))), 0);
             const prom = pesoTotal > 0 ? sumPonderada / pesoTotal : 0;
             
@@ -549,12 +772,10 @@ function calcularEstadisticas(blends, activeRules) {
                 promedioGeneral: prom
             };
 
-            // Si hay regla, calcular desglose 90/10
             if (rule) {
                 const fardosA = fardos.filter(f => f._category === 'A' || !f._toleranceReasons.includes(ruleParam));
                 const fardosB = fardos.filter(f => f._category === 'B' && f._toleranceReasons.includes(ruleParam));
                 
-                // Calcular promedios ponderados por peso para el desglose
                 const sumPesoA = fardosA.reduce((s, f) => s + (Number(f.PESO) / (Number(f.QTDE_ESTOQUE)||1)), 0);
                 const sumPesoB = fardosB.reduce((s, f) => s + (Number(f.PESO) / (Number(f.QTDE_ESTOQUE)||1)), 0);
 

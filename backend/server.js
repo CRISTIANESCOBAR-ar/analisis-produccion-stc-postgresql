@@ -492,13 +492,13 @@ app.get('/api/inventory/cotton-bales', async (req, res) => {
 
 app.post('/api/inventory/blendomat', async (req, res) => {
   try {
-    const { stock, rules, supervisionSettings, blendSize } = req.body;
+    const { stock, rules, supervisionSettings, blendSize, algorithm } = req.body;
 
     if (!stock || !rules || !supervisionSettings || !blendSize) {
       return res.status(400).json({ error: 'Faltan parámetros requeridos (stock, rules, supervisionSettings, blendSize)' });
     }
 
-    const result = optimizeBlend(stock, rules, supervisionSettings, blendSize);
+    const result = optimizeBlend(stock, rules, supervisionSettings, blendSize, algorithm);
     res.json(result);
   } catch (err) {
     console.error('Error en BlendomatOptimizer:', err);
