@@ -19,19 +19,112 @@ export function optimizeBlend(stock, rules, supervisionSettings, blendSize, algo
     }
 
     // Despachador de algoritmos
+    let result;
     if (algorithm === 'stability') {
-        return optimizeBlendStability(stock, rules, supervisionSettings, blendSize, false);
+        result = optimizeBlendStability(stock, rules, supervisionSettings, blendSize, false);
     } else if (algorithm === 'stability-strict') {
-        return optimizeBlendStability(stock, rules, supervisionSettings, blendSize, true);
+        result = optimizeBlendStability(stock, rules, supervisionSettings, blendSize, true);
     } else {
-        return optimizeBlendStandard(stock, rules, supervisionSettings, blendSize);
+        result = optimizeBlendStandard(stock, rules, supervisionSettings, blendSize);
     }
+
+    assertFeasibleBlendPlan(result);
+    return result;
 }
 
 function toOptionalNumber(value) {
     if (value === null || value === undefined || value === '') return null;
     const n = Number(value);
     return Number.isNaN(n) ? null : n;
+}
+
+function summarizeActiveRules(activeRules) {
+    if (!Array.isArray(activeRules) || activeRules.length === 0) return 'Sin reglas activas';
+    return activeRules.map(r => r.parametro).join(', ');
+}
+
+function buildNoFeasibleBlockDiagnostics(blendSize, activeRules, specificReason = '') {
+    const details = [
+        `Fardos solicitados por mezcla: ${blendSize}.`,
+        `Reglas activas: ${summarizeActiveRules(activeRules)}.`
+    ];
+
+    if (specificReason) {
+        details.push(specificReason);
+    }
+
+    return {
+        code: 'NO_FEASIBLE_BLOCK',
+        message: 'No se pudo armar ningún bloque con el stock y las reglas activas.',
+        details
+    };
+}
+
+function getMixesFromBlockId(blockId) {
+    if (!blockId || typeof blockId !== 'string') return 1;
+
+    const singleMatch = blockId.match(/^M(\d+)$/);
+    if (singleMatch) return 1;
+
+    const rangeMatch = blockId.match(/^M(\d+)-M(\d+)$/);
+    if (!rangeMatch) return 1;
+
+    const start = Number(rangeMatch[1]);
+    const end = Number(rangeMatch[2]);
+    if (Number.isNaN(start) || Number.isNaN(end) || end < start) return 1;
+
+    return end - start + 1;
+}
+
+function assertFeasibleBlendPlan(result) {
+    if (!result || !result.success) return;
+
+    const planRows = Array.isArray(result.plan) ? result.plan : [];
+    const blockIds = Array.isArray(result.columnasMezcla) ? result.columnasMezcla : [];
+
+    if (planRows.length === 0 || blockIds.length === 0) return;
+
+    const issues = [];
+
+    planRows.forEach((row) => {
+        const stock = Number(row?.Stock);
+        if (Number.isNaN(stock)) return;
+
+        let remaining = stock;
+        let projectedUsed = 0;
+
+        for (const blockId of blockIds) {
+            const perMixCount = Number(row?.mezclas?.[blockId]) || 0;
+            const mixesFromStats = Number(result?.estadisticas?.[blockId]?.mezclasBloque);
+            const mixesCount = (!Number.isNaN(mixesFromStats) && mixesFromStats > 0)
+                ? mixesFromStats
+                : getMixesFromBlockId(blockId);
+
+            const consumedInBlock = perMixCount * mixesCount;
+            projectedUsed += consumedInBlock;
+            remaining -= consumedInBlock;
+
+            if (remaining < 0) {
+                issues.push(`Sobreconsumo en ${row.PRODUTOR}/${row.LOTE} al bloque ${blockId} (S.Act=${remaining}).`);
+                break;
+            }
+        }
+
+        const reportedUsed = Number(row?.Usados);
+        if (!Number.isNaN(reportedUsed) && Math.round(projectedUsed) !== Math.round(reportedUsed)) {
+            issues.push(`Inconsistencia de usados en ${row.PRODUTOR}/${row.LOTE}: proyectado ${projectedUsed}, reportado ${reportedUsed}.`);
+        }
+
+        const reportedRemaining = Number(row?.Sobrante);
+        if (!Number.isNaN(reportedRemaining) && Math.round(remaining) !== Math.round(reportedRemaining)) {
+            issues.push(`Inconsistencia de sobrante en ${row.PRODUTOR}/${row.LOTE}: proyectado ${remaining}, reportado ${reportedRemaining}.`);
+        }
+    });
+
+    if (issues.length > 0) {
+        const details = issues.slice(0, 3).join(' | ');
+        throw new Error(`Plan de mezcla no realizable. ${details}`);
+    }
 }
 
 // =================================================================================================
@@ -53,7 +146,12 @@ function optimizeBlendStability(stock, rules, supervisionSettings, blendSize, en
     const availableLots = classifiedStock.filter(b => b._category !== 'C' && b._availableCount > 0);
     
     if (availableLots.length === 0) {
-        return generateEmptyResult(classifiedStock, "No hay stock válido disponible.");
+        const diagnostics = {
+            code: 'NO_VALID_STOCK',
+            message: 'No hay stock válido disponible para armar mezclas.',
+            details: ['Todos los lotes fueron rechazados por límites absolutos o no tienen disponibilidad.']
+        };
+        return generateEmptyResult(classifiedStock, 'No hay stock válido disponible.', diagnostics);
     }
 
     const blends = [];
@@ -62,6 +160,7 @@ function optimizeBlendStability(stock, rules, supervisionSettings, blendSize, en
     let iterations = 0;
     const MAX_ITERATIONS = 100;
     let remainingLots = [...availableLots];
+    let stopReason = '';
 
     const findMaxHorizon = (lots) => {
         const total = lots.reduce((sum, l) => sum + l._availableCount, 0);
@@ -223,6 +322,7 @@ function optimizeBlendStability(stock, rules, supervisionSettings, blendSize, en
         while (blockDuration > 0) {
             const rawRecipe = buildRecipeForHorizon(remainingLots, blockDuration);
             if (!rawRecipe) {
+                stopReason = `Con horizonte N=${blockDuration} no hay capacidad suficiente para completar ${blendSize} fardos por mezcla.`;
                 blockDuration -= 1;
                 continue;
             }
@@ -237,6 +337,7 @@ function optimizeBlendStability(stock, rules, supervisionSettings, blendSize, en
             if (enforceToleranceCap) {
                 const capped = capToleranceInRecipe(rawRecipe);
                 if (!capped) {
+                    stopReason = `Con GB + Norma, el cupo de tolerancia no puede cumplirse para N=${blockDuration} con el stock actual.`;
                     blockDuration -= 1;
                     continue;
                 }
@@ -255,8 +356,10 @@ function optimizeBlendStability(stock, rules, supervisionSettings, blendSize, en
             //   de cumplir sin excluir stock valido. Tolerancia aparece como aviso en el resultado.
             // enforceToleranceCap=true (Golden Batch estricto): tambien valida cupo % B.
             //   N resultante puede ser menor, pero el plan cumple las reglas de mezcla.
-            const passesRules = validateRecipeAgainstRules(recipeFardos, activeRules, supervisionSettings, blendSize, !enforceToleranceCap);
-            if (passesRules) break;
+            const validationFailure = getRecipeValidationFailure(recipeFardos, activeRules, supervisionSettings, blendSize, !enforceToleranceCap);
+            if (!validationFailure) break;
+
+            stopReason = validationFailure;
 
             blockDuration -= 1;
         }
@@ -318,7 +421,12 @@ function optimizeBlendStability(stock, rules, supervisionSettings, blendSize, en
         });
     }
 
-    return generateResult(classifiedStock, groupedBlends, rules, supervisionSettings);
+    if (groupedBlends.length === 0) {
+        const diagnostics = buildNoFeasibleBlockDiagnostics(blendSize, activeRules, stopReason);
+        return generateEmptyResult(classifiedStock, diagnostics.message, diagnostics);
+    }
+
+    return generateResult(classifiedStock, groupedBlends, rules, supervisionSettings, null);
 }
 
 /**
@@ -330,6 +438,10 @@ function optimizeBlendStability(stock, rules, supervisionSettings, blendSize, en
  * El 'target' nunca bloquea generación en ningún modo.
  */
 function validateRecipeAgainstRules(recipeFardos, activeRules, supervisionSettings, blendSize, hardCapOnly = false) {
+    return getRecipeValidationFailure(recipeFardos, activeRules, supervisionSettings, blendSize, hardCapOnly) === null;
+}
+
+function getRecipeValidationFailure(recipeFardos, activeRules, supervisionSettings, blendSize, hardCapOnly = false) {
     for (const rule of activeRules) {
         const uiKey = rule.parametro === 'LEN' ? 'UHML' : (rule.parametro === '+b' ? 'PLUS_B' : rule.parametro);
         const settings = supervisionSettings[uiKey];
@@ -346,7 +458,9 @@ function validateRecipeAgainstRules(recipeFardos, activeRules, supervisionSettin
             const maxAbs = toOptionalNumber(rule.limite_max_absoluto);
             const minAbs = toOptionalNumber(rule.limite_min_absoluto);
             const violatesHardCap = values.some(v => (maxAbs !== null && v > maxAbs) || (minAbs !== null && v < minAbs));
-            if (violatesHardCap) return false;
+            if (violatesHardCap) {
+                return `La regla hard cap de ${rule.parametro} no se puede cumplir con la receta propuesta.`;
+            }
         }
 
         // Tolerancia: cupo de dispersión de lotes B
@@ -362,13 +476,15 @@ function validateRecipeAgainstRules(recipeFardos, activeRules, supervisionSettin
                     Array.isArray(f._toleranceReasons) &&
                     f._toleranceReasons.includes(rule.parametro)
                 ).length;
-                if (toleranceCount > maxToleranceCount) return false;
+                if (toleranceCount > maxToleranceCount) {
+                    return `El cupo de tolerancia de ${rule.parametro} es insuficiente (${toleranceCount}/${maxToleranceCount}) para completar la mezcla.`;
+                }
             }
         }
         // NOTE: 'target' no bloquea generación en ningún modo.
     }
 
-    return true;
+    return null;
 }
 
 /**
@@ -699,7 +815,16 @@ function optimizeBlendStandard(stock, rules, supervisionSettings, blendSize) {
         });
     }
 
-    return generateResult(classifiedStock, groupedBlends, rules, supervisionSettings);
+    if (groupedBlends.length === 0) {
+        const diagnostics = buildNoFeasibleBlockDiagnostics(
+            blendSize,
+            activeRules,
+            'No se encontró una receta Round Robin que cumpla simultáneamente disponibilidad y límites activos.'
+        );
+        return generateEmptyResult(classifiedStock, diagnostics.message, diagnostics);
+    }
+
+    return generateResult(classifiedStock, groupedBlends, rules, supervisionSettings, null);
 }
 
 // =================================================================================================
@@ -760,10 +885,12 @@ function classifyStock(stock, rules, supervisionSettings) {
     });
 }
 
-function generateEmptyResult(stock, message) {
+function generateEmptyResult(stock, message, diagnostics = null) {
+    const plan = buildFullStockPlanRows(stock);
+
     return {
         success: true, // Frontend expects success=true to render, even if empty plan
-        plan: [],
+        plan,
         columnasMezcla: [],
         remanentes: stock.map(b => ({
             PRODUTOR: b.PRODUTOR,
@@ -771,11 +898,50 @@ function generateEmptyResult(stock, message) {
             Fardos: b._availableCount, // Puede ser 0 o lo que había
             Motivo: b._rejectReason || message
         })),
-        estadisticas: {}
+        estadisticas: {},
+        diagnostics
     };
 }
 
-function generateResult(classifiedStock, groupedBlends, rules, supervisionSettings) {
+function getEstadoLabelFromLot(lot) {
+    if (lot._category === 'C') return 'RECH.';
+    if (Number(lot._usedCount) > 0) return lot._category === 'B' ? 'TOLER.' : 'USO';
+    return 'NO USO';
+}
+
+function getMotivoLogisticoFromLot(lot) {
+    if (lot._category === 'C') {
+        return lot._rejectReason || 'Rechazado por límites absolutos';
+    }
+
+    if (Number(lot._usedCount) > 0) {
+        return '';
+    }
+
+    if (lot._category === 'B') {
+        return 'No usado (tolerancia/exceso)';
+    }
+
+    return 'No usado en ninguna mezcla';
+}
+
+function buildFullStockPlanRows(classifiedStock) {
+    return classifiedStock.map(lot => ({
+        PRODUTOR: lot.PRODUTOR,
+        Estado: getEstadoLabelFromLot(lot),
+        LOTE: lot.LOTE,
+        Stock: Number(lot.QTDE_ESTOQUE) || 0,
+        Usados: Number(lot._usedCount) || 0,
+        Sobrante: Number(lot._availableCount) || 0,
+        MIC: lot.MIC,
+        STR: lot.STR,
+        LEN: lot.UHML || lot.LEN,
+        MotivoLogistico: getMotivoLogisticoFromLot(lot),
+        mezclas: {}
+    }));
+}
+
+    function generateResult(classifiedStock, groupedBlends, rules, supervisionSettings, diagnostics = null) {
     // Regenerar activeRules para estadísticas (podría pasarse como argumento para no recalcular)
     const activeRules = rules.filter(r => {
         const uiKey = r.parametro === 'LEN' ? 'UHML' : (r.parametro === '+b' ? 'PLUS_B' : r.parametro);
@@ -809,13 +975,13 @@ function generateResult(classifiedStock, groupedBlends, rules, supervisionSettin
         }
     });
 
-    const lotStateMap = {};
-    classifiedStock.forEach(lot => {
-        const key = `${lot.PRODUTOR}_${lot.LOTE}`;
-        lotStateMap[key] = lot;
+    const planArray = buildFullStockPlanRows(classifiedStock);
+    const planRowsMap = new Map();
+    planArray.forEach(row => {
+        const key = `${row.PRODUTOR}_${row.LOTE}`;
+        planRowsMap.set(key, row);
     });
 
-    const planRows = {};
     groupedBlends.forEach((blend, bIndex) => {
         const blendId = blend.id;
         const loteCounts = {};
@@ -827,65 +993,38 @@ function generateResult(classifiedStock, groupedBlends, rules, supervisionSettin
 
         Object.values(loteCounts).forEach(({ count, ref }) => {
             const key = `${ref.PRODUTOR}_${ref.LOTE}`;
-            if (!planRows[key]) {
-                const lotState = lotStateMap[key] || {};
-                planRows[key] = {
-                    PRODUTOR: ref.PRODUTOR,
-                    Estado: ref._category === 'A' ? 'USO' : (ref._category === 'B' ? 'TOLER.' : 'RECH.'),
-                    LOTE: ref.LOTE,
-                    Stock: Number(lotState.QTDE_ESTOQUE) || 0,
-                    Usados: Number(lotState._usedCount) || 0,
-                    Sobrante: Number(lotState._availableCount) || 0,
-                    MIC: ref.MIC,
-                    STR: ref.STR,
-                    LEN: ref.UHML || ref.LEN,
-                    mezclas: {}
-                };
-            }
-            planRows[key].mezclas[blendId] = count;
+            const row = planRowsMap.get(key);
+            if (!row) return;
+            row.mezclas[blendId] = count;
         });
     });
-
-    // Asegurarse de que planRows sea un array
-    const planArray = Object.values(planRows);
     
     // Ordenar por Productor y Lote 
-    planArray.sort((a,b) => (a.PRODUTOR > b.PRODUTOR) ? 1 : ((b.PRODUTOR > a.PRODUTOR) ? -1 : 0));
+    planArray.sort((a, b) => {
+        const producerCmp = `${a.PRODUTOR || ''}`.localeCompare(`${b.PRODUTOR || ''}`, 'es', { sensitivity: 'base', numeric: true });
+        if (producerCmp !== 0) return producerCmp;
+        return `${a.LOTE || ''}`.localeCompare(`${b.LOTE || ''}`, 'es', { sensitivity: 'base', numeric: true });
+    });
 
     return {
         success: true,
         plan: planArray,
         columnasMezcla: groupedBlends.map(b => b.id),
         remanentes: unusedStock,
-        estadisticas: calcularEstadisticas(groupedBlends, activeRules)
+        estadisticas: calcularEstadisticas(groupedBlends, activeRules),
+        diagnostics
     };
 }
 
 function calcularEstadisticas(blends, activeRules) {
     const stats = {};
-
-    const parseMezclasFromBlockId = (blockId) => {
-        if (!blockId || typeof blockId !== 'string') return 1;
-
-        const singleMatch = blockId.match(/^M(\d+)$/);
-        if (singleMatch) return 1;
-
-        const rangeMatch = blockId.match(/^M(\d+)-M(\d+)$/);
-        if (!rangeMatch) return 1;
-
-        const start = Number(rangeMatch[1]);
-        const end = Number(rangeMatch[2]);
-        if (Number.isNaN(start) || Number.isNaN(end) || end < start) return 1;
-
-        return (end - start + 1);
-    };
     
     blends.forEach(blend => {
         const bId = blend.id;
         const fardos = blend.fardos;
         const totalFardos = fardos.length;
         const pesoPorMezcla = fardos.reduce((sum, f) => sum + (Number(f.PESO) / (Number(f.QTDE_ESTOQUE)||1)), 0);
-        const mezclasBloque = Number(blend.mezclasBloque) || parseMezclasFromBlockId(bId);
+        const mezclasBloque = Number(blend.mezclasBloque) || getMixesFromBlockId(bId);
         const pesoTotalBloque = pesoPorMezcla * mezclasBloque;
         
         stats[bId] = {

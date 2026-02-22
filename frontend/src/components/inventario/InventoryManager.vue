@@ -309,6 +309,20 @@
           </button>
         </div>
 
+        <div
+          v-if="blendUserMessage"
+          class="mb-4 rounded-lg px-4 py-3 text-sm"
+          :class="blendUserMessage.kind === 'error'
+            ? 'border border-red-300 bg-red-50 text-red-900'
+            : 'border border-slate-300 bg-slate-50 text-slate-800'"
+        >
+          <p class="font-semibold">{{ blendUserMessage.title }}</p>
+          <p class="mt-1">{{ blendUserMessage.message }}</p>
+          <ul v-if="blendUserMessage.details?.length" class="mt-2 list-disc pl-5 space-y-0.5">
+            <li v-for="(detail, index) in blendUserMessage.details" :key="`blend-msg-${index}`">{{ detail }}</li>
+          </ul>
+        </div>
+
         <div v-if="appliedRulesSummary.length || appliedAlgorithmLabel || appliedCalculationTimestamp" class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <div class="mb-2 flex flex-col md:flex-row md:items-start md:justify-between gap-1.5 md:gap-3">
             <h3 class="text-sm font-bold text-blue-800">Reglas aplicadas en este cálculo</h3>
@@ -460,16 +474,23 @@
                       </svg>
                     </button>
                   </th>
-                  <th v-for="col in blendPlan.columnasMezcla" :key="col" class="px-4 py-3 text-center text-xs font-bold text-indigo-600 uppercase tracking-wider border-l border-gray-300 bg-indigo-50">
-                    <button type="button" class="inline-flex items-center gap-1" @click="toggleBlendSort(`MEZCLA::${col}`)">
-                      <span>{{ col }}</span>
-                      <svg class="w-3 h-3" :class="getBlendSortDirection(`MEZCLA::${col}`) ? 'text-blue-600' : 'text-indigo-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path v-if="getBlendSortDirection(`MEZCLA::${col}`) === 'asc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
-                        <path v-else-if="getBlendSortDirection(`MEZCLA::${col}`) === 'desc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                        <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4M16 15l-4 4-4-4" />
-                      </svg>
-                    </button>
-                  </th>
+                  <template v-for="(col, colIndex) in blendPlan.columnasMezcla" :key="`mix-head-${col}`">
+                    <th class="px-4 py-3 text-center text-xs font-bold text-indigo-600 uppercase tracking-wider border-l border-gray-300 bg-indigo-50">
+                      <button type="button" class="inline-flex items-center gap-1" @click="toggleBlendSort(`MEZCLA::${col}`)">
+                        <span>{{ col }}</span>
+                        <svg class="w-3 h-3" :class="getBlendSortDirection(`MEZCLA::${col}`) ? 'text-blue-600' : 'text-indigo-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path v-if="getBlendSortDirection(`MEZCLA::${col}`) === 'asc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                          <path v-else-if="getBlendSortDirection(`MEZCLA::${col}`) === 'desc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                          <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4M16 15l-4 4-4-4" />
+                        </svg>
+                      </button>
+                    </th>
+                    <th
+                      class="px-4 py-3 text-center text-xs font-bold text-teal-700 uppercase tracking-wider border-l border-gray-300 bg-teal-50"
+                    >
+                      S.Act.
+                    </th>
+                  </template>
                 </tr>
               </thead>
               <tbody class="bg-white divide-y divide-gray-200">
@@ -492,9 +513,14 @@
                   <td class="px-4 py-2 text-sm" :class="getCellClass(row, 'MIC')">{{ formatValue(row.MIC, 'MIC') }}</td>
                   <td class="px-4 py-2 text-sm" :class="getCellClass(row, 'STR')">{{ formatValue(row.STR, 'STR') }}</td>
                   <td class="px-4 py-2 text-sm" :class="getCellClass(row, 'UHML')">{{ formatValue(row.LEN, 'UHML') }}</td>
-                  <td v-for="col in blendPlan.columnasMezcla" :key="col" class="px-4 py-2 text-sm text-center font-bold border-l border-gray-200" :class="row.mezclas[col] ? 'text-indigo-600 bg-indigo-50/30' : 'text-gray-300'">
-                    {{ row.mezclas[col] || '-' }}
-                  </td>
+                  <template v-for="(col, colIndex) in blendPlan.columnasMezcla" :key="`mix-row-${index}-${col}`">
+                    <td class="px-4 py-2 text-sm text-center font-bold border-l border-gray-200" :class="row.mezclas[col] ? 'text-indigo-600 bg-indigo-50/30' : 'text-gray-300'">
+                      {{ row.mezclas[col] || '-' }}
+                    </td>
+                    <td class="px-4 py-2 text-sm text-center font-semibold text-teal-700 border-l border-gray-200 bg-teal-50/30">
+                      {{ getStockActualForBlock(row, colIndex) }}
+                    </td>
+                  </template>
                 </tr>
               </tbody>
               <tfoot class="bg-gray-50 border-t-2 border-gray-300 compact-summary-footer">
@@ -508,9 +534,11 @@
                   <td rowspan="4" class="summary-matrix-cell px-4 py-2 text-sm font-bold text-center text-gray-800">Mezcla</td>
                   <td rowspan="2" class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Cantidad</td>
                   <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Fardos</td>
-                  <td v-for="col in blendPlan.columnasMezcla" :key="'mix-fardos-'+col" class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center font-bold text-gray-900">
-                    {{ blendPlan.estadisticas[col].totalFardos }}
-                  </td>
+                  <template v-for="col in blendPlan.columnasMezcla" :key="'mix-fardos-'+col">
+                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center font-bold text-gray-900" :colspan="2">
+                      {{ blendPlan.estadisticas[col].totalFardos }}
+                    </td>
+                  </template>
                 </tr>
                 <tr class="summary-matrix-row">
                   <td colspan="7" rowspan="18" class="px-4 py-2 align-top border-r border-gray-300">
@@ -544,22 +572,28 @@
                     </div>
                   </td>
                   <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Bloques</td>
-                  <td v-for="col in blendPlan.columnasMezcla" :key="'mix-bloques-'+col" class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center font-bold text-gray-900">
-                    {{ getBlockMixCount(col) }}
-                  </td>
+                  <template v-for="col in blendPlan.columnasMezcla" :key="'mix-bloques-'+col">
+                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center font-bold text-gray-900" :colspan="2">
+                      {{ getBlockMixCount(col) }}
+                    </td>
+                  </template>
                 </tr>
                 <tr class="summary-matrix-row summary-matrix-section-break">
                   <td rowspan="2" class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Peso</td>
                   <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Por Mezcla</td>
-                  <td v-for="col in blendPlan.columnasMezcla" :key="'mix-pmezcla-'+col" class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center font-bold text-gray-900">
-                    {{ formatValue(getPesoPorMezclaForColumn(col), 'PESO') }}
-                  </td>
+                  <template v-for="col in blendPlan.columnasMezcla" :key="'mix-pmezcla-'+col">
+                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center font-bold text-gray-900" :colspan="2">
+                      {{ formatValue(getPesoPorMezclaForColumn(col), 'PESO') }}
+                    </td>
+                  </template>
                 </tr>
                 <tr class="summary-matrix-row summary-matrix-group-end">
                   <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Por Bloque</td>
-                  <td v-for="col in blendPlan.columnasMezcla" :key="'mix-pbloque-'+col" class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center font-bold text-gray-900">
-                    {{ formatValue(getPesoTotalBloqueForColumn(col), 'PESO') }}
-                  </td>
+                  <template v-for="col in blendPlan.columnasMezcla" :key="'mix-pbloque-'+col">
+                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center font-bold text-gray-900" :colspan="2">
+                      {{ formatValue(getPesoTotalBloqueForColumn(col), 'PESO') }}
+                    </td>
+                  </template>
                 </tr>
 
                 <!-- MIC -->
@@ -567,34 +601,44 @@
                   <td rowspan="5" class="summary-matrix-cell px-4 py-2 text-sm font-bold text-center text-gray-800">MIC</td>
                   <td rowspan="3" class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Promedio</td>
                   <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Bloque</td>
-                  <td v-for="col in blendPlan.columnasMezcla" :key="'mic-bloque-'+col" class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.MIC?.promedioGeneral, 'MIC')">
-                    {{ formatValue(blendPlan.estadisticas[col].variables.MIC?.promedioGeneral, 'MIC') }}
-                  </td>
+                  <template v-for="col in blendPlan.columnasMezcla" :key="'mic-bloque-'+col">
+                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.MIC?.promedioGeneral, 'MIC')">
+                      {{ formatValue(blendPlan.estadisticas[col].variables.MIC?.promedioGeneral, 'MIC') }}
+                    </td>
+                  </template>
                 </tr>
                 <tr class="summary-matrix-row">
                   <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">90%</td>
-                  <td v-for="col in blendPlan.columnasMezcla" :key="'mic-90-'+col" class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.MIC?.promedioIdeal, 'MIC')">
-                    {{ formatValue(blendPlan.estadisticas[col].variables.MIC?.promedioIdeal, 'MIC') }}
-                  </td>
+                  <template v-for="col in blendPlan.columnasMezcla" :key="'mic-90-'+col">
+                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.MIC?.promedioIdeal, 'MIC')">
+                      {{ formatValue(blendPlan.estadisticas[col].variables.MIC?.promedioIdeal, 'MIC') }}
+                    </td>
+                  </template>
                 </tr>
                 <tr class="summary-matrix-row">
                   <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">10%</td>
-                  <td v-for="col in blendPlan.columnasMezcla" :key="'mic-10-'+col" class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.MIC?.promedioTolerancia, 'MIC')">
-                    {{ formatValue(blendPlan.estadisticas[col].variables.MIC?.promedioTolerancia, 'MIC') }}
-                  </td>
+                  <template v-for="col in blendPlan.columnasMezcla" :key="'mic-10-'+col">
+                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.MIC?.promedioTolerancia, 'MIC')">
+                      {{ formatValue(blendPlan.estadisticas[col].variables.MIC?.promedioTolerancia, 'MIC') }}
+                    </td>
+                  </template>
                 </tr>
                 <tr class="summary-matrix-row summary-matrix-section-break">
                   <td rowspan="2" class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Porcentual</td>
                   <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">90%</td>
-                  <td v-for="col in blendPlan.columnasMezcla" :key="'mic-pct-90-'+col" class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.MIC?.pctIdeal, 'MIC', 'pctIdeal')">
-                    {{ blendPlan.estadisticas[col].variables.MIC?.pctIdeal !== undefined ? `${blendPlan.estadisticas[col].variables.MIC.pctIdeal.toFixed(1)}%` : '-' }}
-                  </td>
+                  <template v-for="col in blendPlan.columnasMezcla" :key="'mic-pct-90-'+col">
+                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.MIC?.pctIdeal, 'MIC', 'pctIdeal')">
+                      {{ blendPlan.estadisticas[col].variables.MIC?.pctIdeal !== undefined ? `${blendPlan.estadisticas[col].variables.MIC.pctIdeal.toFixed(1)}%` : '-' }}
+                    </td>
+                  </template>
                 </tr>
                 <tr class="summary-matrix-row summary-matrix-group-end">
                   <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">10%</td>
-                  <td v-for="col in blendPlan.columnasMezcla" :key="'mic-pct-10-'+col" class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.MIC?.pctTolerancia, 'MIC', 'pctTolerancia')">
-                    {{ blendPlan.estadisticas[col].variables.MIC?.pctTolerancia !== undefined ? `${blendPlan.estadisticas[col].variables.MIC.pctTolerancia.toFixed(1)}%` : '-' }}
-                  </td>
+                  <template v-for="col in blendPlan.columnasMezcla" :key="'mic-pct-10-'+col">
+                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.MIC?.pctTolerancia, 'MIC', 'pctTolerancia')">
+                      {{ blendPlan.estadisticas[col].variables.MIC?.pctTolerancia !== undefined ? `${blendPlan.estadisticas[col].variables.MIC.pctTolerancia.toFixed(1)}%` : '-' }}
+                    </td>
+                  </template>
                 </tr>
 
                 <!-- STR -->
@@ -602,34 +646,44 @@
                   <td rowspan="5" class="summary-matrix-cell px-4 py-2 text-sm font-bold text-center text-gray-800">STR</td>
                   <td rowspan="3" class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Promedio</td>
                   <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Bloque</td>
-                  <td v-for="col in blendPlan.columnasMezcla" :key="'str-bloque-'+col" class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.STR?.promedioGeneral, 'STR')">
-                    {{ formatValue(blendPlan.estadisticas[col].variables.STR?.promedioGeneral, 'STR') }}
-                  </td>
+                  <template v-for="col in blendPlan.columnasMezcla" :key="'str-bloque-'+col">
+                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.STR?.promedioGeneral, 'STR')">
+                      {{ formatValue(blendPlan.estadisticas[col].variables.STR?.promedioGeneral, 'STR') }}
+                    </td>
+                  </template>
                 </tr>
                 <tr class="summary-matrix-row">
                   <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">80%</td>
-                  <td v-for="col in blendPlan.columnasMezcla" :key="'str-80-'+col" class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.STR?.promedioIdeal, 'STR')">
-                    {{ formatValue(blendPlan.estadisticas[col].variables.STR?.promedioIdeal, 'STR') }}
-                  </td>
+                  <template v-for="col in blendPlan.columnasMezcla" :key="'str-80-'+col">
+                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.STR?.promedioIdeal, 'STR')">
+                      {{ formatValue(blendPlan.estadisticas[col].variables.STR?.promedioIdeal, 'STR') }}
+                    </td>
+                  </template>
                 </tr>
                 <tr class="summary-matrix-row">
                   <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">20%</td>
-                  <td v-for="col in blendPlan.columnasMezcla" :key="'str-20-'+col" class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.STR?.promedioTolerancia, 'STR')">
-                    {{ formatValue(blendPlan.estadisticas[col].variables.STR?.promedioTolerancia, 'STR') }}
-                  </td>
+                  <template v-for="col in blendPlan.columnasMezcla" :key="'str-20-'+col">
+                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.STR?.promedioTolerancia, 'STR')">
+                      {{ formatValue(blendPlan.estadisticas[col].variables.STR?.promedioTolerancia, 'STR') }}
+                    </td>
+                  </template>
                 </tr>
                 <tr class="summary-matrix-row summary-matrix-section-break">
                   <td rowspan="2" class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Porcentual</td>
                   <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">80%</td>
-                  <td v-for="col in blendPlan.columnasMezcla" :key="'str-pct-80-'+col" class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.STR?.pctIdeal, 'STR', 'pctIdeal')">
-                    {{ blendPlan.estadisticas[col].variables.STR?.pctIdeal !== undefined ? `${blendPlan.estadisticas[col].variables.STR.pctIdeal.toFixed(1)}%` : '-' }}
-                  </td>
+                  <template v-for="col in blendPlan.columnasMezcla" :key="'str-pct-80-'+col">
+                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.STR?.pctIdeal, 'STR', 'pctIdeal')">
+                      {{ blendPlan.estadisticas[col].variables.STR?.pctIdeal !== undefined ? `${blendPlan.estadisticas[col].variables.STR.pctIdeal.toFixed(1)}%` : '-' }}
+                    </td>
+                  </template>
                 </tr>
                 <tr class="summary-matrix-row summary-matrix-group-end">
                   <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">20%</td>
-                  <td v-for="col in blendPlan.columnasMezcla" :key="'str-pct-20-'+col" class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.STR?.pctTolerancia, 'STR', 'pctTolerancia')">
-                    {{ blendPlan.estadisticas[col].variables.STR?.pctTolerancia !== undefined ? `${blendPlan.estadisticas[col].variables.STR.pctTolerancia.toFixed(1)}%` : '-' }}
-                  </td>
+                  <template v-for="col in blendPlan.columnasMezcla" :key="'str-pct-20-'+col">
+                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.STR?.pctTolerancia, 'STR', 'pctTolerancia')">
+                      {{ blendPlan.estadisticas[col].variables.STR?.pctTolerancia !== undefined ? `${blendPlan.estadisticas[col].variables.STR.pctTolerancia.toFixed(1)}%` : '-' }}
+                    </td>
+                  </template>
                 </tr>
 
                 <!-- LEN -->
@@ -637,34 +691,44 @@
                   <td rowspan="5" class="summary-matrix-cell px-4 py-2 text-sm font-bold text-center text-gray-800">LEN</td>
                   <td rowspan="3" class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Promedio</td>
                   <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Bloque</td>
-                  <td v-for="col in blendPlan.columnasMezcla" :key="'len-bloque-'+col" class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.LEN?.promedioGeneral, 'UHML')">
-                    {{ formatValue(blendPlan.estadisticas[col].variables.LEN?.promedioGeneral, 'UHML') }}
-                  </td>
+                  <template v-for="col in blendPlan.columnasMezcla" :key="'len-bloque-'+col">
+                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.LEN?.promedioGeneral, 'UHML')">
+                      {{ formatValue(blendPlan.estadisticas[col].variables.LEN?.promedioGeneral, 'UHML') }}
+                    </td>
+                  </template>
                 </tr>
                 <tr class="summary-matrix-row">
                   <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">80%</td>
-                  <td v-for="col in blendPlan.columnasMezcla" :key="'len-80-'+col" class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.LEN?.promedioIdeal, 'UHML')">
-                    {{ formatValue(blendPlan.estadisticas[col].variables.LEN?.promedioIdeal, 'UHML') }}
-                  </td>
+                  <template v-for="col in blendPlan.columnasMezcla" :key="'len-80-'+col">
+                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.LEN?.promedioIdeal, 'UHML')">
+                      {{ formatValue(blendPlan.estadisticas[col].variables.LEN?.promedioIdeal, 'UHML') }}
+                    </td>
+                  </template>
                 </tr>
                 <tr class="summary-matrix-row">
                   <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">20%</td>
-                  <td v-for="col in blendPlan.columnasMezcla" :key="'len-20-'+col" class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.LEN?.promedioTolerancia, 'UHML')">
-                    {{ formatValue(blendPlan.estadisticas[col].variables.LEN?.promedioTolerancia, 'UHML') }}
-                  </td>
+                  <template v-for="col in blendPlan.columnasMezcla" :key="'len-20-'+col">
+                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.LEN?.promedioTolerancia, 'UHML')">
+                      {{ formatValue(blendPlan.estadisticas[col].variables.LEN?.promedioTolerancia, 'UHML') }}
+                    </td>
+                  </template>
                 </tr>
                 <tr class="summary-matrix-row summary-matrix-section-break">
                   <td rowspan="2" class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Porcentual</td>
                   <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">80%</td>
-                  <td v-for="col in blendPlan.columnasMezcla" :key="'len-pct-80-'+col" class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.LEN?.pctIdeal, 'UHML', 'pctIdeal')">
-                    {{ blendPlan.estadisticas[col].variables.LEN?.pctIdeal !== undefined ? `${blendPlan.estadisticas[col].variables.LEN.pctIdeal.toFixed(1)}%` : '-' }}
-                  </td>
+                  <template v-for="col in blendPlan.columnasMezcla" :key="'len-pct-80-'+col">
+                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.LEN?.pctIdeal, 'UHML', 'pctIdeal')">
+                      {{ blendPlan.estadisticas[col].variables.LEN?.pctIdeal !== undefined ? `${blendPlan.estadisticas[col].variables.LEN.pctIdeal.toFixed(1)}%` : '-' }}
+                    </td>
+                  </template>
                 </tr>
                 <tr class="summary-matrix-row summary-matrix-group-end">
                   <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">20%</td>
-                  <td v-for="col in blendPlan.columnasMezcla" :key="'len-pct-20-'+col" class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.LEN?.pctTolerancia, 'UHML', 'pctTolerancia')">
-                    {{ blendPlan.estadisticas[col].variables.LEN?.pctTolerancia !== undefined ? `${blendPlan.estadisticas[col].variables.LEN.pctTolerancia.toFixed(1)}%` : '-' }}
-                  </td>
+                  <template v-for="col in blendPlan.columnasMezcla" :key="'len-pct-20-'+col">
+                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.LEN?.pctTolerancia, 'UHML', 'pctTolerancia')">
+                      {{ blendPlan.estadisticas[col].variables.LEN?.pctTolerancia !== undefined ? `${blendPlan.estadisticas[col].variables.LEN.pctTolerancia.toFixed(1)}%` : '-' }}
+                    </td>
+                  </template>
                 </tr>
               </tfoot>
             </table>
@@ -830,6 +894,7 @@ const activeRules = ref([]);
 const isBlendMode = ref(false);
 const blendPlan = ref(null);
 const isCalculatingBlend = ref(false);
+const blendUserMessage = ref(null);
 const appliedRulesSummary = ref([]);
 const appliedAlgorithmLabel = ref('');
 const appliedCalculationTimestamp = ref('');
@@ -1328,8 +1393,11 @@ const mapUiKeyToFormatKey = (uiKey) => {
 
 const getPlanMotivoLogistico = (row) => {
   if (!row) return '';
+  if (row.MotivoLogistico) return row.MotivoLogistico;
   if (Number(row.Sobrante) === 0) return 'Usado en plan (se usó todo)';
   if (row.Estado === 'TOLER.') return 'Usado en plan (tolerancia permitida)';
+  if (row.Estado === 'NO USO') return 'No usado en ninguna mezcla';
+  if (row.Estado === 'RECH.') return 'Rechazado por límites absolutos';
   return 'Usado en plan (consumo parcial)';
 };
 
@@ -1491,6 +1559,25 @@ const getPesoTotalBloqueForColumn = (colId) => {
     return stat.pesoTotalBloque;
   }
   return getPesoPorMezclaForColumn(colId) * getBlockMixCount(colId);
+};
+
+const getStockActualForBlock = (row, blockIndex) => {
+  const blocks = blendPlan.value?.columnasMezcla || [];
+  if (!Array.isArray(blocks) || blocks.length === 0) return '-';
+
+  const stock = Number(row?.Stock);
+  if (Number.isNaN(stock)) return '-';
+
+  let stockActual = stock;
+
+  for (let i = 0; i <= blockIndex && i < blocks.length; i += 1) {
+    const blockId = blocks[i];
+    const fardosLoteEnBloque = Number(row?.mezclas?.[blockId]) || 0;
+    const repeticionesBloque = getBlockMixCount(blockId);
+    stockActual -= (fardosLoteEnBloque * repeticionesBloque);
+  }
+
+  return formatThousandInteger(stockActual);
 };
 
 const activeBlendVariablesForSummary = computed(() => {
@@ -1676,9 +1763,61 @@ const getSelectedSupervisionVariables = () => {
   });
 };
 
+const getMixCountFromBlockId = (blockId) => {
+  if (!blockId || typeof blockId !== 'string') return 1;
+
+  const singleMatch = blockId.match(/^M(\d+)$/);
+  if (singleMatch) return 1;
+
+  const rangeMatch = blockId.match(/^M(\d+)-M(\d+)$/);
+  if (!rangeMatch) return 1;
+
+  const start = Number(rangeMatch[1]);
+  const end = Number(rangeMatch[2]);
+  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return 1;
+
+  return end - start + 1;
+};
+
+const validateBlendPlanFeasibility = (planData) => {
+  const rows = Array.isArray(planData?.plan) ? planData.plan : [];
+  const blocks = Array.isArray(planData?.columnasMezcla) ? planData.columnasMezcla : [];
+  if (!rows.length || !blocks.length) return;
+
+  const issues = [];
+
+  rows.forEach((row) => {
+    const stock = Number(row?.Stock);
+    if (Number.isNaN(stock)) return;
+
+    let remaining = stock;
+
+    for (const blockId of blocks) {
+      const perMixCount = Number(row?.mezclas?.[blockId]) || 0;
+      const mixesFromStats = Number(planData?.estadisticas?.[blockId]?.mezclasBloque);
+      const mixesCount = (!Number.isNaN(mixesFromStats) && mixesFromStats > 0)
+        ? mixesFromStats
+        : getMixCountFromBlockId(blockId);
+
+      remaining -= perMixCount * mixesCount;
+
+      if (remaining < 0) {
+        issues.push(`${row.PRODUTOR}/${row.LOTE} en ${blockId} (S.Act=${remaining})`);
+        break;
+      }
+    }
+  });
+
+  if (issues.length > 0) {
+    throw new Error(`Plan no realizable detectado en validación UI: ${issues.slice(0, 3).join(' | ')}`);
+  }
+};
+
 // Acción para el botón Mezclas
 const handleMezclas = async ({ silent = false } = {}) => {
   if (isCalculatingBlend.value) return;
+
+  blendUserMessage.value = null;
 
   if (!filters.fardos || filters.fardos <= 0) {
     if (!silent) {
@@ -1725,6 +1864,25 @@ const handleMezclas = async ({ silent = false } = {}) => {
 
     const data = await response.json();
     if (data.success) {
+      if (!Array.isArray(data.plan) || data.plan.length === 0) {
+        const diagnostics = data.diagnostics || {};
+        const friendlyMessage = diagnostics.message || 'No se pudo armar ningún bloque de mezcla con la configuración actual.';
+        const details = Array.isArray(diagnostics.details) ? diagnostics.details : [];
+
+        blendUserMessage.value = {
+          kind: 'info',
+          title: 'No fue posible generar bloques',
+          message: friendlyMessage,
+          details
+        };
+
+        blendPlan.value = data;
+        isBlendMode.value = true;
+        return;
+      }
+
+      validateBlendPlanFeasibility(data);
+      blendUserMessage.value = null;
       blendPlan.value = data;
       isBlendMode.value = true;
     } else {
@@ -1732,6 +1890,12 @@ const handleMezclas = async ({ silent = false } = {}) => {
     }
   } catch (error) {
     console.error(error);
+    blendUserMessage.value = {
+      kind: 'error',
+      title: 'Error al calcular mezclas',
+      message: error.message || 'No se pudo calcular el plan de mezclas.',
+      details: []
+    };
     if (!silent) {
       alert(`Error: ${error.message}`);
     }
