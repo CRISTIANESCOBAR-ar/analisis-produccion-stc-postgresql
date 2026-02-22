@@ -300,6 +300,7 @@ function optimizeBlendStability(stock, rules, supervisionSettings, blendSize, en
             } else {
                 groupedBlends.push({
                     id: currentGroup.start === currentGroup.end ? `M${currentGroup.start}` : `M${currentGroup.start}-M${currentGroup.end}`,
+                    mezclasBloque: (currentGroup.end - currentGroup.start + 1),
                     fardos: currentGroup.fardos
                 });
                 currentGroup = {
@@ -312,6 +313,7 @@ function optimizeBlendStability(stock, rules, supervisionSettings, blendSize, en
         }
         groupedBlends.push({
             id: currentGroup.start === currentGroup.end ? `M${currentGroup.start}` : `M${currentGroup.start}-M${currentGroup.end}`,
+            mezclasBloque: (currentGroup.end - currentGroup.start + 1),
             fardos: currentGroup.fardos
         });
     }
@@ -679,6 +681,7 @@ function optimizeBlendStandard(stock, rules, supervisionSettings, blendSize) {
             } else {
                 groupedBlends.push({
                     id: currentGroup.start === currentGroup.end ? `M${currentGroup.start}` : `M${currentGroup.start}-M${currentGroup.end}`,
+                    mezclasBloque: (currentGroup.end - currentGroup.start + 1),
                     fardos: currentGroup.fardos
                 });
                 currentGroup = {
@@ -691,6 +694,7 @@ function optimizeBlendStandard(stock, rules, supervisionSettings, blendSize) {
         }
         groupedBlends.push({
             id: currentGroup.start === currentGroup.end ? `M${currentGroup.start}` : `M${currentGroup.start}-M${currentGroup.end}`,
+            mezclasBloque: (currentGroup.end - currentGroup.start + 1),
             fardos: currentGroup.fardos
         });
     }
@@ -805,6 +809,12 @@ function generateResult(classifiedStock, groupedBlends, rules, supervisionSettin
         }
     });
 
+    const lotStateMap = {};
+    classifiedStock.forEach(lot => {
+        const key = `${lot.PRODUTOR}_${lot.LOTE}`;
+        lotStateMap[key] = lot;
+    });
+
     const planRows = {};
     groupedBlends.forEach((blend, bIndex) => {
         const blendId = blend.id;
@@ -818,10 +828,14 @@ function generateResult(classifiedStock, groupedBlends, rules, supervisionSettin
         Object.values(loteCounts).forEach(({ count, ref }) => {
             const key = `${ref.PRODUTOR}_${ref.LOTE}`;
             if (!planRows[key]) {
+                const lotState = lotStateMap[key] || {};
                 planRows[key] = {
                     PRODUTOR: ref.PRODUTOR,
                     Estado: ref._category === 'A' ? 'USO' : (ref._category === 'B' ? 'TOLER.' : 'RECH.'),
                     LOTE: ref.LOTE,
+                    Stock: Number(lotState.QTDE_ESTOQUE) || 0,
+                    Usados: Number(lotState._usedCount) || 0,
+                    Sobrante: Number(lotState._availableCount) || 0,
                     MIC: ref.MIC,
                     STR: ref.STR,
                     LEN: ref.UHML || ref.LEN,
@@ -849,17 +863,38 @@ function generateResult(classifiedStock, groupedBlends, rules, supervisionSettin
 
 function calcularEstadisticas(blends, activeRules) {
     const stats = {};
+
+    const parseMezclasFromBlockId = (blockId) => {
+        if (!blockId || typeof blockId !== 'string') return 1;
+
+        const singleMatch = blockId.match(/^M(\d+)$/);
+        if (singleMatch) return 1;
+
+        const rangeMatch = blockId.match(/^M(\d+)-M(\d+)$/);
+        if (!rangeMatch) return 1;
+
+        const start = Number(rangeMatch[1]);
+        const end = Number(rangeMatch[2]);
+        if (Number.isNaN(start) || Number.isNaN(end) || end < start) return 1;
+
+        return (end - start + 1);
+    };
     
     blends.forEach(blend => {
         const bId = blend.id;
         const fardos = blend.fardos;
         const totalFardos = fardos.length;
-        const pesoTotal = fardos.reduce((sum, f) => sum + (Number(f.PESO) / (Number(f.QTDE_ESTOQUE)||1)), 0);
+        const pesoPorMezcla = fardos.reduce((sum, f) => sum + (Number(f.PESO) / (Number(f.QTDE_ESTOQUE)||1)), 0);
+        const mezclasBloque = Number(blend.mezclasBloque) || parseMezclasFromBlockId(bId);
+        const pesoTotalBloque = pesoPorMezcla * mezclasBloque;
         
         stats[bId] = {
             totalFardos,
-            pesoTotal,
-            pesoPromedio: pesoTotal / totalFardos,
+            mezclasBloque,
+            pesoPorMezcla,
+            pesoTotalBloque,
+            pesoTotal: pesoPorMezcla,
+            pesoPromedio: pesoPorMezcla / totalFardos,
             variables: {}
         };
 
@@ -868,7 +903,7 @@ function calcularEstadisticas(blends, activeRules) {
             const rule = activeRules.find(r => r.parametro === ruleParam);
             
             const sumPonderada = fardos.reduce((s, f) => s + ((Number(f[vKey]) || 0) * (Number(f.PESO) / (Number(f.QTDE_ESTOQUE)||1))), 0);
-            const prom = pesoTotal > 0 ? sumPonderada / pesoTotal : 0;
+            const prom = pesoPorMezcla > 0 ? sumPonderada / pesoPorMezcla : 0;
             
             stats[bId].variables[ruleParam] = {
                 promedioGeneral: prom
