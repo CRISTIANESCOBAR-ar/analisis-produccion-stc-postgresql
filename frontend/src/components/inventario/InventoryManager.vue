@@ -1,6 +1,16 @@
 <template>
   <div class="p-6 bg-gray-50 min-h-screen">
-    <h1 class="text-2xl font-bold mb-6 text-gray-800">Gestión de Inventario (Materia Prima)</h1>
+    <div class="flex items-center justify-between mb-6">
+      <h1 class="text-2xl font-bold text-gray-800">Gestión de Inventario (Materia Prima)</h1>
+      <div v-if="activeVersionName" class="shrink-0">
+        <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold bg-green-100 text-green-800 border border-green-200 shadow-sm">
+          <svg class="w-3.5 h-3.5 mr-1.5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Versión Activa: {{ activeVersionName }}
+        </span>
+      </div>
+    </div>
 
     <!-- Controles Superiores: Filtros y Configuración Unificada -->
     <div class="bg-white p-4 rounded-lg shadow mb-6">
@@ -10,16 +20,6 @@
         
         <!-- Bloque Izquierda: Versión y Búsqueda -->
         <div class="flex flex-col md:flex-row md:items-center gap-4 flex-1">
-          <!-- Versión Activa Badge -->
-          <div v-if="activeVersionName" class="shrink-0">
-            <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold bg-green-100 text-green-800 border border-green-200 shadow-sm">
-              <svg class="w-3.5 h-3.5 mr-1.5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Versión Activa: {{ activeVersionName }}
-            </span>
-          </div>
-
           <!-- Buscador -->
           <div class="flex items-center space-x-3 flex-1 max-w-2xl">
             <label class="hidden lg:block text-sm font-semibold text-gray-700 whitespace-nowrap">
@@ -310,14 +310,21 @@
         </div>
 
         <div v-if="appliedRulesSummary.length || appliedAlgorithmLabel || appliedCalculationTimestamp" class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-          <h3 class="text-sm font-bold text-blue-800 mb-2">Reglas aplicadas en este cálculo</h3>
-          <div v-if="appliedAlgorithmLabel" class="text-xs text-blue-900">
-            <span class="font-semibold">Algoritmo usado:</span>
-            <span class="ml-1">{{ appliedAlgorithmLabel }}</span>
-          </div>
-          <div v-if="appliedCalculationTimestamp" class="mb-2 text-xs text-blue-900">
-            <span class="font-semibold">Ejecutado:</span>
-            <span class="ml-1">{{ appliedCalculationTimestamp }}</span>
+          <div class="mb-2 flex flex-col md:flex-row md:items-start md:justify-between gap-1.5 md:gap-3">
+            <h3 class="text-sm font-bold text-blue-800">Reglas aplicadas en este cálculo</h3>
+            <div class="text-xs text-blue-900 md:text-right">
+              <div v-if="appliedAlgorithmLabel || appliedCalculationTimestamp">
+                <span v-if="appliedAlgorithmLabel">
+                  <span class="font-semibold">Algoritmo usado:</span>
+                  <span class="ml-1">{{ appliedAlgorithmLabel }}</span>
+                </span>
+                <span v-if="appliedAlgorithmLabel && appliedCalculationTimestamp" class="mx-2">|</span>
+                <span v-if="appliedCalculationTimestamp">
+                  <span class="font-semibold">Ejecutado:</span>
+                  <span class="ml-1">{{ appliedCalculationTimestamp }}</span>
+                </span>
+              </div>
+            </div>
           </div>
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
             <div
@@ -325,8 +332,10 @@
               :key="`${rule.parametro}-${idx}`"
               class="bg-white border border-blue-100 rounded px-2 py-1.5 text-xs"
             >
-              <div class="font-semibold text-blue-900">{{ rule.parametro }}</div>
-              <div class="text-gray-700">{{ rule.detalle }}</div>
+              <div class="text-gray-700">
+                <span class="font-semibold text-blue-900">{{ rule.parametro }}:</span>
+                <span class="ml-1">{{ rule.detalle }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -360,23 +369,111 @@
             <table class="min-w-full divide-y divide-gray-200 compact-plan-table">
               <thead class="bg-gray-100">
                 <tr>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Productor</th>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lote</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <button type="button" class="inline-flex items-center gap-1" @click="toggleBlendSort('PRODUTOR')">
+                      <span>Productor</span>
+                      <svg class="w-3 h-3" :class="getBlendSortDirection('PRODUTOR') ? 'text-blue-600' : 'text-gray-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path v-if="getBlendSortDirection('PRODUTOR') === 'asc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                        <path v-else-if="getBlendSortDirection('PRODUTOR') === 'desc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4M16 15l-4 4-4-4" />
+                      </svg>
+                    </button>
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <button type="button" class="inline-flex items-center gap-1" @click="toggleBlendSort('LOTE')">
+                      <span>Lote</span>
+                      <svg class="w-3 h-3" :class="getBlendSortDirection('LOTE') ? 'text-blue-600' : 'text-gray-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path v-if="getBlendSortDirection('LOTE') === 'asc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                        <path v-else-if="getBlendSortDirection('LOTE') === 'desc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4M16 15l-4 4-4-4" />
+                      </svg>
+                    </button>
+                  </th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-                  <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
-                  <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Usados</th>
-                  <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Sobrante</th>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Motivo Logístico</th>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">MIC</th>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">STR</th>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">LEN</th>
+                  <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <button type="button" class="inline-flex items-center gap-1" @click="toggleBlendSort('Stock')">
+                      <span>Stock</span>
+                      <svg class="w-3 h-3" :class="getBlendSortDirection('Stock') ? 'text-blue-600' : 'text-gray-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path v-if="getBlendSortDirection('Stock') === 'asc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                        <path v-else-if="getBlendSortDirection('Stock') === 'desc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4M16 15l-4 4-4-4" />
+                      </svg>
+                    </button>
+                  </th>
+                  <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <button type="button" class="inline-flex items-center gap-1" @click="toggleBlendSort('Usados')">
+                      <span>Usados</span>
+                      <svg class="w-3 h-3" :class="getBlendSortDirection('Usados') ? 'text-blue-600' : 'text-gray-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path v-if="getBlendSortDirection('Usados') === 'asc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                        <path v-else-if="getBlendSortDirection('Usados') === 'desc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4M16 15l-4 4-4-4" />
+                      </svg>
+                    </button>
+                  </th>
+                  <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <button type="button" class="inline-flex items-center gap-1" @click="toggleBlendSort('Sobrante')">
+                      <span>Sobrante</span>
+                      <svg class="w-3 h-3" :class="getBlendSortDirection('Sobrante') ? 'text-blue-600' : 'text-gray-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path v-if="getBlendSortDirection('Sobrante') === 'asc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                        <path v-else-if="getBlendSortDirection('Sobrante') === 'desc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4M16 15l-4 4-4-4" />
+                      </svg>
+                    </button>
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <button type="button" class="inline-flex items-center gap-1" @click="toggleBlendSort('MotivoLogistico')">
+                      <span>Motivo Logístico</span>
+                      <svg class="w-3 h-3" :class="getBlendSortDirection('MotivoLogistico') ? 'text-blue-600' : 'text-gray-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path v-if="getBlendSortDirection('MotivoLogistico') === 'asc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                        <path v-else-if="getBlendSortDirection('MotivoLogistico') === 'desc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4M16 15l-4 4-4-4" />
+                      </svg>
+                    </button>
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <button type="button" class="inline-flex items-center gap-1" @click="toggleBlendSort('MIC')">
+                      <span>MIC</span>
+                      <svg class="w-3 h-3" :class="getBlendSortDirection('MIC') ? 'text-blue-600' : 'text-gray-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path v-if="getBlendSortDirection('MIC') === 'asc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                        <path v-else-if="getBlendSortDirection('MIC') === 'desc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4M16 15l-4 4-4-4" />
+                      </svg>
+                    </button>
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <button type="button" class="inline-flex items-center gap-1" @click="toggleBlendSort('STR')">
+                      <span>STR</span>
+                      <svg class="w-3 h-3" :class="getBlendSortDirection('STR') ? 'text-blue-600' : 'text-gray-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path v-if="getBlendSortDirection('STR') === 'asc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                        <path v-else-if="getBlendSortDirection('STR') === 'desc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4M16 15l-4 4-4-4" />
+                      </svg>
+                    </button>
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <button type="button" class="inline-flex items-center gap-1" @click="toggleBlendSort('LEN')">
+                      <span>LEN</span>
+                      <svg class="w-3 h-3" :class="getBlendSortDirection('LEN') ? 'text-blue-600' : 'text-gray-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path v-if="getBlendSortDirection('LEN') === 'asc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                        <path v-else-if="getBlendSortDirection('LEN') === 'desc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4M16 15l-4 4-4-4" />
+                      </svg>
+                    </button>
+                  </th>
                   <th v-for="col in blendPlan.columnasMezcla" :key="col" class="px-4 py-3 text-center text-xs font-bold text-indigo-600 uppercase tracking-wider border-l border-gray-300 bg-indigo-50">
-                    {{ col }}
+                    <button type="button" class="inline-flex items-center gap-1" @click="toggleBlendSort(`MEZCLA::${col}`)">
+                      <span>{{ col }}</span>
+                      <svg class="w-3 h-3" :class="getBlendSortDirection(`MEZCLA::${col}`) ? 'text-blue-600' : 'text-indigo-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path v-if="getBlendSortDirection(`MEZCLA::${col}`) === 'asc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                        <path v-else-if="getBlendSortDirection(`MEZCLA::${col}`) === 'desc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4M16 15l-4 4-4-4" />
+                      </svg>
+                    </button>
                   </th>
                 </tr>
               </thead>
               <tbody class="bg-white divide-y divide-gray-200">
-                <tr v-for="(row, index) in blendPlan.plan" :key="index" class="hover:bg-gray-50">
+                <tr v-for="(row, index) in sortedBlendPlanRows" :key="index" class="hover:bg-gray-50">
                   <td class="px-4 py-2 text-sm text-gray-900 font-medium">{{ row.PRODUTOR }}</td>
                   <td class="px-4 py-2 text-sm text-gray-600">{{ row.LOTE }}</td>
                   <td class="px-4 py-2 text-sm">
@@ -388,9 +485,9 @@
                   <td class="px-4 py-2 text-sm text-center font-semibold text-blue-700">{{ row.Usados ?? '-' }}</td>
                   <td class="px-4 py-2 text-sm text-center font-semibold text-amber-700">{{ row.Sobrante ?? '-' }}</td>
                   <td class="px-4 py-2 text-sm text-gray-700">
-                    <span v-if="Number(row.Sobrante) === 0" class="font-semibold text-emerald-700">Usado en plan (se usó todo)</span>
-                    <span v-else-if="row.Estado === 'TOLER.'" class="font-medium text-amber-700">Usado en plan (tolerancia permitida)</span>
-                    <span v-else class="font-medium text-slate-700">Usado en plan (consumo parcial)</span>
+                    <span v-if="Number(row.Sobrante) === 0" class="font-semibold text-emerald-700">{{ getPlanMotivoLogistico(row) }}</span>
+                    <span v-else-if="row.Estado === 'TOLER.'" class="font-medium text-amber-700">{{ getPlanMotivoLogistico(row) }}</span>
+                    <span v-else class="font-medium text-slate-700">{{ getPlanMotivoLogistico(row) }}</span>
                   </td>
                   <td class="px-4 py-2 text-sm" :class="getCellClass(row, 'MIC')">{{ formatValue(row.MIC, 'MIC') }}</td>
                   <td class="px-4 py-2 text-sm" :class="getCellClass(row, 'STR')">{{ formatValue(row.STR, 'STR') }}</td>
@@ -589,10 +686,10 @@
                 </tr>
               </thead>
               <tbody class="bg-white divide-y divide-gray-200">
-                <tr v-if="blendPlan.remanentes.length === 0">
+                <tr v-if="sortedRemanentes.length === 0">
                   <td colspan="7" class="px-4 py-4 text-center text-gray-500 italic">No hay lotes remanentes. Se usó todo el stock.</td>
                 </tr>
-                <tr v-else v-for="(row, index) in blendPlan.remanentes" :key="index" class="hover:bg-red-50/50">
+                <tr v-else v-for="(row, index) in sortedRemanentes" :key="index" class="hover:bg-red-50/50">
                   <td class="px-4 py-2 text-sm text-gray-900 font-medium">{{ row.PRODUTOR }}</td>
                   <td class="px-4 py-2 text-sm text-gray-600">{{ row.LOTE }}</td>
                   <td class="px-4 py-2 text-sm font-bold text-gray-800">{{ row.Fardos }}</td>
@@ -608,7 +705,8 @@
       </div>
 
       <!-- Vista: Inventario Normal -->
-      <table v-else class="min-w-full divide-y divide-gray-200">
+      <div v-else>
+      <table class="min-w-full divide-y divide-gray-200 stock-table">
         <thead class="bg-gray-100">
           <tr>
             <th 
@@ -616,7 +714,20 @@
               :key="col.key"
               class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap"
             >
-              {{ col.label }}
+              <button
+                v-if="isStockSortableColumn(col.key)"
+                type="button"
+                class="inline-flex items-center gap-1"
+                @click="toggleStockSort(col.key)"
+              >
+                <span>{{ col.label }}</span>
+                <svg class="w-3 h-3" :class="getStockSortDirection(col.key) ? 'text-blue-600' : 'text-gray-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path v-if="getStockSortDirection(col.key) === 'asc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                  <path v-else-if="getStockSortDirection(col.key) === 'desc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                  <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4M16 15l-4 4-4-4" />
+                </svg>
+              </button>
+              <span v-else>{{ col.label }}</span>
             </th>
           </tr>
         </thead>
@@ -626,12 +737,12 @@
                 Cargando inventario...
              </td>
           </tr>
-          <tr v-else-if="filteredData.length === 0">
+          <tr v-else-if="sortedFilteredData.length === 0">
             <td :colspan="visibleColumns.length" class="px-6 py-4 text-center text-gray-500 italic">
               No se encontraron resultados ({{ items.length > 0 ? 'ajusta los filtros' : 'Base de datos vacía o sin conexión' }}).
             </td>
           </tr>
-          <tr v-else v-for="(item, index) in filteredData" :key="index" class="hover:bg-gray-50 transition-colors">
+          <tr v-else v-for="(item, index) in sortedFilteredData" :key="index" class="hover:bg-gray-50 transition-colors">
             <td 
               v-for="col in visibleColumns" 
               :key="col.key"
@@ -662,10 +773,11 @@
           </tr>
         </tfoot>
       </table>
+      </div>
     </div>
     
     <div class="mt-4 text-sm text-gray-500 text-right">
-      Mostrando {{ filteredData.length }} registros
+      Mostrando {{ sortedFilteredData.length }} registros
     </div>
   </div>
 </template>
@@ -741,6 +853,17 @@ const filters = reactive({
   searchText: '',
   fardos: null
 });
+
+const stockSortState = reactive({ key: 'PRODUTOR', direction: 'asc' });
+const blendSortState = reactive({ key: 'PRODUTOR', direction: 'asc' });
+
+const STOCK_SORTABLE_KEYS = new Set([
+  'PRODUTOR', 'LOTE', 'TP', 'CLASSIF', 'COR', 'QTDE_ESTOQUE', 'MIC', 'UHML', 'STR', 'PESO'
+]);
+
+const BLEND_SORTABLE_KEYS = new Set([
+  'PRODUTOR', 'LOTE', 'Stock', 'Usados', 'Sobrante', 'MotivoLogistico', 'MIC', 'STR', 'LEN', 'PESO'
+]);
 
 // 'standard' | 'stability' | 'stability-strict'
 const blendAlgorithm = ref('stability');
@@ -1203,6 +1326,138 @@ const mapUiKeyToFormatKey = (uiKey) => {
   return uiKey;
 };
 
+const getPlanMotivoLogistico = (row) => {
+  if (!row) return '';
+  if (Number(row.Sobrante) === 0) return 'Usado en plan (se usó todo)';
+  if (row.Estado === 'TOLER.') return 'Usado en plan (tolerancia permitida)';
+  return 'Usado en plan (consumo parcial)';
+};
+
+const normalizeSortText = (value) => (value ?? '').toString().trim();
+
+const getSortableValue = (row, key) => {
+  if (!row || !key) return '';
+
+  if (typeof key === 'string' && key.startsWith('MEZCLA::')) {
+    const mixColumn = key.replace('MEZCLA::', '');
+    return Number(row?.mezclas?.[mixColumn]) || 0;
+  }
+
+  if (key === 'MotivoLogistico') return getPlanMotivoLogistico(row);
+
+  if (key === 'UHML') return row.UHML ?? row.LEN ?? '';
+  if (key === 'LEN') return row.LEN ?? row.UHML ?? '';
+
+  return row[key] ?? '';
+};
+
+const NUMERIC_SORT_KEYS = new Set([
+  'QTDE_ESTOQUE',
+  'Stock',
+  'Usados',
+  'Sobrante',
+  'MIC',
+  'UHML',
+  'LEN',
+  'STR',
+  'PESO'
+]);
+
+const compareByKeyAsc = (a, b, key) => {
+  const valueA = getSortableValue(a, key);
+  const valueB = getSortableValue(b, key);
+
+  if (NUMERIC_SORT_KEYS.has(key)) {
+    const numA = Number(valueA);
+    const numB = Number(valueB);
+
+    const validA = !Number.isNaN(numA);
+    const validB = !Number.isNaN(numB);
+
+    if (validA && validB && numA !== numB) return numA - numB;
+    if (validA !== validB) return validA ? -1 : 1;
+  }
+
+  return normalizeSortText(valueA).localeCompare(normalizeSortText(valueB), 'es', {
+    sensitivity: 'base',
+    numeric: true
+  });
+};
+
+const compareByProducerThenLot = (a, b) => {
+  const producerA = normalizeSortText(a?.PRODUTOR);
+  const producerB = normalizeSortText(b?.PRODUTOR);
+
+  const producerCompare = producerA.localeCompare(producerB, 'es', {
+    sensitivity: 'base',
+    numeric: true
+  });
+
+  if (producerCompare !== 0) return producerCompare;
+
+  const lotA = normalizeSortText(a?.LOTE);
+  const lotB = normalizeSortText(b?.LOTE);
+
+  return lotA.localeCompare(lotB, 'es', {
+    sensitivity: 'base',
+    numeric: true
+  });
+};
+
+const cycleSortState = (state, key) => {
+  if (state.key !== key) {
+    state.key = key;
+    state.direction = 'asc';
+    return;
+  }
+
+  if (state.direction === 'asc') {
+    state.direction = 'desc';
+    return;
+  }
+
+  if (state.direction === 'desc') {
+    state.key = null;
+    state.direction = null;
+    return;
+  }
+
+  state.key = key;
+  state.direction = 'asc';
+};
+
+const isStockSortableColumn = (key) => STOCK_SORTABLE_KEYS.has(key);
+const isBlendSortableColumn = (key) => BLEND_SORTABLE_KEYS.has(key) || (typeof key === 'string' && key.startsWith('MEZCLA::'));
+
+const toggleStockSort = (key) => {
+  if (!isStockSortableColumn(key)) return;
+  cycleSortState(stockSortState, key);
+};
+
+const toggleBlendSort = (key) => {
+  if (!isBlendSortableColumn(key)) return;
+  cycleSortState(blendSortState, key);
+};
+
+const getStockSortDirection = (key) => (stockSortState.key === key ? stockSortState.direction : null);
+const getBlendSortDirection = (key) => (blendSortState.key === key ? blendSortState.direction : null);
+
+const sortRowsByState = (rows, sortState) => {
+  if (!sortState.key || !sortState.direction) return [...rows];
+
+  const directionFactor = sortState.direction === 'desc' ? -1 : 1;
+
+  return [...rows].sort((a, b) => {
+    const bySelected = compareByKeyAsc(a, b, sortState.key);
+    if (bySelected !== 0) return bySelected * directionFactor;
+
+    const byDefault = compareByProducerThenLot(a, b);
+    if (byDefault !== 0) return byDefault * directionFactor;
+
+    return 0;
+  });
+};
+
 const getMixesFromBlockId = (blockId) => {
   if (!blockId || typeof blockId !== 'string') return 1;
 
@@ -1263,6 +1518,16 @@ const planLotTotals = computed(() => {
   }, { stock: 0, usados: 0, sobrante: 0 });
 });
 
+const sortedBlendPlanRows = computed(() => {
+  const rows = blendPlan.value?.plan || [];
+  return sortRowsByState(rows, blendSortState);
+});
+
+const sortedRemanentes = computed(() => {
+  const rows = blendPlan.value?.remanentes || [];
+  return sortRowsByState(rows, blendSortState);
+});
+
 // Computed: Datos Filtrados
 const filteredData = computed(() => {
   return items.value.filter(item => {
@@ -1273,6 +1538,10 @@ const filteredData = computed(() => {
       item.LOTE.toLowerCase().includes(searchLower) ||
       item.DESTINO.toLowerCase().includes(searchLower);
   });
+});
+
+const sortedFilteredData = computed(() => {
+  return sortRowsByState(filteredData.value, stockSortState);
 });
 
 // Computed: Fila de Resumen (Promedios Ponderados y Totales)
@@ -1441,7 +1710,7 @@ const handleMezclas = async ({ silent = false } = {}) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        stock: filteredData.value, // Enviar solo el stock filtrado (ej. por búsqueda)
+        stock: sortedFilteredData.value, // Enviar stock filtrado y ordenado según selección
         rules: activeRules.value,
         supervisionSettings: supervisionSettings,
         blendSize: filters.fardos,
@@ -1491,7 +1760,20 @@ input[type=number] {
   padding-bottom: 0.25rem;
 }
 
+.compact-plan-table th,
+.compact-plan-table td,
+.stock-table th,
+.stock-table td {
+  padding-left: 0.25rem;
+  padding-right: 0.25rem;
+}
+
 .compact-plan-table tbody td {
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+
+.stock-table tbody td {
   padding-top: 0.25rem;
   padding-bottom: 0.25rem;
 }
