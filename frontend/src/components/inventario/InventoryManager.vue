@@ -301,12 +301,23 @@
       <div v-if="isBlendMode" class="p-4">
         <div class="flex justify-between items-center mb-4">
           <h2 class="text-xl font-bold text-gray-800">Plan de Mezclas Generado</h2>
-          <button 
-            @click="isBlendMode = false"
-            class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 font-semibold text-sm transition-colors"
-          >
-            Volver al Inventario
-          </button>
+          <div class="flex items-center gap-2">
+            <button 
+              @click="exportToExcel"
+              class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-semibold text-sm transition-colors flex items-center gap-2"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2m0 0v-8m0 8H3m15-8h3" />
+              </svg>
+              Exportar a Excel
+            </button>
+            <button 
+              @click="isBlendMode = false"
+              class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 font-semibold text-sm transition-colors"
+            >
+              Volver al Inventario
+            </button>
+          </div>
         </div>
 
         <div
@@ -436,7 +447,7 @@
                   </th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     <button type="button" class="inline-flex items-center gap-1" @click="toggleBlendSort('MotivoLogistico')">
-                      <span>Motivo Logístico</span>
+                      <span>Motivo Sobrante</span>
                       <svg class="w-3 h-3" :class="getBlendSortDirection('MotivoLogistico') ? 'text-blue-600' : 'text-gray-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path v-if="getBlendSortDirection('MotivoLogistico') === 'asc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
                         <path v-else-if="getBlendSortDirection('MotivoLogistico') === 'desc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
@@ -488,7 +499,7 @@
                     <th
                       class="px-4 py-3 text-center text-xs font-bold text-teal-700 uppercase tracking-wider border-l border-gray-300 bg-teal-50"
                     >
-                      S.Act.
+                      Saldo
                     </th>
                   </template>
                 </tr>
@@ -746,7 +757,7 @@
                   <th class="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase tracking-wider">MIC</th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase tracking-wider">STR</th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase tracking-wider">LEN</th>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase tracking-wider">Motivo Logístico</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase tracking-wider">Motivo Sobrante</th>
                 </tr>
               </thead>
               <tbody class="bg-white divide-y divide-gray-200">
@@ -849,6 +860,7 @@
 <script setup>
 import { ref, computed, reactive, onMounted, onBeforeUnmount, watch } from 'vue';
 import { CottonBale } from '../../models/CottonBale';
+import ExcelJS from 'exceljs';
 
 // --- Configuración de Columnas ---
 const allColumns = [
@@ -1902,6 +1914,255 @@ const handleMezclas = async ({ silent = false } = {}) => {
   } finally {
     isCalculatingBlend.value = false;
   }
+};
+
+// Función para exportar Plan de Mezclas a Excel con formato avanzado
+const exportToExcel = async () => {
+  if (!blendPlan.value || !blendPlan.value.plan) {
+    alert('No hay plan de mezclas para exportar.');
+    return;
+  }
+
+  const plan = blendPlan.value.plan || [];
+  const estadisticas = blendPlan.value.estadisticas || {};
+  const columnasMezcla = blendPlan.value.columnasMezcla || [];
+  
+  // Crear workbook
+  const workbook = new ExcelJS.Workbook();
+  
+  // Colores y estilos
+  const headerBg = 'FF1F4E78'; // Azul oscuro
+  const headerFont = { color: 'FFFFFFFF', bold: true, size: 11 };
+  const titleFont = { bold: true, size: 14, color: 'FF000000' };
+  const subTitleFont = { bold: true, size: 11, color: 'FF1F4E78' };
+  const centerAlign = { horizontal: 'center', vertical: 'center', wrapText: true };
+  const numberFormat = '#,##0.00';
+
+  const applyVerticalCenter = (sheet) => {
+    sheet.eachRow({ includeEmpty: true }, (row) => {
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        cell.alignment = { ...(cell.alignment || {}), vertical: 'middle' };
+      });
+    });
+  };
+  
+  // ===== Hoja 1: Plan de Mezclas =====
+  const planSheet = workbook.addWorksheet('Plan de Mezclas');
+  
+  // Título
+  const totalCols = 7 + 3 + columnasMezcla.length * 2;
+  planSheet.mergeCells(`A1:${String.fromCharCode(64 + totalCols)}1`);
+  const titleCell = planSheet.getCell('A1');
+  titleCell.value = 'PLAN DE MEZCLAS GENERADO';
+  titleCell.font = titleFont;
+  titleCell.alignment = centerAlign;
+  planSheet.getRow(1).height = 25;
+  
+  // Fecha
+  planSheet.mergeCells(`A2:${String.fromCharCode(64 + totalCols)}2`);
+  const dateCell = planSheet.getCell('A2');
+  dateCell.value = `Fecha: ${new Date().toLocaleDateString('es-ES')}`;
+  dateCell.font = { italic: true, size: 10 };
+  dateCell.alignment = { horizontal: 'center' };
+  
+  // Encabezados (mismo orden que la UI)
+  const headers = [
+    'Productor', 'Lote', 'Estado', 'Stock', 'Usados', 'Sobrante', 
+    'Motivo Sobrante', 'MIC', 'STR', 'LEN'
+  ];
+  
+  // Agregar columnas de mezclas dinámicamente
+  columnasMezcla.forEach((mixCol) => {
+    headers.push(mixCol);
+    headers.push(`Saldo ${mixCol}`);
+  });
+  
+  const headerRow = planSheet.addRow(headers);
+  headerRow.font = headerFont;
+  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: headerBg } };
+  headerRow.alignment = centerAlign;
+  planSheet.getRow(3).height = 20;
+  
+  // Ancho de columnas customizado (adaptativo a la cantidad de bloques)
+  const fixedWidths = [16, 7, 9, 9, 9, 9, 33, 7, 7, 7];
+  const columnWidths = headers.map((_, index) => fixedWidths[index] ?? 7);
+  planSheet.columns = columnWidths.map(width => ({ width }));
+  
+  // Datos
+  plan.forEach(row => {
+    const rowData = [
+      row.PRODUTOR || '',
+      row.LOTE || '',
+      row.Estado || '',
+      row.Stock !== undefined ? row.Stock : '',
+      row.Usados !== undefined ? row.Usados : '',
+      row.Sobrante !== undefined ? row.Sobrante : '',
+      getPlanMotivoLogistico(row),
+      row.MIC || '',
+      row.STR || '',
+      row.LEN || ''
+    ];
+    
+    // Mezclas y Saldo
+    columnasMezcla.forEach((mixCol, idx) => {
+      rowData.push(row.mezclas && row.mezclas[mixCol] ? row.mezclas[mixCol] : '');
+      const saldoValue = Number(getStockActualForBlock(row, idx));
+      rowData.push(Number.isNaN(saldoValue) ? '' : saldoValue);
+    });
+    
+    const newRow = planSheet.addRow(rowData);
+    newRow.alignment = { horizontal: 'center', vertical: 'center' };
+    
+    // Colorear Estado
+    const estadoCell = newRow.getCell(3);
+    if (row.Estado === 'NO USO' || row.Estado === 'RECH.') {
+      estadoCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFCCCC' } };
+    } else if (row.Estado === 'USO') {
+      estadoCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFCCFFCC' } };
+    }
+  });
+
+  applyVerticalCenter(planSheet);
+  
+  // ===== Hoja 2: Estadísticas =====
+  const statsSheet = workbook.addWorksheet('Estadísticas');
+  
+  // Título
+  statsSheet.mergeCells('A1:B1');
+  const statsTitle = statsSheet.getCell('A1');
+  statsTitle.value = 'ESTADÍSTICAS Y CONFIGURACIÓN';
+  statsTitle.font = titleFont;
+  statsTitle.alignment = centerAlign;
+  statsSheet.getRow(1).height = 22;
+  
+  let statsRow = 3;
+  
+  // Información general
+  statsSheet.getCell(`A${statsRow}`).value = 'Algoritmo';
+  statsSheet.getCell(`A${statsRow}`).font = subTitleFont;
+  statsSheet.getCell(`B${statsRow}`).value = appliedAlgorithmLabel.value || 'N/A';
+  statsRow++;
+  
+  statsSheet.getCell(`A${statsRow}`).value = 'Fecha de Cálculo';
+  statsSheet.getCell(`A${statsRow}`).font = subTitleFont;
+  statsSheet.getCell(`B${statsRow}`).value = appliedCalculationTimestamp.value || 'N/A';
+  statsRow++;
+  
+  statsSheet.getCell(`A${statsRow}`).value = 'Fardos por mezcla';
+  statsSheet.getCell(`A${statsRow}`).font = subTitleFont;
+  statsSheet.getCell(`B${statsRow}`).value = filters.fardos || 'N/A';
+  statsRow++;
+  
+  // Reglas aplicadas
+  if (appliedRulesSummary.value && appliedRulesSummary.value.length > 0) {
+    statsRow++;
+    statsSheet.getCell(`A${statsRow}`).value = 'REGLAS APLICADAS';
+    statsSheet.getCell(`A${statsRow}`).font = subTitleFont;
+    statsRow++;
+    
+    appliedRulesSummary.value.forEach(rule => {
+      statsSheet.getCell(`A${statsRow}`).value = rule.variable;
+      statsSheet.getCell(`B${statsRow}`).value = rule.target !== undefined ? rule.target : 'N/A';
+      statsRow++;
+    });
+  }
+  
+  // Estadísticas por bloque
+  if (estadisticas.mezclasBloque) {
+    statsRow++;
+    statsSheet.getCell(`A${statsRow}`).value = 'ESTADÍSTICAS POR BLOQUE';
+    statsSheet.getCell(`A${statsRow}`).font = subTitleFont;
+    statsRow++;
+    
+    Object.entries(estadisticas.mezclasBloque).forEach(([blockKey, stats]) => {
+      statsSheet.getCell(`A${statsRow}`).value = blockKey;
+      statsSheet.getCell(`A${statsRow}`).font = { bold: true };
+      statsRow++;
+      
+      if (stats.media !== undefined) {
+        statsSheet.getCell(`B${statsRow}`).value = 'Media';
+        statsSheet.getCell(`C${statsRow}`).value = stats.media;
+        statsRow++;
+      }
+      if (stats.min !== undefined) {
+        statsSheet.getCell(`B${statsRow}`).value = 'Mínimo';
+        statsSheet.getCell(`C${statsRow}`).value = stats.min;
+        statsRow++;
+      }
+      if (stats.max !== undefined) {
+        statsSheet.getCell(`B${statsRow}`).value = 'Máximo';
+        statsSheet.getCell(`C${statsRow}`).value = stats.max;
+        statsRow++;
+      }
+      if (stats.n !== undefined) {
+        statsSheet.getCell(`B${statsRow}`).value = 'Cantidad';
+        statsSheet.getCell(`C${statsRow}`).value = stats.n;
+        statsRow++;
+      }
+    });
+  }
+  
+  statsSheet.columns = [{ width: 25 }, { width: 20 }, { width: 20 }];
+
+  applyVerticalCenter(statsSheet);
+  
+  // ===== Hoja 3: Resumen de Stock =====
+  if (plan.length > 0) {
+    const summarySheet = workbook.addWorksheet('Resumen Stock');
+    
+    summarySheet.mergeCells('A1:G1');
+    const summaryTitle = summarySheet.getCell('A1');
+    summaryTitle.value = 'RESUMEN DE STOCK';
+    summaryTitle.font = titleFont;
+    summaryTitle.alignment = centerAlign;
+    summarySheet.getRow(1).height = 22;
+    
+    const summaryHeaders = ['Productor', 'Lote', 'Destino', 'Stock', 'Usados', 'Sobrante', 'Estado'];
+    const summaryHeaderRow = summarySheet.addRow(summaryHeaders);
+    summaryHeaderRow.font = headerFont;
+    summaryHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: headerBg } };
+    summaryHeaderRow.alignment = centerAlign;
+    
+    plan.forEach(row => {
+      const summaryRow = summarySheet.addRow([
+        row.PRODUTOR || '',
+        row.LOTE || '',
+        row.DESTINO || '',
+        row.Stock !== undefined ? row.Stock : '',
+        row.Usados !== undefined ? row.Usados : '',
+        row.Sobrante !== undefined ? row.Sobrante : '',
+        row.Estado || ''
+      ]);
+      summaryRow.alignment = { horizontal: 'center' };
+    });
+    
+    summarySheet.columns = [
+      { width: 15 }, { width: 12 }, { width: 15 }, { width: 10 },
+      { width: 10 }, { width: 10 }, { width: 15 }
+    ];
+
+    applyVerticalCenter(summarySheet);
+  }
+  
+  // Descargar (en navegador, usar blob)
+  const now = new Date();
+  const date = now.toISOString().split('T')[0];
+  const time = [String(now.getHours()).padStart(2, '0'), String(now.getMinutes()).padStart(2, '0'), String(now.getSeconds()).padStart(2, '0')].join('_');
+  const timestamp = `${date}_${time}`;
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { 
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+  });
+  
+  // Crear enlace de descarga
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `Plan_Mezclas_${timestamp}.xlsx`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 };
 </script>
 
