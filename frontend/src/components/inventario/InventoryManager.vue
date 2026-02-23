@@ -1938,6 +1938,27 @@ const exportToExcel = async () => {
   const centerAlign = { horizontal: 'center', vertical: 'center', wrapText: true };
   const numberFormat = '#,##0.00';
 
+  const applyCellStyleFromUiClass = (cell, uiClass) => {
+    if (!uiClass || typeof uiClass !== 'string') return;
+
+    if (uiClass.includes('bg-red-100')) {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
+      cell.font = { ...(cell.font || {}), color: { argb: 'FF991B1B' }, bold: true };
+      return;
+    }
+
+    if (uiClass.includes('bg-green-100')) {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } };
+      cell.font = { ...(cell.font || {}), color: { argb: 'FF166534' } };
+      return;
+    }
+
+    if (uiClass.includes('bg-yellow-50')) {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEFCE8' } };
+      cell.font = { ...(cell.font || {}), color: { argb: 'FFA16207' } };
+    }
+  };
+
   const applyVerticalCenter = (sheet) => {
     sheet.eachRow({ includeEmpty: true }, (row) => {
       row.eachCell({ includeEmpty: true }, (cell) => {
@@ -1948,22 +1969,56 @@ const exportToExcel = async () => {
   
   // ===== Hoja 1: Plan de Mezclas =====
   const planSheet = workbook.addWorksheet('Plan de Mezclas');
+  const planHeaderBg = 'FF9DC3E6'; // Azul claro para mejor contraste
+
+  const algorithmUsed = appliedAlgorithmLabel.value || 'N/A';
+  const executedAt = appliedCalculationTimestamp.value || new Date().toLocaleString('es-ES');
+
+  const getRuleValuesForExport = (uiKey) => {
+    const rule = getRuleFor(uiKey);
+    if (!rule) return { target: 'N/A', tolerance: 'N/A' };
+
+    const target = getRuleDisplay(rule, 'target') || 'N/A';
+    const tolerance = getRuleDisplay(rule, 'tolerance') || 'N/A';
+
+    return { target, tolerance };
+  };
   
   // Título
   const totalCols = 7 + 3 + columnasMezcla.length * 2;
   planSheet.mergeCells(`A1:${String.fromCharCode(64 + totalCols)}1`);
   const titleCell = planSheet.getCell('A1');
-  titleCell.value = 'PLAN DE MEZCLAS GENERADO';
-  titleCell.font = titleFont;
-  titleCell.alignment = centerAlign;
+  titleCell.value = {
+    richText: [
+      { font: { bold: true, size: 14, color: { argb: 'FF000000' } }, text: 'PLAN DE MEZCLAS GENERADO' },
+      { font: { bold: false, size: 12, color: { argb: 'FF000000' } }, text: ` | Algoritmo usado:${algorithmUsed} | Ejecutado:${executedAt}` }
+    ]
+  };
+  titleCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true, indent: 1 };
   planSheet.getRow(1).height = 25;
   
-  // Fecha
+  // Reglas aplicadas
   planSheet.mergeCells(`A2:${String.fromCharCode(64 + totalCols)}2`);
   const dateCell = planSheet.getCell('A2');
-  dateCell.value = `Fecha: ${new Date().toLocaleDateString('es-ES')}`;
-  dateCell.font = { italic: true, size: 10 };
-  dateCell.alignment = { horizontal: 'center' };
+  const micRuleValues = getRuleValuesForExport('MIC');
+  const lenRuleValues = getRuleValuesForExport('UHML');
+  const strRuleValues = getRuleValuesForExport('STR');
+  const infoFont = { size: 10, color: { argb: 'FF1F4E78' } };
+
+  dateCell.value = {
+    richText: [
+      { font: { ...infoFont, bold: true }, text: 'Reglas aplicadas en este cálculo' },
+      { font: infoFont, text: '\n' },
+      { font: { ...infoFont, bold: true }, text: 'MIC' },
+      { font: infoFont, text: `: Target: ${micRuleValues.target} | Hard Cap | Tolerancia: ${micRuleValues.tolerance}  |  ` },
+      { font: { ...infoFont, bold: true }, text: 'LEN (UHML)' },
+      { font: infoFont, text: `: Target: ${lenRuleValues.target} | Hard Cap | Tolerancia: ${lenRuleValues.tolerance}  |  ` },
+      { font: { ...infoFont, bold: true }, text: 'STR' },
+      { font: infoFont, text: `: Target: ${strRuleValues.target} | Hard Cap | Tolerancia: ${strRuleValues.tolerance}` }
+    ]
+  };
+  dateCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+  planSheet.getRow(2).height = 36;
   
   // Encabezados (mismo orden que la UI)
   const headers = [
@@ -1974,18 +2029,24 @@ const exportToExcel = async () => {
   // Agregar columnas de mezclas dinámicamente
   columnasMezcla.forEach((mixCol) => {
     headers.push(mixCol);
-    headers.push(`Saldo ${mixCol}`);
+    headers.push('Saldo');
   });
   
   const headerRow = planSheet.addRow(headers);
   headerRow.font = headerFont;
-  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: headerBg } };
   headerRow.alignment = centerAlign;
+  for (let col = 1; col <= headers.length; col += 1) {
+    const cell = headerRow.getCell(col);
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: planHeaderBg } };
+  }
   planSheet.getRow(3).height = 20;
   
   // Ancho de columnas customizado (adaptativo a la cantidad de bloques)
   const fixedWidths = [16, 7, 9, 9, 9, 9, 33, 7, 7, 7];
-  const columnWidths = headers.map((_, index) => fixedWidths[index] ?? 7);
+  const columnWidths = headers.map((_, index) => {
+    if (index < fixedWidths.length) return fixedWidths[index];
+    return 9;
+  });
   planSheet.columns = columnWidths.map(width => ({ width }));
   
   // Datos
@@ -2019,6 +2080,315 @@ const exportToExcel = async () => {
       estadoCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFCCCC' } };
     } else if (row.Estado === 'USO') {
       estadoCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFCCFFCC' } };
+    }
+
+    const micCell = newRow.getCell(8);
+    const strCell = newRow.getCell(9);
+    const lenCell = newRow.getCell(10);
+    applyCellStyleFromUiClass(micCell, getCellClass(row, 'MIC'));
+    applyCellStyleFromUiClass(strCell, getCellClass(row, 'STR'));
+    applyCellStyleFromUiClass(lenCell, getCellClass(row, 'UHML'));
+  });
+
+  // SUBTOTALES
+  // Calcular sumas para las columnas numéricas
+  const subtotales = {
+    stock: 0,
+    usados: 0,
+    sobrante: 0,
+    mezclas: {}, // Para cada columna de mezcla
+    saldos: {}   // Para cada columna de saldo
+  };
+  
+  plan.forEach(row => {
+    subtotales.stock += Number(row.Stock) || 0;
+    subtotales.usados += Number(row.Usados) || 0;
+    subtotales.sobrante += Number(row.Sobrante) || 0;
+    
+    // Sumar mezclas y saldos
+    columnasMezcla.forEach((mixCol, idx) => {
+      if (!subtotales.mezclas[mixCol]) subtotales.mezclas[mixCol] = 0;
+      if (!subtotales.saldos[mixCol]) subtotales.saldos[mixCol] = 0;
+      
+      const mezclaValue = row.mezclas && row.mezclas[mixCol] ? Number(row.mezclas[mixCol]) : 0;
+      subtotales.mezclas[mixCol] += mezclaValue || 0;
+      
+      const saldoValue = Number(getStockActualForBlock(row, idx));
+      subtotales.saldos[mixCol] += (Number.isNaN(saldoValue) ? 0 : saldoValue);
+    });
+  });
+  
+  // Agregar fila de subtotales
+  const subtotalesRowData = [
+    '', // Productor
+    '', // Lote
+    'SUBTOTALES', // Estado
+    subtotales.stock,
+    subtotales.usados,
+    subtotales.sobrante,
+    '', // Motivo Sobrante
+    '', // MIC
+    '', // STR
+    ''  // LEN
+  ];
+  
+  // Agregar subtotales de mezclas y saldos
+  columnasMezcla.forEach((mixCol) => {
+    subtotalesRowData.push(subtotales.mezclas[mixCol] || 0);
+    subtotalesRowData.push(subtotales.saldos[mixCol] || 0);
+  });
+  
+  const subtotalesRow = planSheet.addRow(subtotalesRowData);
+  subtotalesRow.font = { bold: true, size: 11 };
+  subtotalesRow.alignment = { horizontal: 'center', vertical: 'center' };
+  for (let col = 1; col <= headers.length; col += 1) {
+    const cell = subtotalesRow.getCell(col);
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F4F8' } };
+  }
+  
+  // Aplicar borde superior a la fila de subtotales
+  subtotalesRow.eachCell({ includeEmpty: false }, (cell) => {
+    cell.border = {
+      top: { style: 'medium', color: { argb: 'FF1F4E78' } }
+    };
+    // Formato numérico para celdas numéricas (sin decimales, con separador de millar)
+    if (typeof cell.value === 'number') {
+      cell.numFmt = '#,##0';
+    }
+  });
+
+  // Bordes gris claro para toda la tabla (encabezados + datos + subtotales)
+  for (let rowNumber = 3; rowNumber <= subtotalesRow.number; rowNumber += 1) {
+    const rowRef = planSheet.getRow(rowNumber);
+    for (let colNumber = 1; colNumber <= headers.length; colNumber += 1) {
+      const cell = rowRef.getCell(colNumber);
+      const hasTopMediumBorder = rowNumber === subtotalesRow.number;
+      cell.border = {
+        top: hasTopMediumBorder
+          ? { style: 'medium', color: { argb: 'FF1F4E78' } }
+          : { style: 'thin', color: { argb: 'FFD1D5DB' } },
+        left: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+        bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+        right: { style: 'thin', color: { argb: 'FFD1D5DB' } }
+      };
+    }
+  }
+
+  // ===== Estadísticas debajo de subtotales (desde columna H) =====
+  const statsStartCol = 8; // Columna H
+  const statsLabelCol = statsStartCol;
+  const statsTypeCol = statsStartCol + 1;
+  const statsMetricCol = statsStartCol + 2;
+  const firstBlockValueCol = 11; // Primera columna de bloque (M1-...)
+  const statsEndCol = headers.length;
+
+  const toNumeric = (value, fallback = 0) => {
+    const numericValue = Number(value);
+    return Number.isNaN(numericValue) ? fallback : numericValue;
+  };
+
+  const getBlockValueCol = (blockIndex) => firstBlockValueCol + (blockIndex * 2);
+
+  const statsRowsConfig = [
+    {
+      label: 'Mezcla',
+      rows: [
+        {
+          type: 'Cantidad',
+          metric: 'Fardos',
+          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.totalFardos, 0),
+          numFmt: '#,##0'
+        },
+        {
+          type: '',
+          metric: 'Bloques',
+          valueGetter: (blockId) => toNumeric(getBlockMixCount(blockId), 0),
+          numFmt: '#,##0'
+        },
+        {
+          type: 'Peso',
+          metric: 'Por Mezcla',
+          valueGetter: (blockId) => toNumeric(getPesoPorMezclaForColumn(blockId), 0),
+          numFmt: '#,##0'
+        },
+        {
+          type: '',
+          metric: 'Por Bloque',
+          valueGetter: (blockId) => toNumeric(getPesoTotalBloqueForColumn(blockId), 0),
+          numFmt: '#,##0'
+        }
+      ]
+    },
+    {
+      label: 'MIC',
+      rows: [
+        {
+          type: 'Promedio',
+          metric: 'Bloque',
+          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.MIC?.promedioGeneral, 0),
+          numFmt: '0.00'
+        },
+        {
+          type: '',
+          metric: '90%',
+          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.MIC?.promedioIdeal, 0),
+          numFmt: '0.00'
+        },
+        {
+          type: '',
+          metric: '10%',
+          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.MIC?.promedioTolerancia, 0),
+          numFmt: '0.00'
+        },
+        {
+          type: 'Porcentual',
+          metric: '90%',
+          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.MIC?.pctIdeal, 0) / 100,
+          numFmt: '0.0%'
+        },
+        {
+          type: '',
+          metric: '10%',
+          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.MIC?.pctTolerancia, 0) / 100,
+          numFmt: '0.0%'
+        }
+      ]
+    },
+    {
+      label: 'STR',
+      rows: [
+        {
+          type: 'Promedio',
+          metric: 'Bloque',
+          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.STR?.promedioGeneral, 0),
+          numFmt: '0.00'
+        },
+        {
+          type: '',
+          metric: '80%',
+          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.STR?.promedioIdeal, 0),
+          numFmt: '0.00'
+        },
+        {
+          type: '',
+          metric: '20%',
+          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.STR?.promedioTolerancia, 0),
+          numFmt: '0.00'
+        },
+        {
+          type: 'Porcentual',
+          metric: '80%',
+          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.STR?.pctIdeal, 0) / 100,
+          numFmt: '0.0%'
+        },
+        {
+          type: '',
+          metric: '20%',
+          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.STR?.pctTolerancia, 0) / 100,
+          numFmt: '0.0%'
+        }
+      ]
+    },
+    {
+      label: 'LEN',
+      rows: [
+        {
+          type: 'Promedio',
+          metric: 'Bloque',
+          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.LEN?.promedioGeneral, 0),
+          numFmt: '0.00'
+        },
+        {
+          type: '',
+          metric: '80%',
+          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.LEN?.promedioIdeal, 0),
+          numFmt: '0.00'
+        },
+        {
+          type: '',
+          metric: '20%',
+          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.LEN?.promedioTolerancia, 0),
+          numFmt: '0.00'
+        },
+        {
+          type: 'Porcentual',
+          metric: '80%',
+          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.LEN?.pctIdeal, 0) / 100,
+          numFmt: '0.0%'
+        },
+        {
+          type: '',
+          metric: '20%',
+          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.LEN?.pctTolerancia, 0) / 100,
+          numFmt: '0.0%'
+        }
+      ]
+    }
+  ];
+
+  let currentStatsRow = subtotalesRow.number + 1;
+  const statsSectionStartRows = [];
+
+  statsRowsConfig.forEach((section) => {
+    const sectionStartRow = currentStatsRow;
+    statsSectionStartRows.push(sectionStartRow);
+
+    section.rows.forEach((rowDef, rowIndex) => {
+      const rowRef = planSheet.getRow(currentStatsRow);
+
+      if (rowIndex === 0) {
+        rowRef.getCell(statsLabelCol).value = section.label;
+      }
+
+      rowRef.getCell(statsTypeCol).value = rowDef.type || '';
+      rowRef.getCell(statsMetricCol).value = rowDef.metric || '';
+
+      columnasMezcla.forEach((blockId, blockIndex) => {
+        const valueCol = getBlockValueCol(blockIndex);
+        const valueCell = rowRef.getCell(valueCol);
+        valueCell.value = rowDef.valueGetter(blockId);
+        valueCell.numFmt = rowDef.numFmt;
+      });
+
+      for (let colNumber = statsStartCol; colNumber <= statsEndCol; colNumber += 1) {
+        const cell = rowRef.getCell(colNumber);
+        const isSectionStart = rowIndex === 0;
+        const isSectionEnd = rowIndex === section.rows.length - 1;
+
+        cell.border = {
+          top: isSectionStart
+            ? { style: 'medium', color: { argb: 'FF4B5563' } }
+            : { style: 'thin', color: { argb: 'FFD1D5DB' } },
+          left: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+          bottom: isSectionEnd
+            ? { style: 'medium', color: { argb: 'FF4B5563' } }
+            : { style: 'thin', color: { argb: 'FFD1D5DB' } },
+          right: { style: 'thin', color: { argb: 'FFD1D5DB' } }
+        };
+
+        if (colNumber >= statsStartCol && colNumber <= statsMetricCol) {
+          cell.font = { ...(cell.font || {}), bold: true, color: { argb: 'FF111827' } };
+          cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        } else {
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          if (cell.value !== null && cell.value !== undefined && cell.value !== '') {
+            cell.font = { ...(cell.font || {}), bold: true, color: { argb: 'FF0F172A' } };
+          }
+        }
+      }
+
+      currentStatsRow += 1;
+    });
+
+    // Merge vertical labels por sección (columna H)
+    if (section.rows.length > 1) {
+      planSheet.mergeCells(sectionStartRow, statsLabelCol, currentStatsRow - 1, statsLabelCol);
+    }
+
+    // Merge "Promedio" y "Porcentual" para MIC/STR/LEN en columna I
+    if (['MIC', 'STR', 'LEN'].includes(section.label)) {
+      planSheet.mergeCells(sectionStartRow, statsTypeCol, sectionStartRow + 2, statsTypeCol);
+      planSheet.mergeCells(sectionStartRow + 3, statsTypeCol, sectionStartRow + 4, statsTypeCol);
     }
   });
 
