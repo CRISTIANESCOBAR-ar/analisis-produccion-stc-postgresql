@@ -745,8 +745,133 @@
             </table>
           </div>
 
+          <h3 class="text-lg font-bold text-gray-800 mb-3 mt-8 border-t pt-6">Proyección de Compra por Calidad</h3>
+          <div class="border rounded-lg bg-emerald-50/40 border-emerald-200 p-4">
+            <div class="grid grid-cols-1 lg:grid-cols-6 gap-3 mb-4">
+              <div>
+                <label class="block text-xs font-semibold text-gray-700 mb-1">Mezclas objetivo</label>
+                <input
+                  v-model.number="purchaseProjection.targetMixes"
+                  type="number"
+                  min="1"
+                  class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm p-2 border"
+                />
+                <p v-if="purchaseProjection.targetMixes < purchaseProjection.minMixesForBlock" class="mt-1 text-[11px] text-amber-700 font-medium">
+                  Recomendado para bloque: mínimo {{ purchaseProjection.minMixesForBlock }} mezclas.
+                </p>
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-gray-700 mb-1">Fuente disponible</label>
+                <select
+                  v-model="purchaseProjection.source"
+                  class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm p-2 border"
+                >
+                  <option value="stock">Stock actual</option>
+                  <option value="remanente">Sobrante no usado</option>
+                </select>
+              </div>
+
+              <div class="bg-white rounded-md border border-emerald-100 px-3 py-2">
+                <p class="text-[11px] text-gray-500 uppercase tracking-wide">Fardos por mezcla</p>
+                <p class="text-lg font-bold text-emerald-700">{{ formatThousandInteger(filters.fardos || 0) }}</p>
+              </div>
+
+              <div v-if="purchaseProjection.source !== 'stock'" class="bg-white rounded-md border border-emerald-100 px-3 py-2">
+                <p class="text-[11px] text-gray-500 uppercase tracking-wide">Mezclas base generadas</p>
+                <p class="text-lg font-bold text-emerald-700">{{ formatThousandInteger(generatedMixesCount) }}</p>
+              </div>
+
+              <div class="bg-white rounded-md border border-emerald-100 px-3 py-2">
+                <p class="text-[11px] text-gray-500 uppercase tracking-wide">Stock total fuente</p>
+                <p class="text-lg font-bold text-emerald-700">{{ formatThousandInteger(projectionSourceTotals.stockFardos) }}</p>
+              </div>
+
+              <div class="bg-white rounded-md border border-emerald-100 px-3 py-2">
+                <p class="text-[11px] text-gray-500 uppercase tracking-wide">Peso total fuente (kg)</p>
+                <p class="text-lg font-bold text-emerald-700">{{ formatThousandInteger(projectionSourceTotals.stockPeso) }}</p>
+              </div>
+            </div>
+
+            <div v-if="purchaseProjectionError" class="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {{ purchaseProjectionError }}
+            </div>
+
+            <div v-if="projectionVariablePurchaseRows.length" class="mt-4 overflow-x-auto border rounded-lg bg-white">
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-emerald-100/60">
+                  <tr>
+                    <th class="px-3 py-2 text-left text-xs font-semibold text-emerald-900 uppercase tracking-wide">Variable</th>
+                    <th class="px-3 py-2 text-right text-xs font-semibold text-emerald-900 uppercase tracking-wide">Disponible</th>
+                    <th class="px-3 py-2 text-right text-xs font-semibold text-emerald-900 uppercase tracking-wide">Faltante</th>
+                    <th class="px-3 py-2 text-right text-xs font-semibold text-emerald-900 uppercase tracking-wide">Total Fardos</th>
+                    <th class="px-3 py-2 text-right text-xs font-semibold text-emerald-900 uppercase tracking-wide">Peso Medio Fardo</th>
+                    <th class="px-3 py-2 text-right text-xs font-semibold text-emerald-900 uppercase tracking-wide">Peso Total</th>
+                    <th class="px-3 py-2 text-right text-xs font-semibold text-emerald-900 uppercase tracking-wide">Fardos x Mezcla</th>
+                    <th class="px-3 py-2 text-right text-xs font-semibold text-emerald-900 uppercase tracking-wide">Tamaño Bloque</th>
+                    <th class="px-3 py-2 text-right text-xs font-semibold text-emerald-900 uppercase tracking-wide">Promedio actual</th>
+                    <th class="px-3 py-2 text-right text-xs font-semibold text-emerald-900 uppercase tracking-wide">Objetivo</th>
+                    <th class="px-3 py-2 text-right text-xs font-semibold text-emerald-900 uppercase tracking-wide">A Comprar</th>
+                    <th class="px-3 py-2 text-right text-xs font-semibold text-emerald-900 uppercase tracking-wide">Promedio Final</th>
+                    <th class="px-3 py-2 text-right text-xs font-semibold text-emerald-900 uppercase tracking-wide">Kg compra global</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                  <tr v-for="item in projectionVariablePurchaseRows" :key="`var-buy-${item.uiKey}`" class="hover:bg-emerald-50/30">
+                    <td class="px-3 py-2 text-sm font-semibold text-gray-800">{{ item.label }}</td>
+                    <td class="px-3 py-2 text-sm text-right text-gray-700">{{ formatProjectionValue(item.disponibleFardos, 0) }}</td>
+                    <td class="px-3 py-2 text-sm text-right text-gray-700">{{ formatProjectionValue(item.faltanteFardos, 0) }}</td>
+                    <td class="px-3 py-2 text-sm text-right text-gray-700">{{ formatProjectionValue(item.totalFardos, 0) }}</td>
+                    <td class="px-3 py-2 text-sm text-right text-gray-700">{{ formatProjectionValue(item.pesoMedioFardo, 0) }}</td>
+                    <td class="px-3 py-2 text-sm text-right text-gray-700">{{ formatThousandInteger(item.pesoTotalKg) }}</td>
+                    <td class="px-3 py-2 text-sm text-right text-gray-700">{{ formatProjectionValue(item.fardosPorMezcla, 0) }}</td>
+                    <td class="px-3 py-2 text-sm text-right text-gray-700">{{ formatProjectionValue(item.tamanoBloque, 0) }}</td>
+                    <td class="px-3 py-2 text-sm text-right text-gray-700">{{ formatProjectionValue(item.promedioActual, 2) }}</td>
+                    <td class="px-3 py-2 text-sm text-right text-gray-700">
+                      <span v-if="item.objetivoComparador && item.objetivoValor !== null">
+                        {{ item.objetivoComparador }} {{ formatProjectionValue(item.objetivoValor, 2) }}
+                      </span>
+                      <span v-else>-</span>
+                    </td>
+                    <td class="px-3 py-2 text-sm text-right font-semibold text-indigo-800">
+                      <span v-if="item.comprarComparador && item.comprarValor !== null">
+                        {{ item.comprarComparador }} {{ formatProjectionValue(item.comprarValor, 2) }}
+                      </span>
+                      <span v-else>-</span>
+                    </td>
+                    <td class="px-3 py-2 text-sm text-right font-semibold text-emerald-800">
+                      {{ item.promedioFinal !== null ? formatProjectionValue(item.promedioFinal, 2) : '-' }}
+                    </td>
+                    <td class="px-3 py-2 text-sm text-right font-bold text-emerald-800">{{ formatThousandInteger(item.totalKgToBuy) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div v-else-if="!purchaseProjectionError" class="mt-4 rounded border border-gray-200 bg-white px-4 py-3 text-sm text-gray-500 italic">
+              No hay datos suficientes para mostrar el resumen global por variable.
+            </div>
+
+            <div class="mt-3 text-xs text-emerald-900 bg-emerald-100/60 border border-emerald-200 rounded px-3 py-2">
+              <span class="font-semibold">Guía de calidad:</span>
+              La recomendación HVI se calcula en función de las variables activadas en “Reglas de Mezclas” y de la fuente seleccionada (stock o remanente).
+              <template v-if="projectionGlobalGuidance.length">
+                <div class="mt-1.5 space-y-0.5">
+                  <p v-for="item in projectionGlobalGuidance" :key="`global-hvi-${item.uiKey}`">
+                    <span class="font-semibold">{{ item.label }}:</span>
+                    base {{ formatProjectionValue(item.sourceAverage, 2) }} ·
+                    {{ buildGlobalGuidanceSummary(item) }} ·
+                    Kg compra global: {{ formatThousandInteger(item.totalKgToBuy) }}
+                  </p>
+                </div>
+              </template>
+              <template v-else>
+                Selecciona al menos una variable (Target/Tolerancia/Límites) para generar orientación de calidad.
+              </template>
+            </div>
+          </div>
+
           <!-- Tabla de Remanentes / No Usados -->
-          <h3 class="text-lg font-bold text-gray-800 mb-3 mt-8 border-t pt-6">Lotes No Usados / Remanentes</h3>
+          <h3 class="text-lg font-bold text-gray-800 mb-3 mt-8 border-t pt-6">{{ projectionSourceTableTitle }}</h3>
           <div class="overflow-x-auto border rounded-lg">
             <table class="min-w-full divide-y divide-gray-200">
               <thead class="bg-red-50">
@@ -754,26 +879,42 @@
                   <th class="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase tracking-wider">Productor</th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase tracking-wider">Lote</th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase tracking-wider">Fardos</th>
+                  <th v-if="projectionSourceShowWeightColumns" class="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase tracking-wider">Kilogramos</th>
+                  <th v-if="projectionSourceShowWeightColumns" class="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase tracking-wider">Peso Medio</th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase tracking-wider">MIC</th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase tracking-wider">STR</th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase tracking-wider">LEN</th>
-                  <th class="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase tracking-wider">Motivo Sobrante</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase tracking-wider">{{ projectionSourceTableReasonLabel }}</th>
                 </tr>
               </thead>
               <tbody class="bg-white divide-y divide-gray-200">
-                <tr v-if="sortedRemanentes.length === 0">
-                  <td colspan="7" class="px-4 py-4 text-center text-gray-500 italic">No hay lotes remanentes. Se usó todo el stock.</td>
+                <tr v-if="projectionSourceTableRows.length === 0">
+                  <td :colspan="projectionSourceTableColspan" class="px-4 py-4 text-center text-gray-500 italic">{{ projectionSourceTableEmptyMessage }}</td>
                 </tr>
-                <tr v-else v-for="(row, index) in sortedRemanentes" :key="index" class="hover:bg-red-50/50">
+                <tr v-else v-for="(row, index) in projectionSourceTableRows" :key="`projection-source-${index}`" class="hover:bg-red-50/50">
                   <td class="px-4 py-2 text-sm text-gray-900 font-medium">{{ row.PRODUTOR }}</td>
                   <td class="px-4 py-2 text-sm text-gray-600">{{ row.LOTE }}</td>
                   <td class="px-4 py-2 text-sm font-bold text-gray-800">{{ row.Fardos }}</td>
+                  <td v-if="projectionSourceShowWeightColumns" class="px-4 py-2 text-sm font-semibold text-gray-800">{{ formatThousandInteger(row.Kilogramos) }}</td>
+                  <td v-if="projectionSourceShowWeightColumns" class="px-4 py-2 text-sm text-gray-700">{{ formatProjectionValue(row.PesoMedio, 2) }}</td>
                   <td class="px-4 py-2 text-sm" :class="getCellClass(row, 'MIC')">{{ formatValue(row.MIC, 'MIC') }}</td>
                   <td class="px-4 py-2 text-sm" :class="getCellClass(row, 'STR')">{{ formatValue(row.STR, 'STR') }}</td>
                   <td class="px-4 py-2 text-sm" :class="getCellClass(row, 'UHML')">{{ formatValue(row.LEN, 'UHML') }}</td>
                   <td class="px-4 py-2 text-sm text-red-600 font-medium">{{ row.Motivo }}</td>
                 </tr>
               </tbody>
+              <tfoot v-if="projectionSourceTableRows.length > 0" class="bg-gray-50 border-t-2 border-gray-300">
+                <tr>
+                  <td colspan="2" class="px-4 py-2 text-sm font-bold text-gray-800">Totales</td>
+                  <td class="px-4 py-2 text-sm font-bold text-gray-800">{{ formatThousandInteger(projectionSourceTableTotals.fardos) }}</td>
+                  <td v-if="projectionSourceShowWeightColumns" class="px-4 py-2 text-sm font-bold text-gray-800">{{ formatThousandInteger(projectionSourceTableTotals.kilogramos) }}</td>
+                  <td v-if="projectionSourceShowWeightColumns" class="px-4 py-2 text-sm font-bold text-gray-800">{{ formatProjectionValue(projectionSourceTableTotals.pesoMedio, 2) }}</td>
+                  <td class="px-4 py-2 text-sm font-bold text-gray-800">{{ formatProjectionValue(projectionSourceTableTotals.mic, 2) }}</td>
+                  <td class="px-4 py-2 text-sm font-bold text-gray-800">{{ formatProjectionValue(projectionSourceTableTotals.str, 2) }}</td>
+                  <td class="px-4 py-2 text-sm font-bold text-gray-800">{{ formatProjectionValue(projectionSourceTableTotals.len, 2) }}</td>
+                  <td class="px-4 py-2 text-sm text-gray-400">—</td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>
@@ -910,6 +1051,11 @@ const blendUserMessage = ref(null);
 const appliedRulesSummary = ref([]);
 const appliedAlgorithmLabel = ref('');
 const appliedCalculationTimestamp = ref('');
+const purchaseProjection = reactive({
+  targetMixes: 20,
+  source: 'stock',
+  minMixesForBlock: 20
+});
 
 // Params to supervise
 const monitoredParams = [
@@ -991,6 +1137,8 @@ const saveUserPreferences = () => {
     const prefs = {
       fardos: filters.fardos,
       blendAlgorithm: blendAlgorithm.value,
+      purchaseProjectionTargetMixes: purchaseProjection.targetMixes,
+      purchaseProjectionSource: purchaseProjection.source,
       selectedColumns: Array.from(selectedColumnKeys.value),
       supervisionSettings: monitoredParams.reduce((acc, p) => {
         const current = supervisionSettings[p.key] || {};
@@ -1029,6 +1177,15 @@ const loadUserPreferences = () => {
     const allowedAlgorithms = ['standard', 'stability', 'stability-strict'];
     if (allowedAlgorithms.includes(prefs.blendAlgorithm)) {
       blendAlgorithm.value = prefs.blendAlgorithm;
+    }
+
+    const parsedTargetMixes = Number(prefs.purchaseProjectionTargetMixes);
+    if (!Number.isNaN(parsedTargetMixes) && parsedTargetMixes > 0) {
+      purchaseProjection.targetMixes = Math.floor(parsedTargetMixes);
+    }
+
+    if (prefs.purchaseProjectionSource === 'stock' || prefs.purchaseProjectionSource === 'remanente') {
+      purchaseProjection.source = prefs.purchaseProjectionSource;
     }
 
     if (Array.isArray(prefs.selectedColumns)) {
@@ -1361,6 +1518,23 @@ watch(supervisionSettings, () => {
   scheduleBlendRecalculation();
 }, { deep: true });
 
+watch(() => purchaseProjection.targetMixes, (value) => {
+  const numericValue = Number(value);
+  if (Number.isNaN(numericValue) || numericValue <= 0) return;
+
+  const rounded = Math.floor(numericValue);
+  if (rounded !== purchaseProjection.targetMixes) {
+    purchaseProjection.targetMixes = rounded;
+    return;
+  }
+
+  saveUserPreferences();
+});
+
+watch(() => purchaseProjection.source, () => {
+  saveUserPreferences();
+});
+
 onBeforeUnmount(() => {
   if (autoBlendRecalcTimeout) {
     clearTimeout(autoBlendRecalcTimeout);
@@ -1627,6 +1801,727 @@ const sortedRemanentes = computed(() => {
   return sortRowsByState(rows, blendSortState);
 });
 
+const projectionSourceShowWeightColumns = computed(() => purchaseProjection.source === 'stock');
+const projectionSourceTableColspan = computed(() => (projectionSourceShowWeightColumns.value ? 9 : 7));
+
+const projectionSourceTableRows = computed(() => {
+  const fallbackAverageWeight = getFallbackAverageWeightPerBale();
+
+  if (purchaseProjection.source === 'stock') {
+    return sortedBlendPlanRows.value.map((row) => {
+      const fardos = Number(row.Stock) || 0;
+      const rowWeight = resolveRowWeight(row);
+      const kilogramos = (rowWeight !== null && rowWeight > 0)
+        ? rowWeight
+        : (fardos * fallbackAverageWeight);
+      const pesoMedio = fardos > 0 ? (kilogramos / fardos) : 0;
+
+      return {
+        PRODUTOR: row.PRODUTOR,
+        LOTE: row.LOTE,
+        Fardos: fardos,
+        Kilogramos: kilogramos,
+        PesoMedio: pesoMedio,
+        MIC: row.MIC,
+        STR: row.STR,
+        LEN: row.LEN,
+        Motivo: getPlanMotivoLogistico(row)
+      };
+    });
+  }
+
+  return sortedRemanentes.value.map((row) => ({
+    PRODUTOR: row.PRODUTOR,
+    LOTE: row.LOTE,
+    Fardos: Number(row.Fardos) || 0,
+    MIC: row.MIC,
+    STR: row.STR,
+    LEN: row.LEN,
+    Motivo: row.Motivo
+  }));
+});
+
+const projectionSourceTableTotals = computed(() => {
+  const totals = projectionSourceTableRows.value.reduce((acc, row) => {
+    const fardos = Number(row?.Fardos) || 0;
+    const kilograms = parseMaybeLocalizedNumber(row?.Kilogramos) || 0;
+    const micValue = parseMaybeLocalizedNumber(row?.MIC);
+    const strValue = parseMaybeLocalizedNumber(row?.STR);
+    const lenValue = parseMaybeLocalizedNumber(row?.LEN);
+
+    acc.fardos += fardos;
+    acc.kilogramos += kilograms;
+
+    if (fardos > 0 && micValue !== null) {
+      acc.micWeighted += (micValue * fardos);
+      acc.micWeight += fardos;
+    }
+
+    if (fardos > 0 && strValue !== null) {
+      acc.strWeighted += (strValue * fardos);
+      acc.strWeight += fardos;
+    }
+
+    if (fardos > 0 && lenValue !== null) {
+      acc.lenWeighted += (lenValue * fardos);
+      acc.lenWeight += fardos;
+    }
+
+    return acc;
+  }, {
+    fardos: 0,
+    kilogramos: 0,
+    micWeighted: 0,
+    micWeight: 0,
+    strWeighted: 0,
+    strWeight: 0,
+    lenWeighted: 0,
+    lenWeight: 0
+  });
+
+  return {
+    fardos: totals.fardos,
+    kilogramos: totals.kilogramos,
+    pesoMedio: totals.fardos > 0 ? (totals.kilogramos / totals.fardos) : 0,
+    mic: totals.micWeight > 0 ? (totals.micWeighted / totals.micWeight) : 0,
+    str: totals.strWeight > 0 ? (totals.strWeighted / totals.strWeight) : 0,
+    len: totals.lenWeight > 0 ? (totals.lenWeighted / totals.lenWeight) : 0
+  };
+});
+
+const projectionSourceTableTitle = computed(() => {
+  return purchaseProjection.source === 'stock'
+    ? 'Lotes de Stock Actual (Referencia Proyección)'
+    : 'Lotes No Usados / Remanentes';
+});
+
+const projectionSourceTableReasonLabel = computed(() => {
+  return purchaseProjection.source === 'stock'
+    ? 'Motivo / Estado'
+    : 'Motivo Sobrante';
+});
+
+const projectionSourceTableEmptyMessage = computed(() => {
+  return purchaseProjection.source === 'stock'
+    ? 'No hay lotes de stock disponibles para mostrar.'
+    : 'No hay lotes remanentes. Se usó todo el stock.';
+});
+
+const getQualityKey = (row) => {
+  const sourceValue = row?.CLASSIF ?? row?.TIPO ?? row?.COR ?? 'SIN CALIDAD';
+  const normalized = normalizeSortText(sourceValue);
+  return normalized || 'SIN CALIDAD';
+};
+
+const generatedMixesCount = computed(() => {
+  const columns = blendPlan.value?.columnasMezcla;
+  if (!Array.isArray(columns) || columns.length === 0) return 0;
+
+  return columns.reduce((sum, colId) => sum + getBlockMixCount(colId), 0);
+});
+
+const recipeByQualityPerMix = computed(() => {
+  const rows = blendPlan.value?.plan;
+  if (!Array.isArray(rows) || rows.length === 0) return [];
+
+  const totalGeneratedMixes = generatedMixesCount.value;
+  if (!totalGeneratedMixes || totalGeneratedMixes <= 0) return [];
+
+  const grouped = new Map();
+
+  rows.forEach((row) => {
+    const qualityKey = getQualityKey(row);
+    const usedBales = Number(row?.Usados) || 0;
+
+    if (!grouped.has(qualityKey)) {
+      grouped.set(qualityKey, { calidad: qualityKey, usados: 0 });
+    }
+
+    const bucket = grouped.get(qualityKey);
+    bucket.usados += usedBales;
+  });
+
+  return Array.from(grouped.values())
+    .map((entry) => ({
+      ...entry,
+      recetaPorMezcla: entry.usados / totalGeneratedMixes
+    }))
+    .filter((entry) => entry.recetaPorMezcla > 0)
+    .sort((a, b) => b.recetaPorMezcla - a.recetaPorMezcla);
+});
+
+const availableByQuality = computed(() => {
+  const sourceRows = purchaseProjection.source === 'remanente'
+    ? (blendPlan.value?.remanentes || [])
+    : (blendPlan.value?.plan || []);
+
+  const grouped = new Map();
+
+  sourceRows.forEach((row) => {
+    const qualityKey = getQualityKey(row);
+    const availableBales = purchaseProjection.source === 'remanente'
+      ? (Number(row?.Fardos) || 0)
+      : (Number(row?.Stock) || 0);
+
+    grouped.set(qualityKey, (grouped.get(qualityKey) || 0) + availableBales);
+  });
+
+  return grouped;
+});
+
+const getProjectionSourceRows = () => (
+  purchaseProjection.source === 'remanente'
+    ? (blendPlan.value?.remanentes || [])
+    : (blendPlan.value?.plan || [])
+);
+
+const getProjectionAvailableBales = (row) => (
+  purchaseProjection.source === 'remanente'
+    ? (Number(row?.Fardos) || 0)
+    : (Number(row?.Stock) || 0)
+);
+
+const parseMaybeLocalizedNumber = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'number') return Number.isNaN(value) ? null : value;
+
+  const asString = String(value).trim();
+  if (!asString) return null;
+
+  const normalized = asString.replace(/\./g, '').replace(',', '.');
+  const parsed = Number(normalized);
+  if (!Number.isNaN(parsed)) return parsed;
+
+  const direct = Number(asString);
+  return Number.isNaN(direct) ? null : direct;
+};
+
+const buildInventoryLookupKey = (produtor, lote) => {
+  const p = normalizeSortText(produtor).toUpperCase();
+  const l = normalizeSortText(lote).toUpperCase();
+  return `${p}::${l}`;
+};
+
+const inventoryWeightLookup = computed(() => {
+  const lookup = new Map();
+
+  (items.value || []).forEach((item) => {
+    const key = buildInventoryLookupKey(item?.PRODUTOR, item?.LOTE);
+    const weight = parseMaybeLocalizedNumber(item?.PESO);
+    if (!key || weight === null || weight <= 0) return;
+    lookup.set(key, weight);
+  });
+
+  return lookup;
+});
+
+const getFallbackAverageWeightPerBale = () => {
+  const totalStock = Number(summaryRow.value?.QTDE_ESTOQUE) || 0;
+  const totalWeight = Number(summaryRow.value?.PESO) || 0;
+  if (totalStock > 0 && totalWeight > 0) return totalWeight / totalStock;
+  return 0;
+};
+
+const resolveRowWeight = (row) => {
+  const directWeight = parseMaybeLocalizedNumber(row?.PESO);
+  if (directWeight !== null && directWeight > 0) return directWeight;
+
+  const lookupKey = buildInventoryLookupKey(row?.PRODUTOR, row?.LOTE);
+  const fromLookup = inventoryWeightLookup.value.get(lookupKey);
+  if (fromLookup !== undefined && fromLookup > 0) return fromLookup;
+
+  return null;
+};
+
+const getVariableValueForRow = (row, uiKey) => {
+  if (!row || !uiKey) return null;
+
+  if (uiKey === 'UHML') {
+    const value = Number(row?.LEN ?? row?.UHML);
+    return Number.isNaN(value) ? null : value;
+  }
+
+  if (uiKey === 'PLUS_B') {
+    const value = Number(row?.PLUS_B);
+    return Number.isNaN(value) ? null : value;
+  }
+
+  const value = Number(row?.[uiKey]);
+  return Number.isNaN(value) ? null : value;
+};
+
+const parseRuleThresholds = (rule) => {
+  const parseOrNull = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const numericValue = Number(value);
+    return Number.isNaN(numericValue) ? null : numericValue;
+  };
+
+  return {
+    targetMin: parseOrNull(rule?.valor_ideal_min),
+    targetMax: parseOrNull(rule?.promedio_objetivo_max),
+    toleranceMin: parseOrNull(rule?.rango_tol_min),
+    toleranceMax: parseOrNull(rule?.rango_tol_max),
+    hardMin: parseOrNull(rule?.limite_min_absoluto),
+    hardMax: parseOrNull(rule?.limite_max_absoluto)
+  };
+};
+
+const computeRequiredPurchaseValue = ({ targetValue, existingQty, existingAverage, purchaseQty }) => {
+  const target = Number(targetValue);
+  const availableQty = Number(existingQty);
+  const currentAverage = Number(existingAverage);
+  const buyQty = Number(purchaseQty);
+
+  if ([target, availableQty, currentAverage, buyQty].some((value) => Number.isNaN(value))) return null;
+  if (buyQty <= 0) return null;
+
+  return ((target * (availableQty + buyQty)) - (currentAverage * availableQty)) / buyQty;
+};
+
+const activeProjectionVariables = computed(() => {
+  return monitoredParams.filter(({ key }) => {
+    const setting = supervisionSettings[key];
+    return setting && (setting.target || setting.hardCap || setting.tolerance);
+  });
+});
+
+const averageByQualityForVariable = computed(() => {
+  const sourceRows = getProjectionSourceRows();
+  const result = {};
+
+  monitoredParams.forEach(({ key: uiKey }) => {
+    const grouped = new Map();
+    let globalQty = 0;
+    let globalWeighted = 0;
+
+    sourceRows.forEach((row) => {
+      const qualityKey = getQualityKey(row);
+      const qty = getProjectionAvailableBales(row);
+      const variableValue = getVariableValueForRow(row, uiKey);
+
+      if (qty <= 0 || variableValue === null) return;
+
+      const current = grouped.get(qualityKey) || { qty: 0, weighted: 0 };
+      current.qty += qty;
+      current.weighted += (variableValue * qty);
+      grouped.set(qualityKey, current);
+
+      globalQty += qty;
+      globalWeighted += (variableValue * qty);
+    });
+
+    const byQuality = new Map();
+    grouped.forEach((value, qualityKey) => {
+      byQuality.set(qualityKey, value.qty > 0 ? (value.weighted / value.qty) : 0);
+    });
+
+    result[uiKey] = {
+      byQuality,
+      global: globalQty > 0 ? (globalWeighted / globalQty) : 0
+    };
+  });
+
+  return result;
+});
+
+const averageWeightByQuality = computed(() => {
+  const sourceRows = getProjectionSourceRows();
+  const grouped = new Map();
+  let globalWeight = 0;
+  let globalBales = 0;
+  const fallbackWeightPerBale = getFallbackAverageWeightPerBale();
+
+  sourceRows.forEach((row) => {
+    const qualityKey = getQualityKey(row);
+    const sourceBales = getProjectionAvailableBales(row);
+    const resolvedWeight = resolveRowWeight(row);
+    const lotWeight = (resolvedWeight !== null && resolvedWeight > 0)
+      ? resolvedWeight
+      : (sourceBales * fallbackWeightPerBale);
+
+    if (sourceBales <= 0 || lotWeight <= 0) return;
+
+    const current = grouped.get(qualityKey) || { weight: 0, bales: 0 };
+    current.weight += lotWeight;
+    current.bales += sourceBales;
+    grouped.set(qualityKey, current);
+
+    globalWeight += lotWeight;
+    globalBales += sourceBales;
+  });
+
+  const qualityAverages = new Map();
+  grouped.forEach((value, key) => {
+    qualityAverages.set(key, value.bales > 0 ? (value.weight / value.bales) : 0);
+  });
+
+  const globalAverage = globalBales > 0 ? (globalWeight / globalBales) : 0;
+
+  return {
+    byQuality: qualityAverages,
+    global: globalAverage
+  };
+});
+
+const purchaseProjectionError = computed(() => {
+  if (!blendPlan.value || !Array.isArray(blendPlan.value.plan) || blendPlan.value.plan.length === 0) {
+    return 'Genera primero un plan de mezclas para poder calcular la compra por calidad.';
+  }
+
+  const targetMixes = Number(purchaseProjection.targetMixes);
+  if (Number.isNaN(targetMixes) || targetMixes <= 0) {
+    return 'Ingresa una cantidad de mezclas objetivo válida (mayor que 0).';
+  }
+
+  if (!filters.fardos || Number(filters.fardos) <= 0) {
+    return 'Define los fardos por mezcla antes de proyectar la compra.';
+  }
+
+  if (generatedMixesCount.value <= 0) {
+    return 'No hay bloques válidos en el plan para obtener receta base por calidad.';
+  }
+
+  return '';
+});
+
+const purchaseProjectionRows = computed(() => {
+  if (purchaseProjectionError.value) return [];
+
+  const targetMixes = Number(purchaseProjection.targetMixes);
+  const availableMap = availableByQuality.value;
+  const weightAverages = averageWeightByQuality.value;
+  const selectedVariables = activeProjectionVariables.value;
+  const variableAverages = averageByQualityForVariable.value;
+
+  return recipeByQualityPerMix.value.map((recipeRow) => {
+    const required = recipeRow.recetaPorMezcla * targetMixes;
+    const available = availableMap.get(recipeRow.calidad) || 0;
+    const shortage = Math.max(0, required - available);
+    const suggestedPurchaseBales = Math.ceil(shortage);
+
+    const qualityAvgWeight = weightAverages.byQuality.get(recipeRow.calidad);
+    const avgWeightPerBale = (qualityAvgWeight && qualityAvgWeight > 0)
+      ? qualityAvgWeight
+      : weightAverages.global;
+
+    const suggestedPurchaseWeight = suggestedPurchaseBales * (avgWeightPerBale || 0);
+
+    const hviGuidance = selectedVariables.map(({ key: uiKey, label }) => {
+      const settings = supervisionSettings[uiKey] || {};
+      const rule = getRuleFor(uiKey);
+      const thresholds = parseRuleThresholds(rule);
+      const averages = variableAverages[uiKey] || { byQuality: new Map(), global: 0 };
+      const avgByQuality = averages.byQuality.get(recipeRow.calidad);
+      const avgAvailable = (avgByQuality && avgByQuality > 0) ? avgByQuality : averages.global;
+
+      const targetMinBuy = settings.target && thresholds.targetMin !== null
+        ? computeRequiredPurchaseValue({
+          targetValue: thresholds.targetMin,
+          existingQty: available,
+          existingAverage: avgAvailable,
+          purchaseQty: suggestedPurchaseBales
+        })
+        : null;
+
+      const targetMaxBuy = settings.target && thresholds.targetMax !== null
+        ? computeRequiredPurchaseValue({
+          targetValue: thresholds.targetMax,
+          existingQty: available,
+          existingAverage: avgAvailable,
+          purchaseQty: suggestedPurchaseBales
+        })
+        : null;
+
+      const toleranceMinBuy = settings.tolerance && thresholds.toleranceMin !== null
+        ? computeRequiredPurchaseValue({
+          targetValue: thresholds.toleranceMin,
+          existingQty: available,
+          existingAverage: avgAvailable,
+          purchaseQty: suggestedPurchaseBales
+        })
+        : null;
+
+      const toleranceMaxBuy = settings.tolerance && thresholds.toleranceMax !== null
+        ? computeRequiredPurchaseValue({
+          targetValue: thresholds.toleranceMax,
+          existingQty: available,
+          existingAverage: avgAvailable,
+          purchaseQty: suggestedPurchaseBales
+        })
+        : null;
+
+      const hardMinBuy = settings.hardCap && thresholds.hardMin !== null
+        ? computeRequiredPurchaseValue({
+          targetValue: thresholds.hardMin,
+          existingQty: available,
+          existingAverage: avgAvailable,
+          purchaseQty: suggestedPurchaseBales
+        })
+        : null;
+
+      const hardMaxBuy = settings.hardCap && thresholds.hardMax !== null
+        ? computeRequiredPurchaseValue({
+          targetValue: thresholds.hardMax,
+          existingQty: available,
+          existingAverage: avgAvailable,
+          purchaseQty: suggestedPurchaseBales
+        })
+        : null;
+
+      return {
+        uiKey,
+        label,
+        avgAvailable,
+        targetMinBuy,
+        targetMaxBuy,
+        toleranceMinBuy,
+        toleranceMaxBuy,
+        hardMinBuy,
+        hardMaxBuy,
+        hasRecommendation: suggestedPurchaseBales > 0
+      };
+    });
+
+    return {
+      calidad: recipeRow.calidad,
+      recetaPorMezcla: recipeRow.recetaPorMezcla,
+      requerido: required,
+      disponible: available,
+      faltante: shortage,
+      compraSugeridaFardos: suggestedPurchaseBales,
+      compraSugeridaPeso: suggestedPurchaseWeight,
+      hviGuidance
+    };
+  });
+});
+
+const purchaseProjectionTotals = computed(() => {
+  return purchaseProjectionRows.value.reduce((totals, row) => {
+    totals.requerido += row.requerido;
+    totals.disponible += row.disponible;
+    totals.faltante += row.faltante;
+    totals.compraSugeridaFardos += row.compraSugeridaFardos;
+    totals.compraSugeridaPeso += row.compraSugeridaPeso;
+    return totals;
+  }, {
+    requerido: 0,
+    disponible: 0,
+    faltante: 0,
+    compraSugeridaFardos: 0,
+    compraSugeridaPeso: 0
+  });
+});
+
+const projectionSourceTotals = computed(() => {
+  const sourceRows = getProjectionSourceRows();
+  const avgWeightFallback = Number(averageWeightByQuality.value?.global) || getFallbackAverageWeightPerBale();
+
+  return sourceRows.reduce((totals, row) => {
+    const bales = getProjectionAvailableBales(row);
+    const rowWeight = resolveRowWeight(row);
+
+    totals.stockFardos += bales;
+    totals.stockPeso += (rowWeight !== null && rowWeight > 0)
+      ? rowWeight
+      : (bales * avgWeightFallback);
+
+    return totals;
+  }, {
+    stockFardos: 0,
+    stockPeso: 0
+  });
+});
+
+const projectionGlobalGuidance = computed(() => {
+  const totalAvailable = Number(purchaseProjectionTotals.value?.disponible) || 0;
+  const totalToBuy = Number(purchaseProjectionTotals.value?.compraSugeridaFardos) || 0;
+  const totalKgToBuy = Number(purchaseProjectionTotals.value?.compraSugeridaPeso) || 0;
+  const variableAverages = averageByQualityForVariable.value;
+
+  return activeProjectionVariables.value.map(({ key: uiKey, label }) => {
+    const settings = supervisionSettings[uiKey] || {};
+    const rule = getRuleFor(uiKey);
+    const thresholds = parseRuleThresholds(rule);
+    const sourceAverage = Number(variableAverages?.[uiKey]?.global) || 0;
+
+    const targetMinBuy = settings.target && thresholds.targetMin !== null
+      ? computeRequiredPurchaseValue({
+        targetValue: thresholds.targetMin,
+        existingQty: totalAvailable,
+        existingAverage: sourceAverage,
+        purchaseQty: totalToBuy
+      })
+      : null;
+
+    const targetMaxBuy = settings.target && thresholds.targetMax !== null
+      ? computeRequiredPurchaseValue({
+        targetValue: thresholds.targetMax,
+        existingQty: totalAvailable,
+        existingAverage: sourceAverage,
+        purchaseQty: totalToBuy
+      })
+      : null;
+
+    const toleranceMinBuy = settings.tolerance && thresholds.toleranceMin !== null
+      ? computeRequiredPurchaseValue({
+        targetValue: thresholds.toleranceMin,
+        existingQty: totalAvailable,
+        existingAverage: sourceAverage,
+        purchaseQty: totalToBuy
+      })
+      : null;
+
+    const toleranceMaxBuy = settings.tolerance && thresholds.toleranceMax !== null
+      ? computeRequiredPurchaseValue({
+        targetValue: thresholds.toleranceMax,
+        existingQty: totalAvailable,
+        existingAverage: sourceAverage,
+        purchaseQty: totalToBuy
+      })
+      : null;
+
+    const hardMinBuy = settings.hardCap && thresholds.hardMin !== null
+      ? computeRequiredPurchaseValue({
+        targetValue: thresholds.hardMin,
+        existingQty: totalAvailable,
+        existingAverage: sourceAverage,
+        purchaseQty: totalToBuy
+      })
+      : null;
+
+    const hardMaxBuy = settings.hardCap && thresholds.hardMax !== null
+      ? computeRequiredPurchaseValue({
+        targetValue: thresholds.hardMax,
+        existingQty: totalAvailable,
+        existingAverage: sourceAverage,
+        purchaseQty: totalToBuy
+      })
+      : null;
+
+    return {
+      uiKey,
+      label,
+      sourceAverage,
+      totalToBuy,
+      totalAvailable,
+      totalKgToBuy,
+      thresholds,
+      targetMinBuy,
+      targetMaxBuy,
+      toleranceMinBuy,
+      toleranceMaxBuy,
+      hardMinBuy,
+      hardMaxBuy
+    };
+  });
+});
+
+const normalizeRecommendedValue = (value, comparator) => {
+  const numericValue = Number(value);
+  if (Number.isNaN(numericValue)) return null;
+
+  if (comparator === '>=') return Math.max(0, numericValue);
+  if (comparator === '<=') return Math.max(0, numericValue);
+  return numericValue;
+};
+
+const calculateFinalAverageAfterPurchase = ({ currentAverage, availableQty, buyQty, buyValue }) => {
+  const current = Number(currentAverage);
+  const available = Number(availableQty);
+  const toBuy = Number(buyQty);
+  const purchaseValue = Number(buyValue);
+
+  if ([current, available, toBuy, purchaseValue].some((value) => Number.isNaN(value))) return null;
+  if ((available + toBuy) <= 0) return null;
+
+  return ((current * available) + (purchaseValue * toBuy)) / (available + toBuy);
+};
+
+const resolveObjectiveForVariable = (item) => {
+  const thresholds = item?.thresholds || {};
+  const isLowerBetter = item?.uiKey === 'PLUS_B';
+
+  if (isLowerBetter) {
+    if (thresholds.targetMax !== null && thresholds.targetMax !== undefined) {
+      return {
+        comparator: '<=',
+        objectiveValue: thresholds.targetMax,
+        recommendedValue: item.targetMaxBuy
+      };
+    }
+    if (thresholds.toleranceMax !== null && thresholds.toleranceMax !== undefined) {
+      return {
+        comparator: '<=',
+        objectiveValue: thresholds.toleranceMax,
+        recommendedValue: item.toleranceMaxBuy
+      };
+    }
+  } else {
+    if (thresholds.targetMin !== null && thresholds.targetMin !== undefined) {
+      return {
+        comparator: '>=',
+        objectiveValue: thresholds.targetMin,
+        recommendedValue: item.targetMinBuy
+      };
+    }
+    if (thresholds.toleranceMin !== null && thresholds.toleranceMin !== undefined) {
+      return {
+        comparator: '>=',
+        objectiveValue: thresholds.toleranceMin,
+        recommendedValue: item.toleranceMinBuy
+      };
+    }
+  }
+
+  return {
+    comparator: null,
+    objectiveValue: null,
+    recommendedValue: null
+  };
+};
+
+const projectionVariablePurchaseRows = computed(() => {
+  const available = Number(purchaseProjectionTotals.value?.disponible) || 0;
+  const missing = Number(purchaseProjectionTotals.value?.compraSugeridaFardos) || 0;
+  const totalBales = available + missing;
+  const avgWeightPerBale = Number(averageWeightByQuality.value?.global) || 0;
+  const totalWeight = totalBales * avgWeightPerBale;
+  const fardosPorMezcla = Number(filters.fardos) || 0;
+  const tamanoBloque = Number(purchaseProjection.targetMixes) || 0;
+
+  return projectionGlobalGuidance.value.map((item) => {
+    const objective = resolveObjectiveForVariable(item);
+    const recommended = normalizeRecommendedValue(objective.recommendedValue, objective.comparator);
+    const finalAverage = (recommended !== null)
+      ? calculateFinalAverageAfterPurchase({
+        currentAverage: item.sourceAverage,
+        availableQty: available,
+        buyQty: missing,
+        buyValue: recommended
+      })
+      : null;
+
+    return {
+      ...item,
+      disponibleFardos: available,
+      faltanteFardos: missing,
+      totalFardos: totalBales,
+      pesoMedioFardo: avgWeightPerBale,
+      pesoTotalKg: totalWeight,
+      fardosPorMezcla,
+      tamanoBloque,
+      promedioActual: item.sourceAverage,
+      objetivoComparador: objective.comparator,
+      objetivoValor: objective.objectiveValue,
+      comprarComparador: objective.comparator,
+      comprarValor: recommended,
+      promedioFinal: finalAverage,
+      recomendacion: buildGlobalGuidanceSummary(item)
+    };
+  });
+});
+
 // Computed: Datos Filtrados
 const filteredData = computed(() => {
   return items.value.filter(item => {
@@ -1729,6 +2624,89 @@ const formatThousandInteger = (value) => {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0
   }).format(Math.round(parsedNumber));
+};
+
+const formatProjectionValue = (value, decimals = 2) => {
+  const numberValue = Number(value);
+  if (Number.isNaN(numberValue)) return '-';
+
+  return new Intl.NumberFormat('es-ES', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals
+  }).format(numberValue);
+};
+
+const formatGuidanceBound = (value) => {
+  if (value === null || value === undefined) return null;
+  const numericValue = Number(value);
+  if (Number.isNaN(numericValue)) return null;
+  return formatProjectionValue(numericValue, 2);
+};
+
+const buildGuidanceSummary = (guidance, purchaseQty) => {
+  if (!guidance) return 'Sin guía.';
+  if (!purchaseQty || purchaseQty <= 0 || !guidance.hasRecommendation) return 'Sin compra requerida para esta calidad.';
+
+  const parts = [];
+
+  const targetMin = formatGuidanceBound(guidance.targetMinBuy);
+  const targetMax = formatGuidanceBound(guidance.targetMaxBuy);
+  if (targetMin !== null || targetMax !== null) {
+    if (targetMin !== null && targetMax !== null) parts.push(`Target compra: ${targetMin} - ${targetMax}`);
+    else if (targetMin !== null) parts.push(`Target compra: >= ${targetMin}`);
+    else parts.push(`Target compra: <= ${targetMax}`);
+  }
+
+  const toleranceMin = formatGuidanceBound(guidance.toleranceMinBuy);
+  const toleranceMax = formatGuidanceBound(guidance.toleranceMaxBuy);
+  if (toleranceMin !== null || toleranceMax !== null) {
+    if (toleranceMin !== null && toleranceMax !== null) parts.push(`Tolerancia compra: ${toleranceMin} - ${toleranceMax}`);
+    else if (toleranceMin !== null) parts.push(`Tolerancia compra: >= ${toleranceMin}`);
+    else parts.push(`Tolerancia compra: <= ${toleranceMax}`);
+  }
+
+  const hardMin = formatGuidanceBound(guidance.hardMinBuy);
+  const hardMax = formatGuidanceBound(guidance.hardMaxBuy);
+  if (hardMin !== null || hardMax !== null) {
+    if (hardMin !== null && hardMax !== null) parts.push(`Límite abs compra: ${hardMin} - ${hardMax}`);
+    else if (hardMin !== null) parts.push(`Límite abs compra: >= ${hardMin}`);
+    else parts.push(`Límite abs compra: <= ${hardMax}`);
+  }
+
+  return parts.join(' | ') || 'Sin umbrales de regla para esta variable.';
+};
+
+const buildGlobalGuidanceSummary = (item) => {
+  if (!item) return 'Sin guía';
+  if (!item.totalToBuy || item.totalToBuy <= 0) return 'Sin compra total requerida.';
+
+  const parts = [];
+
+  const targetMin = formatGuidanceBound(item.targetMinBuy);
+  const targetMax = formatGuidanceBound(item.targetMaxBuy);
+  if (targetMin !== null || targetMax !== null) {
+    if (targetMin !== null && targetMax !== null) parts.push(`Target compra ${targetMin} - ${targetMax}`);
+    else if (targetMin !== null) parts.push(`Target compra >= ${targetMin}`);
+    else parts.push(`Target compra <= ${targetMax}`);
+  }
+
+  const toleranceMin = formatGuidanceBound(item.toleranceMinBuy);
+  const toleranceMax = formatGuidanceBound(item.toleranceMaxBuy);
+  if (toleranceMin !== null || toleranceMax !== null) {
+    if (toleranceMin !== null && toleranceMax !== null) parts.push(`Tolerancia compra ${toleranceMin} - ${toleranceMax}`);
+    else if (toleranceMin !== null) parts.push(`Tolerancia compra >= ${toleranceMin}`);
+    else parts.push(`Tolerancia compra <= ${toleranceMax}`);
+  }
+
+  const hardMin = formatGuidanceBound(item.hardMinBuy);
+  const hardMax = formatGuidanceBound(item.hardMaxBuy);
+  if (hardMin !== null || hardMax !== null) {
+    if (hardMin !== null && hardMax !== null) parts.push(`Límite abs compra ${hardMin} - ${hardMax}`);
+    else if (hardMin !== null) parts.push(`Límite abs compra >= ${hardMin}`);
+    else parts.push(`Límite abs compra <= ${hardMax}`);
+  }
+
+  return parts.join(' | ') || 'Sin umbrales de regla para esta variable.';
 };
 
 const buildAppliedRulesSummary = () => {
@@ -2513,6 +3491,236 @@ const exportToExcel = async () => {
 
     applyVerticalCenter(summarySheet);
   }
+
+  // ===== Hoja 4: Compra Sugerida =====
+  const projectionSheet = workbook.addWorksheet('Compra Sugerida');
+
+  projectionSheet.mergeCells('A1:H1');
+  const projectionTitle = projectionSheet.getCell('A1');
+  projectionTitle.value = 'PROYECCIÓN DE COMPRA POR CALIDAD';
+  projectionTitle.font = titleFont;
+  projectionTitle.alignment = centerAlign;
+  projectionSheet.getRow(1).height = 22;
+
+  const projectionSourceLabel = purchaseProjection.source === 'remanente'
+    ? 'Sobrante no usado'
+    : 'Stock actual';
+
+  const projectionMetaRows = [
+    ['Fuente disponible', projectionSourceLabel],
+    ['Mezclas objetivo', Number(purchaseProjection.targetMixes) || 0],
+    ['Mínimo recomendado de bloque', Number(purchaseProjection.minMixesForBlock) || 20],
+    ['Fardos por mezcla', Number(filters.fardos) || 0],
+    ['Mezclas base generadas', Number(generatedMixesCount.value) || 0],
+    ['Stock total fuente (fardos)', Number(projectionSourceTotals.value?.stockFardos) || 0],
+    ['Peso total fuente (kg)', Number(projectionSourceTotals.value?.stockPeso) || 0]
+  ];
+
+  let projectionRowIndex = 3;
+  projectionMetaRows.forEach(([label, value]) => {
+    projectionSheet.getCell(`A${projectionRowIndex}`).value = label;
+    projectionSheet.getCell(`A${projectionRowIndex}`).font = subTitleFont;
+    projectionSheet.getCell(`B${projectionRowIndex}`).value = value;
+    projectionSheet.getCell(`B${projectionRowIndex}`).alignment = { horizontal: 'left', vertical: 'middle' };
+    projectionRowIndex += 1;
+  });
+
+  projectionRowIndex += 1;
+
+  const projectionHeaders = [
+    'Calidad',
+    'Receta x mezcla',
+    'Requerido',
+    'Disponible',
+    'Faltante',
+    'Compra sugerida (fardos)',
+    'Peso estimado compra',
+    'Orientación HVI compra (según selección)'
+  ];
+
+  const projectionHeaderRow = projectionSheet.getRow(projectionRowIndex);
+  projectionHeaders.forEach((header, index) => {
+    const cell = projectionHeaderRow.getCell(index + 1);
+    cell.value = header;
+    cell.font = headerFont;
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2E7D32' } };
+    cell.alignment = centerAlign;
+  });
+  projectionHeaderRow.height = 20;
+
+  const projectionDataStartRow = projectionRowIndex + 1;
+  const projectionRows = purchaseProjectionRows.value || [];
+
+  if (projectionRows.length === 0) {
+    projectionSheet.mergeCells(`A${projectionDataStartRow}:H${projectionDataStartRow}`);
+    const emptyCell = projectionSheet.getCell(`A${projectionDataStartRow}`);
+    emptyCell.value = purchaseProjectionError.value || 'No hay datos suficientes para proyectar compra por calidad.';
+    emptyCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    emptyCell.font = { color: { argb: 'FF6B7280' }, italic: true };
+  } else {
+    projectionRows.forEach((row, idx) => {
+      const dataRow = projectionSheet.getRow(projectionDataStartRow + idx);
+      dataRow.getCell(1).value = row.calidad;
+      dataRow.getCell(2).value = Number(row.recetaPorMezcla) || 0;
+      dataRow.getCell(3).value = Number(row.requerido) || 0;
+      dataRow.getCell(4).value = Number(row.disponible) || 0;
+      dataRow.getCell(5).value = Number(row.faltante) || 0;
+      dataRow.getCell(6).value = Number(row.compraSugeridaFardos) || 0;
+      dataRow.getCell(7).value = Number(row.compraSugeridaPeso) || 0;
+      const guidanceText = Array.isArray(row.hviGuidance)
+        ? row.hviGuidance
+          .map((guidance) => `${guidance.label} (Disp ${formatProjectionValue(guidance.avgAvailable, 2)}): ${buildGuidanceSummary(guidance, row.compraSugeridaFardos)}`)
+          .join('\n')
+        : '';
+      dataRow.getCell(8).value = guidanceText;
+
+      dataRow.getCell(2).numFmt = '0.00';
+      dataRow.getCell(3).numFmt = '0.00';
+      dataRow.getCell(4).numFmt = '0.00';
+      dataRow.getCell(5).numFmt = '0.00';
+      dataRow.getCell(6).numFmt = '#,##0';
+      dataRow.getCell(7).numFmt = '#,##0';
+
+      for (let col = 1; col <= 8; col += 1) {
+        const cell = dataRow.getCell(col);
+        cell.alignment = {
+          horizontal: col === 1 || col === 8 ? 'left' : 'right',
+          vertical: 'middle'
+        };
+      }
+      dataRow.getCell(8).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+
+      if ((Number(row.faltante) || 0) > 0) {
+        const shortageCell = dataRow.getCell(5);
+        shortageCell.font = { ...(shortageCell.font || {}), bold: true, color: { argb: 'FFB91C1C' } };
+      }
+    });
+
+    const totalsRowIndex = projectionDataStartRow + projectionRows.length;
+    const totalsRow = projectionSheet.getRow(totalsRowIndex);
+    totalsRow.getCell(1).value = 'TOTALES';
+    totalsRow.getCell(1).font = { bold: true, color: { argb: 'FF14532D' } };
+    totalsRow.getCell(3).value = Number(purchaseProjectionTotals.value.requerido) || 0;
+    totalsRow.getCell(4).value = Number(purchaseProjectionTotals.value.disponible) || 0;
+    totalsRow.getCell(5).value = Number(purchaseProjectionTotals.value.faltante) || 0;
+    totalsRow.getCell(6).value = Number(purchaseProjectionTotals.value.compraSugeridaFardos) || 0;
+    totalsRow.getCell(7).value = Number(purchaseProjectionTotals.value.compraSugeridaPeso) || 0;
+
+    totalsRow.getCell(3).numFmt = '0.00';
+    totalsRow.getCell(4).numFmt = '0.00';
+    totalsRow.getCell(5).numFmt = '0.00';
+    totalsRow.getCell(6).numFmt = '#,##0';
+    totalsRow.getCell(7).numFmt = '#,##0';
+
+    for (let col = 1; col <= 8; col += 1) {
+      const cell = totalsRow.getCell(col);
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
+      cell.font = { ...(cell.font || {}), bold: true, color: { argb: 'FF14532D' } };
+      cell.alignment = {
+        horizontal: col === 1 || col === 8 ? 'left' : 'right',
+        vertical: 'middle'
+      };
+      cell.border = {
+        top: { style: 'medium', color: { argb: 'FF065F46' } },
+        left: { style: 'thin', color: { argb: 'FFA7F3D0' } },
+        bottom: { style: 'thin', color: { argb: 'FFA7F3D0' } },
+        right: { style: 'thin', color: { argb: 'FFA7F3D0' } }
+      };
+    }
+  }
+
+  if (projectionVariablePurchaseRows.value.length > 0) {
+    const variableSectionStart = (projectionSheet.lastRow?.number || projectionDataStartRow) + 2;
+
+    projectionSheet.mergeCells(`A${variableSectionStart}:H${variableSectionStart}`);
+    const variableTitleCell = projectionSheet.getCell(`A${variableSectionStart}`);
+    variableTitleCell.value = 'COMPRA GLOBAL POR VARIABLE HVI (SEGÚN REGLAS ACTIVAS)';
+    variableTitleCell.font = { ...subTitleFont, bold: true };
+    variableTitleCell.alignment = { horizontal: 'left', vertical: 'middle' };
+
+    const variableHeaderRowIndex = variableSectionStart + 1;
+    const variableHeaders = ['Variable', 'Promedio actual', 'Objetivo de compra según regla', 'Kg compra global'];
+    variableHeaders.forEach((header, idx) => {
+      const cell = projectionSheet.getRow(variableHeaderRowIndex).getCell(idx + 1);
+      cell.value = header;
+      cell.font = headerFont;
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2E7D32' } };
+      cell.alignment = centerAlign;
+      cell.border = {
+        top: { style: 'medium', color: { argb: 'FF065F46' } },
+        left: { style: 'thin', color: { argb: 'FFA7F3D0' } },
+        bottom: { style: 'thin', color: { argb: 'FFA7F3D0' } },
+        right: { style: 'thin', color: { argb: 'FFA7F3D0' } }
+      };
+    });
+
+    projectionVariablePurchaseRows.value.forEach((item, index) => {
+      const rowIndex = variableHeaderRowIndex + 1 + index;
+      const rowRef = projectionSheet.getRow(rowIndex);
+
+      rowRef.getCell(1).value = item.label;
+      rowRef.getCell(2).value = Number(item.sourceAverage) || 0;
+      rowRef.getCell(3).value = item.recomendacion;
+      rowRef.getCell(4).value = Number(item.totalKgToBuy) || 0;
+
+      rowRef.getCell(2).numFmt = '0.00';
+      rowRef.getCell(4).numFmt = '#,##0';
+
+      rowRef.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
+      rowRef.getCell(2).alignment = { horizontal: 'right', vertical: 'middle' };
+      rowRef.getCell(3).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+      rowRef.getCell(4).alignment = { horizontal: 'right', vertical: 'middle' };
+
+      for (let col = 1; col <= 4; col += 1) {
+        const cell = rowRef.getCell(col);
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+          left: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+          bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+          right: { style: 'thin', color: { argb: 'FFD1D5DB' } }
+        };
+      }
+    });
+  }
+
+  projectionSheet.columns = [
+    { width: 20 },
+    { width: 16 },
+    { width: 12 },
+    { width: 12 },
+    { width: 12 },
+    { width: 22 },
+    { width: 20 },
+    { width: 60 }
+  ];
+
+  const projectionLastRow = projectionSheet.lastRow?.number || projectionDataStartRow;
+  for (let rowNumber = projectionRowIndex; rowNumber <= projectionLastRow; rowNumber += 1) {
+    const rowRef = projectionSheet.getRow(rowNumber);
+    for (let colNumber = 1; colNumber <= 8; colNumber += 1) {
+      const cell = rowRef.getCell(colNumber);
+      if (rowNumber === projectionRowIndex) {
+        cell.border = {
+          top: { style: 'medium', color: { argb: 'FF065F46' } },
+          left: { style: 'thin', color: { argb: 'FFA7F3D0' } },
+          bottom: { style: 'thin', color: { argb: 'FFA7F3D0' } },
+          right: { style: 'thin', color: { argb: 'FFA7F3D0' } }
+        };
+        continue;
+      }
+
+      if (cell.border?.top?.style === 'medium') continue;
+
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+        left: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+        bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+        right: { style: 'thin', color: { argb: 'FFD1D5DB' } }
+      };
+    }
+  }
+
+  applyVerticalCenter(projectionSheet);
   
   // Descargar (en navegador, usar blob)
   const now = new Date();
