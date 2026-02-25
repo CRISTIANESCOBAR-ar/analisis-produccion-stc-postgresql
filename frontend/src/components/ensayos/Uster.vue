@@ -9,7 +9,7 @@
     <main
       class="w-full flex-1 min-h-0 bg-white rounded-2xl shadow-xl px-4 py-3 border border-slate-200 flex flex-col overflow-y-auto uster-component">
       <!-- Top: compact carpeta selector on a single line for desktop -->
-      <div class="flex-shrink-0 mb-3">
+          <div class="shrink-0 mb-3">
         <div class="flex items-center gap-3">
           <label class="text-sm font-semibold text-slate-700 mr-2 shrink-0">Carpeta de archivos Uster:</label>
 
@@ -1626,7 +1626,8 @@ async function deleteCurrentTest() {
       timerProgressBar: true
     })
 
-    const endpoint = '/api/uster/delete'
+    // Construir la ruta según el backend: DELETE /api/uster/delete/:testnr
+    const endpoint = `/api/uster/delete/${encodeURIComponent(selectedTestnr.value)}`
 
     const fetchWithTimeout = (url, opts = {}, timeout = 30000) => {
       return new Promise((resolve, reject) => {
@@ -1638,7 +1639,7 @@ async function deleteCurrentTest() {
     const resp = await fetchWithTimeout(endpoint, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ testnr: selectedTestnr.value }),
+      // backend espera el testnr en la ruta, no en el body
       credentials: 'include'
     }, 30000)
 

@@ -41,6 +41,56 @@ Los contenedores **Podman/Docker NO pueden acceder directamente** a carpetas de 
 │ PC Laboratorio (misma red que USTER)                        │
 │                                                             │
 │  ┌─────────────────────────────────────────────────────┐   │
+
+## 📁 Estructura recomendada dentro de la carpeta compartida
+
+Para mantener separados los flujos de `USTER` y `TENSORAPID` crea la siguiente jerarquía dentro del share compartido:
+
+```
+\pc-laboratorio\uster_share\
+  USTER\
+    par\
+    tbl\
+    raw\
+    processed\
+    backups\
+  TENSORAPID\
+    par\
+    tbl\
+    raw\
+    processed\
+    backups\
+```
+
+### Pasos de creación (PowerShell en PC laboratorio)
+```powershell
+$shareRoot = 'D:\uster_share'
+$folders = @(
+  'USTER\par',
+  'USTER\tbl',
+  'USTER\raw',
+  'USTER\processed',
+  'USTER\backups',
+  'TENSORAPID\par',
+  'TENSORAPID\tbl',
+  'TENSORAPID\raw',
+  'TENSORAPID\processed',
+  'TENSORAPID\backups'
+)
+foreach ($f in $folders) {
+  New-Item -ItemType Directory -Path (Join-Path $shareRoot $f) -Force | Out-Null
+}
+```
+
+### Sincronización selectiva por carpeta
+1. Ajusta el script `robocopy` para depositar `.PAR` y `.TBL` en sus carpetas destino:
+   ```powershell
+   robocopy $usterSource (Join-Path $shareRoot 'USTER\par') *.PAR /XO /LOG:$logFile /TEE
+   robocopy $usterSource (Join-Path $shareRoot 'TENSORAPID\tbl') *.TBL /XO /LOG:$logFile /TEE
+   ```
+2. Usa esta estructura para montar en el servidor (puedes mapear todo como `D:\stc\uster_share` y despues acceder a `USTER/` y `TENSORAPID/` dentro de `/data/uster_files`).
+3. Anota en la documentación de la red qué carpeta debe usar cada sistema para no mezclar archivos.
+
 │  │ Sistema USTER/TENSORAPID                            │   │
 │  │ (genera .PAR y .TBL)                                │   │
 │  └────────────────┬────────────────────────────────────┘   │
