@@ -245,7 +245,7 @@
                   <td class="px-2 py-1 text-center border-r border-slate-200 whitespace-nowrap">{{ formatFecha(h.dt_final) }}</td>
                   <td class="px-2 py-1 text-center border-r border-slate-200 font-mono">{{ fmtHora(h.hora_final) }}</td>
                   <td class="px-2 py-1 text-right border-r border-slate-200 font-semibold">{{ fmtNum(h.metros, 0) }}</td>
-                  <td class="px-2 py-1 border-r border-slate-200">{{ h.artigo || '–' }}</td>
+                  <td class="px-2 py-1 border-r border-slate-200">{{ (h.artigo || '–').substring(0, 10) }}</td>
                   <td class="px-2 py-1 text-center border-r border-slate-200">{{ h.cor || '–' }}</td>
                   <td class="px-2 py-1">{{ h.nm_mercado || '–' }}</td>
                 </tr>
@@ -273,7 +273,7 @@
                   <td class="px-2 py-1 text-center border-r border-slate-200 whitespace-nowrap">{{ formatFecha(c.dat_final) }}</td>
                   <td class="px-2 py-1 text-center border-r border-slate-200 font-mono">{{ c.hora_final || '–' }}</td>
                   <td class="px-2 py-1 text-right border-r border-slate-200 font-semibold">{{ fmtNum(c.metros, 0) }}</td>
-                  <td class="px-2 py-1 border-r border-slate-200">{{ c.artigo || '–' }}</td>
+                  <td class="px-2 py-1 border-r border-slate-200">{{ (c.artigo || '–').substring(0, 10) }}</td>
                   <td class="px-2 py-1 text-center border-r border-slate-200">{{ c.cor || '–' }}</td>
                   <td class="px-2 py-1">{{ c.nm_mercado || '–' }}</td>
                 </tr>
