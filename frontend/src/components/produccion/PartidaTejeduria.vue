@@ -196,10 +196,11 @@
         </div>
 
         <!-- ── Historial de máquinas ────────────────────────────────────────── -->
-        <div v-if="hist.length" class="mt-4">
+        <div v-if="hist.length || calidad.length" class="mt-4">
           <div class="flex items-center gap-2 mb-1">
             <span class="text-xs font-bold uppercase tracking-wide text-slate-600">Recorrido por Máquinas</span>
             <span class="text-[10px] bg-slate-200 text-slate-600 rounded-full px-2 py-0.5 font-semibold">{{ hist.length }}</span>
+            <span v-if="calidad.length" class="text-[10px] bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 font-semibold">+ {{ calidad.length }} Calidad</span>
           </div>
           <div class="overflow-x-auto border border-slate-300 rounded-lg">
             <table class="w-full text-xs border-collapse">
@@ -220,9 +221,10 @@
                 </tr>
               </thead>
               <tbody>
+                <!-- Filas tb_produccion -->
                 <tr
                   v-for="(h, i) in hist"
-                  :key="i"
+                  :key="'h'+i"
                   :class="i % 2 === 0 ? 'bg-white' : 'bg-slate-50'"
                   class="hover:bg-blue-50 transition-colors"
                 >
@@ -232,10 +234,10 @@
                   <td class="px-2 py-1 text-center border-r border-slate-200">
                     <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold"
                       :class="{
-                        'bg-blue-100 text-blue-700':   h.seletor === 'TECELAGEM',
-                        'bg-amber-100 text-amber-700':  h.seletor === 'URDIDEIRA' || h.seletor === 'URDIDORA',
+                        'bg-blue-100 text-blue-700':    h.seletor === 'TECELAGEM',
+                        'bg-amber-100 text-amber-700':   h.seletor === 'URDIDEIRA' || h.seletor === 'URDIDORA',
                         'bg-indigo-100 text-indigo-700': h.seletor === 'INDIGO',
-                        'bg-slate-100 text-slate-600':  !['TECELAGEM','URDIDEIRA','URDIDORA','INDIGO'].includes(h.seletor)
+                        'bg-slate-100 text-slate-600':   !['TECELAGEM','URDIDEIRA','URDIDORA','INDIGO'].includes(h.seletor)
                       }">{{ h.seletor }}</span>
                   </td>
                   <td class="px-2 py-1 text-center border-r border-slate-200 whitespace-nowrap">{{ formatFecha(h.dt_inicio) }}</td>
@@ -247,16 +249,35 @@
                   <td class="px-2 py-1 text-center border-r border-slate-200">{{ h.cor || '–' }}</td>
                   <td class="px-2 py-1">{{ h.nm_mercado || '–' }}</td>
                 </tr>
-              </tbody>
-              <tfoot>
-                <tr class="bg-slate-700 text-white font-bold">
-                  <td colspan="8" class="px-2 py-1.5 text-center border-r border-slate-600 text-xs">TOTAL</td>
-                  <td class="px-2 py-1.5 text-right border-r border-slate-600">
-                    {{ fmtNum(hist.reduce((s, h) => s + (h.metros || 0), 0), 0) }}
-                  </td>
-                  <td colspan="3" class="px-2 py-1.5"></td>
+
+                <!-- Separador CALIDAD -->
+                <tr v-if="calidad.length">
+                  <td colspan="12" class="px-3 py-1 bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-wider">Calidad</td>
                 </tr>
-              </tfoot>
+
+                <!-- Filas tb_calidad -->
+                <tr
+                  v-for="(c, i) in calidad"
+                  :key="'c'+i"
+                  :class="i % 2 === 0 ? 'bg-emerald-50' : 'bg-white'"
+                  class="hover:bg-emerald-100 transition-colors"
+                >
+                  <td class="px-2 py-1 text-center border-r border-slate-200 text-slate-400 font-semibold">{{ i + 1 }}</td>
+                  <td class="px-2 py-1 border-r border-slate-200 font-semibold text-emerald-800 text-[10px] leading-tight">{{ c.revisores || '–' }}</td>
+                  <td class="px-2 py-1 text-center border-r border-slate-200 font-mono font-semibold text-slate-700">{{ c.partida || '–' }}</td>
+                  <td class="px-2 py-1 text-center border-r border-slate-200">
+                    <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700">CALIDAD</span>
+                  </td>
+                  <td class="px-2 py-1 text-center border-r border-slate-200 whitespace-nowrap">{{ formatFecha(c.dat_prod) }}</td>
+                  <td class="px-2 py-1 text-center border-r border-slate-200">–</td>
+                  <td class="px-2 py-1 text-center border-r border-slate-200">–</td>
+                  <td class="px-2 py-1 text-center border-r border-slate-200">–</td>
+                  <td class="px-2 py-1 text-right border-r border-slate-200 font-semibold">{{ fmtNum(c.metros, 0) }}</td>
+                  <td class="px-2 py-1 border-r border-slate-200">{{ c.artigo || '–' }}</td>
+                  <td class="px-2 py-1 text-center border-r border-slate-200">{{ c.cor || '–' }}</td>
+                  <td class="px-2 py-1">{{ c.nm_mercado || '–' }}</td>
+                </tr>
+              </tbody>
             </table>
           </div>
         </div>
@@ -286,7 +307,8 @@ const datos              = ref(null)
 
 const enc = computed(() => datos.value?.encabezado || {})
 const tot = computed(() => datos.value?.totales || {})
-const hist = computed(() => datos.value?.historial || [])
+const hist    = computed(() => datos.value?.historial || [])
+const calidad = computed(() => datos.value?.calidad   || [])
 
 // Convierte "1-5352.16" → "1535216" (elimina máscara)
 function normalizarPartida(raw) {

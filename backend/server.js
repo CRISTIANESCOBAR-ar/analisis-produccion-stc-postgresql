@@ -5710,13 +5710,52 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
       historial = [];
     }
 
+    // ── Q8: tb_calidad agrupada por partida ────────────────────────────
+    // REVISOR FINAL juega el rol de "Maquina"; puede haber varios revisores por partida
+    let calidad = [];
+    try {
+      const sqlCalidad = `
+        SELECT
+          STRING_AGG(
+            DISTINCT TRIM(c."REVISOR FINAL"::text),
+            ' / '
+            ORDER BY TRIM(c."REVISOR FINAL"::text)
+          )                                   AS revisores,
+          c."PARTIDA"                         AS partida,
+          ${pDate('c."DAT_PROD"')}           AS dat_prod,
+          ROUND(SUM(${pNum('c."METRAGEM"')})::numeric, 0) AS metros,
+          MAX(c."ARTIGO")                     AS artigo,
+          MAX(c."COR")                        AS cor,
+          MAX(c."NM MERC")                    AS nm_mercado
+        FROM tb_calidad c
+        WHERE c."PARTIDA" = ANY($1::text[])
+          AND TRIM(COALESCE(c."REVISOR FINAL"::text, '')) <> ''
+        GROUP BY c."PARTIDA", ${pDate('c."DAT_PROD"')}
+        ORDER BY ${pDate('c."DAT_PROD"')} ASC NULLS LAST, c."PARTIDA" ASC
+      `;
+      const resCalidad = await query(sqlCalidad, [partidaCandidates], 'partida-tej/calidad');
+      calidad = (resCalidad.rows || []).map(r => ({
+        revisores:  r.revisores || '',
+        partida:    r.partida   || '',
+        dat_prod:   r.dat_prod,
+        metros:     r.metros !== null ? parseFloat(r.metros) : null,
+        artigo:     r.artigo,
+        cor:        r.cor,
+        nm_mercado: r.nm_mercado
+      }));
+    } catch (calErr) {
+      console.warn('partida-tej/calidad:', calErr.message);
+      calidad = [];
+    }
+
     res.json({
       success: true,
       encontrada: true,
       encabezado,
       registros,
       totales,
-      historial
+      historial,
+      calidad
     });
 
   } catch (err) {
