@@ -5295,6 +5295,529 @@ app.post('/api/hvi/predecir-hilatura', async (req, res) => {
 });
 
 // =====================================================
+// CORRELACIÓN MEZCLA (HVI) → HILO (USTER + TENSORAPID)
+// =====================================================
+
+// Helpers de estadística
+function pearsonCorrelation(x, y) {
+  const n = x.length;
+  if (n < 3) return null;
+  const mx = x.reduce((a, b) => a + b, 0) / n;
+  const my = y.reduce((a, b) => a + b, 0) / n;
+  const num = x.reduce((s, xi, i) => s + (xi - mx) * (y[i] - my), 0);
+  const den = Math.sqrt(
+    x.reduce((s, xi) => s + (xi - mx) ** 2, 0) *
+    y.reduce((s, yi) => s + (yi - my) ** 2, 0)
+  );
+  return den === 0 ? 0 : parseFloat((num / den).toFixed(4));
+}
+
+function linearRegression(x, y) {
+  const n = x.length;
+  if (n < 2) return { slope: 0, intercept: 0, r2: 0 };
+  const mx = x.reduce((a, b) => a + b, 0) / n;
+  const my = y.reduce((a, b) => a + b, 0) / n;
+  const ssxy = x.reduce((s, xi, i) => s + (xi - mx) * (y[i] - my), 0);
+  const ssxx = x.reduce((s, xi) => s + (xi - mx) ** 2, 0);
+  const slope = ssxx === 0 ? 0 : ssxy / ssxx;
+  const intercept = my - slope * mx;
+  const r = pearsonCorrelation(x, y) || 0;
+  return {
+    slope: parseFloat(slope.toFixed(4)),
+    intercept: parseFloat(intercept.toFixed(4)),
+    r2: parseFloat((r * r).toFixed(4))
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/produccion/partida-tejeduria
+// Trazabilidad completa de una partida – sector TEJEDURÍA
+// Query params: partida (requerido), filial (opcional, default '05')
+// ─────────────────────────────────────────────────────────────────────────────
+app.get('/api/produccion/partida-tejeduria', async (req, res) => {
+  try {
+    const { partida, filial = '05' } = req.query;
+    if (!partida) return res.status(400).json({ error: 'Se requiere parámetro "partida"' });
+
+    // Construir candidatos: el valor exacto + con 1 ó 2 ceros al frente
+    // Ej: '535201' → ['535201', '0535201', '00535201']
+    const partidaCandidates = [...new Set([
+      partida,
+      '0'  + partida,
+      '00' + partida
+    ])];
+
+    const pNum  = col => sqlParseNumber(col);
+    const pNumI = col => sqlParseNumberIntl(col);  // para columnas con separador de miles (3.000,00)
+    const pDate = col => sqlParseDate(col);
+
+    // Detectar nombre exacto de columnas variables en tb_produccion
+    const colsRes = await query(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='tb_produccion'`,
+      [], 'partida-tej/cols'
+    );
+    const prodCols = new Map((colsRes.rows || []).map(r => [String(r.column_name).toLowerCase(), r.column_name]));
+    const maqKey  = ['maq  fiacao', 'maq fiacao'].find(c => prodCols.has(c));
+    const loteKey = ['lote fiacao', 'lote  fiacao'].find(c => prodCols.has(c));
+    const maqExpr  = maqKey  ? `p.${quoteIdent(prodCols.get(maqKey))}` : 'NULL::text';
+    const loteExpr = loteKey ? `p.${quoteIdent(prodCols.get(loteKey))}` : 'NULL::text';
+
+    // ── Q1: registros diario/turno (TECELAGEM) ──────────────────────────────
+    const sqlRegistros = `
+      SELECT
+        ${pDate('p."DT_BASE_PRODUCAO"')}              AS fecha,
+        p."TURNO"                                       AS turno,
+        p."PARTIDA"                                     AS partida,
+        ${pNum('p."METRAGEM"')}                        AS metros_crudos,
+        ${pNum('p."PARADA TEC TRAMA"')}                AS paradas_trama,
+        ${pNum('p."PARADA TEC URDUME"')}               AS paradas_urdimbre,
+        ${pNum('p."PONTOS_LIDOS"')}                    AS pontos_lidos,
+        ${pNum('p."PONTOS_100%"')}                     AS pontos_100,
+        ${pNum('p."RPM LEITURA"')}                     AS rpm,
+        p."ARTIGO"                                      AS artigo,
+        p."COR"                                         AS cor,
+        p."NM MERCADO"                                  AS nm_mercado,
+        p."MAQUINA"                                     AS maquina,
+        p."TRAMA REDUZIDA 1"                            AS trama,
+        ${pNum('p."BATIDAS"')}                         AS batidas,
+        p."GRUPO TEAR"                                  AS grupo_tear,
+        p."BASE URDUME"                                 AS base_urdume,
+        p."ROLADA"                                      AS rolada
+      FROM tb_produccion p
+      WHERE p."FILIAL" = $2
+        AND p."PARTIDA" = ANY($1::text[])
+        AND p."SELETOR" = 'TECELAGEM'
+      ORDER BY ${pDate('p."DT_BASE_PRODUCAO"')} ASC NULLS LAST, p."TURNO" ASC
+    `;
+
+    // ── Q2: totales/promedios consolidados (TECELAGEM) ──────────────────────
+    const sqlTotales = `
+      SELECT
+        SUM(${pNum('p."METRAGEM"')})                   AS metros_crudos,
+        SUM(${pNum('p."PARADA TEC TRAMA"')})           AS paradas_trama,
+        SUM(${pNum('p."PARADA TEC URDUME"')})          AS paradas_urdimbre,
+        SUM(${pNum('p."PONTOS_LIDOS"')})               AS pontos_lidos,
+        SUM(${pNum('p."PONTOS_100%"')})                AS pontos_100,
+        AVG(${pNum('p."RPM LEITURA"')})                AS rpm
+      FROM tb_produccion p
+      WHERE p."FILIAL" = $2
+        AND p."PARTIDA" = ANY($1::text[])
+        AND p."SELETOR" = 'TECELAGEM'
+    `;
+
+    const [resRegistros, resTotales] = await Promise.all([
+      query(sqlRegistros, [partidaCandidates, filial], 'partida-tej/registros'),
+      query(sqlTotales,   [partidaCandidates, filial], 'partida-tej/totales')
+    ]);
+
+    const rows = resRegistros.rows;
+    if (rows.length === 0) {
+      return res.json({
+        success: true,
+        encontrada: false,
+        encabezado: {},
+        registros: [],
+        totales: {}
+      });
+    }
+
+    // ── Encabezado (valores del primer registro no nulo) ──────────────────
+    const hdr  = rows[0];
+    const art  = (hdr.artigo  || '').substring(0, 10);
+    const cor  = hdr.cor  || '';
+    const base = hdr.base_urdume || '';
+    // Maquina: últimos 2 dígitos como número
+    const telar = hdr.maquina ? parseInt(hdr.maquina.replace(/\D+$/, '').slice(-2) || '0', 10) || hdr.maquina : '';
+
+    // ── Cómputos por fila ─────────────────────────────────────────────────
+    let acum = 0;
+    const registros = rows.map(r => {
+      const mc   = parseFloat(r.metros_crudos) || 0;
+      const mt   = Math.round(mc * 0.85 * 10) / 10;
+      const pt   = parseFloat(r.paradas_trama) || 0;
+      const pu   = parseFloat(r.paradas_urdimbre) || 0;
+      const pl   = parseFloat(r.pontos_lidos) || 0;
+      const p100 = parseFloat(r.pontos_100) || 0;
+      const efi  = p100 > 0 ? Math.round((pl / p100 * 100) * 10) / 10 : null;
+      const rt   = pl > 0   ? Math.round((pt * 100000 / (pl * 1000)) * 100) / 100 : null;
+      const ru   = pl > 0   ? Math.round((pu * 100000 / (pl * 1000)) * 100) / 100 : null;
+      acum += mt;
+      return {
+        fecha:            r.fecha,
+        turno:            r.turno,
+        partida:          r.partida,
+        metros_crudos:    parseFloat(mc.toFixed(1)),
+        metros_term:      mt,
+        metros_term_acum: Math.round(acum * 10) / 10,
+        paradas_trama:    pt,
+        paradas_urdimbre: pu,
+        total_paradas:    pt + pu,
+        eficiencia:       efi,
+        rt_105:           rt,
+        ru_105:           ru,
+        rpm:              r.rpm !== null ? Math.round(parseFloat(r.rpm)) : null
+      };
+    });
+
+    // ── Totales ────────────────────────────────────────────────────────────
+    const tot = resTotales.rows[0] || {};
+    const tmc  = parseFloat(tot.metros_crudos) || 0;
+    const tpt  = parseFloat(tot.paradas_trama) || 0;
+    const tpu  = parseFloat(tot.paradas_urdimbre) || 0;
+    const tpl  = parseFloat(tot.pontos_lidos) || 0;
+    const tp100 = parseFloat(tot.pontos_100) || 0;
+    const totales = {
+      metros_crudos:    Math.round(tmc),
+      metros_term:      Math.round(tmc * 0.85),
+      paradas_trama:    tpt,
+      paradas_urdimbre: tpu,
+      total_paradas:    tpt + tpu,
+      eficiencia:       tp100 > 0 ? Math.round((tpl / tp100 * 100) * 10) / 10 : null,
+      rt_105:           tpl > 0   ? Math.round((tpt * 100000 / (tpl * 1000)) * 100) / 100 : null,
+      ru_105:           tpl > 0   ? Math.round((tpu * 100000 / (tpl * 1000)) * 100) / 100 : null,
+      rpm:              tot.rpm !== null ? Math.round(parseFloat(tot.rpm)) : null
+    };
+
+    // ── ROLADAs: del conjunto TECELAGEM (para header) + derivada del string de partida ──
+    const roladas = [...new Set(rows.map(r => r.rolada).filter(Boolean))];
+
+    // Usar la partida real de la BD (puede tener ceros al frente que el usuario no ingresó)
+    // Derivar ROLADA: Left(Right(partida, 6), 4) → '0535201' → '535201' → '5352'
+    const partidaReal    = String(rows[0].partida || partida);
+    const roladaDerivada = partidaReal.length >= 6 ? partidaReal.slice(-6, -2) : partidaReal;
+
+    // ── Q3: Roturas URDIDORA (RU106) ──────────────────────────────────────
+    // Fórmula per-fila: SUM(RUPTURAS * 1_000_000) / NULLIF(SUM(METRAGEM * NUM_FIOS), 0)
+    // SELETOR incluye tanto 'URDIDEIRA' como 'URDIDORA'
+    // METRAGEM/NUM_FIOS usan formato europeo (3.000,00) → pNumI
+    const sqlRU106 = `
+      SELECT
+        SUM(${pNum('p."RUPTURAS"')} * 1000000.0)                                          AS numerador,
+        NULLIF(SUM(${pNumI('p."METRAGEM"')} * ${pNumI('p."NUM_FIOS"')}), 0)             AS denominador
+      FROM tb_produccion p
+      WHERE p."FILIAL" = $1
+        AND p."ROLADA" = $2
+        AND p."SELETOR" IN ('URDIDEIRA', 'URDIDORA')
+    `;
+
+    // ── Q4: Roturas INDIGO (RI103) ────────────────────────────────────────
+    // METRAGEM usa formato europeo → pNumI
+    const sqlRI103 = `
+      SELECT
+        SUM(${pNum('p."RUPTURAS"')}) * 1000.0 / NULLIF(SUM(${pNumI('p."METRAGEM"')}), 0) AS ri103
+      FROM tb_produccion p
+      WHERE p."FILIAL" = $1
+        AND p."ROLADA" = $2
+        AND p."SELETOR" = 'INDIGO'
+    `;
+
+    // ── Q5: Lotes de hilo URDIDORA ────────────────────────────────────────
+    const sqlLotes = `
+      SELECT DISTINCT ${pNum(loteExpr)} AS lote
+      FROM tb_produccion p
+      WHERE p."FILIAL" = $1
+        AND p."ROLADA" = $2
+        AND p."SELETOR" IN ('URDIDEIRA', 'URDIDORA')
+        AND ${loteExpr} IS NOT NULL AND ${loteExpr} <> ''
+      ORDER BY ${pNum(loteExpr)} ASC NULLS LAST
+    `;
+
+    // ── Q6: Máquinas OE URDIDORA ─────────────────────────────────────────
+    const sqlOEs = `
+      SELECT DISTINCT RIGHT(${maqExpr}, 2) AS oe_raw
+      FROM tb_produccion p
+      WHERE p."FILIAL" = $1
+        AND p."ROLADA" = $2
+        AND p."SELETOR" IN ('URDIDEIRA', 'URDIDORA')
+        AND ${maqExpr} IS NOT NULL AND ${maqExpr} <> ''
+      ORDER BY RIGHT(${maqExpr}, 2) ASC NULLS LAST
+    `;
+
+    const [resRU106, resRI103, resLotes, resOEs] = await Promise.all([
+      query(sqlRU106, [filial, roladaDerivada], 'partida-tej/ru106'),
+      query(sqlRI103, [filial, roladaDerivada], 'partida-tej/ri103'),
+      query(sqlLotes, [filial, roladaDerivada], 'partida-tej/lotes'),
+      query(sqlOEs,   [filial, roladaDerivada], 'partida-tej/oes')
+    ]);
+
+    // ── Calcular RU106 ─────────────────────────────────────────────────────
+    let rot_urd_106 = null;
+    if (resRU106.rows[0]) {
+      const ru = resRU106.rows[0];
+      const num = parseFloat(ru.numerador) || 0;
+      const den = parseFloat(ru.denominador);
+      if (den && den > 0) {
+        rot_urd_106 = Math.round((num / den) * 100) / 100;
+      }
+    }
+
+    // ── Calcular RI103 ─────────────────────────────────────────────────────
+    let rot_ind_103 = null;
+    if (resRI103.rows[0]) {
+      const ri = resRI103.rows[0];
+      const val = parseFloat(ri.ri103);
+      if (!isNaN(val)) {
+        rot_ind_103 = Math.round(val * 100) / 100;
+      }
+    }
+
+    // ── Lotes y OEs ────────────────────────────────────────────────────────
+    const lotesArr = resLotes.rows.map(r => r.lote).filter(Boolean);
+    // Extraer número de OE del raw (ej. '06' → 6, ' 8' → 8)
+    const oesArr   = [...new Set(
+      resOEs.rows.map(r => {
+        const raw = String(r.oe_raw || '').trim();
+        const n = parseInt(raw, 10);
+        return isNaN(n) ? raw : n;
+      }).filter(v => v !== '' && v !== null)
+    )].sort((a, b) => a - b);
+
+    const encabezado = {
+      articulo:    `${art} ${cor}`.trim(),
+      nombre:      hdr.nm_mercado || '',
+      telar,
+      trama:       hdr.trama || '',
+      pasadas:     hdr.batidas !== null ? parseFloat(hdr.batidas) : null,
+      grupo:       hdr.grupo_tear || '',
+      base,
+      rot_urd_106,
+      rot_ind_103,
+      oes:         oesArr.join(', '),
+      lote:        lotesArr.join(', '),
+      roladas
+    };
+
+    res.json({
+      success: true,
+      encontrada: true,
+      encabezado,
+      registros,
+      totales
+    });
+
+  } catch (err) {
+    console.error('Error /api/produccion/partida-tejeduria:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/correlacion/mezcla-hilo
+// Query params: fecha_inicio, fecha_fin, ne_titulo (opt)
+app.get('/api/correlacion/mezcla-hilo', async (req, res) => {
+  try {
+    const { fecha_inicio, fecha_fin, ne_titulo } = req.query;
+
+    if (!fecha_inicio || !fecha_fin) {
+      return res.status(400).json({ success: false, error: 'Se requieren fecha_inicio y fecha_fin' });
+    }
+
+    // Extrae el numero de mistura del campo lote: "HD-91-25", "HD 91-25", etc. → "91"
+    const sql = `
+      WITH uster_lotes AS (
+        SELECT
+          u.testnr,
+          u.lote AS lote_raw,
+          u.nomcount,
+          u.time_stamp,
+          COALESCE(
+            (regexp_match(u.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1],
+            (regexp_match(u.lote, '(\\d+)'))[1]
+          ) AS mistura_num
+        FROM tb_uster_par u
+        WHERE u.time_stamp IS NOT NULL
+          AND TO_DATE(SPLIT_PART(u.time_stamp, ' ', 1), 'DD/MM/YYYY') BETWEEN $1::date AND $2::date
+          AND ($3::text IS NULL OR u.nomcount = SPLIT_PART($3, '/', 1) OR u.nomcount::text ILIKE $3)
+      ),
+      uster_avg AS (
+        SELECT
+          testnr,
+          ROUND(AVG(cvm_percent)::numeric, 2)       AS cvm,
+          ROUND(AVG(h)::numeric, 2)                 AS vellosidad,
+          ROUND(AVG(neps_200_km)::numeric, 1)        AS neps_200,
+          ROUND(AVG(delg_minus50_km)::numeric, 1)    AS thin_50,
+          ROUND(AVG(grue_50_km)::numeric, 1)         AS thick_50
+        FROM tb_uster_tbl
+        GROUP BY testnr
+      ),
+      tenso_avg AS (
+        SELECT
+          p.uster_testnr,
+          ROUND(AVG(t.tenacidad)::numeric, 2)   AS tenacidad,
+          ROUND(AVG(t.elongacion)::numeric, 2)  AS elongacion
+        FROM tb_tensorapid_par p
+        JOIN tb_tensorapid_tbl t ON t.testnr = p.testnr
+        WHERE p.uster_testnr IS NOT NULL
+        GROUP BY p.uster_testnr
+      ),
+      hvi_avg AS (
+        SELECT
+          "LOTE_FIAC"::integer                                       AS lote_fiac_num,
+          ROUND(AVG(REPLACE("STR",  ',', '.')::numeric), 2)          AS str_avg,
+          ROUND(AVG(REPLACE("SCI",  ',', '.')::numeric), 2)          AS sci_avg,
+          ROUND(AVG(REPLACE("MIC",  ',', '.')::numeric), 3)          AS mic_avg,
+          ROUND(AVG(REPLACE("UHML", ',', '.')::numeric), 2)          AS uhml_avg,
+          COUNT(*)                                                   AS fardos
+        FROM tb_calidad_fibra
+        WHERE "TIPO_MOV" = 'MIST'
+          AND "LOTE_FIAC" ~ '^\\d+$'
+          AND "STR"  ~ '^[0-9][0-9,\\.]*$'
+          AND "SCI"  ~ '^[0-9][0-9,\\.]*$'
+          AND "MIC"  ~ '^[0-9][0-9,\\.]*$'
+          AND "UHML" ~ '^[0-9][0-9,\\.]*$'
+        GROUP BY "LOTE_FIAC"::integer
+      )
+      SELECT
+        ul.lote_raw,
+        ul.mistura_num,
+        ul.nomcount        AS ne_titulo,
+        TO_DATE(SPLIT_PART(ul.time_stamp, ' ', 1), 'DD/MM/YYYY') AS fecha,
+        ua.cvm,
+        ua.vellosidad,
+        ua.neps_200,
+        ua.thin_50,
+        ua.thick_50,
+        ta.tenacidad,
+        ta.elongacion,
+        ha.str_avg   AS str,
+        ha.sci_avg   AS sci,
+        ha.mic_avg   AS mic,
+        ha.uhml_avg  AS uhml,
+        ha.fardos    AS fardos_hvi
+      FROM uster_lotes ul
+      JOIN uster_avg  ua ON ua.testnr       = ul.testnr
+      LEFT JOIN tenso_avg ta ON ta.uster_testnr = ul.testnr
+      JOIN hvi_avg    ha ON ha.lote_fiac_num = ul.mistura_num::integer
+      ORDER BY ul.time_stamp ASC
+    `;
+
+    const result = await query(sql, [fecha_inicio, fecha_fin, ne_titulo || null], 'correlacion-mezcla-hilo');
+    const rows = result.rows;
+
+    if (rows.length === 0) {
+      return res.json({ success: true, datos: [], correlaciones: [], n: 0 });
+    }
+
+    // Variables HVI disponibles como causas
+    const hviVars   = ['str', 'sci', 'mic', 'uhml'];
+    // Variables hilo disponibles como efectos
+    const hiloVars  = ['cvm', 'vellosidad', 'neps_200', 'thin_50', 'thick_50', 'tenacidad', 'elongacion'];
+
+    // Filtra pares validos (ambos valores numéricos != null) para cada combinación
+    const correlaciones = [];
+    for (const hv of hviVars) {
+      for (const yv of hiloVars) {
+        const pares = rows.filter(r =>
+          r[hv] != null && r[yv] != null &&
+          !isNaN(parseFloat(r[hv])) && !isNaN(parseFloat(r[yv]))
+        );
+        if (pares.length < 3) continue;
+        const x = pares.map(r => parseFloat(r[hv]));
+        const y = pares.map(r => parseFloat(r[yv]));
+        const r  = pearsonCorrelation(x, y);
+        const lr = linearRegression(x, y);
+        correlaciones.push({
+          hvi_var:   hv,
+          hilo_var:  yv,
+          r,
+          r2:        lr.r2,
+          slope:     lr.slope,
+          intercept: lr.intercept,
+          n:         pares.length,
+          // Para el scatter plot
+          puntos: pares.map((row, i) => ({
+            x:       x[i],
+            y:       y[i],
+            lote:    row.lote_raw,
+            titulo:  row.ne_titulo,
+            fecha:   row.fecha
+          }))
+        });
+      }
+    }
+
+    res.json({ success: true, datos: rows, correlaciones, n: rows.length });
+  } catch (err) {
+    console.error('Error en correlacion mezcla-hilo:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/correlacion/narrativa
+// Body: { correlaciones, n, fecha_inicio, fecha_fin, ne_titulo, model }
+app.post('/api/correlacion/narrativa', async (req, res) => {
+  try {
+    const { correlaciones, n, fecha_inicio, fecha_fin, ne_titulo, model: modelReq } = req.body;
+    const apiKey = process.env.GOOGLE_API_KEY;
+
+    if (!apiKey) {
+      return res.status(500).json({ success: false, error: 'GOOGLE_API_KEY no configurada' });
+    }
+
+    const modelName = modelReq || 'gemini-2.0-flash';
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: modelName });
+
+    const etiquetas = {
+      str: 'STR (Tenacidad Fibra, g/tex)',
+      sci: 'SCI (Spinning Consistency Index)',
+      mic: 'MIC (Micronaire)',
+      uhml: 'UHML (Longitud media fibra, mm)',
+      cvm: 'CVm% (Irregularidad de masa)',
+      vellosidad: 'H (Vellosidad Uster)',
+      neps_200:  'Neps 200%/km',
+      thin_50:   'Puntos delgados -50%/km',
+      thick_50:  'Puntos gruesos +50%/km',
+      tenacidad: 'Tenacidad hilo (cN/tex)',
+      elongacion:'Elongación hilo (%)'
+    };
+
+    const resumen = correlaciones
+      .filter(c => Math.abs(c.r) >= 0.3)
+      .sort((a, b) => Math.abs(b.r) - Math.abs(a.r))
+      .slice(0, 12)
+      .map(c => {
+        const dir = c.slope >= 0 ? 'aumenta' : 'disminuye';
+        const unidadHvi = c.hvi_var === 'str' ? 'g/tex' : c.hvi_var === 'mic' ? 'unidades' : c.hvi_var === 'uhml' ? 'mm' : 'puntos';
+        const unidadHilo = ['cvm','vellosidad','neps_200','thin_50','thick_50'].includes(c.hvi_var) ? 'unidades' : 'cN/tex';
+        return `- ${etiquetas[c.hvi_var]} → ${etiquetas[c.hilo_var]}: r=${c.r} (${c.n} muestras). Por cada 1 ${unidadHvi} de aumento en ${c.hvi_var.toUpperCase()}, el ${c.hilo_var.toUpperCase()} ${dir} ${Math.abs(c.slope).toFixed(3)} ${unidadHilo}.`;
+      }).join('\n');
+
+    const prompt = `Actúa como un Analista Senior de Control de Calidad Textil especializado en hilatura de Denim.
+
+Recibirás un análisis de correlación estadística entre variables de FIBRA (HVI) y variables de HILO (Uster + Tensorapid) calculado sobre ${n} ensayos históricos de la planta, periodo ${fecha_inicio} a ${fecha_fin}${ne_titulo ? `, título Ne ${ne_titulo}` : ', todos los títulos'}.
+
+CORRELACIONES DETECTADAS (r = coeficiente de Pearson, slope = pendiente de regresión lineal):
+${resumen || 'No se detectaron correlaciones significativas (r >= 0.3) con los datos disponibles.'}
+
+TAREA:
+Redactá en español un análisis técnico dividido en exactamente 3 secciones usando Markdown:
+
+## 1. Relaciones Causa-Efecto Confirmadas
+Explicá en lenguaje claro (para un jefe de planta, no un estadístico) qué variables de la mezcla impactan más en la calidad del hilo y en qué dirección. Cuantificá el impacto ("por cada unidad que sube X, Y cambia en Z").
+
+## 2. Oportunidades de Optimización
+Basado en las correlaciones encontradas, indicá qué ajustes en la mezcla podrían mejorar la calidad del hilo o reducir costos sin sacrificar estándares. Sé específico y accionable.
+
+## 3. Veredicto y Recomendación
+Un párrafo ejecutivo de 3-4 oraciones que un gerente pueda leer en 20 segundos. Indicá si los datos son suficientes para tomar decisiones o si se necesitan más muestras.
+
+REGLAS:
+- No inventes relaciones que no estén en los datos.
+- Si el n es bajo (< 10), advierte sobre la limitación estadística.
+- Usá terminología textil correcta.
+- Formato Markdown.`;
+
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+
+    res.json({ success: true, narrativa: text });
+  } catch (error) {
+    console.error('Error narrativa correlacion:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// =====================================================
 // INICIAR SERVIDOR
 // =====================================================
 async function startServer() {

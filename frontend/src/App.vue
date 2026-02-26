@@ -241,6 +241,13 @@
             >
               <span>📈</span> Metros por Sector
             </router-link>
+            <router-link 
+              to="/partida-tejeduria" 
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
+              :class="{ 'bg-blue-600': $route.path === '/partida-tejeduria' }"
+            >
+              <span>🏭</span> Partida en Producción
+            </router-link>
           </div>
         </div>
 
@@ -363,6 +370,13 @@
               <span>🧬</span> Carga HVI (Mistura)
             </router-link>
             <router-link 
+              to="/correlacion-mezcla-hilo" 
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
+              :class="{ 'bg-blue-600': $route.path === '/correlacion-mezcla-hilo' }"
+            >
+              <span>🔬</span> Correlación Mezcla → Hilo
+            </router-link>
+            <router-link 
               to="/detalle-mistura-lote" 
               class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
               :class="{ 'bg-blue-600': $route.path === '/detalle-mistura-lote' }"
@@ -425,7 +439,7 @@ const isProdRouteActive = computed(() => prodRoutes.includes(route.path))
 const inventoryRoutes = ['/inventario']
 const isInventoryRouteActive = computed(() => inventoryRoutes.includes(route.path))
 
-const calidadRoutes = ['/revision-cq', '/analisis-mesa-test', '/calidad-sectores']
+const calidadRoutes = ['/revision-cq', '/analisis-mesa-test', '/calidad-sectores', '/partida-tejeduria']
 const isCalidadRouteActive = computed(() => calidadRoutes.includes(route.path))
 
 const indigoRoutes = [
@@ -439,7 +453,7 @@ const indigoRoutes = [
 ]
   const isIndigoRouteActive = computed(() => indigoRoutes.includes(route.path)) 
   
-  const configRoutes = ['/parametros-hvi', '/detalle-mistura-lote', '/configuracion-estandares']
+  const configRoutes = ['/parametros-hvi', '/detalle-mistura-lote', '/configuracion-estandares', '/correlacion-mezcla-hilo']
   const isConfigRouteActive = computed(() => configRoutes.includes(route.path))
 
   function openSidebar() {

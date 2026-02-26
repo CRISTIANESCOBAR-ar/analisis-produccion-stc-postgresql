@@ -50,6 +50,11 @@ const routes = [
     component: () => import('./components/ensayos/DetalleMisturaLote.vue'),
     meta: { title: 'Detalle MISTURA por Lote' }
   },
+  {
+    path: '/correlacion-mezcla-hilo',
+    component: () => import('./components/ensayos/CorrelacionMezclaHilo.vue'),
+    meta: { title: 'Correlación Mezcla → Hilo' }
+  },
   { 
     path: '/resumen-diario', 
     component: () => import('./components/ensayos/ResumenDiario.vue'), 
@@ -84,6 +89,11 @@ const routes = [
     path: '/calidad-sectores',
     component: () => import('./components/produccion/CalidadSectoresTabla.vue'),
     meta: { title: 'Metros por Sector - Control de Calidad' }
+  },
+  {
+    path: '/partida-tejeduria',
+    component: () => import('./components/produccion/PartidaTejeduria.vue'),
+    meta: { title: 'Partida en Producción – Tejeduría' }
   }
   ,
   {
