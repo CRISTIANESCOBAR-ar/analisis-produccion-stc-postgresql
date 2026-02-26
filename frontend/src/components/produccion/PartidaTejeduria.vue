@@ -50,7 +50,7 @@
       <div v-if="datos && datos.encontrada" ref="reporteRef" class="flex flex-col gap-0">
 
         <!-- ── Cabecera tipo formulario ───────────────────────────────────── -->
-        <div class="border border-slate-400 rounded-t-lg overflow-hidden print:rounded-none">
+        <div class="border border-slate-400 rounded-lg overflow-hidden print:rounded-none">
 
           <!-- Título -->
           <div class="grid grid-cols-[auto_1fr_auto_auto] items-stretch bg-white border-b border-slate-300">
@@ -112,87 +112,6 @@
             <div class="px-2 py-1 text-xs font-semibold text-slate-500 border-r border-slate-200">Lote:</div>
             <div class="px-2 py-1 text-sm font-bold text-slate-800">{{ enc.lote || '–' }}</div>
           </div>
-        </div>
-
-        <!-- ── Tabla de datos ──────────────────────────────────────────────── -->
-        <div class="overflow-x-auto border border-t-0 border-slate-400 rounded-b-lg">
-          <table class="w-full text-xs border-collapse">
-            <thead>
-              <tr class="bg-slate-700 text-white">
-                <th class="px-2 py-2 text-center border-r border-slate-600 font-semibold whitespace-nowrap">Fecha</th>
-                <th class="px-2 py-2 text-center border-r border-slate-600 font-semibold">Tur</th>
-                <th class="px-2 py-2 text-center border-r border-slate-600 font-semibold">Partida</th>
-                <th class="px-2 py-2 text-right border-r border-slate-600 font-semibold whitespace-nowrap">Metros<br>Crudos</th>
-                <th class="px-2 py-2 text-right border-r border-slate-600 font-semibold whitespace-nowrap">Metros<br>Termin.</th>
-                <th class="px-2 py-2 text-right border-r border-slate-600 font-semibold whitespace-nowrap">Metros Term.<br>Acumul.</th>
-                <th class="px-2 py-2 text-right border-r border-slate-600 font-semibold whitespace-nowrap">Paradas<br>Trama</th>
-                <th class="px-2 py-2 text-right border-r border-slate-600 font-semibold whitespace-nowrap">Paradas<br>Urdimbre</th>
-                <th class="px-2 py-2 text-right border-r border-slate-600 font-semibold whitespace-nowrap">Total<br>Paradas</th>
-                <th class="px-2 py-2 text-right border-r border-slate-600 font-semibold whitespace-nowrap">Eficiencia<br>%</th>
-                <th class="px-2 py-2 text-right border-r border-slate-600 font-semibold whitespace-nowrap">Roturas<br>TRAMA 105</th>
-                <th class="px-2 py-2 text-right border-r border-slate-600 font-semibold whitespace-nowrap">Roturas<br>URDIDO 105</th>
-                <th class="px-2 py-2 text-right font-semibold">RPM</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="(r, i) in datos.registros"
-                :key="i"
-                :class="i % 2 === 0 ? 'bg-white' : 'bg-slate-50'"
-                class="hover:bg-blue-50 transition-colors"
-              >
-                <td class="px-2 py-1 text-center border-r border-slate-200 whitespace-nowrap">{{ formatFecha(r.fecha) }}</td>
-                <td class="px-2 py-1 text-center border-r border-slate-200 font-semibold">{{ r.turno }}</td>
-                <td class="px-2 py-1 text-center border-r border-slate-200 whitespace-nowrap">{{ r.partida }}</td>
-                <td class="px-2 py-1 text-right border-r border-slate-200">{{ fmtNum(r.metros_crudos, 0) }}</td>
-                <td class="px-2 py-1 text-right border-r border-slate-200">{{ fmtNum(r.metros_term, 0) }}</td>
-                <td class="px-2 py-1 text-right border-r border-slate-200 font-medium text-blue-700">{{ fmtNum(r.metros_term_acum, 0) }}</td>
-                <td class="px-2 py-1 text-right border-r border-slate-200">{{ r.paradas_trama }}</td>
-                <td class="px-2 py-1 text-right border-r border-slate-200">{{ r.paradas_urdimbre }}</td>
-                <td class="px-2 py-1 text-right border-r border-slate-200 font-semibold">{{ r.total_paradas }}</td>
-                <td class="px-2 py-1 text-right border-r border-slate-200" :class="colorEfi(r.eficiencia)">
-                  {{ r.eficiencia != null ? r.eficiencia.toFixed(1) : '–' }}
-                </td>
-                <td class="px-2 py-1 text-right border-r border-slate-200" :class="colorRt(r.rt_105)">
-                  {{ r.rt_105 != null ? r.rt_105.toFixed(1) : '–' }}
-                </td>
-                <td class="px-2 py-1 text-right border-r border-slate-200" :class="colorRt(r.ru_105)">
-                  {{ r.ru_105 != null ? r.ru_105.toFixed(1) : '–' }}
-                </td>
-                <td class="px-2 py-1 text-right">{{ r.rpm != null ? r.rpm : '–' }}</td>
-              </tr>
-            </tbody>
-            <!-- Fila de totales -->
-            <tfoot>
-              <tr class="bg-slate-800 text-white font-bold">
-                <td colspan="3" class="px-2 py-1.5 text-center border-r border-slate-600 text-xs">TOTAL / PROMEDIO</td>
-                <td class="px-2 py-1.5 text-right border-r border-slate-600">{{ fmtNum(tot.metros_crudos, 0) }}</td>
-                <td class="px-2 py-1.5 text-right border-r border-slate-600">{{ fmtNum(tot.metros_term, 0) }}</td>
-                <td class="px-2 py-1.5 border-r border-slate-600"></td>
-                <td class="px-2 py-1.5 text-right border-r border-slate-600">{{ tot.paradas_trama }}</td>
-                <td class="px-2 py-1.5 text-right border-r border-slate-600">{{ tot.paradas_urdimbre }}</td>
-                <td class="px-2 py-1.5 text-right border-r border-slate-600">{{ tot.total_paradas }}</td>
-                <td class="px-2 py-1.5 text-right border-r border-slate-600">
-                  {{ tot.eficiencia != null ? tot.eficiencia.toFixed(1) : '–' }}
-                </td>
-                <td class="px-2 py-1.5 text-right border-r border-slate-600">
-                  {{ tot.rt_105 != null ? tot.rt_105.toFixed(1) : '–' }}
-                </td>
-                <td class="px-2 py-1.5 text-right border-r border-slate-600">
-                  {{ tot.ru_105 != null ? tot.ru_105.toFixed(1) : '–' }}
-                </td>
-                <td class="px-2 py-1.5 text-right">{{ tot.rpm != null ? tot.rpm : '–' }}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-
-        <!-- ── Barra de info inferior ─────────────────────────────────────── -->
-        <div class="mt-2 flex flex-wrap gap-4 text-xs text-slate-500">
-          <span>{{ datos.registros.length }} registros (turnos)</span>
-          <span v-if="enc.roladas?.length">
-            Rolada(s): <strong class="text-slate-700">{{ enc.roladas.join(', ') }}</strong>
-          </span>
         </div>
 
         <!-- ── Historial de máquinas ────────────────────────────────────────── -->
@@ -295,6 +214,87 @@
               </tbody>
             </table>
           </div>
+        </div>
+
+        <!-- ── Tabla de datos ──────────────────────────────────────────────── -->
+        <div class="overflow-x-auto border border-slate-400 rounded-lg mt-5">
+          <table class="w-full text-xs border-collapse">
+            <thead>
+              <tr class="bg-slate-700 text-white">
+                <th class="px-2 py-2 text-center border-r border-slate-600 font-semibold whitespace-nowrap">Fecha</th>
+                <th class="px-2 py-2 text-center border-r border-slate-600 font-semibold">Tur</th>
+                <th class="px-2 py-2 text-center border-r border-slate-600 font-semibold">Partida</th>
+                <th class="px-2 py-2 text-right border-r border-slate-600 font-semibold whitespace-nowrap">Metros<br>Crudos</th>
+                <th class="px-2 py-2 text-right border-r border-slate-600 font-semibold whitespace-nowrap">Metros<br>Termin.</th>
+                <th class="px-2 py-2 text-right border-r border-slate-600 font-semibold whitespace-nowrap">Metros Term.<br>Acumul.</th>
+                <th class="px-2 py-2 text-right border-r border-slate-600 font-semibold whitespace-nowrap">Paradas<br>Trama</th>
+                <th class="px-2 py-2 text-right border-r border-slate-600 font-semibold whitespace-nowrap">Paradas<br>Urdimbre</th>
+                <th class="px-2 py-2 text-right border-r border-slate-600 font-semibold whitespace-nowrap">Total<br>Paradas</th>
+                <th class="px-2 py-2 text-right border-r border-slate-600 font-semibold whitespace-nowrap">Eficiencia<br>%</th>
+                <th class="px-2 py-2 text-right border-r border-slate-600 font-semibold whitespace-nowrap">Roturas<br>TRAMA 105</th>
+                <th class="px-2 py-2 text-right border-r border-slate-600 font-semibold whitespace-nowrap">Roturas<br>URDIDO 105</th>
+                <th class="px-2 py-2 text-right font-semibold">RPM</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="(r, i) in datos.registros"
+                :key="i"
+                :class="i % 2 === 0 ? 'bg-white' : 'bg-slate-50'"
+                class="hover:bg-blue-50 transition-colors"
+              >
+                <td class="px-2 py-1 text-center border-r border-slate-200 whitespace-nowrap">{{ formatFecha(r.fecha) }}</td>
+                <td class="px-2 py-1 text-center border-r border-slate-200 font-semibold">{{ r.turno }}</td>
+                <td class="px-2 py-1 text-center border-r border-slate-200 whitespace-nowrap">{{ r.partida }}</td>
+                <td class="px-2 py-1 text-right border-r border-slate-200">{{ fmtNum(r.metros_crudos, 0) }}</td>
+                <td class="px-2 py-1 text-right border-r border-slate-200">{{ fmtNum(r.metros_term, 0) }}</td>
+                <td class="px-2 py-1 text-right border-r border-slate-200 font-medium text-blue-700">{{ fmtNum(r.metros_term_acum, 0) }}</td>
+                <td class="px-2 py-1 text-right border-r border-slate-200">{{ r.paradas_trama }}</td>
+                <td class="px-2 py-1 text-right border-r border-slate-200">{{ r.paradas_urdimbre }}</td>
+                <td class="px-2 py-1 text-right border-r border-slate-200 font-semibold">{{ r.total_paradas }}</td>
+                <td class="px-2 py-1 text-right border-r border-slate-200" :class="colorEfi(r.eficiencia)">
+                  {{ r.eficiencia != null ? r.eficiencia.toFixed(1) : '–' }}
+                </td>
+                <td class="px-2 py-1 text-right border-r border-slate-200" :class="colorRt(r.rt_105)">
+                  {{ r.rt_105 != null ? r.rt_105.toFixed(1) : '–' }}
+                </td>
+                <td class="px-2 py-1 text-right border-r border-slate-200" :class="colorRt(r.ru_105)">
+                  {{ r.ru_105 != null ? r.ru_105.toFixed(1) : '–' }}
+                </td>
+                <td class="px-2 py-1 text-right">{{ r.rpm != null ? r.rpm : '–' }}</td>
+              </tr>
+            </tbody>
+            <!-- Fila de totales -->
+            <tfoot>
+              <tr class="bg-slate-800 text-white font-bold">
+                <td colspan="3" class="px-2 py-1.5 text-center border-r border-slate-600 text-xs">TOTAL / PROMEDIO</td>
+                <td class="px-2 py-1.5 text-right border-r border-slate-600">{{ fmtNum(tot.metros_crudos, 0) }}</td>
+                <td class="px-2 py-1.5 text-right border-r border-slate-600">{{ fmtNum(tot.metros_term, 0) }}</td>
+                <td class="px-2 py-1.5 border-r border-slate-600"></td>
+                <td class="px-2 py-1.5 text-right border-r border-slate-600">{{ tot.paradas_trama }}</td>
+                <td class="px-2 py-1.5 text-right border-r border-slate-600">{{ tot.paradas_urdimbre }}</td>
+                <td class="px-2 py-1.5 text-right border-r border-slate-600">{{ tot.total_paradas }}</td>
+                <td class="px-2 py-1.5 text-right border-r border-slate-600">
+                  {{ tot.eficiencia != null ? tot.eficiencia.toFixed(1) : '–' }}
+                </td>
+                <td class="px-2 py-1.5 text-right border-r border-slate-600">
+                  {{ tot.rt_105 != null ? tot.rt_105.toFixed(1) : '–' }}
+                </td>
+                <td class="px-2 py-1.5 text-right border-r border-slate-600">
+                  {{ tot.ru_105 != null ? tot.ru_105.toFixed(1) : '–' }}
+                </td>
+                <td class="px-2 py-1.5 text-right">{{ tot.rpm != null ? tot.rpm : '–' }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <!-- ── Barra de info inferior ─────────────────────────────────────── -->
+        <div class="mt-2 flex flex-wrap gap-4 text-xs text-slate-500">
+          <span>{{ datos.registros.length }} registros (turnos)</span>
+          <span v-if="enc.roladas?.length">
+            Rolada(s): <strong class="text-slate-700">{{ enc.roladas.join(', ') }}</strong>
+          </span>
         </div>
       </div>
 
