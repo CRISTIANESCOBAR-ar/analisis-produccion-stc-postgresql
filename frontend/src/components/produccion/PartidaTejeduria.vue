@@ -215,13 +215,6 @@
                   <td class="px-3 py-1.5 text-slate-600">{{ h.nm_mercado || '–' }}</td>
                 </tr>
 
-                <!-- Separador CALIDAD -->
-                <tr v-if="calidad.length">
-                  <td colspan="12" class="px-3 py-1.5 bg-emerald-600 text-white text-[10px] font-bold uppercase tracking-widest">
-                    ✓ Calidad
-                  </td>
-                </tr>
-
                 <!-- Filas tb_calidad -->
                 <tr
                   v-for="(c, i) in calidad"
