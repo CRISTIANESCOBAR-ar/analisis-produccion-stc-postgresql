@@ -194,6 +194,70 @@
             Rolada(s): <strong class="text-slate-700">{{ enc.roladas.join(', ') }}</strong>
           </span>
         </div>
+
+        <!-- ── Historial de máquinas ────────────────────────────────────────── -->
+        <div v-if="hist.length" class="mt-4">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-xs font-bold uppercase tracking-wide text-slate-600">Recorrido por Máquinas</span>
+            <span class="text-[10px] bg-slate-200 text-slate-600 rounded-full px-2 py-0.5 font-semibold">{{ hist.length }}</span>
+          </div>
+          <div class="overflow-x-auto border border-slate-300 rounded-lg">
+            <table class="w-full text-xs border-collapse">
+              <thead>
+                <tr class="bg-slate-600 text-white">
+                  <th class="px-2 py-2 text-center border-r border-slate-500 font-semibold whitespace-nowrap">#</th>
+                  <th class="px-2 py-2 text-center border-r border-slate-500 font-semibold whitespace-nowrap">Máquina</th>
+                  <th class="px-2 py-2 text-center border-r border-slate-500 font-semibold whitespace-nowrap">Sector</th>
+                  <th class="px-2 py-2 text-center border-r border-slate-500 font-semibold whitespace-nowrap">Fecha<br>Inicial</th>
+                  <th class="px-2 py-2 text-center border-r border-slate-500 font-semibold whitespace-nowrap">Hora<br>Ini</th>
+                  <th class="px-2 py-2 text-center border-r border-slate-500 font-semibold whitespace-nowrap">Fecha<br>Final</th>
+                  <th class="px-2 py-2 text-center border-r border-slate-500 font-semibold whitespace-nowrap">Hora<br>Fin</th>
+                  <th class="px-2 py-2 text-right border-r border-slate-500 font-semibold whitespace-nowrap">Metros</th>
+                  <th class="px-2 py-2 text-left border-r border-slate-500 font-semibold whitespace-nowrap">Artículo</th>
+                  <th class="px-2 py-2 text-center border-r border-slate-500 font-semibold">Color</th>
+                  <th class="px-2 py-2 text-left font-semibold">Nombre</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="(h, i) in hist"
+                  :key="i"
+                  :class="i % 2 === 0 ? 'bg-white' : 'bg-slate-50'"
+                  class="hover:bg-blue-50 transition-colors"
+                >
+                  <td class="px-2 py-1 text-center border-r border-slate-200 text-slate-400 font-semibold">{{ i + 1 }}</td>
+                  <td class="px-2 py-1 text-center border-r border-slate-200 font-bold text-blue-700">{{ h.maquina }}</td>
+                  <td class="px-2 py-1 text-center border-r border-slate-200">
+                    <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold"
+                      :class="{
+                        'bg-blue-100 text-blue-700':   h.seletor === 'TECELAGEM',
+                        'bg-amber-100 text-amber-700':  h.seletor === 'URDIDEIRA' || h.seletor === 'URDIDORA',
+                        'bg-indigo-100 text-indigo-700': h.seletor === 'INDIGO',
+                        'bg-slate-100 text-slate-600':  !['TECELAGEM','URDIDEIRA','URDIDORA','INDIGO'].includes(h.seletor)
+                      }">{{ h.seletor }}</span>
+                  </td>
+                  <td class="px-2 py-1 text-center border-r border-slate-200 whitespace-nowrap">{{ formatFecha(h.dt_inicio) }}</td>
+                  <td class="px-2 py-1 text-center border-r border-slate-200 font-mono">{{ fmtHora(h.hora_inicio) }}</td>
+                  <td class="px-2 py-1 text-center border-r border-slate-200 whitespace-nowrap">{{ formatFecha(h.dt_final) }}</td>
+                  <td class="px-2 py-1 text-center border-r border-slate-200 font-mono">{{ fmtHora(h.hora_final) }}</td>
+                  <td class="px-2 py-1 text-right border-r border-slate-200 font-semibold">{{ fmtNum(h.metros, 0) }}</td>
+                  <td class="px-2 py-1 border-r border-slate-200">{{ h.artigo || '–' }}</td>
+                  <td class="px-2 py-1 text-center border-r border-slate-200">{{ h.cor || '–' }}</td>
+                  <td class="px-2 py-1">{{ h.nm_mercado || '–' }}</td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr class="bg-slate-700 text-white font-bold">
+                  <td colspan="7" class="px-2 py-1.5 text-center border-r border-slate-600 text-xs">TOTAL</td>
+                  <td class="px-2 py-1.5 text-right border-r border-slate-600">
+                    {{ fmtNum(hist.reduce((s, h) => s + (h.metros || 0), 0), 0) }}
+                  </td>
+                  <td colspan="3" class="px-2 py-1.5"></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
       </div>
 
       <!-- ── Estado inicial ─────────────────────────────────────────────── -->
@@ -220,6 +284,7 @@ const datos              = ref(null)
 
 const enc = computed(() => datos.value?.encabezado || {})
 const tot = computed(() => datos.value?.totales || {})
+const hist = computed(() => datos.value?.historial || [])
 
 // Convierte "1-5352.16" → "1535216" (elimina máscara)
 function normalizarPartida(raw) {
@@ -262,6 +327,19 @@ function fmtNum(v, dec = 1) {
   const n = parseFloat(v)
   if (isNaN(n)) return '–'
   return n.toLocaleString('es-AR', { minimumFractionDigits: dec, maximumFractionDigits: dec })
+}
+
+// "13.20" → "13:20" ; "18:40:00" → "18:40"
+function fmtHora(h) {
+  if (!h) return '–'
+  const s = String(h).trim()
+  // Si el DB ya devuelve formato TIME "HH:MM:SS" o "HH:MM"
+  if (s.includes(':')) return s.substring(0, 5)
+  // Formato europeo "13.20" → "13:20"
+  const parts = s.split('.')
+  const hh = parts[0].padStart(2, '0')
+  const mm = (parts[1] || '00').padEnd(2, '0').substring(0, 2)
+  return `${hh}:${mm}`
 }
 
 // ── Colores condicionales ────────────────────────────────────────────────────

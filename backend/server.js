@@ -5587,12 +5587,97 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
       roladas
     };
 
+    // ── Q7: Historial de máquinas por las que pasó la partida ─────────────
+    // Agrupa por MAQUINA (todos los SELETOR), mostrando primer inicio / último fin / suma metros
+    let historial = [];
+    try {
+      const sqlHistorial = `
+        WITH base AS (
+          SELECT
+            p."MAQUINA",
+            p."SELETOR",
+            ${pDate('p."DT_INICIO"')}       AS dt_ini_parsed,
+            p."HORA_INICIO",
+            ${pDate('p."DT_FINAL"')}        AS dt_fin_parsed,
+            p."HORA_FINAL",
+            ${pNumI('p."METRAGEM"')}        AS metros_val,
+            p."ARTIGO",
+            p."COR",
+            p."NM MERCADO"                  AS nm_mercado
+          FROM tb_produccion p
+          WHERE p."FILIAL" = $2
+            AND p."PARTIDA" = ANY($1::text[])
+            AND p."MAQUINA" IS NOT NULL
+            AND TRIM(p."MAQUINA"::text) <> ''
+        ),
+        por_maquina AS (
+          SELECT
+            "MAQUINA",
+            MAX("SELETOR")                      AS seletor,
+            MIN(dt_ini_parsed)                   AS dt_inicio,
+            MAX(dt_fin_parsed)                   AS dt_final,
+            ROUND(COALESCE(SUM(metros_val), 0)::numeric, 0) AS metros,
+            MAX("ARTIGO")                        AS artigo,
+            MAX("COR")                           AS cor,
+            MAX(nm_mercado)                      AS nm_mercado
+          FROM base
+          GROUP BY "MAQUINA"
+        ),
+        primera_hora AS (
+          SELECT DISTINCT ON ("MAQUINA")
+            "MAQUINA",
+            "HORA_INICIO"
+          FROM base
+          ORDER BY "MAQUINA", dt_ini_parsed ASC NULLS LAST
+        ),
+        ultima_hora AS (
+          SELECT DISTINCT ON ("MAQUINA")
+            "MAQUINA",
+            "HORA_FINAL"
+          FROM base
+          ORDER BY "MAQUINA", dt_fin_parsed DESC NULLS LAST
+        )
+        SELECT
+          pm."MAQUINA"      AS maquina,
+          pm.seletor,
+          pm.dt_inicio,
+          ph."HORA_INICIO"  AS hora_inicio,
+          pm.dt_final,
+          uh."HORA_FINAL"   AS hora_final,
+          pm.metros,
+          pm.artigo,
+          pm.cor,
+          pm.nm_mercado
+        FROM por_maquina pm
+        LEFT JOIN primera_hora ph ON ph."MAQUINA" = pm."MAQUINA"
+        LEFT JOIN ultima_hora  uh ON uh."MAQUINA" = pm."MAQUINA"
+        ORDER BY pm.dt_inicio ASC NULLS LAST, pm."MAQUINA" ASC
+      `;
+      const resHistorial = await query(sqlHistorial, [partidaCandidates, filial], 'partida-tej/historial');
+      historial = (resHistorial.rows || []).map(r => ({
+        maquina:     r.maquina,
+        seletor:     r.seletor,
+        dt_inicio:   r.dt_inicio,
+        hora_inicio: r.hora_inicio,
+        dt_final:    r.dt_final,
+        hora_final:  r.hora_final,
+        metros:      r.metros !== null ? parseFloat(r.metros) : null,
+        artigo:      r.artigo,
+        cor:         r.cor,
+        nm_mercado:  r.nm_mercado
+      }));
+    } catch (histErr) {
+      console.warn('partida-tej/historial: columnas no disponibles -', histErr.message);
+      historial = [];
+    }
+
     res.json({
       success: true,
       encontrada: true,
       encabezado,
       registros,
-      totales
+      totales,
+      historial
     });
 
   } catch (err) {
