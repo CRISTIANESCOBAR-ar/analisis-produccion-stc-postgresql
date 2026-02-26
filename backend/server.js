@@ -5711,37 +5711,72 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
     }
 
     // ── Q8: tb_calidad agrupada por partida ────────────────────────────
-    // REVISOR FINAL juega el rol de "Maquina"; puede haber varios revisores por partida
+    // REVISOR FINAL = Maquina; MIN/MAX de DAT_PROD+HORA como inicio/fin
     let calidad = [];
     try {
       const sqlCalidad = `
+        WITH base_cal AS (
+          SELECT
+            c."PARTIDA",
+            TRIM(c."REVISOR FINAL"::text)              AS revisor,
+            ${pDate('c."DAT_PROD"')}                  AS dat_prod_parsed,
+            LPAD(TRIM(COALESCE(c."HORA"::text, '0')), 4, '0') AS hora_fmt,
+            ${pNum('c."METRAGEM"')}                   AS metros_val,
+            c."ARTIGO",
+            c."COR",
+            c."NM MERC"                               AS nm_mercado
+          FROM tb_calidad c
+          WHERE c."PARTIDA" = ANY($1::text[])
+            AND TRIM(COALESCE(c."REVISOR FINAL"::text, '')) <> ''
+        ),
+        min_row AS (
+          SELECT DISTINCT ON ("PARTIDA")
+            "PARTIDA",
+            dat_prod_parsed AS dat_inicio,
+            LEFT(hora_fmt, 2) || ':' || RIGHT(hora_fmt, 2) AS hora_inicio
+          FROM base_cal
+          ORDER BY "PARTIDA", dat_prod_parsed ASC NULLS LAST, hora_fmt ASC NULLS LAST
+        ),
+        max_row AS (
+          SELECT DISTINCT ON ("PARTIDA")
+            "PARTIDA",
+            dat_prod_parsed AS dat_final,
+            LEFT(hora_fmt, 2) || ':' || RIGHT(hora_fmt, 2) AS hora_final
+          FROM base_cal
+          ORDER BY "PARTIDA", dat_prod_parsed DESC NULLS LAST, hora_fmt DESC NULLS LAST
+        )
         SELECT
           STRING_AGG(
-            DISTINCT TRIM(c."REVISOR FINAL"::text),
-            ' / '
-            ORDER BY TRIM(c."REVISOR FINAL"::text)
-          )                                   AS revisores,
-          c."PARTIDA"                         AS partida,
-          ${pDate('c."DAT_PROD"')}           AS dat_prod,
-          ROUND(SUM(${pNum('c."METRAGEM"')})::numeric, 0) AS metros,
-          MAX(c."ARTIGO")                     AS artigo,
-          MAX(c."COR")                        AS cor,
-          MAX(c."NM MERC")                    AS nm_mercado
-        FROM tb_calidad c
-        WHERE c."PARTIDA" = ANY($1::text[])
-          AND TRIM(COALESCE(c."REVISOR FINAL"::text, '')) <> ''
-        GROUP BY c."PARTIDA", ${pDate('c."DAT_PROD"')}
-        ORDER BY ${pDate('c."DAT_PROD"')} ASC NULLS LAST, c."PARTIDA" ASC
+            DISTINCT b.revisor, ' / '
+            ORDER BY b.revisor
+          )                                     AS revisores,
+          b."PARTIDA"                           AS partida,
+          mn.dat_inicio,
+          mn.hora_inicio,
+          mx.dat_final,
+          mx.hora_final,
+          ROUND(SUM(b.metros_val)::numeric, 0)  AS metros,
+          MAX(b."ARTIGO")                       AS artigo,
+          MAX(b."COR")                          AS cor,
+          MAX(b.nm_mercado)                     AS nm_mercado
+        FROM base_cal b
+        JOIN min_row mn ON mn."PARTIDA" = b."PARTIDA"
+        JOIN max_row mx ON mx."PARTIDA" = b."PARTIDA"
+        GROUP BY b."PARTIDA", mn.dat_inicio, mn.hora_inicio, mx.dat_final, mx.hora_final
+        ORDER BY mn.dat_inicio ASC NULLS LAST, b."PARTIDA" ASC
       `;
       const resCalidad = await query(sqlCalidad, [partidaCandidates], 'partida-tej/calidad');
       calidad = (resCalidad.rows || []).map(r => ({
-        revisores:  r.revisores || '',
-        partida:    r.partida   || '',
-        dat_prod:   r.dat_prod,
-        metros:     r.metros !== null ? parseFloat(r.metros) : null,
-        artigo:     r.artigo,
-        cor:        r.cor,
-        nm_mercado: r.nm_mercado
+        revisores:   r.revisores  || '',
+        partida:     r.partida    || '',
+        dat_inicio:  r.dat_inicio,
+        hora_inicio: r.hora_inicio || '',
+        dat_final:   r.dat_final,
+        hora_final:  r.hora_final  || '',
+        metros:      r.metros !== null ? parseFloat(r.metros) : null,
+        artigo:      r.artigo,
+        cor:         r.cor,
+        nm_mercado:  r.nm_mercado
       }));
     } catch (calErr) {
       console.warn('partida-tej/calidad:', calErr.message);

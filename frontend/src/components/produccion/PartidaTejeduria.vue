@@ -268,10 +268,10 @@
                   <td class="px-2 py-1 text-center border-r border-slate-200">
                     <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700">CALIDAD</span>
                   </td>
-                  <td class="px-2 py-1 text-center border-r border-slate-200 whitespace-nowrap">{{ formatFecha(c.dat_prod) }}</td>
-                  <td class="px-2 py-1 text-center border-r border-slate-200">–</td>
-                  <td class="px-2 py-1 text-center border-r border-slate-200">–</td>
-                  <td class="px-2 py-1 text-center border-r border-slate-200">–</td>
+                  <td class="px-2 py-1 text-center border-r border-slate-200 whitespace-nowrap">{{ formatFecha(c.dat_inicio) }}</td>
+                  <td class="px-2 py-1 text-center border-r border-slate-200 font-mono">{{ c.hora_inicio || '–' }}</td>
+                  <td class="px-2 py-1 text-center border-r border-slate-200 whitespace-nowrap">{{ formatFecha(c.dat_final) }}</td>
+                  <td class="px-2 py-1 text-center border-r border-slate-200 font-mono">{{ c.hora_final || '–' }}</td>
                   <td class="px-2 py-1 text-right border-r border-slate-200 font-semibold">{{ fmtNum(c.metros, 0) }}</td>
                   <td class="px-2 py-1 border-r border-slate-200">{{ c.artigo || '–' }}</td>
                   <td class="px-2 py-1 text-center border-r border-slate-200">{{ c.cor || '–' }}</td>
