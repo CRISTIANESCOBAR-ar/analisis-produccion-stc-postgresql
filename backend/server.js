@@ -5596,6 +5596,7 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
           SELECT
             p."MAQUINA",
             p."SELETOR",
+            p."PARTIDA"                          AS partida_rec,
             ${pDate('p."DT_INICIO"')}       AS dt_ini_parsed,
             p."HORA_INICIO",
             ${pDate('p."DT_FINAL"')}        AS dt_fin_parsed,
@@ -5606,7 +5607,15 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
             p."NM MERCADO"                  AS nm_mercado
           FROM tb_produccion p
           WHERE p."FILIAL" = $2
-            AND p."PARTIDA" = ANY($1::text[])
+            AND (
+              -- TECELAGEM, INDIGO, ACABAMENTO: ligados por nro de partida
+              p."PARTIDA" = ANY($1::text[])
+              OR
+              -- URDIDEIRA / URDIDORA: sus registros usan como PARTIDA el nro de haz
+              -- (ej. 544401..544416) y se vinculan a la partida de tejeria via ROLADA
+              ( p."ROLADA" = $3
+                AND p."SELETOR" IN ('URDIDEIRA', 'URDIDORA') )
+            )
             AND p."MAQUINA" IS NOT NULL
             AND TRIM(p."MAQUINA"::text) <> ''
         ),
@@ -5616,7 +5625,17 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
             MAX("SELETOR")                      AS seletor,
             MIN(dt_ini_parsed)                   AS dt_inicio,
             MAX(dt_fin_parsed)                   AS dt_final,
-            ROUND(COALESCE(SUM(metros_val), 0)::numeric, 0) AS metros,
+            -- URDIDEIRA/URDIDORA: la plegadora urde N haces (PARTIDA) en simultaneo,
+            -- cada uno de la misma longitud. Metros reales = SUM / COUNT(DISTINCT PARTIDA).
+            -- Resto de sectores: SUM directo.
+            CASE
+              WHEN MAX("SELETOR") IN ('URDIDEIRA', 'URDIDORA')
+              THEN ROUND(
+                     COALESCE(SUM(metros_val), 0)::numeric
+                     / NULLIF(COUNT(DISTINCT partida_rec), 0),
+                   0)
+              ELSE ROUND(COALESCE(SUM(metros_val), 0)::numeric, 0)
+            END                                  AS metros,
             MAX("ARTIGO")                        AS artigo,
             MAX("COR")                           AS cor,
             MAX(nm_mercado)                      AS nm_mercado
@@ -5653,7 +5672,7 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
         LEFT JOIN ultima_hora  uh ON uh."MAQUINA" = pm."MAQUINA"
         ORDER BY pm.dt_inicio ASC NULLS LAST, pm."MAQUINA" ASC
       `;
-      const resHistorial = await query(sqlHistorial, [partidaCandidates, filial], 'partida-tej/historial');
+      const resHistorial = await query(sqlHistorial, [partidaCandidates, filial, roladaDerivada], 'partida-tej/historial');
       historial = (resHistorial.rows || []).map(r => ({
         maquina:     r.maquina,
         seletor:     r.seletor,
