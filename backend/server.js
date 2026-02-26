@@ -5625,22 +5625,28 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
             MAX("SELETOR")                      AS seletor,
             MIN(dt_ini_parsed)                   AS dt_inicio,
             MAX(dt_fin_parsed)                   AS dt_final,
-            -- URDIDEIRA/URDIDORA: la plegadora urde N haces (PARTIDA) en simultaneo,
-            -- cada uno de la misma longitud. Metros reales = SUM / COUNT(DISTINCT PARTIDA).
-            -- Resto de sectores: SUM directo.
-            CASE
-              WHEN MAX("SELETOR") IN ('URDIDEIRA', 'URDIDORA')
-              THEN ROUND(
-                     COALESCE(SUM(metros_val), 0)::numeric
-                     / NULLIF(COUNT(DISTINCT partida_rec), 0),
-                   0)
-              ELSE ROUND(COALESCE(SUM(metros_val), 0)::numeric, 0)
-            END                                  AS metros,
+            ROUND(COALESCE(SUM(metros_val), 0)::numeric, 0) AS metros_raw,
             MAX("ARTIGO")                        AS artigo,
             MAX("COR")                           AS cor,
             MAX(nm_mercado)                      AS nm_mercado
           FROM base
           GROUP BY "MAQUINA"
+        ),
+        -- URDIDEIRA: sumar METRAGEM por haz (PARTIDA) individualmente,
+        -- luego tomar MAX. Esto da la longitud del haz completo (ej. 60.000m)
+        -- independientemente de cuantos haces haya en la ROLADA o si alguno es parcial.
+        beam_max AS (
+          SELECT
+            sub."MAQUINA",
+            MAX(sub.haz_total) AS metros_beam
+          FROM (
+            SELECT "MAQUINA", partida_rec,
+                   SUM(metros_val) AS haz_total
+            FROM base
+            WHERE "SELETOR" IN ('URDIDEIRA', 'URDIDORA')
+            GROUP BY "MAQUINA", partida_rec
+          ) sub
+          GROUP BY sub."MAQUINA"
         ),
         primera_hora AS (
           SELECT DISTINCT ON ("MAQUINA")
@@ -5663,13 +5669,18 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
           ph."HORA_INICIO"  AS hora_inicio,
           pm.dt_final,
           uh."HORA_FINAL"   AS hora_final,
-          pm.metros,
+          CASE
+            WHEN pm.seletor IN ('URDIDEIRA', 'URDIDORA')
+            THEN COALESCE(bm.metros_beam, pm.metros_raw)
+            ELSE pm.metros_raw
+          END               AS metros,
           pm.artigo,
           pm.cor,
           pm.nm_mercado
         FROM por_maquina pm
         LEFT JOIN primera_hora ph ON ph."MAQUINA" = pm."MAQUINA"
         LEFT JOIN ultima_hora  uh ON uh."MAQUINA" = pm."MAQUINA"
+        LEFT JOIN beam_max     bm ON bm."MAQUINA" = pm."MAQUINA"
         ORDER BY pm.dt_inicio ASC NULLS LAST, pm."MAQUINA" ASC
       `;
       const resHistorial = await query(sqlHistorial, [partidaCandidates, filial, roladaDerivada], 'partida-tej/historial');
