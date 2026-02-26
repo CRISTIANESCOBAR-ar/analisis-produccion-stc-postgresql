@@ -207,6 +207,7 @@
                 <tr class="bg-slate-600 text-white">
                   <th class="px-2 py-2 text-center border-r border-slate-500 font-semibold whitespace-nowrap">#</th>
                   <th class="px-2 py-2 text-center border-r border-slate-500 font-semibold whitespace-nowrap">Máquina</th>
+                  <th class="px-2 py-2 text-center border-r border-slate-500 font-semibold whitespace-nowrap">Partida</th>
                   <th class="px-2 py-2 text-center border-r border-slate-500 font-semibold whitespace-nowrap">Sector</th>
                   <th class="px-2 py-2 text-center border-r border-slate-500 font-semibold whitespace-nowrap">Fecha<br>Inicial</th>
                   <th class="px-2 py-2 text-center border-r border-slate-500 font-semibold whitespace-nowrap">Hora<br>Ini</th>
@@ -227,6 +228,7 @@
                 >
                   <td class="px-2 py-1 text-center border-r border-slate-200 text-slate-400 font-semibold">{{ i + 1 }}</td>
                   <td class="px-2 py-1 text-center border-r border-slate-200 font-bold text-blue-700">{{ h.maquina }}</td>
+                  <td class="px-2 py-1 text-center border-r border-slate-200 font-mono font-semibold text-slate-700">{{ h.partida_display || '–' }}</td>
                   <td class="px-2 py-1 text-center border-r border-slate-200">
                     <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold"
                       :class="{
@@ -248,7 +250,7 @@
               </tbody>
               <tfoot>
                 <tr class="bg-slate-700 text-white font-bold">
-                  <td colspan="7" class="px-2 py-1.5 text-center border-r border-slate-600 text-xs">TOTAL</td>
+                  <td colspan="8" class="px-2 py-1.5 text-center border-r border-slate-600 text-xs">TOTAL</td>
                   <td class="px-2 py-1.5 text-right border-r border-slate-600">
                     {{ fmtNum(hist.reduce((s, h) => s + (h.metros || 0), 0), 0) }}
                   </td>

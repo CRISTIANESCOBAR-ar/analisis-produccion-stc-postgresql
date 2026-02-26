@@ -5626,6 +5626,13 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
             MIN(dt_ini_parsed)                   AS dt_inicio,
             MAX(dt_fin_parsed)                   AS dt_final,
             ROUND(COALESCE(SUM(metros_val), 0)::numeric, 0) AS metros_raw,
+            -- Partida a mostrar: URDIDEIRA usa LEFT(RIGHT(partida,6),4) = nro de orden de urdido
+            -- Resto: la partida tal cual
+            CASE
+              WHEN MAX("SELETOR") IN ('URDIDEIRA', 'URDIDORA')
+              THEN LEFT(RIGHT(MIN(partida_rec)::text, 6), 4)
+              ELSE MAX(partida_rec)::text
+            END                                  AS partida_display,
             MAX("ARTIGO")                        AS artigo,
             MAX("COR")                           AS cor,
             MAX(nm_mercado)                      AS nm_mercado
@@ -5674,6 +5681,7 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
             THEN COALESCE(bm.metros_beam, pm.metros_raw)
             ELSE pm.metros_raw
           END               AS metros,
+          pm.partida_display,
           pm.artigo,
           pm.cor,
           pm.nm_mercado
@@ -5685,16 +5693,17 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
       `;
       const resHistorial = await query(sqlHistorial, [partidaCandidates, filial, roladaDerivada], 'partida-tej/historial');
       historial = (resHistorial.rows || []).map(r => ({
-        maquina:     r.maquina,
-        seletor:     r.seletor,
-        dt_inicio:   r.dt_inicio,
-        hora_inicio: r.hora_inicio,
-        dt_final:    r.dt_final,
-        hora_final:  r.hora_final,
-        metros:      r.metros !== null ? parseFloat(r.metros) : null,
-        artigo:      r.artigo,
-        cor:         r.cor,
-        nm_mercado:  r.nm_mercado
+        maquina:         r.maquina,
+        seletor:         r.seletor,
+        dt_inicio:       r.dt_inicio,
+        hora_inicio:     r.hora_inicio,
+        dt_final:        r.dt_final,
+        hora_final:      r.hora_final,
+        metros:          r.metros !== null ? parseFloat(r.metros) : null,
+        partida_display: r.partida_display || '',
+        artigo:          r.artigo,
+        cor:             r.cor,
+        nm_mercado:      r.nm_mercado
       }));
     } catch (histErr) {
       console.warn('partida-tej/historial: columnas no disponibles -', histErr.message);
