@@ -5928,83 +5928,221 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Genera el informe de forma local (sin IA externa) — siempre disponible
+// ─────────────────────────────────────────────────────────────────────────────
+function generarNarrativaLocal(rows, loteActual) {
+  const lotesSorted = [...new Set(rows.map(r => Number(r.mistura)))].sort((a, b) => a - b);
+  const actual = loteActual ? Number(loteActual) : Math.max(...lotesSorted);
+  const refs   = lotesSorted.filter(l => l !== actual);
+
+  const f = (v, d = 2) => (v == null || isNaN(parseFloat(v))) ? '–' : parseFloat(v).toFixed(d);
+  const pct = (a, b) => {
+    if (a == null || b == null) return '';
+    const d = parseFloat(b) - parseFloat(a);
+    const p = (d / Math.abs(parseFloat(a))) * 100;
+    return ` (${d >= 0 ? '+' : ''}${p.toFixed(1)}%)`;
+  };
+
+  // Agrupa por lote y obtiene primer registro HVI + todos los Ne
+  const getLote = (m) => ({ hvi: rows.find(r => Number(r.mistura) === m) || {}, hilos: rows.filter(r => Number(r.mistura) === m && r.ne != null) });
+  const dataActual = getLote(actual);
+  const dataRefs   = refs.map(getLote);
+
+  // Nivel de semáforo global del lote actual
+  let nivelGlobal = 'VERDE';
+  const alertas = [];
+  for (const h of dataActual.hilos) {
+    const ten = parseFloat(h.tenacidad);
+    const elo = parseFloat(h.elongacion);
+    const nps = parseFloat(h.neps_200);
+    const cvm = parseFloat(h.cvm);
+    if (!isNaN(ten) && ten < 14.5) { nivelGlobal = 'ROJO'; alertas.push(`Ne${h.ne}: Tenacidad crítica (${f(ten)} cN/tex < 14.5)`); }
+    else if (!isNaN(ten) && ten < 16.0) { if (nivelGlobal === 'VERDE') nivelGlobal = 'AMARILLO'; alertas.push(`Ne${h.ne}: Tenacidad en zona de precaución (${f(ten)} cN/tex)`); }
+    if (!isNaN(elo) && elo < 7.5) { if (nivelGlobal === 'VERDE') nivelGlobal = 'AMARILLO'; alertas.push(`Ne${h.ne}: Elongación ${f(elo)}% – riesgo rotura en Urdidora`); }
+    if (!isNaN(nps) && nps > 700) { nivelGlobal = 'ROJO'; alertas.push(`Ne${h.ne}: Neps ${f(nps,1)}/km – riesgo en Índigo`); }
+    if (!isNaN(cvm) && cvm > 13.0) { if (nivelGlobal === 'VERDE') nivelGlobal = 'AMARILLO'; alertas.push(`Ne${h.ne}: CVm% ${f(cvm)} – masa irregular`); }
+  }
+
+  const estadoLabel = { VERDE: '✅ APROBADO PARA CONTINUIDAD', AMARILLO: '⚠️ PRECAUCIÓN – REVISAR', ROJO: '🔴 CRÍTICO – DETENER' }[nivelGlobal];
+  const conclusionBase = {
+    VERDE: `El Lote ${actual} cumple todos los umbrales críticos de aptitud para tejeduría.${refs.length ? ` Supera o iguala el desempeño de referencia (${refs.join('/')}).` : ''}`,
+    AMARILLO: `El Lote ${actual} presenta valores fuera de rango en algunas variables; se recomienda monitoreo intensivo en los procesos afectados.`,
+    ROJO: `El Lote ${actual} registra valores críticos que requieren acción inmediata antes de continuar la producción.`
+  }[nivelGlobal];
+
+  // Genera comparativas por variable
+  let numVar = 0;
+  const bloques = [];
+
+  const varDefs = [
+    { key: 'str',       label: 'STR — Tenacidad Fibra', unit: 'g/tex', src: 'hvi', buenos: 27, bad: 25, inv: false },
+    { key: 'sci',       label: 'SCI — Índice Hilabilidad', unit: '',   src: 'hvi', buenos: 145, bad: 130, inv: false },
+    { key: 'tenacidad', label: 'Tenacidad Hilo', unit: 'cN/tex',       src: 'hilo', buenos: 16, bad: 14.5, inv: false },
+    { key: 'elongacion',label: 'Elongación Hilo', unit: '%',           src: 'hilo', buenos: 8,  bad: 7.5,  inv: false },
+    { key: 'cvm',       label: 'CVm% — Irregularidad de Masa', unit: '%', src: 'hilo', buenos: 12, bad: 13, inv: true },
+    { key: 'neps_200',  label: 'Neps +200%', unit: '/km',              src: 'hilo', buenos: 500, bad: 700, inv: true },
+  ];
+
+  const emojis = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣'];
+
+  for (const vd of varDefs) {
+    const getVal = (loteData) => {
+      if (vd.src === 'hvi') return parseFloat(loteData.hvi[vd.key]);
+      // Para hilo: promedio de todos los Ne
+      const vals = loteData.hilos.map(h => parseFloat(h[vd.key])).filter(v => !isNaN(v));
+      return vals.length ? vals.reduce((a, b) => a + b) / vals.length : NaN;
+    };
+
+    const valActual = getVal(dataActual);
+    if (isNaN(valActual)) continue;
+
+    const descriptor = (val, inv) => {
+      if (isNaN(val)) return '–';
+      const good = vd.buenos, bad2 = vd.bad;
+      if (inv) return val <= good ? '✅ Óptimo' : val <= bad2 ? '⚠️ Precaución' : '🔴 Crítico';
+      return val >= good ? '✅ Óptimo' : val >= bad2 ? '⚠️ Precaución' : '🔴 Crítico';
+    };
+
+    numVar++;
+    let bloque = `${emojis[numVar-1] || `${numVar}.`} ${vd.label.toUpperCase()}:\n`;
+    for (const rd of dataRefs) {
+      const v = getVal(rd);
+      bloque += `  • Lote ${refs[dataRefs.indexOf(rd)]}: ${isNaN(v) ? '(sin datos)' : `${f(v)} ${vd.unit} ${descriptor(v, vd.inv)}`}\n`;
+    }
+    bloque += `  • Lote ${actual}: ${f(valActual)} ${vd.unit} ${descriptor(valActual, vd.inv)}\n`;
+
+    // Trend vs primer ref
+    if (dataRefs.length > 0) {
+      const vRef = getVal(dataRefs[0]);
+      if (!isNaN(vRef)) {
+        const diff = valActual - vRef;
+        const arrow = diff > 0.001 ? '↑' : diff < -0.001 ? '↓' : '=';
+        const mejor = vd.inv ? diff < 0 : diff > 0;
+        const cambio = `${arrow} ${Math.abs(diff).toFixed(2)} ${vd.unit}${pct(vRef, valActual)}`;
+        const impactoDesc = {
+          tenacidad: vd.inv ? `Hilo más débil, mayor riesgo de paradas en Telar.` : diff > 0.5 ? `Hilo significativamente más resistente, menor riesgo de rotura en Telar.` : diff > 0 ? `Leve mejora en resistencia.` : `Leve reducción; monitorear en alta velocidad.`,
+          elongacion: diff < 0 ? `Menor absorción de impacto, mayor riesgo de rotura en Urdidora.` : `Mejor elasticidad, más tolerancia a la tensión.`,
+          cvm: diff < 0 ? `Masa más uniforme; menos irregularidad visual en la tela.` : `Mayor irregularidad de masa; posible barreado.`,
+          neps_200: diff < 0 ? `Hilo más limpio; menos enredos y arrastre de colorante desigual en Índigo.` : `Más impurezas; evaluar ajuste de cardas.`,
+          str: diff > 0 ? `Fibra más resistente, impacto positivo directo en tenacidad del hilo.` : `Reducción en tenacidad de fibra.`,
+          sci: diff > 0 ? `Mayor consistencia de hilatura, menos paradas de rotura esperadas.` : `Menor índice composite; revisar mezcla.`,
+        }[vd.key] || '';
+        bloque += `  👉 Variación: ${cambio} (${mejor ? 'mejora' : 'empeora'}). ${impactoDesc}`;
+      }
+    }
+    bloques.push(bloque);
+  }
+
+  // Puntos clave adicionales por Ne
+  const puntosNe = [];
+  const HilosActual = dataActual.hilos;
+  for (const h of HilosActual) {
+    const ten = parseFloat(h.tenacidad);
+    const elo = parseFloat(h.elongacion);
+    const nps = parseFloat(h.neps_200);
+    if (!isNaN(ten) && ten >= 16.0) puntosNe.push(`🔸 Ne${h.ne}: Tenacidad ${f(ten)} cN/tex — APTO telar alta velocidad.`);
+    if (!isNaN(elo) && elo >= 8.0)  puntosNe.push(`🔸 Ne${h.ne}: Elongación ${f(elo)}% — buena absorción de impacto en Urdidora.`);
+    if (!isNaN(nps) && nps < 200)   puntosNe.push(`🔸 Ne${h.ne}: Neps ${f(nps,1)}/km — hilo muy limpio para Índigo.`);
+  }
+
+  const refStr = refs.length > 0 ? refs.join('/') : 'sin referencia';
+  const lines = [
+    `📋 INFORME DE DESEMPEÑO: LOTE ${actual} vs ${refStr}`,
+    `Análisis Comparativo Fibra ↔️ Hilo`,
+    ``,
+    `✅ CONCLUSIÓN GENERAL:`,
+    conclusionBase,
+    ``,
+    `📊 COMPARATIVA TÉCNICA (Promedios):`,
+    ``,
+    ...bloques.flatMap(b => [b, '']),
+    `⚠️ PUNTOS CLAVE PARA PRODUCCIÓN:`,
+    ...(alertas.length
+      ? alertas.map(a => `  ⚠️ ${a}`)
+      : ['  ✓ Sin alertas críticas en el lote actual.']),
+    ...(puntosNe.length ? puntosNe : []),
+    ``,
+    `🚀 ESTADO: ${estadoLabel}`,
+    HilosActual.length === 0
+      ? `Solo se disponen de datos HVI para este lote; los datos de ensayos de hilo están pendientes.`
+      : `La mezcla evaluada tiene ${dataActual.hvi.n_fardos ?? '–'} fardos HVI y ${HilosActual.reduce((a,h)=>a+(Number(h.n_uster)||0),0)} ensayos Uster asociados.`,
+    ``,
+    `_Informe generado localmente · ${new Date().toLocaleString('es-AR')}_`,
+  ];
+
+  return lines.join('\n');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // POST /api/dashboard/narrativa-lotes
-// Genera informe comparativo en lenguaje natural con Gemini
-// Body: { rows, loteActual }
+// Genera informe comparativo. Intenta Gemini; si falla por quota → local.
+// Body: { rows, loteActual, modelo? ('gemini'|'local') }
 // ─────────────────────────────────────────────────────────────────────────────
 app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
   try {
-    const { rows, loteActual, model: modelReq } = req.body;
-    const apiKey = process.env.GOOGLE_API_KEY;
-    if (!apiKey) return res.status(500).json({ success: false, error: 'GOOGLE_API_KEY no configurada' });
+    const { rows, loteActual, model: modelReq, modo } = req.body;
     if (!rows || rows.length === 0) return res.status(400).json({ error: 'Sin datos para analizar' });
 
-    const modelName = modelReq || 'gemini-2.0-flash';
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: modelName });
+    // Si piden explícitamente local, o no hay API key → generación local directa
+    if (modo === 'local' || !process.env.GOOGLE_API_KEY) {
+      const narrativa = generarNarrativaLocal(rows, loteActual);
+      return res.json({ success: true, narrativa, fuente: 'local' });
+    }
 
     const lotesSorted = [...new Set(rows.map(r => Number(r.mistura)))].sort((a, b) => a - b);
     const actual = loteActual ? Number(loteActual) : Math.max(...lotesSorted);
-    const refs = lotesSorted.filter(l => l !== actual);
+    const refs   = lotesSorted.filter(l => l !== actual);
 
     const resumenLotes = lotesSorted.map(mistura => {
       const filas = rows.filter(r => Number(r.mistura) === mistura);
       const hvi = filas[0] || {};
       const hilos = filas
         .filter(r => r.ne != null)
-        .map(r => `   • Ne ${r.ne}/1: Tenacidad=${r.tenacidad ?? '-'} cN/tex | Elongación=${r.elongacion ?? '-'}% | CVm%=${r.cvm ?? '-'} | VellosidadH=${r.vellosidad ?? '-'} | Neps+200%=${r.neps_200 ?? '-'}/km | PuntosDelg=${r.thin_50 ?? '-'}/km | PuntosGrue=${r.thick_50 ?? '-'}/km`)
+        .map(r => `   • Ne ${r.ne}/1: Tenacidad=${r.tenacidad ?? '-'} cN/tex | Elongación=${r.elongacion ?? '-'}% | CVm%=${r.cvm ?? '-'} | Neps+200%=${r.neps_200 ?? '-'}/km`)
         .join('\n');
-
       return `LOTE ${mistura}${mistura === actual ? ' [ACTUAL]' : ' [REFERENCIA]'}:
   HVI: STR=${hvi.str ?? '-'} g/tex | SCI=${hvi.sci ?? '-'} | MIC=${hvi.mic ?? '-'} | UHML=${hvi.uhml ?? '-'} mm | ${hvi.n_fardos ?? '-'} fardos
-  Hilo:
-${hilos || '   (sin datos de ensayos de hilo)'}`;
+  Hilo:\n${hilos || '   (sin datos)'}`;
     }).join('\n\n');
 
-    const prompt = `Actúa como un Experto en Tejeduría e Hilandería de denim de alta velocidad, con foco en análisis predictivo de comportamiento en producción.
+    const modelName = modelReq || 'gemini-2.0-flash';
+    const genAI  = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+    const model  = genAI.getGenerativeModel({ model: modelName });
 
-DATOS COMPARATIVOS DE LOTES:
+    const prompt = `Actúa como un Experto en Tejeduría e Hilandería de denim de alta velocidad.
+
+DATOS COMPARATIVOS:
 ${resumenLotes}
 
-UMBRALES DE REFERENCIA:
-- Tenacidad hilo: >16.0 cN/tex = APTO TELAR | 14.5-16.0 = PRECAUCIÓN | <14.5 = CRÍTICO
-- Elongación hilo: >8.0% = BUENA | 7.5-8.0% = PRECAUCIÓN URDIDORA | <7.5% = RIESGO ROTURA
-- Neps +200%/km: <500 = LIMPIO | 500-700 = MEDIO | >700 = RIESGO ÍNDIGO
-- CVm%: <12.0% = ESTABLE | 12.0-13.0% = ACEPTABLE | >13.0% = IRREGULAR
-- STR fibra: >27.0 = ÓPTIMO | 25.0-27.0 = NORMAL | <25.0 = LÍMITE
-- SCI: >145 = EXCELENTE | 130-145 = BUENO | <130 = BAJO
+UMBRALES: Tenacidad hilo >16.0=APTO, 14.5-16.0=PRECAUCIÓN, <14.5=CRÍTICO | Elongación <7.5%=RIESGO URDIDORA | Neps+200% >700=RIESGO ÍNDIGO | CVm% >13=IRREGULAR | STR fibra >27=ÓPTIMO
 
-TAREA: Generá el siguiente informe en español con exactamente este formato (incluye todos los emojis):
+Generá exactamente este formato en español (350 palabras máx, cuantificá cambios con %):
 
-📋 INFORME DE DESEMPEÑO: LOTE ${actual} vs ${refs.length > 0 ? refs.join('/') : 'sin referencia'}
+📋 INFORME DE DESEMPEÑO: LOTE ${actual} vs ${refs.join('/') || 'sin referencia'}
 Análisis Comparativo Fibra ↔️ Hilo
 
 ✅ CONCLUSIÓN GENERAL:
-[1-2 oraciones con el veredicto global del Lote ${actual}]
+[veredicto 1-2 oraciones]
 
 📊 COMPARATIVA TÉCNICA (Promedios):
-[Para cada variable clave disponible (STR, Tenacidad, Neps, CVm%, Elongación), mostrá un bloque como:
-1️⃣ VARIABLE (nombre):
-• Lote X: valor (descriptor)
-• Lote Y: valor (descriptor)
-👉 Impacto: [qué significa para producción, cuantificá la mejora/empeoramiento]]
+[bloques numerados 1️⃣ 2️⃣ 3️⃣ para STR, Tenacidad, Neps, CVm%, Elongación con valores por lote y 👉 Impacto]
 
 ⚠️ PUNTOS CLAVE PARA PRODUCCIÓN:
-[2-3 bullets con hallazgos técnicos específicos y recomendaciones accionables para el jefe de planta]
+[2-3 bullets accionables]
 
 🚀 ESTADO: [APROBADO PARA CONTINUIDAD / PRECAUCIÓN - REVISAR / CRÍTICO - DETENER]
-[Una oración de cierre ejecutiva]
+[oración de cierre]`;
 
-REGLAS:
-- Máximo 350 palabras totales
-- Cuantificá cambios entre lotes (ej: "subió de 14.0 a 16.7 cN/tex, +19%")
-- Si hay múltiples Ne, analizá cada uno brevemente
-- No inventes datos, usá solo los provistos
-- Si faltan datos de hilo, indicalo y basate solo en HVI`;
+    try {
+      const result = await model.generateContent(prompt);
+      return res.json({ success: true, narrativa: result.response.text(), fuente: 'gemini' });
+    } catch (geminiErr) {
+      // Fallback local ante cualquier error de Gemini (quota, red, etc.)
+      console.warn('Gemini no disponible, usando generación local:', geminiErr.message?.slice(0, 120));
+      const narrativa = generarNarrativaLocal(rows, loteActual);
+      return res.json({ success: true, narrativa, fuente: 'local', aviso: 'Gemini no disponible – informe generado localmente.' });
+    }
 
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    res.json({ success: true, narrativa: text });
   } catch (err) {
     console.error('Error narrativa-lotes:', err.message);
     res.status(500).json({ success: false, error: err.message });

@@ -259,26 +259,39 @@
             <h2 class="font-bold text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wide">
               <span>✨</span> Informe con IA
             </h2>
-            <p class="text-[10px] text-slate-400 mt-0.5">Análisis predictivo en lenguaje natural • Gemini 2.0 Flash</p>
+            <p class="text-[10px] text-slate-400 mt-0.5">Análisis predictivo en lenguaje natural • Gemini 2.0 Flash con fallback local</p>
           </div>
-          <button @click="generarNarrativa" :disabled="loadingNarrativa"
-            class="px-5 py-2 rounded-xl font-bold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm hover:shadow-md"
-            :class="loadingNarrativa ? 'bg-slate-200 text-slate-500' : narrativa ? 'bg-slate-700 hover:bg-slate-800 text-white' : 'bg-indigo-600 hover:bg-indigo-700 text-white'">
-            <span v-if="loadingNarrativa" class="animate-spin inline-block">⟳</span>
-            <span v-else>{{ narrativa ? '↺' : '✨' }}</span>
-            {{ loadingNarrativa ? 'Analizando...' : narrativa ? 'Regenerar' : 'Generar Informe' }}
-          </button>
+          <div class="flex items-center gap-2">
+            <span v-if="narrativaFuente" class="text-[10px] px-2 py-0.5 rounded-full font-bold"
+              :class="narrativaFuente === 'gemini' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-600'">
+              {{ narrativaFuente === 'gemini' ? '✨ Gemini' : '⚡ Local' }}
+            </span>
+            <button @click="generarNarrativa(true)" :disabled="loadingNarrativa || !hasData"
+              class="px-3 py-2 rounded-xl font-bold text-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-600">
+              ⚡ Local
+            </button>
+            <button @click="generarNarrativa(false)" :disabled="loadingNarrativa"
+              class="px-5 py-2 rounded-xl font-bold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm hover:shadow-md"
+              :class="loadingNarrativa ? 'bg-slate-200 text-slate-500' : narrativa ? 'bg-slate-700 hover:bg-slate-800 text-white' : 'bg-indigo-600 hover:bg-indigo-700 text-white'">
+              <span v-if="loadingNarrativa" class="animate-spin inline-block">⟳</span>
+              <span v-else>{{ narrativa ? '↺' : '✨' }}</span>
+              {{ loadingNarrativa ? 'Analizando...' : narrativa ? 'Regenerar' : 'Generar Informe' }}
+            </button>
+          </div>
         </div>
 
         <div class="p-6">
           <div v-if="!narrativa && !loadingNarrativa" class="text-center py-6 text-slate-400">
             <div class="text-3xl mb-2">✨</div>
             <p class="text-sm">Generá un resumen en lenguaje natural con análisis predictivo para producción</p>
-            <p class="text-xs mt-1 text-slate-300">Similar al reporte de Gemini — incluye semáforo, comparativas y recomendaciones</p>
+            <p class="text-xs mt-1 text-slate-300">✨ Gemini — si hay cuota disponible • ⚡ Local — siempre disponible, instantáneo</p>
           </div>
           <div v-if="loadingNarrativa" class="flex items-center gap-3 text-slate-500 py-4">
             <span class="animate-spin text-xl inline-block">⟳</span>
-            <span class="text-sm">Analizando datos con IA...</span>
+            <span class="text-sm">Analizando datos...</span>
+          </div>
+          <div v-if="narrativaAviso && narrativa" class="text-amber-700 text-xs bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 mb-3 flex items-center gap-2">
+            <span>⚠️</span> {{ narrativaAviso }}
           </div>
           <div v-if="narrativa && !loadingNarrativa"
             class="bg-slate-50 rounded-xl border border-slate-100 p-5 text-sm text-slate-700 whitespace-pre-wrap leading-relaxed font-mono">
@@ -304,6 +317,8 @@ const loading       = ref(false)
 const rows          = ref([])
 const narrativa     = ref('')
 const narrativaError= ref('')
+const narrativaFuente = ref('')   // 'gemini' | 'local'
+const narrativaAviso  = ref('')
 const loadingNarrativa = ref(false)
 
 // ── Definición de filas de tabla ──────────────────────────────────────────
@@ -492,11 +507,13 @@ async function analizar() {
   }
 }
 
-async function generarNarrativa() {
+async function generarNarrativa(soloLocal = false) {
   if (loadingNarrativa.value || !rows.value.length) return
   loadingNarrativa.value = true
   narrativa.value = ''
   narrativaError.value = ''
+  narrativaFuente.value = ''
+  narrativaAviso.value = ''
 
   try {
     const res = await fetch('/api/dashboard/narrativa-lotes', {
@@ -504,12 +521,15 @@ async function generarNarrativa() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         rows: rows.value,
-        loteActual: loteActual.value
+        loteActual: loteActual.value,
+        modo: soloLocal ? 'local' : undefined
       })
     })
     const data = await res.json()
     if (!data.success) throw new Error(data.error || 'Error al generar')
     narrativa.value = data.narrativa
+    narrativaFuente.value = data.fuente || 'local'
+    narrativaAviso.value = data.aviso || ''
   } catch (err) {
     narrativaError.value = err.message
   } finally {
