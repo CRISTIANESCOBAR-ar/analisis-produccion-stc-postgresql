@@ -196,28 +196,36 @@
         </div>
 
         <!-- ── Historial de máquinas ────────────────────────────────────────── -->
-        <div v-if="hist.length || calidad.length" class="mt-4">
-          <div class="flex items-center gap-2 mb-1">
-            <span class="text-xs font-bold uppercase tracking-wide text-slate-600">Recorrido por Máquinas</span>
-            <span class="text-[10px] bg-slate-200 text-slate-600 rounded-full px-2 py-0.5 font-semibold">{{ hist.length }}</span>
-            <span v-if="calidad.length" class="text-[10px] bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 font-semibold">+ {{ calidad.length }} Calidad</span>
+        <div v-if="hist.length || calidad.length" class="mt-5" style="font-family: Verdana, Ubuntu, 'Segoe UI', sans-serif;">
+
+          <!-- Header -->
+          <div class="flex items-center gap-3 mb-2 px-1">
+            <div class="flex items-center gap-2">
+              <span class="w-1 h-5 rounded-full bg-slate-700 inline-block"></span>
+              <span class="text-[11px] font-bold tracking-widest uppercase text-slate-700">Recorrido por Máquinas</span>
+            </div>
+            <span class="text-[10px] font-bold bg-slate-700 text-white rounded-md px-2 py-0.5">{{ hist.length }}</span>
+            <span v-if="calidad.length" class="text-[10px] font-bold bg-emerald-600 text-white rounded-md px-2 py-0.5">+ {{ calidad.length }} Calidad</span>
           </div>
-          <div class="overflow-x-auto border border-slate-300 rounded-lg">
-            <table class="w-full text-xs border-collapse">
+
+          <!-- Tabla -->
+          <div class="overflow-x-auto rounded-xl border border-slate-200 shadow-sm">
+            <table class="w-full border-collapse" style="font-size:11px;">
               <thead>
-                <tr class="bg-slate-600 text-white">
-                  <th class="px-2 py-2 text-center border-r border-slate-500 font-semibold whitespace-nowrap">#</th>
-                  <th class="px-2 py-2 text-center border-r border-slate-500 font-semibold whitespace-nowrap">Máquina</th>
-                  <th class="px-2 py-2 text-center border-r border-slate-500 font-semibold whitespace-nowrap">Partida</th>
-                  <th class="px-2 py-2 text-center border-r border-slate-500 font-semibold whitespace-nowrap">Sector</th>
-                  <th class="px-2 py-2 text-center border-r border-slate-500 font-semibold whitespace-nowrap">Fecha<br>Inicial</th>
-                  <th class="px-2 py-2 text-center border-r border-slate-500 font-semibold whitespace-nowrap">Hora<br>Ini</th>
-                  <th class="px-2 py-2 text-center border-r border-slate-500 font-semibold whitespace-nowrap">Fecha<br>Final</th>
-                  <th class="px-2 py-2 text-center border-r border-slate-500 font-semibold whitespace-nowrap">Hora<br>Fin</th>
-                  <th class="px-2 py-2 text-right border-r border-slate-500 font-semibold whitespace-nowrap">Metros</th>
-                  <th class="px-2 py-2 text-left border-r border-slate-500 font-semibold whitespace-nowrap">Artículo</th>
-                  <th class="px-2 py-2 text-center border-r border-slate-500 font-semibold">Color</th>
-                  <th class="px-2 py-2 text-left font-semibold">Nombre</th>
+                <tr class="bg-slate-800 text-white">
+                  <th class="px-2 py-2 text-center border-r border-slate-600 font-semibold w-6">#</th>
+                  <th class="px-3 py-2 text-left border-r border-slate-600 font-semibold whitespace-nowrap">Máquina</th>
+                  <th class="px-3 py-2 text-left border-r border-slate-600 font-semibold whitespace-nowrap">Partida</th>
+                  <th class="px-3 py-2 text-left border-r border-slate-600 font-semibold whitespace-nowrap">Sector</th>
+                  <th class="px-3 py-2 text-center border-r border-slate-600 font-semibold whitespace-nowrap">Fecha Ini</th>
+                  <th class="px-3 py-2 text-center border-r border-slate-600 font-semibold">Hora</th>
+                  <th class="px-3 py-2 text-center border-r border-slate-600 font-semibold whitespace-nowrap">Fecha Fin</th>
+                  <th class="px-3 py-2 text-center border-r border-slate-600 font-semibold">Hora</th>
+                  <th class="px-3 py-2 text-right border-r border-slate-600 font-semibold">Metros</th>
+                  <th class="px-3 py-2 text-right border-r border-slate-600 font-semibold whitespace-nowrap">Rot 106</th>
+                  <th class="px-3 py-2 text-left border-r border-slate-600 font-semibold">Artículo</th>
+                  <th class="px-3 py-2 text-center border-r border-slate-600 font-semibold">Color</th>
+                  <th class="px-3 py-2 text-left font-semibold">Nombre</th>
                 </tr>
               </thead>
               <tbody>
@@ -225,57 +233,64 @@
                 <tr
                   v-for="(h, i) in hist"
                   :key="'h'+i"
-                  :class="i % 2 === 0 ? 'bg-white' : 'bg-slate-50'"
-                  class="hover:bg-blue-50 transition-colors"
+                  class="border-b border-slate-100 transition-colors hover:bg-sky-50"
+                  :class="i % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'"
                 >
-                  <td class="px-2 py-1 text-center border-r border-slate-200 text-slate-400 font-semibold">{{ i + 1 }}</td>
-                  <td class="px-2 py-1 text-center border-r border-slate-200 font-bold text-blue-700">{{ h.maquina }}</td>
-                  <td class="px-2 py-1 text-center border-r border-slate-200 font-mono font-semibold text-slate-700">{{ h.partida_display || '–' }}</td>
-                  <td class="px-2 py-1 text-center border-r border-slate-200">
-                    <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold"
+                  <td class="px-2 py-1.5 text-center border-r border-slate-100 text-slate-300 font-semibold">{{ i + 1 }}</td>
+                  <td class="px-3 py-1.5 border-r border-slate-100 font-bold text-slate-800 tracking-wide">{{ h.maquina }}</td>
+                  <td class="px-3 py-1.5 border-r border-slate-100 font-mono text-slate-600">{{ h.partida_display || '–' }}</td>
+                  <td class="px-3 py-1.5 border-r border-slate-100">
+                    <span class="inline-block px-2 py-0.5 rounded-md font-semibold text-[10px] tracking-wide"
                       :class="{
                         'bg-blue-100 text-blue-700':    h.seletor === 'TECELAGEM',
-                        'bg-amber-100 text-amber-700':   h.seletor === 'URDIDEIRA' || h.seletor === 'URDIDORA',
-                        'bg-indigo-100 text-indigo-700': h.seletor === 'INDIGO',
-                        'bg-slate-100 text-slate-600':   !['TECELAGEM','URDIDEIRA','URDIDORA','INDIGO'].includes(h.seletor)
+                        'bg-amber-100 text-amber-700':  h.seletor === 'URDIDEIRA' || h.seletor === 'URDIDORA',
+                        'bg-violet-100 text-violet-700': h.seletor === 'INDIGO',
+                        'bg-slate-100 text-slate-500':  !['TECELAGEM','URDIDEIRA','URDIDORA','INDIGO'].includes(h.seletor)
                       }">{{ h.seletor }}</span>
                   </td>
-                  <td class="px-2 py-1 text-center border-r border-slate-200 whitespace-nowrap">{{ formatFecha(h.dt_inicio) }}</td>
-                  <td class="px-2 py-1 text-center border-r border-slate-200 font-mono">{{ fmtHora(h.hora_inicio) }}</td>
-                  <td class="px-2 py-1 text-center border-r border-slate-200 whitespace-nowrap">{{ formatFecha(h.dt_final) }}</td>
-                  <td class="px-2 py-1 text-center border-r border-slate-200 font-mono">{{ fmtHora(h.hora_final) }}</td>
-                  <td class="px-2 py-1 text-right border-r border-slate-200 font-semibold">{{ fmtNum(h.metros, 0) }}</td>
-                  <td class="px-2 py-1 border-r border-slate-200">{{ (h.artigo || '–').substring(0, 10) }}</td>
-                  <td class="px-2 py-1 text-center border-r border-slate-200">{{ h.cor || '–' }}</td>
-                  <td class="px-2 py-1">{{ h.nm_mercado || '–' }}</td>
+                  <td class="px-3 py-1.5 text-center border-r border-slate-100 whitespace-nowrap text-slate-600">{{ formatFecha(h.dt_inicio) }}</td>
+                  <td class="px-3 py-1.5 text-center border-r border-slate-100 font-mono text-slate-700">{{ fmtHora(h.hora_inicio) }}</td>
+                  <td class="px-3 py-1.5 text-center border-r border-slate-100 whitespace-nowrap text-slate-600">{{ formatFecha(h.dt_final) }}</td>
+                  <td class="px-3 py-1.5 text-center border-r border-slate-100 font-mono text-slate-700">{{ fmtHora(h.hora_final) }}</td>
+                  <td class="px-3 py-1.5 text-right border-r border-slate-100 font-bold text-slate-800">{{ fmtNum(h.metros, 0) }}</td>
+                  <td class="px-3 py-1.5 text-right border-r border-slate-100 font-mono"
+                    :class="h.rot_106 != null ? (h.rot_106 <= 1 ? 'text-green-700 font-bold' : h.rot_106 <= 2 ? 'text-amber-600 font-bold' : 'text-red-600 font-bold') : 'text-slate-300'">
+                    {{ (h.seletor === 'URDIDEIRA' || h.seletor === 'URDIDORA') && h.rot_106 != null ? h.rot_106.toFixed(2).replace('.', ',') : '–' }}
+                  </td>
+                  <td class="px-3 py-1.5 border-r border-slate-100 text-slate-600">{{ (h.artigo || '–').substring(0, 10) }}</td>
+                  <td class="px-3 py-1.5 text-center border-r border-slate-100 text-slate-500">{{ h.cor || '–' }}</td>
+                  <td class="px-3 py-1.5 text-slate-600">{{ h.nm_mercado || '–' }}</td>
                 </tr>
 
                 <!-- Separador CALIDAD -->
                 <tr v-if="calidad.length">
-                  <td colspan="12" class="px-3 py-1 bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-wider">Calidad</td>
+                  <td colspan="12" class="px-3 py-1.5 bg-emerald-600 text-white text-[10px] font-bold uppercase tracking-widest">
+                    ✓ Calidad
+                  </td>
                 </tr>
 
                 <!-- Filas tb_calidad -->
                 <tr
                   v-for="(c, i) in calidad"
                   :key="'c'+i"
-                  :class="i % 2 === 0 ? 'bg-emerald-50' : 'bg-white'"
-                  class="hover:bg-emerald-100 transition-colors"
+                  class="border-b border-emerald-100 transition-colors hover:bg-emerald-50"
+                  :class="i % 2 === 0 ? 'bg-emerald-50/40' : 'bg-white'"
                 >
-                  <td class="px-2 py-1 text-center border-r border-slate-200 text-slate-400 font-semibold">{{ i + 1 }}</td>
-                  <td class="px-2 py-1 border-r border-slate-200 font-semibold text-emerald-800 text-[10px] leading-tight">{{ c.revisores || '–' }}</td>
-                  <td class="px-2 py-1 text-center border-r border-slate-200 font-mono font-semibold text-slate-700">{{ c.partida || '–' }}</td>
-                  <td class="px-2 py-1 text-center border-r border-slate-200">
-                    <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-700">CALIDAD</span>
+                  <td class="px-2 py-1.5 text-center border-r border-slate-100 text-slate-300 font-semibold">{{ i + 1 }}</td>
+                  <td class="px-3 py-1.5 border-r border-slate-100 font-semibold text-emerald-800 leading-tight" style="font-size:10px;">{{ c.revisores || '–' }}</td>
+                  <td class="px-3 py-1.5 border-r border-slate-100 font-mono text-slate-600">{{ c.partida || '–' }}</td>
+                  <td class="px-3 py-1.5 border-r border-slate-100">
+                    <span class="inline-block px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-700 tracking-wide">CALIDAD</span>
                   </td>
-                  <td class="px-2 py-1 text-center border-r border-slate-200 whitespace-nowrap">{{ formatFecha(c.dat_inicio) }}</td>
-                  <td class="px-2 py-1 text-center border-r border-slate-200 font-mono">{{ c.hora_inicio || '–' }}</td>
-                  <td class="px-2 py-1 text-center border-r border-slate-200 whitespace-nowrap">{{ formatFecha(c.dat_final) }}</td>
-                  <td class="px-2 py-1 text-center border-r border-slate-200 font-mono">{{ c.hora_final || '–' }}</td>
-                  <td class="px-2 py-1 text-right border-r border-slate-200 font-semibold">{{ fmtNum(c.metros, 0) }}</td>
-                  <td class="px-2 py-1 border-r border-slate-200">{{ (c.artigo || '–').substring(0, 10) }}</td>
-                  <td class="px-2 py-1 text-center border-r border-slate-200">{{ c.cor || '–' }}</td>
-                  <td class="px-2 py-1">{{ c.nm_mercado || '–' }}</td>
+                  <td class="px-3 py-1.5 text-center border-r border-slate-100 whitespace-nowrap text-slate-600">{{ formatFecha(c.dat_inicio) }}</td>
+                  <td class="px-3 py-1.5 text-center border-r border-slate-100 font-mono text-slate-700">{{ c.hora_inicio || '–' }}</td>
+                  <td class="px-3 py-1.5 text-center border-r border-slate-100 whitespace-nowrap text-slate-600">{{ formatFecha(c.dat_final) }}</td>
+                  <td class="px-3 py-1.5 text-center border-r border-slate-100 font-mono text-slate-700">{{ c.hora_final || '–' }}</td>
+                  <td class="px-3 py-1.5 text-right border-r border-slate-100 font-bold text-slate-800">{{ fmtNum(c.metros, 0) }}</td>
+                  <td class="px-3 py-1.5 border-r border-slate-100 text-slate-300">–</td>
+                  <td class="px-3 py-1.5 border-r border-slate-100 text-slate-600">{{ (c.artigo || '–').substring(0, 10) }}</td>
+                  <td class="px-3 py-1.5 text-center border-r border-slate-100 text-slate-500">{{ c.cor || '–' }}</td>
+                  <td class="px-3 py-1.5 text-slate-600">{{ c.nm_mercado || '–' }}</td>
                 </tr>
               </tbody>
             </table>

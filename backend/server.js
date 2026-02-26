@@ -5602,6 +5602,8 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
             ${pDate('p."DT_FINAL"')}        AS dt_fin_parsed,
             p."HORA_FINAL",
             ${pNumI('p."METRAGEM"')}        AS metros_val,
+            ${pNum('p."RUPTURAS"')}         AS rupturas_val,
+            ${pNumI('p."NUM_FIOS"')}        AS num_fios_val,
             p."ARTIGO",
             p."COR",
             p."NM MERCADO"                  AS nm_mercado
@@ -5655,6 +5657,19 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
           ) sub
           GROUP BY sub."MAQUINA"
         ),
+        -- ROT 106 por maquina: SUM(RUPTURAS*1e6) / NULLIF(SUM(METRAGEM*NUM_FIOS),0)
+        rot106_maq AS (
+          SELECT
+            "MAQUINA",
+            ROUND(
+              (SUM(rupturas_val * 1000000.0)
+               / NULLIF(SUM(metros_val * num_fios_val), 0))::numeric
+            , 2) AS rot_106
+          FROM base
+          WHERE "SELETOR" IN ('URDIDEIRA', 'URDIDORA')
+            AND num_fios_val > 0
+          GROUP BY "MAQUINA"
+        ),
         primera_hora AS (
           SELECT DISTINCT ON ("MAQUINA")
             "MAQUINA",
@@ -5682,6 +5697,7 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
             ELSE pm.metros_raw
           END               AS metros,
           pm.partida_display,
+          rm.rot_106,
           pm.artigo,
           pm.cor,
           pm.nm_mercado
@@ -5689,6 +5705,7 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
         LEFT JOIN primera_hora ph ON ph."MAQUINA" = pm."MAQUINA"
         LEFT JOIN ultima_hora  uh ON uh."MAQUINA" = pm."MAQUINA"
         LEFT JOIN beam_max     bm ON bm."MAQUINA" = pm."MAQUINA"
+        LEFT JOIN rot106_maq   rm ON rm."MAQUINA" = pm."MAQUINA"
         ORDER BY pm.dt_inicio ASC NULLS LAST, pm."MAQUINA" ASC
       `;
       const resHistorial = await query(sqlHistorial, [partidaCandidates, filial, roladaDerivada], 'partida-tej/historial');
@@ -5700,6 +5717,7 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
         dt_final:        r.dt_final,
         hora_final:      r.hora_final,
         metros:          r.metros !== null ? parseFloat(r.metros) : null,
+        rot_106:         r.rot_106 !== null && r.rot_106 !== undefined ? parseFloat(r.rot_106) : null,
         partida_display: r.partida_display || '',
         artigo:          r.artigo,
         cor:             r.cor,
