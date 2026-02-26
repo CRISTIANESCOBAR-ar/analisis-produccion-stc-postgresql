@@ -55,6 +55,11 @@ const routes = [
     component: () => import('./components/ensayos/CorrelacionMezclaHilo.vue'),
     meta: { title: 'Correlación Mezcla → Hilo' }
   },
+  {
+    path: '/dashboard-mezcla',
+    component: () => import('./components/ensayos/DashboardMezclaHilo.vue'),
+    meta: { title: 'Dashboard Mezcla → Hilo' }
+  },
   { 
     path: '/resumen-diario', 
     component: () => import('./components/ensayos/ResumenDiario.vue'), 

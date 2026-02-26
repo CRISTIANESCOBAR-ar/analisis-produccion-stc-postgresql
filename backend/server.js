@@ -14,7 +14,7 @@ import { optimizeBlend } from './services/blendomat-optimizer.js';
 const { Pool } = pg
 const app = express()
 
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 app.use(cors());
 
 // Rutas de configuración
@@ -262,7 +262,7 @@ const corsOptionsDelegate = (req, cb) => {
 
 app.use(cors(corsOptionsDelegate))
 app.options('*', cors(corsOptionsDelegate))
-app.use(express.json({ limit: '10mb' }))
+app.use(express.json({ limit: '50mb' }))
 
 // =====================================================
 // FRONTEND (PRODUCCIÓN): servir SPA desde el mismo servidor
@@ -5814,6 +5814,200 @@ REGLAS:
   } catch (error) {
     console.error('Error narrativa correlacion:', error);
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/dashboard/mezcla-lotes
+// Comparativa HVI + Uster + Tensorapid por lotes de mezcla
+// Query: lotes (ej: "107,108,109"), ne (opcional, ej: "10/1")
+// ─────────────────────────────────────────────────────────────────────────────
+app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
+  try {
+    const { lotes, ne } = req.query;
+    if (!lotes) return res.status(400).json({ error: 'Se requiere parámetro lotes (ej: 107,108,109)' });
+
+    const loteList = [...new Set(
+      lotes.split(',').map(l => parseInt(l.trim(), 10)).filter(n => !isNaN(n) && n > 0)
+    )];
+    if (loteList.length === 0) return res.status(400).json({ error: 'Sin lotes válidos' });
+
+    const sql = `
+      WITH hvi_agg AS (
+        SELECT
+          "MISTURA"::integer AS mistura,
+          ROUND(AVG(CASE WHEN "STR"  ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("STR",  ',', '.')::numeric END), 2) AS str,
+          ROUND(AVG(CASE WHEN "SCI"  ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("SCI",  ',', '.')::numeric END), 1) AS sci,
+          ROUND(AVG(CASE WHEN "MIC"  ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("MIC",  ',', '.')::numeric END), 3) AS mic,
+          ROUND(AVG(CASE WHEN "UHML" ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("UHML", ',', '.')::numeric END), 2) AS uhml,
+          ROUND(AVG(CASE WHEN "UI"   ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("UI",   ',', '.')::numeric END), 2) AS ui,
+          ROUND(AVG(CASE WHEN "ELG"  ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("ELG",  ',', '.')::numeric END), 2) AS elg_fibra,
+          COUNT(*) AS n_fardos
+        FROM tb_calidad_fibra
+        WHERE "TIPO_MOV" = 'MIST'
+          AND "MISTURA" ~ '^\\d+$'
+          AND "MISTURA"::integer = ANY($1::integer[])
+        GROUP BY "MISTURA"::integer
+      ),
+      uster_base AS (
+        SELECT
+          u.testnr,
+          u.nomcount AS ne,
+          COALESCE(
+            (regexp_match(u.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1],
+            (regexp_match(u.lote, '(\\d+)'))[1]
+          ) AS mistura_str
+        FROM tb_uster_par u
+        WHERE COALESCE(
+            (regexp_match(u.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1],
+            (regexp_match(u.lote, '(\\d+)'))[1]
+          ) IS NOT NULL
+          AND ($2::text IS NULL OR u.nomcount = SPLIT_PART($2, '/', 1) OR u.nomcount::text ILIKE $2)
+      ),
+      uster_lotes AS (
+        SELECT testnr, ne, mistura_str::integer AS mistura
+        FROM uster_base
+        WHERE mistura_str ~ '^\\d+$'
+          AND mistura_str::integer = ANY($1::integer[])
+      ),
+      uster_agg AS (
+        SELECT
+          ul.mistura,
+          ul.ne,
+          ROUND(AVG(t.cvm_percent)::numeric,    2) AS cvm,
+          ROUND(AVG(t.h)::numeric,              2) AS vellosidad,
+          ROUND(AVG(t.neps_200_km)::numeric,    1) AS neps_200,
+          ROUND(AVG(t.delg_minus50_km)::numeric,1) AS thin_50,
+          ROUND(AVG(t.grue_50_km)::numeric,     1) AS thick_50,
+          COUNT(DISTINCT ul.testnr)               AS n_uster
+        FROM uster_lotes ul
+        JOIN tb_uster_tbl t ON t.testnr = ul.testnr
+        GROUP BY ul.mistura, ul.ne
+      ),
+      tenso_agg AS (
+        SELECT
+          ul.mistura,
+          ul.ne,
+          ROUND(AVG(tt.tenacidad)::numeric,  2) AS tenacidad,
+          ROUND(AVG(tt.elongacion)::numeric, 2) AS elongacion
+        FROM uster_lotes ul
+        JOIN tb_tensorapid_par tp ON tp.uster_testnr = ul.testnr
+        JOIN tb_tensorapid_tbl tt ON tt.testnr = tp.testnr
+        GROUP BY ul.mistura, ul.ne
+      )
+      SELECT
+        h.mistura,
+        h.str,
+        h.sci,
+        h.mic,
+        h.uhml,
+        h.ui,
+        h.elg_fibra,
+        h.n_fardos,
+        ua.ne,
+        ua.cvm,
+        ua.vellosidad,
+        ua.neps_200,
+        ua.thin_50,
+        ua.thick_50,
+        ua.n_uster,
+        ta.tenacidad,
+        ta.elongacion
+      FROM hvi_agg h
+      LEFT JOIN uster_agg  ua ON ua.mistura = h.mistura
+      LEFT JOIN tenso_agg  ta ON ta.mistura = h.mistura AND ta.ne = ua.ne
+      ORDER BY h.mistura ASC, ua.ne::numeric ASC NULLS LAST
+    `;
+
+    const result = await query(sql, [loteList, ne || null], 'dashboard/mezcla-lotes');
+    res.json({ success: true, rows: result.rows, lotes: loteList });
+  } catch (err) {
+    console.error('Error /api/dashboard/mezcla-lotes:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/dashboard/narrativa-lotes
+// Genera informe comparativo en lenguaje natural con Gemini
+// Body: { rows, loteActual }
+// ─────────────────────────────────────────────────────────────────────────────
+app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
+  try {
+    const { rows, loteActual, model: modelReq } = req.body;
+    const apiKey = process.env.GOOGLE_API_KEY;
+    if (!apiKey) return res.status(500).json({ success: false, error: 'GOOGLE_API_KEY no configurada' });
+    if (!rows || rows.length === 0) return res.status(400).json({ error: 'Sin datos para analizar' });
+
+    const modelName = modelReq || 'gemini-2.0-flash';
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: modelName });
+
+    const lotesSorted = [...new Set(rows.map(r => Number(r.mistura)))].sort((a, b) => a - b);
+    const actual = loteActual ? Number(loteActual) : Math.max(...lotesSorted);
+    const refs = lotesSorted.filter(l => l !== actual);
+
+    const resumenLotes = lotesSorted.map(mistura => {
+      const filas = rows.filter(r => Number(r.mistura) === mistura);
+      const hvi = filas[0] || {};
+      const hilos = filas
+        .filter(r => r.ne != null)
+        .map(r => `   • Ne ${r.ne}/1: Tenacidad=${r.tenacidad ?? '-'} cN/tex | Elongación=${r.elongacion ?? '-'}% | CVm%=${r.cvm ?? '-'} | VellosidadH=${r.vellosidad ?? '-'} | Neps+200%=${r.neps_200 ?? '-'}/km | PuntosDelg=${r.thin_50 ?? '-'}/km | PuntosGrue=${r.thick_50 ?? '-'}/km`)
+        .join('\n');
+
+      return `LOTE ${mistura}${mistura === actual ? ' [ACTUAL]' : ' [REFERENCIA]'}:
+  HVI: STR=${hvi.str ?? '-'} g/tex | SCI=${hvi.sci ?? '-'} | MIC=${hvi.mic ?? '-'} | UHML=${hvi.uhml ?? '-'} mm | ${hvi.n_fardos ?? '-'} fardos
+  Hilo:
+${hilos || '   (sin datos de ensayos de hilo)'}`;
+    }).join('\n\n');
+
+    const prompt = `Actúa como un Experto en Tejeduría e Hilandería de denim de alta velocidad, con foco en análisis predictivo de comportamiento en producción.
+
+DATOS COMPARATIVOS DE LOTES:
+${resumenLotes}
+
+UMBRALES DE REFERENCIA:
+- Tenacidad hilo: >16.0 cN/tex = APTO TELAR | 14.5-16.0 = PRECAUCIÓN | <14.5 = CRÍTICO
+- Elongación hilo: >8.0% = BUENA | 7.5-8.0% = PRECAUCIÓN URDIDORA | <7.5% = RIESGO ROTURA
+- Neps +200%/km: <500 = LIMPIO | 500-700 = MEDIO | >700 = RIESGO ÍNDIGO
+- CVm%: <12.0% = ESTABLE | 12.0-13.0% = ACEPTABLE | >13.0% = IRREGULAR
+- STR fibra: >27.0 = ÓPTIMO | 25.0-27.0 = NORMAL | <25.0 = LÍMITE
+- SCI: >145 = EXCELENTE | 130-145 = BUENO | <130 = BAJO
+
+TAREA: Generá el siguiente informe en español con exactamente este formato (incluye todos los emojis):
+
+📋 INFORME DE DESEMPEÑO: LOTE ${actual} vs ${refs.length > 0 ? refs.join('/') : 'sin referencia'}
+Análisis Comparativo Fibra ↔️ Hilo
+
+✅ CONCLUSIÓN GENERAL:
+[1-2 oraciones con el veredicto global del Lote ${actual}]
+
+📊 COMPARATIVA TÉCNICA (Promedios):
+[Para cada variable clave disponible (STR, Tenacidad, Neps, CVm%, Elongación), mostrá un bloque como:
+1️⃣ VARIABLE (nombre):
+• Lote X: valor (descriptor)
+• Lote Y: valor (descriptor)
+👉 Impacto: [qué significa para producción, cuantificá la mejora/empeoramiento]]
+
+⚠️ PUNTOS CLAVE PARA PRODUCCIÓN:
+[2-3 bullets con hallazgos técnicos específicos y recomendaciones accionables para el jefe de planta]
+
+🚀 ESTADO: [APROBADO PARA CONTINUIDAD / PRECAUCIÓN - REVISAR / CRÍTICO - DETENER]
+[Una oración de cierre ejecutiva]
+
+REGLAS:
+- Máximo 350 palabras totales
+- Cuantificá cambios entre lotes (ej: "subió de 14.0 a 16.7 cN/tex, +19%")
+- Si hay múltiples Ne, analizá cada uno brevemente
+- No inventes datos, usá solo los provistos
+- Si faltan datos de hilo, indicalo y basate solo en HVI`;
+
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+    res.json({ success: true, narrativa: text });
+  } catch (err) {
+    console.error('Error narrativa-lotes:', err.message);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

@@ -377,6 +377,13 @@
               <span>🔬</span> Correlación Mezcla → Hilo
             </router-link>
             <router-link 
+              to="/dashboard-mezcla" 
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
+              :class="{ 'bg-blue-600': $route.path === '/dashboard-mezcla' }"
+            >
+              <span>🏭</span> Dashboard Mezcla → Hilo
+            </router-link>
+            <router-link 
               to="/detalle-mistura-lote" 
               class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
               :class="{ 'bg-blue-600': $route.path === '/detalle-mistura-lote' }"
@@ -453,7 +460,7 @@ const indigoRoutes = [
 ]
   const isIndigoRouteActive = computed(() => indigoRoutes.includes(route.path)) 
   
-  const configRoutes = ['/parametros-hvi', '/detalle-mistura-lote', '/configuracion-estandares', '/correlacion-mezcla-hilo']
+  const configRoutes = ['/parametros-hvi', '/detalle-mistura-lote', '/configuracion-estandares', '/correlacion-mezcla-hilo', '/dashboard-mezcla']
   const isConfigRouteActive = computed(() => configRoutes.includes(route.path))
 
   function openSidebar() {
