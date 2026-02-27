@@ -851,6 +851,80 @@
               No hay datos suficientes para mostrar el resumen global por variable.
             </div>
 
+            <!-- ── Análisis por Reglas de Mezcla (solo Sobrante no usado) ──────────────── -->
+            <div v-if="purchaseProjection.source === 'remanente' && remanenteMixingRuleAnalysis" class="mt-5 overflow-x-auto border rounded-lg bg-white">
+              <div class="px-4 py-2 bg-slate-100 border-b border-slate-200 flex items-center gap-2">
+                <span class="text-sm font-semibold text-slate-700">Análisis por Reglas de Mezcla</span>
+                <span class="text-xs text-slate-500">— fardos con calidad baja no siempre son 100 % utilizables</span>
+              </div>
+              <table class="min-w-full text-sm">
+                <thead>
+                  <tr>
+                    <th class="px-3 py-1.5" rowspan="2"></th>
+                    <th class="px-3 py-1.5" rowspan="2"></th>
+                    <th colspan="4" class="px-3 py-1.5 text-center text-xs font-semibold text-slate-700 uppercase tracking-wide border-b border-l border-slate-200">Stock Disponible</th>
+                    <th colspan="4" class="px-3 py-1.5 text-center text-xs font-semibold text-emerald-800 uppercase tracking-wide border-b border-l border-emerald-200 bg-emerald-50">Próximas Mezclas</th>
+                  </tr>
+                  <tr class="bg-slate-50 border-b border-slate-200">
+                    <th class="px-3 py-1 text-right text-xs font-semibold text-slate-600 border-l border-slate-200">Fardos</th>
+                    <th class="px-3 py-1 text-right text-xs font-semibold text-slate-600">Kg</th>
+                    <th class="px-3 py-1 text-right text-xs font-semibold text-slate-600">% Stock</th>
+                    <th class="px-3 py-1 text-right text-xs font-semibold text-slate-600">Límite %</th>
+                    <th class="px-3 py-1 text-right text-xs font-semibold text-emerald-800 bg-emerald-50 border-l border-emerald-200">% Stock</th>
+                    <th class="px-3 py-1 text-right text-xs font-semibold text-emerald-800 bg-emerald-50">Usable Kg</th>
+                    <th class="px-3 py-1 text-right text-xs font-semibold text-emerald-800 bg-emerald-50">% Usable</th>
+                    <th class="px-3 py-1 text-right text-xs font-semibold text-red-700 bg-red-50">Sobrante Kg</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                  <template v-for="row in remanenteMixingRuleAnalysis.varRows" :key="`mra-${row.variable}-${row.rango}`">
+                    <tr :class="row.isLowRange ? 'bg-amber-50/50' : ''">
+                      <td class="px-3 py-1.5 text-xs font-semibold text-slate-700">{{ row.variable }}</td>
+                      <td class="px-3 py-1.5 text-xs text-slate-500">{{ row.rango }}</td>
+                      <td class="px-3 py-1.5 text-right text-xs text-slate-700">{{ formatProjectionValue(row.fardos, 0) }}</td>
+                      <td class="px-3 py-1.5 text-right text-xs text-slate-700">{{ formatThousandInteger(row.kg) }}</td>
+                      <td class="px-3 py-1.5 text-right text-xs"
+                          :class="row.isLowRange && row.limitePct !== null && row.pctStock > row.limitePct ? 'font-bold text-red-700 bg-red-100' : 'text-slate-500'">
+                        {{ row.pctStock !== null ? formatProjectionValue(row.pctStock, 0) : '' }}
+                      </td>
+                      <td class="px-3 py-1.5 text-right text-xs text-slate-400">{{ row.limitePct !== null ? row.limitePct : '' }}</td>
+                      <td class="px-3 py-1.5 text-right text-xs text-slate-500 bg-emerald-50">
+                        {{ row.isLowRange ? formatProjectionValue(row.pctStock, 1) : '' }}
+                      </td>
+                      <td class="px-3 py-1.5 text-right text-xs text-emerald-700 bg-emerald-50">
+                        {{ row.usableKg !== null ? formatThousandInteger(row.usableKg) : '' }}
+                      </td>
+                      <td class="px-3 py-1.5 text-right text-xs bg-emerald-50">
+                        {{ row.pctUsable !== null ? formatProjectionValue(row.pctUsable, 1) : '' }}
+                      </td>
+                      <td class="px-3 py-1.5 text-right text-xs font-semibold bg-red-50"
+                          :class="row.sobranteKg !== null && row.sobranteKg > 0 ? 'text-red-700' : 'text-gray-300'">
+                        {{ row.sobranteKg !== null && row.sobranteKg > 0 ? formatThousandInteger(row.sobranteKg) : '' }}
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+                <tfoot class="border-t-2 border-slate-300">
+                  <tr class="bg-slate-50">
+                    <td colspan="2" class="px-3 py-1.5 text-xs font-semibold text-slate-700"></td>
+                    <td class="px-3 py-1.5 text-right text-xs font-bold text-slate-800">{{ formatProjectionValue(remanenteMixingRuleAnalysis.totalFardos, 0) }}</td>
+                    <td class="px-3 py-1.5 text-right text-xs font-bold text-slate-800">{{ formatThousandInteger(remanenteMixingRuleAnalysis.totalKg) }}</td>
+                    <td colspan="2" class="px-3 py-1.5"></td>
+                    <td colspan="2" class="px-3 py-1.5 text-right text-xs font-bold text-emerald-800 bg-emerald-50">{{ formatThousandInteger(remanenteMixingRuleAnalysis.totalNeededKg) }}</td>
+                    <td colspan="2" class="px-3 py-1.5 bg-red-50"></td>
+                  </tr>
+                  <tr class="border-t border-slate-200">
+                    <td colspan="7" class="px-3 py-1.5 text-right text-xs font-semibold text-slate-600">A comprar</td>
+                    <td colspan="2" class="px-3 py-1.5 text-right text-sm font-bold text-red-700 bg-red-50">{{ formatThousandInteger(remanenteMixingRuleAnalysis.aComprarKg) }} kg</td>
+                  </tr>
+                  <tr class="border-t border-slate-200">
+                    <td colspan="7" class="px-3 py-1.5 text-right text-xs font-semibold text-slate-600">Entradas (25.000 kg)</td>
+                    <td colspan="2" class="px-3 py-1.5 text-right text-sm font-bold text-indigo-700 bg-indigo-50">{{ formatProjectionValue(remanenteMixingRuleAnalysis.entradasN, 1) }}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
             <div class="mt-3 text-xs text-emerald-900 bg-emerald-100/60 border border-emerald-200 rounded px-3 py-2">
               <span class="font-semibold">Guía de calidad:</span>
               La recomendación HVI se calcula en función de las variables activadas en “Reglas de Mezclas” y de la fuente seleccionada (stock o remanente).
@@ -1801,7 +1875,49 @@ const sortedRemanentes = computed(() => {
   return sortRowsByState(rows, blendSortState);
 });
 
-const projectionSourceShowWeightColumns = computed(() => purchaseProjection.source === 'stock');
+// Fila normalizada basada en SALDO DISPONIVEL del inventario (tb_est_mp).
+// kg = SALDO_DISPONIVEL × PESO_MEDIO. Incluye todos los campos HVI para el análisis de calidad.
+const saldoDisponibleRows = computed(() => {
+  return (items.value || [])
+    .filter(item => item.SALDO_DISPONIVEL > 0)
+    .map(item => {
+      const saldo = item.SALDO_DISPONIVEL;
+      const pesoTotal = saldo * item.PESO_MEDIO;
+      return {
+        PRODUTOR:  item.PRODUTOR,
+        LOTE:      item.LOTE,
+        CLASSIF:   item.CLASSIF,
+        TIPO:      item.TIPO,
+        COR:       item.COR,
+        // Fardos y peso
+        Fardos:    saldo,
+        SALDO_DISPONIVEL: saldo,
+        Kilogramos: pesoTotal,
+        PESO:      pesoTotal,  // para que resolveRowWeight lo tome
+        PesoMedio: item.PESO_MEDIO,
+        // HVI
+        MIC:  item.MIC,
+        STR:  item.STR,
+        UHML: item.UHML,
+        LEN:  item.UHML,
+        SCI:  item.SCI,
+        MST:  item.MST,
+        MAT:  item.MAT,
+        UI:   item.UI,
+        SF:   item.SF,
+        ELG:  item.ELG,
+        RD:   item.RD,
+        PLUS_B: item.PLUS_B,
+        TrCNT: item.TrCNT,
+        TrAR:  item.TrAR,
+        TRID:  item.TRID,
+        Motivo: 'Saldo disponible'
+      };
+    });
+});
+
+// Para remanente ahora siempre mostramos columnas de peso (tenemos PESO_MEDIO)
+const projectionSourceShowWeightColumns = computed(() => true);
 const projectionSourceTableColspan = computed(() => (projectionSourceShowWeightColumns.value ? 9 : 7));
 
 const projectionSourceTableRows = computed(() => {
@@ -1830,15 +1946,8 @@ const projectionSourceTableRows = computed(() => {
     });
   }
 
-  return sortedRemanentes.value.map((row) => ({
-    PRODUTOR: row.PRODUTOR,
-    LOTE: row.LOTE,
-    Fardos: Number(row.Fardos) || 0,
-    MIC: row.MIC,
-    STR: row.STR,
-    LEN: row.LEN,
-    Motivo: row.Motivo
-  }));
+  // Remanente: usar SALDO DISPONIVEL × PESO_MEDIO del inventario real
+  return saldoDisponibleRows.value;
 });
 
 const projectionSourceTableTotals = computed(() => {
@@ -1892,19 +2001,19 @@ const projectionSourceTableTotals = computed(() => {
 const projectionSourceTableTitle = computed(() => {
   return purchaseProjection.source === 'stock'
     ? 'Lotes de Stock Actual (Referencia Proyección)'
-    : 'Lotes No Usados / Remanentes';
+    : 'Fardos con Saldo Disponible (SALDO DISPONIVEL del inventario)';
 });
 
 const projectionSourceTableReasonLabel = computed(() => {
   return purchaseProjection.source === 'stock'
     ? 'Motivo / Estado'
-    : 'Motivo Sobrante';
+    : 'Estado';
 });
 
 const projectionSourceTableEmptyMessage = computed(() => {
   return purchaseProjection.source === 'stock'
     ? 'No hay lotes de stock disponibles para mostrar.'
-    : 'No hay lotes remanentes. Se usó todo el stock.';
+    : 'No hay lotes con SALDO DISPONIVEL > 0 en el inventario. Actualizá el CSV de stock.';
 });
 
 const getQualityKey = (row) => {
@@ -1921,6 +2030,38 @@ const generatedMixesCount = computed(() => {
 });
 
 const recipeByQualityPerMix = computed(() => {
+  // ── Fuente: Sobrante no usado ────────────────────────────────────────────
+  // La receta se calcula desde las proporciones del SALDO DISPONIVEL real del
+  // inventario: peso_calidad / peso_total × fardos_por_mezcla.
+  // No depende del plan del optimizer.
+  if (purchaseProjection.source === 'remanente') {
+    const saldoRows = saldoDisponibleRows.value;
+    if (!saldoRows.length) return [];
+    const fardosPorMezcla = Number(filters.fardos) || 0;
+    if (fardosPorMezcla <= 0) return [];
+
+    const totalSaldo = saldoRows.reduce((sum, r) => sum + (Number(r.Fardos) || 0), 0);
+    if (totalSaldo <= 0) return [];
+
+    const grouped = new Map();
+    saldoRows.forEach((row) => {
+      const qualityKey = getQualityKey(row);
+      const fardos = Number(row.Fardos) || 0;
+      grouped.set(qualityKey, (grouped.get(qualityKey) || 0) + fardos);
+    });
+
+    return Array.from(grouped.entries())
+      .map(([calidad, saldo]) => ({
+        calidad,
+        usados: saldo,
+        recetaPorMezcla: (saldo / totalSaldo) * fardosPorMezcla
+      }))
+      .filter((e) => e.recetaPorMezcla > 0)
+      .sort((a, b) => b.recetaPorMezcla - a.recetaPorMezcla);
+  }
+
+  // ── Fuente: Stock actual ─────────────────────────────────────────────────
+  // La receta viene del plan generado por el optimizer (fardos Usados / mezclas).
   const rows = blendPlan.value?.plan;
   if (!Array.isArray(rows) || rows.length === 0) return [];
 
@@ -1952,7 +2093,7 @@ const recipeByQualityPerMix = computed(() => {
 
 const availableByQuality = computed(() => {
   const sourceRows = purchaseProjection.source === 'remanente'
-    ? (blendPlan.value?.remanentes || [])
+    ? saldoDisponibleRows.value
     : (blendPlan.value?.plan || []);
 
   const grouped = new Map();
@@ -1971,7 +2112,7 @@ const availableByQuality = computed(() => {
 
 const getProjectionSourceRows = () => (
   purchaseProjection.source === 'remanente'
-    ? (blendPlan.value?.remanentes || [])
+    ? saldoDisponibleRows.value
     : (blendPlan.value?.plan || [])
 );
 
@@ -2164,11 +2305,113 @@ const averageWeightByQuality = computed(() => {
   };
 });
 
-const purchaseProjectionError = computed(() => {
-  if (!blendPlan.value || !Array.isArray(blendPlan.value.plan) || blendPlan.value.plan.length === 0) {
-    return 'Genera primero un plan de mezclas para poder calcular la compra por calidad.';
-  }
+// ── Análisis de Sobrante por Reglas de Mezcla (Fuente: Sobrante no usado) ─────────────────
+// Para cada variable HVI activa con regla de mezclado, calcula qué fracción de los lotes
+// con calidad baja (< valor_ideal_min) supera el límite de uso por mezcla.
+// El sobrante resultante reduce el stock efectivamente disponible para la proyección de compra.
+const remanenteMixingRuleAnalysis = computed(() => {
+  if (purchaseProjection.source !== 'remanente') return null;
 
+  const fardosPorMezcla = Number(filters.fardos) || 0;
+  const targetMixes = Number(purchaseProjection.targetMixes) || 0;
+  if (fardosPorMezcla <= 0 || targetMixes <= 0) return null;
+
+  const saldoRows = saldoDisponibleRows.value;
+  if (!saldoRows.length) return null;
+
+  // Totales del stock disponible
+  const totalFardos = saldoRows.reduce((s, r) => s + (Number(r.Fardos) || 0), 0);
+  const totalKg = saldoRows.reduce((s, r) => s + (Number(r.Kilogramos) || 0), 0);
+  if (totalFardos <= 0 || totalKg <= 0) return null;
+
+  const avgWeightPerBale = totalKg / totalFardos;
+  const kgMezcla = fardosPorMezcla * avgWeightPerBale;
+  const totalNeededKg = targetMixes * kgMezcla;
+
+  // Variables a analizar: uiKey, parametro (para buscar regla), label, getter HVI
+  const varCfg = [
+    { uiKey: 'MIC',  ruleKey: 'MIC', label: 'MIC',        getHvi: r => { const v = Number(r.MIC);  return isNaN(v) || v === 0 ? null : v; } },
+    { uiKey: 'STR',  ruleKey: 'STR', label: 'STR',        getHvi: r => { const v = Number(r.STR);  return isNaN(v) || v === 0 ? null : v; } },
+    { uiKey: 'UHML', ruleKey: 'LEN', label: 'LEN (UHML)', getHvi: r => { const v = Number(r.UHML); return isNaN(v) || v === 0 ? null : v; } },
+  ];
+
+  const varRows = [];
+  let maxSobranteKg = 0; // restricción vinculante (la que genera más sobrante)
+
+  varCfg.forEach(({ uiKey, ruleKey, label, getHvi }) => {
+    const rule = activeRules.value.find(r => r.parametro === ruleKey);
+    if (!rule) return;
+
+    const idealMin = parseFloat(rule.valor_ideal_min);
+    const porcentajeMinIdeal = parseFloat(rule.porcentaje_min_ideal);
+    if (isNaN(idealMin) || isNaN(porcentajeMinIdeal)) return;
+
+    const maxTolPct = (100 - porcentajeMinIdeal) / 100; // ej. 0.20 para STR/LEN
+    const limitePct = 100 - porcentajeMinIdeal;          // ej. 20
+
+    // Etiqueta de rango bajo: usa rango_tol_min si existe
+    const tolMin = parseFloat(rule.rango_tol_min);
+    const rangoLowLabel = !isNaN(tolMin) ? `${tolMin} a ${idealMin}` : `< ${idealMin}`;
+    const rangoHighLabel = `> ${idealMin}`;
+
+    let lowFardos = 0, lowKg = 0, highFardos = 0, highKg = 0;
+    saldoRows.forEach(row => {
+      const val = getHvi(row);
+      const f   = Number(row.Fardos) || 0;
+      const kg  = Number(row.Kilogramos) || 0;
+      if (val === null) return;
+      if (val < idealMin) { lowFardos += f; lowKg += kg; }
+      else                { highFardos += f; highKg += kg; }
+    });
+
+    const pctLowStock = totalFardos > 0 ? (lowFardos / totalFardos) * 100 : 0;
+
+    // Usable del rango bajo dentro del bloque de mezclas (limitado al % máximo)
+    const maxUsableLowKg = targetMixes * kgMezcla * maxTolPct;
+    const usableLowKg    = Math.min(lowKg, maxUsableLowKg);
+    const sobranteLowKg  = Math.max(0, lowKg - maxUsableLowKg);
+    const pctUsableLow   = totalNeededKg > 0 ? (usableLowKg / totalNeededKg) * 100 : 0;
+
+    if (sobranteLowKg > maxSobranteKg) maxSobranteKg = sobranteLowKg;
+
+    // Fila rango BAJO (con límite)
+    varRows.push({
+      variable: label, uiKey, isLowRange: true,
+      rango: rangoLowLabel,
+      fardos: lowFardos, kg: lowKg,
+      pctStock: pctLowStock, limitePct,
+      pctUsable: pctUsableLow, usableKg: usableLowKg, sobranteKg: sobranteLowKg,
+    });
+
+    // Fila rango ALTO (sin límite)
+    varRows.push({
+      variable: label, uiKey, isLowRange: false,
+      rango: rangoHighLabel,
+      fardos: highFardos, kg: highKg,
+      pctStock: totalFardos > 0 ? (highFardos / totalFardos) * 100 : 0,
+      limitePct: null, pctUsable: null, usableKg: null, sobranteKg: null,
+    });
+  });
+
+  if (!varRows.length) return null;
+
+  // Cálculo efectivo: descuento la restricción más severa (variable vinculante)
+  const effectiveAvailableKg  = totalKg - maxSobranteKg;
+  const aComprarKg            = Math.max(0, totalNeededKg - effectiveAvailableKg);
+  const aComprarFardos        = avgWeightPerBale > 0 ? Math.ceil(aComprarKg / avgWeightPerBale) : 0;
+  const entradasN             = aComprarKg / 25000;
+
+  return {
+    varRows,
+    totalFardos, totalKg,
+    kgMezcla, totalNeededKg,
+    maxSobranteKg, effectiveAvailableKg,
+    aComprarKg, aComprarFardos, entradasN,
+    avgWeightPerBale,
+  };
+});
+
+const purchaseProjectionError = computed(() => {
   const targetMixes = Number(purchaseProjection.targetMixes);
   if (Number.isNaN(targetMixes) || targetMixes <= 0) {
     return 'Ingresa una cantidad de mezclas objetivo válida (mayor que 0).';
@@ -2176,6 +2419,19 @@ const purchaseProjectionError = computed(() => {
 
   if (!filters.fardos || Number(filters.fardos) <= 0) {
     return 'Define los fardos por mezcla antes de proyectar la compra.';
+  }
+
+  // ── Sobrante no usado: no requiere plan del optimizer ───────────────────
+  if (purchaseProjection.source === 'remanente') {
+    if (saldoDisponibleRows.value.length === 0) {
+      return 'No hay lotes con SALDO DISPONIVEL > 0 en el inventario actual. Actualizá el CSV de stock.';
+    }
+    return '';
+  }
+
+  // ── Stock actual: requiere plan del optimizer ────────────────────────────
+  if (!blendPlan.value || !Array.isArray(blendPlan.value.plan) || blendPlan.value.plan.length === 0) {
+    return 'Genera primero un plan de mezclas para poder calcular la receta base por calidad.';
   }
 
   if (generatedMixesCount.value <= 0) {
@@ -2194,9 +2450,17 @@ const purchaseProjectionRows = computed(() => {
   const selectedVariables = activeProjectionVariables.value;
   const variableAverages = averageByQualityForVariable.value;
 
+  // Para remanente: reducir el disponible según el sobrante por reglas de mezcla.
+  // La fracción efectiva escala proporcionalmente el disponible de cada grupo de calidad.
+  const mixingAnalysis = purchaseProjection.source === 'remanente' ? remanenteMixingRuleAnalysis.value : null;
+  const effectiveFraction = (mixingAnalysis && mixingAnalysis.totalKg > 0)
+    ? Math.min(1, mixingAnalysis.effectiveAvailableKg / mixingAnalysis.totalKg)
+    : 1;
+
   return recipeByQualityPerMix.value.map((recipeRow) => {
     const required = recipeRow.recetaPorMezcla * targetMixes;
-    const available = availableMap.get(recipeRow.calidad) || 0;
+    const rawAvailable = availableMap.get(recipeRow.calidad) || 0;
+    const available = rawAvailable * effectiveFraction;
     const shortage = Math.max(0, required - available);
     const suggestedPurchaseBales = Math.ceil(shortage);
 

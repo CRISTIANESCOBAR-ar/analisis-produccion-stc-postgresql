@@ -89,12 +89,15 @@
               <div>
                 <div class="flex items-center gap-2">
                   <span class="text-xs font-bold uppercase tracking-widest" :class="semaforo(mistura).textClass">
-                    Lote {{ mistura }}
+                    Lote FIAC {{ mistura }}
                   </span>
                   <span v-if="Number(mistura) === Number(loteActual)"
                     class="text-[9px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full font-bold">
                     ACTUAL
                   </span>
+                </div>
+                <div v-if="getMisturaReal(mistura)" class="text-[9px] text-slate-400 mt-0.5">
+                  Mistura {{ getMisturaReal(mistura) }}
                 </div>
                 <div class="text-sm font-bold mt-0.5" :class="semaforo(mistura).textClass">
                   {{ semaforo(mistura).label }}
@@ -144,9 +147,9 @@
             </div>
 
             <!-- Metadata -->
-            <div class="mt-3 pt-3 border-t border-slate-100 text-[9px] text-slate-400 flex gap-3">
-              <span>{{ getHVI(mistura, 'n_fardos') ?? '–' }} fardos HVI</span>
-              <span>{{ getHiloCount(mistura) }} ensayos Uster</span>
+            <div class="mt-3 pt-3 border-t border-slate-100 text-[9px] text-slate-400 flex flex-wrap gap-3">
+              <span>🧺 {{ getHVI(mistura, 'n_fardos') ?? '–' }} fardos consumidos</span>
+              <span>🔄 {{ getHVI(mistura, 'n_secuencias') ?? '–' }} secuencias blendomat</span>
             </div>
           </div>
         </div>
@@ -340,7 +343,7 @@ const HILO_ROWS = [
   { key: 'neps_200',   label: 'Neps +200%', unit: '/km',  dec: 1, thresholds: [500, 700],   inverse: true },
   { key: 'thin_50',    label: 'Puntos Delgados −50%', unit: '/km', dec: 1, thresholds: null, inverse: true },
   { key: 'thick_50',   label: 'Puntos Gruesos +50%', unit: '/km', dec: 1, thresholds: null,  inverse: true },
-  { key: 'n_uster',    label: 'Ensayos Uster', unit: '',  dec: 0, thresholds: null,          inverse: false },
+  { key: 'n_uster',      label: 'Ensayos Uster (por Ne)', unit: '', dec: 0, thresholds: null, inverse: false },
 ]
 
 // ── Computed ───────────────────────────────────────────────────────────────
@@ -375,10 +378,18 @@ function getHiloFirst(mistura, key) {
   return first[key] != null ? parseFloat(first[key]) : null
 }
 
+function getMisturaReal(mistura) {
+  const row = rows.value.find(r => String(r.mistura) === String(mistura))
+  return row?.mistura_real ?? null
+}
+
 function getHiloCount(mistura) {
+  // n_secuencias viene de hvi_agg: secuencias de blendomat con DT_ENTRADA_PROD != null
+  const row = rows.value.find(r => String(r.mistura) === String(mistura))
+  if (row?.n_secuencias != null) return Number(row.n_secuencias)
+  // fallback: suma de n_uster por Ne
   const neRows = rows.value.filter(r => String(r.mistura) === String(mistura) && r.ne != null)
-  const total = neRows.reduce((acc, r) => acc + (Number(r.n_uster) || 0), 0)
-  return total || '–'
+  return neRows.reduce((acc, r) => acc + (Number(r.n_uster) || 0), 0) || '–'
 }
 
 function fmt(val, dec = 2) {

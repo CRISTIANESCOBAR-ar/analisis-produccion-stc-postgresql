@@ -6117,20 +6117,27 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
 
     const sql = `
       WITH hvi_agg AS (
+        -- Filtra por LOTE_FIAC (el número que ingresa el usuario), no por MISTURA.
+        -- n_fardos = fardos efectivamente consumidos (DT_ENTRADA_PROD no nulo).
+        -- n_secuencias = secuencias (SEQ) ingresadas a blendomat con fecha.
         SELECT
-          "MISTURA"::integer AS mistura,
+          CAST(NULLIF(regexp_replace("LOTE_FIAC", '[^0-9]', '', 'g'), '') AS INTEGER) AS mistura,
+          MAX(CAST(NULLIF(regexp_replace("MISTURA", '[^0-9]', '', 'g'), '') AS INTEGER))::text AS mistura_real,
           ROUND(AVG(CASE WHEN "STR"  ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("STR",  ',', '.')::numeric END), 2) AS str,
           ROUND(AVG(CASE WHEN "SCI"  ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("SCI",  ',', '.')::numeric END), 1) AS sci,
           ROUND(AVG(CASE WHEN "MIC"  ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("MIC",  ',', '.')::numeric END), 3) AS mic,
           ROUND(AVG(CASE WHEN "UHML" ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("UHML", ',', '.')::numeric END), 2) AS uhml,
           ROUND(AVG(CASE WHEN "UI"   ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("UI",   ',', '.')::numeric END), 2) AS ui,
           ROUND(AVG(CASE WHEN "ELG"  ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("ELG",  ',', '.')::numeric END), 2) AS elg_fibra,
-          COUNT(*) AS n_fardos
+          -- Solo fardos con fecha de entrada a producción (consumidos en blendomat)
+          COUNT(CASE WHEN "DT_ENTRADA_PROD" IS NOT NULL AND "DT_ENTRADA_PROD" <> '' THEN 1 END) AS n_fardos,
+          -- Secuencias distintas que ya ingresaron (DT_ENTRADA_PROD no nulo)
+          COUNT(DISTINCT CASE WHEN "DT_ENTRADA_PROD" IS NOT NULL AND "DT_ENTRADA_PROD" <> '' THEN "SEQ" END) AS n_secuencias
         FROM tb_calidad_fibra
         WHERE "TIPO_MOV" = 'MIST'
-          AND "MISTURA" ~ '^\\d+$'
-          AND "MISTURA"::integer = ANY($1::integer[])
-        GROUP BY "MISTURA"::integer
+          AND "LOTE_FIAC" ~ '[0-9]'
+          AND CAST(NULLIF(regexp_replace("LOTE_FIAC", '[^0-9]', '', 'g'), '') AS INTEGER) = ANY($1::integer[])
+        GROUP BY CAST(NULLIF(regexp_replace("LOTE_FIAC", '[^0-9]', '', 'g'), '') AS INTEGER)
       ),
       uster_base AS (
         SELECT
@@ -6180,6 +6187,7 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
       )
       SELECT
         h.mistura,
+        h.mistura_real,
         h.str,
         h.sci,
         h.mic,
@@ -6187,6 +6195,7 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
         h.ui,
         h.elg_fibra,
         h.n_fardos,
+        h.n_secuencias,
         ua.ne,
         ua.cvm,
         ua.vellosidad,
@@ -6248,9 +6257,9 @@ function generarNarrativaLocal(rows, loteActual) {
 
   const estadoLabel = { VERDE: '✅ APROBADO PARA CONTINUIDAD', AMARILLO: '⚠️ PRECAUCIÓN – REVISAR', ROJO: '🔴 CRÍTICO – DETENER' }[nivelGlobal];
   const conclusionBase = {
-    VERDE: `El Lote ${actual} cumple todos los umbrales críticos de aptitud para tejeduría.${refs.length ? ` Supera o iguala el desempeño de referencia (${refs.join('/')}).` : ''}`,
-    AMARILLO: `El Lote ${actual} presenta valores fuera de rango en algunas variables; se recomienda monitoreo intensivo en los procesos afectados.`,
-    ROJO: `El Lote ${actual} registra valores críticos que requieren acción inmediata antes de continuar la producción.`
+    VERDE: `El Lote FIAC ${actual} cumple todos los umbrales críticos de aptitud para tejeduría.${refs.length ? ` Supera o iguala el desempeño de referencia (${refs.join('/')}).` : ''}`,
+    AMARILLO: `El Lote FIAC ${actual} presenta valores fuera de rango en algunas variables; se recomienda monitoreo intensivo en los procesos afectados.`,
+    ROJO: `El Lote FIAC ${actual} registra valores críticos que requieren acción inmediata antes de continuar la producción.`
   }[nivelGlobal];
 
   // Genera comparativas por variable
@@ -6330,7 +6339,7 @@ function generarNarrativaLocal(rows, loteActual) {
 
   const refStr = refs.length > 0 ? refs.join('/') : 'sin referencia';
   const lines = [
-    `📋 INFORME DE DESEMPEÑO: LOTE ${actual} vs ${refStr}`,
+    `📋 INFORME DE DESEMPEÑO: LOTE FIAC ${actual} vs ${refStr}`,
     `Análisis Comparativo Fibra ↔️ Hilo`,
     ``,
     `✅ CONCLUSIÓN GENERAL:`,
@@ -6346,9 +6355,14 @@ function generarNarrativaLocal(rows, loteActual) {
     ...(puntosNe.length ? puntosNe : []),
     ``,
     `🚀 ESTADO: ${estadoLabel}`,
-    HilosActual.length === 0
-      ? `Solo se disponen de datos HVI para este lote; los datos de ensayos de hilo están pendientes.`
-      : `La mezcla evaluada tiene ${dataActual.hvi.n_fardos ?? '–'} fardos HVI y ${HilosActual.reduce((a,h)=>a+(Number(h.n_uster)||0),0)} ensayos Uster asociados.`,
+    (() => {
+      const lf = actual;
+      const mr = dataActual.hvi.n_fardos != null ? `${dataActual.hvi.n_fardos} fardos consumidos` : '– fardos';
+      const ms = dataActual.hvi.n_secuencias != null ? `${dataActual.hvi.n_secuencias} secuencias de blendomat` : '';
+      const mreal = dataActual.hvi.mistura_real ? ` (Mistura interna ${dataActual.hvi.mistura_real})` : '';
+      if (HilosActual.length === 0) return `Solo se disponen de datos HVI para el Lote FIAC ${lf}${mreal}; los datos de ensayos de hilo están pendientes.`;
+      return `El Lote FIAC ${lf}${mreal} tiene ${mr}${ms ? ' y ' + ms : ''} asociadas.`;
+    })(),
     ``,
     `_Informe generado localmente · ${new Date().toLocaleString('es-AR')}_`,
   ];
@@ -6383,9 +6397,10 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
         .filter(r => r.ne != null)
         .map(r => `   • Ne ${r.ne}/1: Tenacidad=${r.tenacidad ?? '-'} cN/tex | Elongación=${r.elongacion ?? '-'}% | CVm%=${r.cvm ?? '-'} | Neps+200%=${r.neps_200 ?? '-'}/km`)
         .join('\n');
-      return `LOTE ${mistura}${mistura === actual ? ' [ACTUAL]' : ' [REFERENCIA]'}:
-  HVI: STR=${hvi.str ?? '-'} g/tex | SCI=${hvi.sci ?? '-'} | MIC=${hvi.mic ?? '-'} | UHML=${hvi.uhml ?? '-'} mm | ${hvi.n_fardos ?? '-'} fardos
-  Hilo:\n${hilos || '   (sin datos)'}`;
+      const misturaLabel = hvi.mistura_real ? `${mistura} (Mistura ${hvi.mistura_real})` : `${mistura}`;
+      return `LOTE_FIAC ${misturaLabel}${mistura === actual ? ' [ACTUAL]' : ' [REFERENCIA]'}:
+  HVI: STR=${hvi.str ?? '-'} g/tex | SCI=${hvi.sci ?? '-'} | MIC=${hvi.mic ?? '-'} | UHML=${hvi.uhml ?? '-'} mm | ${hvi.n_fardos ?? '-'} fardos consumidos | ${hvi.n_secuencias ?? '-'} secuencias blendomat
+  Hilo:\n${hilos || '   (sin datos)'}`;  
     }).join('\n\n');
 
     const modelName = modelReq || 'gemini-2.0-flash';
@@ -6401,7 +6416,7 @@ UMBRALES: Tenacidad hilo >16.0=APTO, 14.5-16.0=PRECAUCIÓN, <14.5=CRÍTICO | Elo
 
 Generá exactamente este formato en español (350 palabras máx, cuantificá cambios con %):
 
-📋 INFORME DE DESEMPEÑO: LOTE ${actual} vs ${refs.join('/') || 'sin referencia'}
+📋 INFORME DE DESEMPEÑO: LOTE FIAC ${actual} vs ${refs.join('/') || 'sin referencia'}
 Análisis Comparativo Fibra ↔️ Hilo
 
 ✅ CONCLUSIÓN GENERAL:

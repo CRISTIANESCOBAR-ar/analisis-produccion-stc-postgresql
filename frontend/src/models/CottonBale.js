@@ -42,6 +42,8 @@ export class CottonBale {
     
     // Mapeo especifico para claves con espacios o variantes
     this.QTDE_ESTOQUE = parseLocalNum(getVal(['QTDE ESTOQUE', 'QTDE_ESTOQUE', 'qtde_estoque']));
+    // Saldo de fardos disponibles de la última mezcla optimizada (columna "SALDO DISPONIVEL" en tb_est_mp)
+    this.SALDO_DISPONIVEL = parseLocalNum(getVal(['SALDO DISPONIVEL', 'SALDO_DISPONIVEL', 'saldo_disponivel']));
     
     // Propiedades numéricas de calidad
     this.SCI = parseLocalNum(getVal(['SCI', 'sci']));
