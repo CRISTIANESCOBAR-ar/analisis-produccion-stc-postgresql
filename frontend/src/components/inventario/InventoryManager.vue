@@ -852,77 +852,195 @@
             </div>
 
             <!-- ── Análisis por Reglas de Mezcla (solo Sobrante no usado) ──────────────── -->
-            <div v-if="purchaseProjection.source === 'remanente' && remanenteMixingRuleAnalysis" class="mt-5 overflow-x-auto border rounded-lg bg-white">
-              <div class="px-4 py-2 bg-slate-100 border-b border-slate-200 flex items-center gap-2">
+            <div v-if="purchaseProjection.source === 'remanente' && remanenteMixingRuleAnalysis" class="mt-5 space-y-4">
+
+              <!-- Cabecera general -->
+              <div class="flex items-baseline gap-3 px-1">
                 <span class="text-sm font-semibold text-slate-700">Análisis por Reglas de Mezcla</span>
-                <span class="text-xs text-slate-500">— fardos con calidad baja no siempre son 100 % utilizables</span>
+                <span class="text-xs text-slate-500">
+                  Bloque: {{ formatProjectionValue(remanenteMixingRuleAnalysis.totalBloqueF, 0) }} fardos
+                  ({{ filters.fardos }} × {{ purchaseProjection.targetMixes }} mezclas) ·
+                  Stock disponible: {{ formatProjectionValue(remanenteMixingRuleAnalysis.totalStockF, 0) }} fardos
+                </span>
               </div>
-              <table class="min-w-full text-sm">
-                <thead>
-                  <tr>
-                    <th class="px-3 py-1.5" rowspan="2"></th>
-                    <th class="px-3 py-1.5" rowspan="2"></th>
-                    <th colspan="4" class="px-3 py-1.5 text-center text-xs font-semibold text-slate-700 uppercase tracking-wide border-b border-l border-slate-200">Stock Disponible</th>
-                    <th colspan="4" class="px-3 py-1.5 text-center text-xs font-semibold text-emerald-800 uppercase tracking-wide border-b border-l border-emerald-200 bg-emerald-50">Próximas Mezclas</th>
-                  </tr>
-                  <tr class="bg-slate-50 border-b border-slate-200">
-                    <th class="px-3 py-1 text-right text-xs font-semibold text-slate-600 border-l border-slate-200">Fardos</th>
-                    <th class="px-3 py-1 text-right text-xs font-semibold text-slate-600">Kg</th>
-                    <th class="px-3 py-1 text-right text-xs font-semibold text-slate-600">% Stock</th>
-                    <th class="px-3 py-1 text-right text-xs font-semibold text-slate-600">Límite %</th>
-                    <th class="px-3 py-1 text-right text-xs font-semibold text-emerald-800 bg-emerald-50 border-l border-emerald-200">% Stock</th>
-                    <th class="px-3 py-1 text-right text-xs font-semibold text-emerald-800 bg-emerald-50">Usable Kg</th>
-                    <th class="px-3 py-1 text-right text-xs font-semibold text-emerald-800 bg-emerald-50">% Usable</th>
-                    <th class="px-3 py-1 text-right text-xs font-semibold text-red-700 bg-red-50">Sobrante Kg</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-100">
-                  <template v-for="row in remanenteMixingRuleAnalysis.varRows" :key="`mra-${row.variable}-${row.rango}`">
-                    <tr :class="row.isLowRange ? 'bg-amber-50/50' : ''">
-                      <td class="px-3 py-1.5 text-xs font-semibold text-slate-700">{{ row.variable }}</td>
-                      <td class="px-3 py-1.5 text-xs text-slate-500">{{ row.rango }}</td>
-                      <td class="px-3 py-1.5 text-right text-xs text-slate-700">{{ formatProjectionValue(row.fardos, 0) }}</td>
-                      <td class="px-3 py-1.5 text-right text-xs text-slate-700">{{ formatThousandInteger(row.kg) }}</td>
-                      <td class="px-3 py-1.5 text-right text-xs"
-                          :class="row.isLowRange && row.limitePct !== null && row.pctStock > row.limitePct ? 'font-bold text-red-700 bg-red-100' : 'text-slate-500'">
-                        {{ row.pctStock !== null ? formatProjectionValue(row.pctStock, 0) : '' }}
+
+              <!-- Una card por variable -->
+              <div v-for="v in remanenteMixingRuleAnalysis.varAnalysis" :key="v.uiKey"
+                   class="overflow-x-auto border rounded-lg bg-white">
+
+                <!-- Encabezado de la variable -->
+                <div class="flex items-center gap-3 px-4 py-2 border-b"
+                     :class="v.aComprarF > 0 ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-200'">
+                  <span class="text-sm font-bold" :class="v.aComprarF > 0 ? 'text-red-800' : 'text-emerald-800'">
+                    {{ v.label }}
+                  </span>
+                  <span class="text-xs px-2 py-0.5 rounded font-mono bg-white border"
+                        :class="v.aComprarF > 0 ? 'border-red-300 text-red-700' : 'border-emerald-300 text-emerald-700'">
+                    Regla {{ v.tolLimitPct === 10 ? '90/10' : v.tolLimitPct === 20 ? '80/20' : (100-v.tolLimitPct)+'/'+v.tolLimitPct }}
+                  </span>
+                  <span class="text-xs text-slate-600">
+                    Obj promedio ≥ {{ formatProjectionValue(v.idealMin, 2) }} ·
+                    Tolerancia {{ v.tolMin }}–{{ v.tolMax }} max {{ v.tolLimitPct }}%
+                  </span>
+                  <span v-if="v.aComprarF === 0" class="ml-auto text-xs font-semibold text-emerald-700">✓ Sin necesidad de compra</span>
+                  <span v-else class="ml-auto text-xs font-semibold text-red-700">
+                    A comprar: {{ formatProjectionValue(v.aComprarF, 0) }} fardos
+                    ({{ formatThousandInteger(v.aComprarKg) }} kg)
+                  </span>
+                </div>
+
+                <table class="min-w-full text-xs">
+                  <thead class="bg-slate-50 border-b border-slate-200">
+                    <tr>
+                      <th class="px-3 py-1.5 text-left font-semibold text-slate-600">Zona</th>
+                      <th class="px-3 py-1.5 text-left font-semibold text-slate-600">Rango</th>
+                      <th class="px-3 py-1.5 text-right font-semibold text-slate-600">Fardos</th>
+                      <th class="px-3 py-1.5 text-right font-semibold text-slate-600">Kg</th>
+                      <th class="px-3 py-1.5 text-right font-semibold text-slate-600">% Stock</th>
+                      <th class="px-3 py-1.5 text-right font-semibold text-slate-600">Prom. HVI</th>
+                      <th class="px-3 py-1.5 text-right font-semibold text-slate-600">Límite %</th>
+                      <th class="px-3 py-1.5 text-right font-semibold text-slate-600">Usable F</th>
+                      <th class="px-3 py-1.5 text-right font-semibold text-red-700">Sobrante F</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-100">
+                    <!-- Zona DESCARTADO -->
+                    <tr v-if="v.descF > 0" class="bg-gray-100">
+                      <td class="px-3 py-1.5 font-semibold text-gray-400">Descartado</td>
+                      <td class="px-3 py-1.5 text-gray-400">&lt; {{ v.tolMin }}</td>
+                      <td class="px-3 py-1.5 text-right text-gray-400">{{ formatProjectionValue(v.descF, 0) }}</td>
+                      <td class="px-3 py-1.5 text-right text-gray-400">{{ formatThousandInteger(v.descKg) }}</td>
+                      <td class="px-3 py-1.5 text-right text-gray-400">{{ formatProjectionValue((v.descF/remanenteMixingRuleAnalysis.totalStockF)*100, 0) }}</td>
+                      <td class="px-3 py-1.5 text-right text-gray-400">—</td>
+                      <td class="px-3 py-1.5 text-right text-gray-400">0</td>
+                      <td class="px-3 py-1.5 text-right text-gray-400">0</td>
+                      <td class="px-3 py-1.5 text-right text-gray-400">{{ formatProjectionValue(v.descF, 0) }}</td>
+                    </tr>
+                    <!-- Zona TOLERANCIA (restringida) -->
+                    <tr class="bg-amber-50/60">
+                      <td class="px-3 py-1.5 font-semibold text-amber-700">Tolerancia</td>
+                      <td class="px-3 py-1.5 text-amber-700">{{ v.tolMin }} – {{ v.tolMax }}</td>
+                      <td class="px-3 py-1.5 text-right text-slate-700">{{ formatProjectionValue(v.tolF, 0) }}</td>
+                      <td class="px-3 py-1.5 text-right text-slate-700">{{ formatThousandInteger(v.tolKg) }}</td>
+                      <td class="px-3 py-1.5 text-right font-semibold"
+                          :class="v.pctTolStock > v.tolLimitPct ? 'text-red-700' : 'text-slate-600'">
+                        {{ formatProjectionValue(v.pctTolStock, 0) }}
                       </td>
-                      <td class="px-3 py-1.5 text-right text-xs text-slate-400">{{ row.limitePct !== null ? row.limitePct : '' }}</td>
-                      <td class="px-3 py-1.5 text-right text-xs text-slate-500 bg-emerald-50">
-                        {{ row.isLowRange ? formatProjectionValue(row.pctStock, 1) : '' }}
-                      </td>
-                      <td class="px-3 py-1.5 text-right text-xs text-emerald-700 bg-emerald-50">
-                        {{ row.usableKg !== null ? formatThousandInteger(row.usableKg) : '' }}
-                      </td>
-                      <td class="px-3 py-1.5 text-right text-xs bg-emerald-50">
-                        {{ row.pctUsable !== null ? formatProjectionValue(row.pctUsable, 1) : '' }}
-                      </td>
-                      <td class="px-3 py-1.5 text-right text-xs font-semibold bg-red-50"
-                          :class="row.sobranteKg !== null && row.sobranteKg > 0 ? 'text-red-700' : 'text-gray-300'">
-                        {{ row.sobranteKg !== null && row.sobranteKg > 0 ? formatThousandInteger(row.sobranteKg) : '' }}
+                      <td class="px-3 py-1.5 text-right text-slate-600">{{ v.tolF > 0 ? formatProjectionValue(v.tolAvg, 2) : '—' }}</td>
+                      <td class="px-3 py-1.5 text-right font-semibold text-amber-700">{{ v.tolLimitPct }}</td>
+                      <td class="px-3 py-1.5 text-right text-emerald-700">{{ formatProjectionValue(v.usableTolF, 0) }}</td>
+                      <td class="px-3 py-1.5 text-right font-semibold"
+                          :class="v.sobranteTolF > 0 ? 'text-red-700' : 'text-gray-300'">
+                        {{ v.sobranteTolF > 0 ? formatProjectionValue(v.sobranteTolF, 0) : '—' }}
                       </td>
                     </tr>
-                  </template>
-                </tbody>
-                <tfoot class="border-t-2 border-slate-300">
-                  <tr class="bg-slate-50">
-                    <td colspan="2" class="px-3 py-1.5 text-xs font-semibold text-slate-700"></td>
-                    <td class="px-3 py-1.5 text-right text-xs font-bold text-slate-800">{{ formatProjectionValue(remanenteMixingRuleAnalysis.totalFardos, 0) }}</td>
-                    <td class="px-3 py-1.5 text-right text-xs font-bold text-slate-800">{{ formatThousandInteger(remanenteMixingRuleAnalysis.totalKg) }}</td>
-                    <td colspan="2" class="px-3 py-1.5"></td>
-                    <td colspan="2" class="px-3 py-1.5 text-right text-xs font-bold text-emerald-800 bg-emerald-50">{{ formatThousandInteger(remanenteMixingRuleAnalysis.totalNeededKg) }}</td>
-                    <td colspan="2" class="px-3 py-1.5 bg-red-50"></td>
-                  </tr>
-                  <tr class="border-t border-slate-200">
-                    <td colspan="7" class="px-3 py-1.5 text-right text-xs font-semibold text-slate-600">A comprar</td>
-                    <td colspan="2" class="px-3 py-1.5 text-right text-sm font-bold text-red-700 bg-red-50">{{ formatThousandInteger(remanenteMixingRuleAnalysis.aComprarKg) }} kg</td>
-                  </tr>
-                  <tr class="border-t border-slate-200">
-                    <td colspan="7" class="px-3 py-1.5 text-right text-xs font-semibold text-slate-600">Entradas (25.000 kg)</td>
-                    <td colspan="2" class="px-3 py-1.5 text-right text-sm font-bold text-indigo-700 bg-indigo-50">{{ formatProjectionValue(remanenteMixingRuleAnalysis.entradasN, 1) }}</td>
-                  </tr>
-                </tfoot>
-              </table>
+                    <!-- Zona SUB-IDEAL (libre) -->
+                    <tr class="bg-sky-50/40">
+                      <td class="px-3 py-1.5 font-semibold text-sky-700">Sub-ideal</td>
+                      <td class="px-3 py-1.5 text-sky-700">{{ v.tolMax }} – {{ v.idealMin }}</td>
+                      <td class="px-3 py-1.5 text-right text-slate-700">{{ formatProjectionValue(v.subF, 0) }}</td>
+                      <td class="px-3 py-1.5 text-right text-slate-700">{{ formatThousandInteger(v.subKg) }}</td>
+                      <td class="px-3 py-1.5 text-right text-slate-600">{{ formatProjectionValue((v.subF/remanenteMixingRuleAnalysis.totalStockF)*100, 0) }}</td>
+                      <td class="px-3 py-1.5 text-right text-slate-600">{{ v.subF > 0 ? formatProjectionValue(v.subAvg, 2) : '—' }}</td>
+                      <td class="px-3 py-1.5 text-right text-slate-400">—</td>
+                      <td class="px-3 py-1.5 text-right text-emerald-700">{{ formatProjectionValue(v.subF, 0) }}</td>
+                      <td class="px-3 py-1.5 text-right text-gray-300">—</td>
+                    </tr>
+                    <!-- Zona IDEAL (libre) -->
+                    <tr class="bg-emerald-50/40">
+                      <td class="px-3 py-1.5 font-semibold text-emerald-700">Ideal</td>
+                      <td class="px-3 py-1.5 text-emerald-700">≥ {{ v.idealMin }}</td>
+                      <td class="px-3 py-1.5 text-right text-slate-700">{{ formatProjectionValue(v.ideF, 0) }}</td>
+                      <td class="px-3 py-1.5 text-right text-slate-700">{{ formatThousandInteger(v.ideKg) }}</td>
+                      <td class="px-3 py-1.5 text-right text-slate-600">{{ formatProjectionValue((v.ideF/remanenteMixingRuleAnalysis.totalStockF)*100, 0) }}</td>
+                      <td class="px-3 py-1.5 text-right text-emerald-700 font-semibold">{{ v.ideF > 0 ? formatProjectionValue(v.ideAvg, 2) : '—' }}</td>
+                      <td class="px-3 py-1.5 text-right text-slate-400">—</td>
+                      <td class="px-3 py-1.5 text-right text-emerald-700">{{ formatProjectionValue(v.ideF, 0) }}</td>
+                      <td class="px-3 py-1.5 text-right text-gray-300">—</td>
+                    </tr>
+                  </tbody>
+
+                  <!-- Líneas resumen -->
+                  <tfoot class="border-t-2 border-slate-300 text-xs">
+                    <!-- Total usable -->
+                    <tr class="bg-slate-50">
+                      <td colspan="2" class="px-3 py-1.5 font-semibold text-slate-700">Total usable del stock</td>
+                      <td class="px-3 py-1.5 text-right font-bold text-slate-800">{{ formatProjectionValue(v.totalUsableF, 0) }}</td>
+                      <td class="px-3 py-1.5 text-right font-bold text-slate-800">{{ formatThousandInteger(v.totalUsableKg) }}</td>
+                      <td colspan="5" class="px-3 py-1.5"></td>
+                    </tr>
+                    <!-- Faltante cantidad -->
+                    <tr :class="v.faltanteF > 0 ? 'bg-red-50' : 'bg-slate-50'">
+                      <td colspan="2" class="px-3 py-1.5 font-semibold"
+                          :class="v.faltanteF > 0 ? 'text-red-700' : 'text-slate-500'">
+                        {{ v.faltanteF > 0 ? '⚠ Faltante de cantidad' : '✓ Cantidad suficiente' }}
+                      </td>
+                      <td class="px-3 py-1.5 text-right font-bold"
+                          :class="v.faltanteF > 0 ? 'text-red-700' : 'text-emerald-600'">
+                        {{ v.faltanteF > 0 ? formatProjectionValue(v.faltanteF, 0) : '0' }}
+                      </td>
+                      <td class="px-3 py-1.5 text-right font-bold"
+                          :class="v.faltanteF > 0 ? 'text-red-700' : 'text-emerald-600'">
+                        {{ v.faltanteF > 0 ? formatThousandInteger(v.faltanteKg) : '—' }}
+                      </td>
+                      <td colspan="5" class="px-3 py-1.5"></td>
+                    </tr>
+                    <!-- Promedio estimado del bloque -->
+                    <tr :class="v.avgPromedioOK ? 'bg-emerald-50/60' : 'bg-amber-50'">
+                      <td colspan="2" class="px-3 py-1.5 font-semibold"
+                          :class="v.avgPromedioOK ? 'text-emerald-700' : 'text-amber-700'">
+                        {{ v.avgPromedioOK ? '✓ Promedio bloque OK' : '⚠ Promedio bloque insuficiente' }}
+                      </td>
+                      <td colspan="2" class="px-3 py-1.5 font-bold text-right"
+                          :class="v.avgPromedioOK ? 'text-emerald-700' : 'text-amber-700'">
+                        {{ formatProjectionValue(v.avgBloque, 2) }}
+                        <span class="font-normal text-slate-500 ml-1">(obj {{ formatProjectionValue(v.idealMin, 2) }})</span>
+                      </td>
+                      <td colspan="5" class="px-3 py-1.5"></td>
+                    </tr>
+                    <!-- A comprar -->
+                    <tr v-if="v.aComprarF > 0" class="bg-red-50 border-t border-red-200">
+                      <td colspan="2" class="px-3 py-1.5 font-bold text-red-800">A comprar</td>
+                      <td class="px-3 py-1.5 text-right font-bold text-red-800">{{ formatProjectionValue(v.aComprarF, 0) }} fardos</td>
+                      <td class="px-3 py-1.5 text-right font-bold text-red-800">{{ formatThousandInteger(v.aComprarKg) }} kg</td>
+                      <td colspan="2" class="px-3 py-1.5 text-slate-600">
+                        <span v-if="v.valorMinCompra !== null">
+                          valor HVI ≥ {{ formatProjectionValue(v.valorMinCompra, 2) }}
+                        </span>
+                      </td>
+                      <td colspan="3" class="px-3 py-1.5"></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              <!-- Resumen final: restricción vinculante -->
+              <div class="border rounded-lg overflow-hidden">
+                <div class="bg-slate-700 px-4 py-2">
+                  <span class="text-sm font-semibold text-white">Resumen — Restricción vinculante</span>
+                </div>
+                <div class="px-4 py-3 bg-slate-50 flex flex-wrap gap-6 text-sm">
+                  <div>
+                    <span class="text-slate-500 text-xs uppercase tracking-wide">A comprar (fardos)</span>
+                    <p class="text-xl font-bold text-red-700">{{ formatProjectionValue(remanenteMixingRuleAnalysis.maxAComprarF, 0) }}</p>
+                  </div>
+                  <div>
+                    <span class="text-slate-500 text-xs uppercase tracking-wide">A comprar (kg)</span>
+                    <p class="text-xl font-bold text-red-700">{{ formatThousandInteger(remanenteMixingRuleAnalysis.maxAComprarKg) }}</p>
+                  </div>
+                  <div>
+                    <span class="text-slate-500 text-xs uppercase tracking-wide">Entradas (25.000 kg)</span>
+                    <p class="text-xl font-bold text-indigo-700">{{ formatProjectionValue(remanenteMixingRuleAnalysis.entradasN, 1) }}</p>
+                  </div>
+                  <div>
+                    <span class="text-slate-500 text-xs uppercase tracking-wide">Bloque objetivo</span>
+                    <p class="text-base font-semibold text-slate-700">
+                      {{ formatProjectionValue(remanenteMixingRuleAnalysis.totalBloqueF, 0) }} fardos ·
+                      {{ formatThousandInteger(remanenteMixingRuleAnalysis.totalBloqueKg) }} kg
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div class="mt-3 text-xs text-emerald-900 bg-emerald-100/60 border border-emerald-200 rounded px-3 py-2">
@@ -2313,101 +2431,187 @@ const remanenteMixingRuleAnalysis = computed(() => {
   if (purchaseProjection.source !== 'remanente') return null;
 
   const fardosPorMezcla = Number(filters.fardos) || 0;
-  const targetMixes = Number(purchaseProjection.targetMixes) || 0;
+  const targetMixes    = Number(purchaseProjection.targetMixes) || 0;
   if (fardosPorMezcla <= 0 || targetMixes <= 0) return null;
 
   const saldoRows = saldoDisponibleRows.value;
   if (!saldoRows.length) return null;
 
-  // Totales del stock disponible
-  const totalFardos = saldoRows.reduce((s, r) => s + (Number(r.Fardos) || 0), 0);
-  const totalKg = saldoRows.reduce((s, r) => s + (Number(r.Kilogramos) || 0), 0);
-  if (totalFardos <= 0 || totalKg <= 0) return null;
+  // ── Totales del stock disponible ────────────────────────────────────────
+  const totalStockF  = saldoRows.reduce((s, r) => s + (Number(r.Fardos)      || 0), 0);
+  const totalStockKg = saldoRows.reduce((s, r) => s + (Number(r.Kilogramos)  || 0), 0);
+  if (totalStockF <= 0 || totalStockKg <= 0) return null;
 
-  const avgWeightPerBale = totalKg / totalFardos;
-  const kgMezcla = fardosPorMezcla * avgWeightPerBale;
-  const totalNeededKg = targetMixes * kgMezcla;
+  const avgWeightPerBale = totalStockKg / totalStockF;
 
-  // Variables a analizar: uiKey, parametro (para buscar regla), label, getter HVI
+  // ── Dimensiones del bloque objetivo ─────────────────────────────────────
+  const totalBloqueF  = fardosPorMezcla * targetMixes;         // total fardos a usar
+  const kgMezcla      = fardosPorMezcla * avgWeightPerBale;
+  const totalBloqueKg = totalBloqueF * avgWeightPerBale;        // ≡ kgMezcla × targetMixes
+
+  // ── Configuración de variables HVI a analizar ───────────────────────────
   const varCfg = [
-    { uiKey: 'MIC',  ruleKey: 'MIC', label: 'MIC',        getHvi: r => { const v = Number(r.MIC);  return isNaN(v) || v === 0 ? null : v; } },
-    { uiKey: 'STR',  ruleKey: 'STR', label: 'STR',        getHvi: r => { const v = Number(r.STR);  return isNaN(v) || v === 0 ? null : v; } },
-    { uiKey: 'UHML', ruleKey: 'LEN', label: 'LEN (UHML)', getHvi: r => { const v = Number(r.UHML); return isNaN(v) || v === 0 ? null : v; } },
+    { uiKey: 'MIC',  ruleKey: 'MIC', label: 'MIC',        getHvi: r => { const v = Number(r.MIC);  return (!isNaN(v) && v > 0) ? v : null; } },
+    { uiKey: 'STR',  ruleKey: 'STR', label: 'STR',        getHvi: r => { const v = Number(r.STR);  return (!isNaN(v) && v > 0) ? v : null; } },
+    { uiKey: 'UHML', ruleKey: 'LEN', label: 'LEN (UHML)', getHvi: r => { const v = Number(r.UHML); return (!isNaN(v) && v > 0) ? v : null; } },
   ];
 
-  const varRows = [];
-  let maxSobranteKg = 0; // restricción vinculante (la que genera más sobrante)
+  // ── Análisis por variable ────────────────────────────────────────────────
+  const varAnalysis = [];
 
   varCfg.forEach(({ uiKey, ruleKey, label, getHvi }) => {
     const rule = activeRules.value.find(r => r.parametro === ruleKey);
     if (!rule) return;
 
-    const idealMin = parseFloat(rule.valor_ideal_min);
-    const porcentajeMinIdeal = parseFloat(rule.porcentaje_min_ideal);
-    if (isNaN(idealMin) || isNaN(porcentajeMinIdeal)) return;
+    const idealMin = parseFloat(rule.valor_ideal_min);         // obj promedio  (e.g. 26.50)
+    const tolMin   = parseFloat(rule.rango_tol_min);           // tol inferior  (e.g. 25.00)
+    const tolMax   = parseFloat(rule.rango_tol_max);           // tol superior  (e.g. 26.00)
+    const pctIdeal = parseFloat(rule.porcentaje_min_ideal);    // % mínimo ideal (e.g. 80)
+    if ([idealMin, tolMin, tolMax, pctIdeal].some(isNaN)) return;
 
-    const maxTolPct = (100 - porcentajeMinIdeal) / 100; // ej. 0.20 para STR/LEN
-    const limitePct = 100 - porcentajeMinIdeal;          // ej. 20
+    // tolPct = fracción MÁXIMA del bloque que puede ser zona de tolerancia
+    const tolLimitPct = 100 - pctIdeal;                        // e.g. 20
+    const tolLimitF   = totalBloqueF * (tolLimitPct / 100);   // fardos máx tolerancia en bloque
 
-    // Etiqueta de rango bajo: usa rango_tol_min si existe
-    const tolMin = parseFloat(rule.rango_tol_min);
-    const rangoLowLabel = !isNaN(tolMin) ? `${tolMin} a ${idealMin}` : `< ${idealMin}`;
-    const rangoHighLabel = `> ${idealMin}`;
+    // ── Clasificar cada lote en 4 zonas ─────────────────────────────────
+    // Zona 1 - DESCARTADO:  val < tolMin
+    // Zona 2 - TOLERANCIA:  tolMin ≤ val < tolMax   (uso limitado al tolLimitPct %)
+    // Zona 3 - SUB-IDEAL:   tolMax ≤ val < idealMin (uso libre, pero arrastra promedio abajo)
+    // Zona 4 - IDEAL:       val ≥ idealMin           (uso libre, promedio objetivo OK)
+    let descF=0, descKg=0;
+    let tolF=0,  tolKg=0,  tolWsum=0;
+    let subF=0,  subKg=0,  subWsum=0;
+    let ideF=0,  ideKg=0,  ideWsum=0;
 
-    let lowFardos = 0, lowKg = 0, highFardos = 0, highKg = 0;
     saldoRows.forEach(row => {
       const val = getHvi(row);
       const f   = Number(row.Fardos) || 0;
       const kg  = Number(row.Kilogramos) || 0;
-      if (val === null) return;
-      if (val < idealMin) { lowFardos += f; lowKg += kg; }
-      else                { highFardos += f; highKg += kg; }
+      if (val === null || f <= 0) return;
+
+      if      (val < tolMin)   { descF += f; descKg += kg; }
+      else if (val < tolMax)   { tolF  += f; tolKg  += kg; tolWsum += val * f; }
+      else if (val < idealMin) { subF  += f; subKg  += kg; subWsum += val * f; }
+      else                     { ideF  += f; ideKg  += kg; ideWsum += val * f; }
     });
 
-    const pctLowStock = totalFardos > 0 ? (lowFardos / totalFardos) * 100 : 0;
+    // ── Usable de la zona tolerancia (limitado al tolLimitPct del bloque) ──
+    // Se usa proporcionalmente para conservar el promedio de la zona
+    const usableTolF  = Math.min(tolF, tolLimitF);
+    const tolRatio    = tolF > 0 ? usableTolF / tolF : 0;
+    const usableTolKg = tolKg * tolRatio;
+    const usableTolW  = tolWsum * tolRatio;
+    const sobranteTolF  = Math.max(0, tolF - usableTolF);
+    const sobranteTolKg = Math.max(0, tolKg - usableTolKg);
 
-    // Usable del rango bajo dentro del bloque de mezclas (limitado al % máximo)
-    const maxUsableLowKg = targetMixes * kgMezcla * maxTolPct;
-    const usableLowKg    = Math.min(lowKg, maxUsableLowKg);
-    const sobranteLowKg  = Math.max(0, lowKg - maxUsableLowKg);
-    const pctUsableLow   = totalNeededKg > 0 ? (usableLowKg / totalNeededKg) * 100 : 0;
+    // ── Total usable del stock por esta variable ─────────────────────────
+    // Sub-ideal + Ideal (sin límite) + Tolerancia (hasta límite)
+    const freeF   = subF + ideF;
+    const freeKg  = subKg + ideKg;
+    const freeW   = subWsum + ideWsum;
 
-    if (sobranteLowKg > maxSobranteKg) maxSobranteKg = sobranteLowKg;
+    const totalUsableF  = freeF + usableTolF;
+    const totalUsableKg = freeKg + usableTolKg;
 
-    // Fila rango BAJO (con límite)
-    varRows.push({
-      variable: label, uiKey, isLowRange: true,
-      rango: rangoLowLabel,
-      fardos: lowFardos, kg: lowKg,
-      pctStock: pctLowStock, limitePct,
-      pctUsable: pctUsableLow, usableKg: usableLowKg, sobranteKg: sobranteLowKg,
-    });
+    // ── PROBLEMA 1: Cantidad ─────────────────────────────────────────────
+    // ¿Hay suficientes fardos usables para armar el bloque completo?
+    const faltanteF  = Math.max(0, totalBloqueF - totalUsableF);
+    const faltanteKg = faltanteF * avgWeightPerBale;
 
-    // Fila rango ALTO (sin límite)
-    varRows.push({
-      variable: label, uiKey, isLowRange: false,
-      rango: rangoHighLabel,
-      fardos: highFardos, kg: highKg,
-      pctStock: totalFardos > 0 ? (highFardos / totalFardos) * 100 : 0,
-      limitePct: null, pctUsable: null, usableKg: null, sobranteKg: null,
+    // ── PROBLEMA 2: Promedio ─────────────────────────────────────────────
+    // Construyo la mezcla óptima: uso ideal+sub primero, luego tolerancia
+    // Para no necesitar ordenar por lote, trabajo con promedios de zona.
+    let bloqueF, bloqueW;
+    if (freeF >= totalBloqueF) {
+      // El bloque se llena íntegramente con fardos sub-ideal + ideal
+      // Aproximación: promedio proporcional de freeF (sin poder excluir los peores)
+      bloqueF = totalBloqueF;
+      bloqueW = freeF > 0 ? (freeW / freeF) * totalBloqueF : 0;
+    } else {
+      // Necesito llenar con tolerancia lo que no alcanza con freeF
+      const tolToUse   = Math.min(totalBloqueF - freeF, usableTolF);
+      const tolRatioUse = usableTolF > 0 ? tolToUse / usableTolF : 0;
+      bloqueF = freeF + tolToUse;
+      bloqueW = freeW + usableTolW * tolRatioUse;
+    }
+
+    const avgBloque = bloqueF > 0 ? bloqueW / bloqueF : 0;
+
+    // ── Cantidad a comprar por promedio (cuando hay cantidad suficiente) ──
+    // Fórmula regla de mezclas inversa:
+    // objetivo × totalBloqueF = avgBloque × bloqueF + valorCompra × compraF
+    // → compraF = totalBloqueF × (objetivo - avgBloque) / (valorCompra - avgBloque)
+    // Usamos valorCompra = idealMin como valor mínimo de compra razonable
+    let compraFPromedio = 0;
+    let valorMinCompra  = null;
+    if (faltanteF === 0 && avgBloque < idealMin) {
+      // Hay fardos suficientes pero el promedio no llega
+      // Necesitamos "swapear" los N peores por fardos nuevos ≥ idealMin
+      // compraF = totalBloqueF × (objetivo - avg) / (idealMin - avg)
+      const denom = idealMin - avgBloque;
+      if (denom > 0) {
+        compraFPromedio = Math.ceil(totalBloqueF * (idealMin - avgBloque) / denom);
+        valorMinCompra  = idealMin;
+      }
+    }
+
+    // ── Cuando hay faltante, ¿qué valor HVI deben tener los fardos a comprar? ─
+    // objetivo × totalBloqueF = avgBloque × (totalBloqueF - faltanteF) + Y × faltanteF
+    // → Y = (objetivo × totalBloqueF - avgBloque × (totalBloqueF - faltanteF)) / faltanteF
+    let valorCompraFaltante = null;
+    if (faltanteF > 0) {
+      const usadosStockF = totalBloqueF - faltanteF;
+      valorCompraFaltante = (idealMin * totalBloqueF - avgBloque * usadosStockF) / faltanteF;
+      valorMinCompra = valorCompraFaltante;
+    }
+
+    // ── Fardos a comprar = máximo entre restricción de cantidad y de promedio ─
+    const aComprarF  = Math.max(faltanteF, compraFPromedio);
+    const aComprarKg = aComprarF * avgWeightPerBale;
+
+    varAnalysis.push({
+      label, uiKey, ruleKey,
+      // Regla
+      idealMin, tolMin, tolMax, tolLimitPct,
+      // Stock por zona
+      descF, descKg,
+      tolF, tolKg, tolAvg: tolF > 0 ? tolWsum / tolF : 0,
+      subF, subKg, subAvg: subF > 0 ? subWsum / subF : 0,
+      ideF, ideKg, ideAvg: ideF > 0 ? ideWsum / ideF : 0,
+      // Usable
+      usableTolF, usableTolKg,
+      sobranteTolF, sobranteTolKg,
+      totalUsableF, totalUsableKg,
+      // % sobre el stock total
+      pctTolStock:  totalStockF > 0 ? (tolF / totalStockF) * 100 : 0,
+      pctFreeStock: totalStockF > 0 ? (freeF / totalStockF) * 100 : 0,
+      // Problema 1: cantidad
+      faltanteF, faltanteKg,
+      // Problema 2: promedio
+      avgBloque,
+      avgPromedioOK: avgBloque >= idealMin,
+      compraFPromedio,
+      // Resultado
+      aComprarF, aComprarKg,
+      valorMinCompra,          // valor HVI mínimo que deben tener los fardos a comprar
+      valorCompraFaltante,     // si hay faltante, valor HVI necesario para cumplir objetivo
     });
   });
 
-  if (!varRows.length) return null;
+  if (!varAnalysis.length) return null;
 
-  // Cálculo efectivo: descuento la restricción más severa (variable vinculante)
-  const effectiveAvailableKg  = totalKg - maxSobranteKg;
-  const aComprarKg            = Math.max(0, totalNeededKg - effectiveAvailableKg);
-  const aComprarFardos        = avgWeightPerBale > 0 ? Math.ceil(aComprarKg / avgWeightPerBale) : 0;
-  const entradasN             = aComprarKg / 25000;
+  // ── Resumen consolidado ─────────────────────────────────────────────────
+  // La restricción vinculante es la variable que pide más fardos a comprar
+  const maxAComprarF  = Math.max(...varAnalysis.map(v => v.aComprarF));
+  const maxAComprarKg = maxAComprarF * avgWeightPerBale;
+  const entradasN     = maxAComprarKg / 25000;
 
   return {
-    varRows,
-    totalFardos, totalKg,
-    kgMezcla, totalNeededKg,
-    maxSobranteKg, effectiveAvailableKg,
-    aComprarKg, aComprarFardos, entradasN,
+    varAnalysis,
+    totalStockF, totalStockKg,
+    totalBloqueF, totalBloqueKg, kgMezcla,
     avgWeightPerBale,
+    maxAComprarF, maxAComprarKg, entradasN,
   };
 });
 
@@ -2450,12 +2654,10 @@ const purchaseProjectionRows = computed(() => {
   const selectedVariables = activeProjectionVariables.value;
   const variableAverages = averageByQualityForVariable.value;
 
-  // Para remanente: reducir el disponible según el sobrante por reglas de mezcla.
-  // La fracción efectiva escala proporcionalmente el disponible de cada grupo de calidad.
-  const mixingAnalysis = purchaseProjection.source === 'remanente' ? remanenteMixingRuleAnalysis.value : null;
-  const effectiveFraction = (mixingAnalysis && mixingAnalysis.totalKg > 0)
-    ? Math.min(1, mixingAnalysis.effectiveAvailableKg / mixingAnalysis.totalKg)
-    : 1;
+  // Para remanente: el análisis de restricción real está en remanenteMixingRuleAnalysis.
+  // purchaseProjectionRows muestra la vista por calidad (sin escalar), la restricción
+  // vinculante per-variable se ve en la tabla de análisis por reglas de mezcla.
+  const effectiveFraction = 1;
 
   return recipeByQualityPerMix.value.map((recipeRow) => {
     const required = recipeRow.recetaPorMezcla * targetMixes;
