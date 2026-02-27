@@ -5601,12 +5601,18 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
             p."HORA_INICIO",
             ${pDate('p."DT_FINAL"')}        AS dt_fin_parsed,
             p."HORA_FINAL",
-            ${pNumI('p."METRAGEM"')}        AS metros_val,
-            ${pNum('p."RUPTURAS"')}         AS rupturas_val,
-            ${pNumI('p."NUM_FIOS"')}        AS num_fios_val,
+            ${pNumI('p."METRAGEM"')}                AS metros_val,
+            ${pNum('p."RUPTURAS"')}                 AS rupturas_val,
+            ${pNumI('p."NUM_FIOS"')}                AS num_fios_val,
+            ${pNumI('p."CAVALOS"')}                 AS cavalos_val,
+            ${pNumI('p."VELOC"')}                   AS veloc_val,
+            ${pNum('p."PONTOS_LIDOS"')}             AS pontos_lidos_val,
+            ${pNum('p."PONTOS_100%"')}              AS pontos_100_val,
+            ${pNum('p."PARADA TEC TRAMA"')}         AS par_trama_val,
+            ${pNum('p."PARADA TEC URDUME"')}        AS par_urd_val,
             p."ARTIGO",
             p."COR",
-            p."NM MERCADO"                  AS nm_mercado
+            p."NM MERCADO"                          AS nm_mercado
           FROM tb_produccion p
           WHERE p."FILIAL" = $2
             AND (
@@ -5657,7 +5663,7 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
           ) sub
           GROUP BY sub."MAQUINA"
         ),
-        -- ROT 106 por maquina: SUM(RUPTURAS*1e6) / NULLIF(SUM(METRAGEM*NUM_FIOS),0)
+        -- ROT 106 por maquina (URDIDEIRA/URDIDORA)
         rot106_maq AS (
           SELECT
             "MAQUINA",
@@ -5668,6 +5674,37 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
           FROM base
           WHERE "SELETOR" IN ('URDIDEIRA', 'URDIDORA')
             AND num_fios_val > 0
+          GROUP BY "MAQUINA"
+        ),
+        -- INDIGO: R10³, Cav 10⁵, Vel.Nom
+        indigo_vals AS (
+          SELECT
+            "MAQUINA",
+            ROUND(SUM(rupturas_val) * 1000.0   / NULLIF(SUM(metros_val), 0), 2) AS r103,
+            ROUND(SUM(cavalos_val) * 100000.0  / NULLIF(SUM(metros_val), 0), 1) AS cav105,
+            MAX(veloc_val) AS vel_nom
+          FROM base
+          WHERE "SELETOR" = 'INDIGO'
+          GROUP BY "MAQUINA"
+        ),
+        -- TECELAGEM: Efic%, RU10⁵, RT10⁵
+        tecelagem_vals AS (
+          SELECT
+            "MAQUINA",
+            ROUND(SUM(pontos_lidos_val) * 100.0  / NULLIF(SUM(pontos_100_val), 0), 1) AS efic_pct,
+            ROUND(SUM(par_urd_val) * 100000.0    / NULLIF(SUM(pontos_lidos_val) * 1000, 0), 1) AS ru105,
+            ROUND(SUM(par_trama_val) * 100000.0  / NULLIF(SUM(pontos_lidos_val) * 1000, 0), 1) AS rt105
+          FROM base
+          WHERE "SELETOR" = 'TECELAGEM'
+          GROUP BY "MAQUINA"
+        ),
+        -- ACABAMENTO: Velocidad
+        acabamento_vals AS (
+          SELECT
+            "MAQUINA",
+            MAX(veloc_val) AS veloc
+          FROM base
+          WHERE "SELETOR" ILIKE 'ACABAMENTO%'
           GROUP BY "MAQUINA"
         ),
         primera_hora AS (
@@ -5698,17 +5735,24 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
           END               AS metros,
           pm.partida_display,
           rm.rot_106,
+          iv.r103,     iv.cav105,  iv.vel_nom,
+          tv.efic_pct, tv.ru105,   tv.rt105,
+          av.veloc,
           pm.artigo,
           pm.cor,
           pm.nm_mercado
         FROM por_maquina pm
-        LEFT JOIN primera_hora ph ON ph."MAQUINA" = pm."MAQUINA"
-        LEFT JOIN ultima_hora  uh ON uh."MAQUINA" = pm."MAQUINA"
-        LEFT JOIN beam_max     bm ON bm."MAQUINA" = pm."MAQUINA"
-        LEFT JOIN rot106_maq   rm ON rm."MAQUINA" = pm."MAQUINA"
+        LEFT JOIN primera_hora   ph ON ph."MAQUINA" = pm."MAQUINA"
+        LEFT JOIN ultima_hora    uh ON uh."MAQUINA" = pm."MAQUINA"
+        LEFT JOIN beam_max       bm ON bm."MAQUINA" = pm."MAQUINA"
+        LEFT JOIN rot106_maq     rm ON rm."MAQUINA" = pm."MAQUINA"
+        LEFT JOIN indigo_vals    iv ON iv."MAQUINA" = pm."MAQUINA"
+        LEFT JOIN tecelagem_vals tv ON tv."MAQUINA" = pm."MAQUINA"
+        LEFT JOIN acabamento_vals av ON av."MAQUINA" = pm."MAQUINA"
         ORDER BY pm.dt_inicio ASC NULLS LAST, pm."MAQUINA" ASC
       `;
       const resHistorial = await query(sqlHistorial, [partidaCandidates, filial, roladaDerivada], 'partida-tej/historial');
+      const pf = v => (v !== null && v !== undefined) ? parseFloat(v) : null;
       historial = (resHistorial.rows || []).map(r => ({
         maquina:         r.maquina,
         seletor:         r.seletor,
@@ -5716,8 +5760,18 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
         hora_inicio:     r.hora_inicio,
         dt_final:        r.dt_final,
         hora_final:      r.hora_final,
-        metros:          r.metros !== null ? parseFloat(r.metros) : null,
-        rot_106:         r.rot_106 !== null && r.rot_106 !== undefined ? parseFloat(r.rot_106) : null,
+        metros:          pf(r.metros),
+        rot_106:         pf(r.rot_106),
+        // INDIGO
+        r103:            pf(r.r103),
+        cav105:          pf(r.cav105),
+        vel_nom:         pf(r.vel_nom),
+        // TECELAGEM
+        efic_pct:        pf(r.efic_pct),
+        ru105:           pf(r.ru105),
+        rt105:           pf(r.rt105),
+        // ACABAMENTO
+        veloc:           pf(r.veloc),
         partida_display: r.partida_display || '',
         artigo:          r.artigo,
         cor:             r.cor,
@@ -5740,6 +5794,9 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
             ${pDate('c."DAT_PROD"')}                  AS dat_prod_parsed,
             LPAD(TRIM(COALESCE(c."HORA"::text, '0')), 4, '0') AS hora_fmt,
             ${pNum('c."METRAGEM"')}                   AS metros_val,
+            ${pNum('c."PONTUACAO"')}                 AS pontuacao_val,
+            ${pNum('c."LARGURA"')}                   AS largura_val,
+            UPPER(TRIM(COALESCE(c."QUALIDADE"::text, ''))) AS qualidade_val,
             c."ARTIGO",
             c."COR",
             c."NM MERC"                               AS nm_mercado
@@ -5774,6 +5831,14 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
           mx.dat_final,
           mx.hora_final,
           ROUND(SUM(b.metros_val)::numeric, 0)  AS metros,
+          ROUND(
+            SUM(CASE WHEN b.qualidade_val LIKE 'PRIMEIRA%' THEN b.metros_val ELSE 0 END)
+            * 100.0 / NULLIF(SUM(b.metros_val), 0)
+          , 1)                                  AS cal_pct,
+          ROUND(
+            SUM(b.pontuacao_val) * 100.0
+            / NULLIF(SUM(b.metros_val * COALESCE(b.largura_val, 0) / 100.0), 0)
+          , 1)                                  AS pts_100m2,
           MAX(b."ARTIGO")                       AS artigo,
           MAX(b."COR")                          AS cor,
           MAX(b.nm_mercado)                     AS nm_mercado
@@ -5792,6 +5857,8 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
         dat_final:   r.dat_final,
         hora_final:  r.hora_final  || '',
         metros:      r.metros !== null ? parseFloat(r.metros) : null,
+        cal_pct:     r.cal_pct  !== null && r.cal_pct  !== undefined ? parseFloat(r.cal_pct)  : null,
+        pts_100m2:   r.pts_100m2 !== null && r.pts_100m2 !== undefined ? parseFloat(r.pts_100m2) : null,
         artigo:      r.artigo,
         cor:         r.cor,
         nm_mercado:  r.nm_mercado

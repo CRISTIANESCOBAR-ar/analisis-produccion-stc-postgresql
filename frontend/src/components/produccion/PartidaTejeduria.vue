@@ -175,7 +175,7 @@
                   <th class="px-3 py-2 text-center border-r border-slate-200 font-semibold whitespace-nowrap">Fecha Fin</th>
                   <th class="px-3 py-2 text-center border-r border-slate-200 font-semibold">Hora</th>
                   <th class="px-3 py-2 text-right border-r border-slate-200 font-semibold">Metros</th>
-                  <th class="px-3 py-2 text-right border-r border-slate-200 font-semibold whitespace-nowrap">Rot 106</th>
+                  <th class="px-3 py-2 text-left border-r border-slate-200 font-semibold whitespace-nowrap">Valores Proceso</th>
                   <th class="px-3 py-2 text-left border-r border-slate-200 font-semibold">Artículo</th>
                   <th class="px-3 py-2 text-center border-r border-slate-200 font-semibold">Color</th>
                   <th class="px-3 py-2 text-left font-semibold">Nombre</th>
@@ -206,9 +206,65 @@
                   <td class="px-3 py-1.5 text-center border-r border-slate-100 whitespace-nowrap text-slate-600">{{ formatFecha(h.dt_final) }}</td>
                   <td class="px-3 py-1.5 text-center border-r border-slate-100 font-mono text-slate-700">{{ fmtHora(h.hora_final) }}</td>
                   <td class="px-3 py-1.5 text-right border-r border-slate-100 font-bold text-slate-800">{{ fmtNum(h.metros, 0) }}</td>
-                  <td class="px-3 py-1.5 text-right border-r border-slate-100 font-mono"
-                    :class="h.rot_106 != null ? (h.rot_106 <= 1 ? 'text-green-700 font-bold' : h.rot_106 <= 2 ? 'text-amber-600 font-bold' : 'text-red-600 font-bold') : 'text-slate-300'">
-                    {{ (h.seletor === 'URDIDEIRA' || h.seletor === 'URDIDORA') && h.rot_106 != null ? h.rot_106.toFixed(2).replace('.', ',') : '–' }}
+                  <!-- Valores Proceso condicional por sector -->
+                  <td class="px-3 py-1.5 border-r border-slate-100">
+                    <!-- URDIDEIRA / URDIDORA: Rot 10⁶ -->
+                    <template v-if="h.seletor === 'URDIDEIRA' || h.seletor === 'URDIDORA'">
+                      <div v-if="h.rot_106 != null" class="flex items-center gap-1 text-[10px]">
+                        <span class="text-slate-400">Rot 10⁶</span>
+                        <span :class="h.rot_106 <= 1 ? 'text-green-700 font-bold' : h.rot_106 <= 2 ? 'text-amber-600 font-bold' : 'text-red-600 font-bold'">
+                          {{ h.rot_106.toFixed(2).replace('.', ',') }}
+                        </span>
+                      </div>
+                      <span v-else class="text-slate-300 text-[10px]">–</span>
+                    </template>
+                    <!-- INDIGO: R10³ + Cav 10⁵ + Vel -->
+                    <template v-else-if="h.seletor === 'INDIGO'">
+                      <div class="flex flex-col gap-0.5 text-[10px] text-slate-600">
+                        <div v-if="h.r103 != null" class="flex items-center gap-1">
+                          <span class="text-slate-400">R10³</span>
+                          <span class="font-semibold tabular-nums">{{ h.r103.toFixed(2).replace('.', ',') }}</span>
+                        </div>
+                        <div v-if="h.cav105 != null" class="flex items-center gap-1">
+                          <span class="text-slate-400">Cav 10⁵</span>
+                          <span class="font-semibold tabular-nums">{{ h.cav105.toFixed(1).replace('.', ',') }}</span>
+                        </div>
+                        <div v-if="h.vel_nom != null" class="flex items-center gap-1">
+                          <span class="text-slate-400">Vel.</span>
+                          <span class="font-semibold tabular-nums">{{ Math.round(h.vel_nom) }}</span>
+                        </div>
+                      </div>
+                    </template>
+                    <!-- TECELAGEM: Efic% + RU10⁵ + RT10⁵ -->
+                    <template v-else-if="h.seletor === 'TECELAGEM'">
+                      <div class="flex flex-col gap-0.5 text-[10px] text-slate-600">
+                        <div v-if="h.efic_pct != null" class="flex items-center gap-1">
+                          <span class="text-slate-400">Efic.%</span>
+                          <span :class="h.efic_pct >= 90 ? 'text-green-700 font-bold' : h.efic_pct >= 80 ? 'text-amber-600 font-semibold' : 'text-red-600 font-semibold'" class="tabular-nums">
+                            {{ h.efic_pct.toFixed(1).replace('.', ',') }}
+                          </span>
+                        </div>
+                        <div v-if="h.ru105 != null" class="flex items-center gap-1">
+                          <span class="text-slate-400">RU10⁵</span>
+                          <span class="font-semibold tabular-nums">{{ h.ru105.toFixed(1).replace('.', ',') }}</span>
+                        </div>
+                        <div v-if="h.rt105 != null" class="flex items-center gap-1">
+                          <span class="text-slate-400">RT10⁵</span>
+                          <span class="font-semibold tabular-nums">{{ h.rt105.toFixed(1).replace('.', ',') }}</span>
+                        </div>
+                      </div>
+                    </template>
+                    <!-- ACABAMENTO: Velocidad -->
+                    <template v-else-if="h.seletor && h.seletor.toUpperCase().startsWith('ACABAMENTO')">
+                      <div v-if="h.veloc != null" class="flex items-center gap-1 text-[10px]">
+                        <span class="text-slate-400">Vel.</span>
+                        <span class="font-semibold tabular-nums text-slate-600">{{ Math.round(h.veloc) }}</span>
+                      </div>
+                      <span v-else class="text-slate-300 text-[10px]">–</span>
+                    </template>
+                    <template v-else>
+                      <span class="text-slate-300 text-[10px]">–</span>
+                    </template>
                   </td>
                   <td class="px-3 py-1.5 border-r border-slate-100 text-slate-600">{{ (h.artigo || '–').substring(0, 10) }}</td>
                   <td class="px-3 py-1.5 text-center border-r border-slate-100 text-slate-500">{{ h.cor || '–' }}</td>
@@ -233,7 +289,21 @@
                   <td class="px-3 py-1.5 text-center border-r border-slate-100 whitespace-nowrap text-slate-600">{{ formatFecha(c.dat_final) }}</td>
                   <td class="px-3 py-1.5 text-center border-r border-slate-100 font-mono text-slate-700">{{ c.hora_final || '–' }}</td>
                   <td class="px-3 py-1.5 text-right border-r border-slate-100 font-bold text-slate-800">{{ fmtNum(c.metros, 0) }}</td>
-                  <td class="px-3 py-1.5 border-r border-slate-100 text-slate-300">–</td>
+                  <!-- Calidad: Cal% + Pts/100m² -->
+                  <td class="px-3 py-1.5 border-r border-slate-100">
+                    <div class="flex flex-col gap-0.5 text-[10px] text-slate-600">
+                      <div v-if="c.cal_pct != null" class="flex items-center gap-1">
+                        <span class="text-slate-400">Cal.%</span>
+                        <span :class="c.cal_pct >= 95 ? 'text-emerald-700 font-bold' : c.cal_pct >= 85 ? 'text-amber-600 font-semibold' : 'text-red-600 font-semibold'" class="tabular-nums">
+                          {{ c.cal_pct.toFixed(1).replace('.', ',') }}
+                        </span>
+                      </div>
+                      <div v-if="c.pts_100m2 != null" class="flex items-center gap-1">
+                        <span class="text-slate-400">Pts/m²</span>
+                        <span class="font-semibold tabular-nums">{{ c.pts_100m2.toFixed(1).replace('.', ',') }}</span>
+                      </div>
+                    </div>
+                  </td>
                   <td class="px-3 py-1.5 border-r border-slate-100 text-slate-600">{{ (c.artigo || '–').substring(0, 10) }}</td>
                   <td class="px-3 py-1.5 text-center border-r border-slate-100 text-slate-500">{{ c.cor || '–' }}</td>
                   <td class="px-3 py-1.5 text-slate-600">{{ c.nm_mercado || '–' }}</td>
