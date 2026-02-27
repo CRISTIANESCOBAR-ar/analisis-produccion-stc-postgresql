@@ -882,11 +882,19 @@
                     Obj promedio ≥ {{ formatProjectionValue(v.idealMin, 2) }} ·
                     Tolerancia {{ v.tolMin }}–{{ v.tolMax }} max {{ v.tolLimitPct }}%
                   </span>
-                  <span v-if="v.aComprarF === 0" class="ml-auto text-xs font-semibold text-emerald-700">✓ Sin necesidad de compra</span>
-                  <span v-else class="ml-auto text-xs font-semibold text-red-700">
+                  <span v-if="v.aComprarF === 0" class="text-xs font-semibold text-emerald-700">✓ Sin necesidad de compra</span>
+                  <span v-else class="text-xs font-semibold text-red-700">
                     A comprar: {{ formatProjectionValue(v.aComprarF, 0) }} fardos
                     ({{ formatThousandInteger(v.aComprarKg) }} kg)
                   </span>
+                  <button @click="openMixDetailModal(v.uiKey)"
+                          class="ml-auto flex items-center gap-1 text-xs px-2.5 py-1 rounded border font-medium transition-colors"
+                          :class="v.aComprarF > 0
+                            ? 'bg-white border-red-300 text-red-700 hover:bg-red-50'
+                            : 'bg-white border-emerald-300 text-emerald-700 hover:bg-emerald-50'">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                    Ver detalle fardo a fardo
+                  </button>
                 </div>
 
                 <table class="min-w-full text-xs">
@@ -1188,6 +1196,169 @@
       Mostrando {{ sortedFilteredData.length }} registros
     </div>
   </div>
+
+  <!-- ── Modal: Detalle fardo a fardo por variable ────────────────────────── -->
+  <Teleport to="body">
+    <div v-if="mixDetailModal.visible"
+         class="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-8 px-4 pb-4"
+         @click.self="closeMixDetailModal">
+      <div class="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
+
+        <!-- Header del modal -->
+        <div class="flex items-center gap-3 px-5 py-3 border-b bg-slate-50 flex-shrink-0">
+          <span class="text-base font-bold text-slate-800">
+            Detalle stock — {{ mixDetailVarItem?.label }}
+          </span>
+          <span v-if="mixDetailVarItem" class="text-xs px-2 py-0.5 rounded font-mono bg-slate-200 text-slate-700">
+            Regla {{ mixDetailVarItem.tolLimitPct === 10 ? '90/10' : mixDetailVarItem.tolLimitPct === 20 ? '80/20' : (100-mixDetailVarItem.tolLimitPct)+'/'+mixDetailVarItem.tolLimitPct }}
+          </span>
+          <span v-if="mixDetailVarItem" class="text-xs text-slate-500">
+            Tol. {{ mixDetailVarItem.tolMin }}–{{ mixDetailVarItem.tolMax }} ·
+            Ideal ≥ {{ mixDetailVarItem.idealMin }}
+          </span>
+          <button @click="closeMixDetailModal"
+                  class="ml-auto p-1 rounded hover:bg-slate-200 text-slate-500 hover:text-slate-800 transition-colors">
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Leyenda de zonas -->
+        <div class="flex flex-wrap gap-3 px-5 py-2 border-b bg-white text-xs flex-shrink-0">
+          <span class="flex items-center gap-1.5">
+            <span class="inline-block w-3 h-3 rounded-sm bg-emerald-200 border border-emerald-400"></span> Ideal
+          </span>
+          <span class="flex items-center gap-1.5">
+            <span class="inline-block w-3 h-3 rounded-sm bg-sky-200 border border-sky-400"></span> Sub-ideal (libre)
+          </span>
+          <span class="flex items-center gap-1.5">
+            <span class="inline-block w-3 h-3 rounded-sm bg-amber-200 border border-amber-400"></span> Tolerancia usada
+          </span>
+          <span class="flex items-center gap-1.5">
+            <span class="inline-block w-3 h-3 rounded-sm bg-orange-200 border border-orange-400"></span> Tolerancia sobrante
+          </span>
+          <span class="flex items-center gap-1.5">
+            <span class="inline-block w-3 h-3 rounded-sm bg-gray-200 border border-gray-400"></span> Descartado / Sin dato
+          </span>
+        </div>
+
+        <!-- Tabla -->
+        <div class="overflow-auto flex-1">
+          <table class="min-w-full text-xs">
+            <thead class="sticky top-0 bg-slate-100 border-b border-slate-300 z-10">
+              <tr>
+                <th class="px-3 py-2 text-left font-semibold text-slate-700">#</th>
+                <th class="px-3 py-2 text-left font-semibold text-slate-700">Proveedor</th>
+                <th class="px-3 py-2 text-left font-semibold text-slate-700">Lote</th>
+                <th class="px-3 py-2 text-right font-semibold text-slate-700">Saldo Disp.</th>
+                <th class="px-3 py-2 text-right font-semibold text-emerald-800">Fardos Usados</th>
+                <th class="px-3 py-2 text-right font-semibold text-red-800">Fardos No Usados</th>
+                <th class="px-3 py-2 text-left font-semibold text-slate-700">Condición</th>
+                <th class="px-3 py-2 text-left font-semibold text-slate-700">Motivo (no usado)</th>
+                <th class="px-3 py-2 text-right font-semibold text-slate-700">{{ mixDetailVarItem?.label }}</th>
+                <th class="px-3 py-2 text-right font-semibold text-slate-700">Peso Medio</th>
+                <th class="px-3 py-2 text-right font-semibold text-emerald-800">Kg Usables</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-for="(row, idx) in mixDetailRows" :key="`mdr-${row.LOTE}-${idx}`"
+                  :class="{
+                    'bg-emerald-50/60': row.zona === 'Ideal',
+                    'bg-sky-50/50':     row.zona === 'Sub-ideal',
+                    'bg-amber-50/60':   row.zona === 'Tolerancia' && !row.noUsado,
+                    'bg-orange-50/60':  row.zona === 'Tolerancia' && row.noUsado,
+                    'bg-gray-100/70':   row.zona === 'Descartado' || row.zona === 'Sin dato',
+                  }">
+                <td class="px-3 py-1.5 text-slate-400">{{ idx + 1 }}</td>
+                <td class="px-3 py-1.5 font-medium text-slate-800">{{ row.PRODUTOR }}</td>
+                <td class="px-3 py-1.5 font-mono text-slate-700">{{ row.LOTE }}</td>
+                <td class="px-3 py-1.5 text-right text-slate-700">{{ formatProjectionValue(row.SALDO_DISPONIVEL, 0) }}</td>
+                <!-- Fardos usados -->
+                <td class="px-3 py-1.5 text-right font-semibold"
+                    :class="row.usadosF > 0 ? 'text-emerald-700' : 'text-gray-300'">
+                  {{ row.usadosF > 0.005 ? formatProjectionValue(row.usadosF, 1) : '—' }}
+                </td>
+                <!-- Fardos no usados -->
+                <td class="px-3 py-1.5 text-right font-semibold"
+                    :class="row.sobranteF > 0.005 ? 'text-red-700' : 'text-gray-300'">
+                  {{ row.sobranteF > 0.005 ? formatProjectionValue(row.sobranteF, 1) : '—' }}
+                </td>
+                <!-- Condición -->
+                <td class="px-3 py-1.5">
+                  <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold"
+                        :class="{
+                          'bg-emerald-100 text-emerald-800': row.zona === 'Ideal',
+                          'bg-sky-100 text-sky-800':         row.zona === 'Sub-ideal',
+                          'bg-amber-100 text-amber-800':     row.zona === 'Tolerancia' && !row.noUsado,
+                          'bg-orange-100 text-orange-800':   row.zona === 'Tolerancia' && row.noUsado,
+                          'bg-gray-100 text-gray-500':       row.zona === 'Descartado' || row.zona === 'Sin dato',
+                        }">
+                    {{ row.condicion }}
+                  </span>
+                </td>
+                <!-- Motivo -->
+                <td class="px-3 py-1.5 text-slate-500 italic">{{ row.motivo || '—' }}</td>
+                <!-- Valor HVI -->
+                <td class="px-3 py-1.5 text-right font-mono font-semibold"
+                    :class="{
+                      'text-emerald-700': row.hvi !== null && row.hvi >= (mixDetailVarItem?.idealMin || 0),
+                      'text-sky-700':     row.hvi !== null && row.hvi >= (mixDetailVarItem?.tolMax || 0) && row.hvi < (mixDetailVarItem?.idealMin || 0),
+                      'text-amber-700':   row.hvi !== null && row.hvi >= (mixDetailVarItem?.tolMin || 0) && row.hvi < (mixDetailVarItem?.tolMax || 0),
+                      'text-gray-400':    row.hvi === null || row.hvi < (mixDetailVarItem?.tolMin || 0),
+                    }">
+                  {{ row.hvi !== null ? formatProjectionValue(row.hvi, 2) : '—' }}
+                </td>
+                <!-- Peso Medio -->
+                <td class="px-3 py-1.5 text-right text-slate-600">{{ formatProjectionValue(row.pesoMedio, 0) }}</td>
+                <!-- Kg Usables -->
+                <td class="px-3 py-1.5 text-right font-semibold"
+                    :class="row.usadosKg > 0 ? 'text-emerald-700' : 'text-gray-300'">
+                  {{ row.usadosKg > 0 ? formatThousandInteger(row.usadosKg) : '—' }}
+                </td>
+              </tr>
+            </tbody>
+
+            <!-- Pie: totales y promedios ponderados -->
+            <tfoot v-if="mixDetailSummary" class="border-t-2 border-slate-400 bg-slate-100 sticky bottom-0">
+              <tr>
+                <td colspan="3" class="px-3 py-2 font-semibold text-slate-700 text-xs">TOTAL / PROM. PONDERADO</td>
+                <td class="px-3 py-2 text-right font-bold text-slate-800">{{ formatProjectionValue(remanenteMixingRuleAnalysis?.totalStockF, 0) }}</td>
+                <td class="px-3 py-2 text-right font-bold text-emerald-800">{{ formatProjectionValue(mixDetailSummary.totalUsadosF, 1) }}</td>
+                <td class="px-3 py-2 text-right font-bold text-red-800">{{ formatProjectionValue(mixDetailSummary.totalSobranteF, 1) }}</td>
+                <td colspan="2" class="px-3 py-2"></td>
+                <!-- Prom HVI usados -->
+                <td class="px-3 py-2 text-right font-bold">
+                  <div class="text-emerald-800">
+                    {{ mixDetailSummary.avgHviUsados !== null ? formatProjectionValue(mixDetailSummary.avgHviUsados, 2) : '—' }}
+                    <span class="text-[10px] font-normal text-slate-500"> usados</span>
+                  </div>
+                  <div class="text-orange-700" v-if="mixDetailSummary.avgHviSobrante !== null">
+                    {{ formatProjectionValue(mixDetailSummary.avgHviSobrante, 2) }}
+                    <span class="text-[10px] font-normal text-slate-500"> sobrantes</span>
+                  </div>
+                </td>
+                <td class="px-3 py-2"></td>
+                <td class="px-3 py-2 text-right font-bold text-emerald-800">{{ formatThousandInteger(mixDetailSummary.totalUsadosKg) }}</td>
+              </tr>
+              <!-- Señal de promedio vs objetivo -->
+              <tr v-if="mixDetailVarItem" class="border-t border-slate-300">
+                <td colspan="11" class="px-3 py-1.5 text-xs">
+                  <span :class="mixDetailSummary.avgHviUsados !== null && mixDetailSummary.avgHviUsados >= mixDetailVarItem.idealMin ? 'text-emerald-700 font-semibold' : 'text-amber-700 font-semibold'">
+                    {{ mixDetailSummary.avgHviUsados !== null && mixDetailSummary.avgHviUsados >= mixDetailVarItem.idealMin
+                      ? `✓ Promedio ${mixDetailVarItem.label} de los fardos usados (${formatProjectionValue(mixDetailSummary.avgHviUsados, 2)}) cumple el objetivo ≥ ${mixDetailVarItem.idealMin}`
+                      : `⚠ Promedio ${mixDetailVarItem.label} de los fardos usados (${mixDetailSummary.avgHviUsados !== null ? formatProjectionValue(mixDetailSummary.avgHviUsados, 2) : '—'}) NO alcanza el objetivo ≥ ${mixDetailVarItem.idealMin}` }}
+                  </span>
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+      </div>
+    </div>
+  </Teleport>
+
 </template>
 
 <script setup>
@@ -2627,6 +2798,123 @@ const remanenteMixingRuleAnalysis = computed(() => {
     totalBloqueF, totalBloqueKg, kgMezcla,
     avgWeightPerBale,
     maxAComprarF, maxAComprarKg, entradasN,
+  };
+});
+
+// ── Modal: detalle fardo a fardo por variable ───────────────────────────────
+const mixDetailModal = reactive({ visible: false, uiKey: null });
+
+function openMixDetailModal(uiKey) {
+  mixDetailModal.uiKey  = uiKey;
+  mixDetailModal.visible = true;
+}
+function closeMixDetailModal() {
+  mixDetailModal.visible = false;
+  mixDetailModal.uiKey  = null;
+}
+
+const mixDetailVarItem = computed(() =>
+  mixDetailModal.uiKey && remanenteMixingRuleAnalysis.value
+    ? (remanenteMixingRuleAnalysis.value.varAnalysis.find(v => v.uiKey === mixDetailModal.uiKey) || null)
+    : null
+);
+
+const mixDetailRows = computed(() => {
+  const varItem = mixDetailVarItem.value;
+  if (!varItem) return [];
+
+  const { idealMin, tolMin, tolMax, tolLimitPct, usableTolF, tolF } = varItem;
+  const bloqueF  = remanenteMixingRuleAnalysis.value?.totalBloqueF || 0;
+  const tolRatio = tolF > 0 ? usableTolF / tolF : 0;
+
+  const hviGetters = {
+    MIC:  r => { const v = Number(r.MIC);  return (!isNaN(v) && v > 0) ? v : null; },
+    STR:  r => { const v = Number(r.STR);  return (!isNaN(v) && v > 0) ? v : null; },
+    UHML: r => { const v = Number(r.UHML); return (!isNaN(v) && v > 0) ? v : null; },
+  };
+  const getHvi = hviGetters[mixDetailModal.uiKey];
+  if (!getHvi) return [];
+
+  const ZONE_ORDER = { 'Ideal': 0, 'Sub-ideal': 1, 'Tolerancia': 2, 'Sobrante tol.': 3, 'Descartado': 4, 'Sin dato': 5 };
+
+  const rows = saldoDisponibleRows.value.map(row => {
+    const val       = getHvi(row);
+    const fardos    = Number(row.Fardos)    || 0;
+    const pesoMedio = Number(row.PesoMedio) || 0;
+    const kgTotal   = fardos * pesoMedio;
+
+    let zona, condicion, noUsado, motivo, usadosF, usadosKg;
+
+    if (val === null) {
+      zona = 'Sin dato'; condicion = 'Sin valor HVI'; noUsado = true;
+      motivo  = 'Sin dato HVI — no clasificable';
+      usadosF = 0; usadosKg = 0;
+    } else if (val < tolMin) {
+      zona = 'Descartado'; condicion = 'Descartado'; noUsado = true;
+      motivo  = `${mixDetailModal.uiKey} ${val.toFixed(2)} < ${tolMin} (mínimo absoluto)`;
+      usadosF = 0; usadosKg = 0;
+    } else if (val < tolMax) {
+      // Tolerancia: asignación proporcional según el cupo disponible
+      usadosF  = fardos * tolRatio;
+      usadosKg = usadosF * pesoMedio;
+      const sobF = fardos - usadosF;
+      if (sobF > 0.005) {
+        zona      = 'Tolerancia';   condicion = 'Tolerancia (parcial)';
+        noUsado   = true;
+        motivo    = `Cupo tol. ${tolLimitPct}% → máx ${Math.round(bloqueF * tolLimitPct / 100)} fardos en bloque`;
+      } else {
+        zona      = 'Tolerancia';   condicion = 'Tolerancia';
+        noUsado   = false;          motivo    = '';
+      }
+    } else if (val < idealMin) {
+      zona = 'Sub-ideal'; condicion = 'Sub-ideal (libre)'; noUsado = false; motivo = '';
+      usadosF = fardos; usadosKg = kgTotal;
+    } else {
+      zona = 'Ideal'; condicion = 'Ideal'; noUsado = false; motivo = '';
+      usadosF = fardos; usadosKg = kgTotal;
+    }
+
+    const sobranteF  = fardos - usadosF;
+    const sobranteKg = sobranteF * pesoMedio;
+
+    return {
+      PRODUTOR: row.PRODUTOR, LOTE: row.LOTE,
+      SALDO_DISPONIVEL: fardos, pesoMedio, kgTotal,
+      hvi: val,
+      zona, condicion, noUsado, motivo,
+      usadosF, usadosKg, sobranteF, sobranteKg,
+      zoneOrder: ZONE_ORDER[zona] ?? 5,
+    };
+  });
+
+  // Ordena: por zona asc, dentro de zona por HVI desc
+  return rows.sort((a, b) => {
+    if (a.zoneOrder !== b.zoneOrder) return a.zoneOrder - b.zoneOrder;
+    if (a.hvi !== null && b.hvi !== null) return b.hvi - a.hvi;
+    return 0;
+  });
+});
+
+const mixDetailSummary = computed(() => {
+  const rows = mixDetailRows.value;
+  if (!rows.length) return null;
+
+  const totalUsadosF   = rows.reduce((s, r) => s + r.usadosF,   0);
+  const totalSobranteF = rows.reduce((s, r) => s + r.sobranteF, 0);
+  const totalUsadosKg  = rows.reduce((s, r) => s + r.usadosKg,  0);
+
+  let wSumU = 0, wFU = 0, wSumS = 0, wFS = 0;
+  rows.forEach(r => {
+    if (r.hvi !== null) {
+      if (r.usadosF > 0)   { wSumU += r.hvi * r.usadosF;   wFU += r.usadosF; }
+      if (r.sobranteF > 0) { wSumS += r.hvi * r.sobranteF; wFS += r.sobranteF; }
+    }
+  });
+
+  return {
+    totalUsadosF, totalSobranteF, totalUsadosKg,
+    avgHviUsados:   wFU > 0 ? wSumU / wFU : null,
+    avgHviSobrante: wFS > 0 ? wSumS / wFS : null,
   };
 });
 
