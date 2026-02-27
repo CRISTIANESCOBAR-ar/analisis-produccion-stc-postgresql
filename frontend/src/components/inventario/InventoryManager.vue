@@ -2556,13 +2556,28 @@ const remanenteMixingRuleAnalysis = computed(() => {
     }
 
     // ── Cuando hay faltante, ¿qué valor HVI deben tener los fardos a comprar? ─
+    // Fórmula regla de mezclas inversa:
     // objetivo × totalBloqueF = avgBloque × (totalBloqueF - faltanteF) + Y × faltanteF
     // → Y = (objetivo × totalBloqueF - avgBloque × (totalBloqueF - faltanteF)) / faltanteF
+    //
+    // PERO ese Y puede caer por debajo de la zona tolerancia.
+    // El cupo de tolerancia ya fue asignado al stock existente.
+    // Si remainingTolCapacity < faltanteF → los nuevos fardos NO pueden ir a la zona
+    // tolerancia (el cupo está lleno) → mínimo aceptable = tolMax (sub-ideal).
+    // Si hay cupo disponible para todos los faltantes → mínimo = tolMin.
     let valorCompraFaltante = null;
     if (faltanteF > 0) {
-      const usadosStockF = totalBloqueF - faltanteF;
-      valorCompraFaltante = (idealMin * totalBloqueF - avgBloque * usadosStockF) / faltanteF;
-      valorMinCompra = valorCompraFaltante;
+      const usadosStockF      = totalBloqueF - faltanteF;
+      const rawValorCompra    = (idealMin * totalBloqueF - avgBloque * usadosStockF) / faltanteF;
+
+      // Cupo restante de tolerancia disponible para fardos a comprar
+      const remainingTolCap   = Math.max(0, tolLimitF - usableTolF);
+      // Si el cupo restante no alcanza para todos los faltantes,
+      // el umbral mínimo sube a tolMax (los comprados no entran en tolerancia)
+      const umbralMinimo      = remainingTolCap >= faltanteF ? tolMin : tolMax;
+
+      valorCompraFaltante = Math.max(rawValorCompra, umbralMinimo);
+      valorMinCompra      = valorCompraFaltante;
     }
 
     // ── Fardos a comprar = máximo entre restricción de cantidad y de promedio ─
