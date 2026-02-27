@@ -220,38 +220,42 @@
                     </template>
                     <!-- INDIGO: R10³ + Cav 10⁵ + Vel -->
                     <template v-else-if="h.seletor === 'INDIGO'">
-                      <div class="flex flex-col gap-0.5 text-[10px] text-slate-600">
-                        <div v-if="h.r103 != null" class="flex items-center gap-1">
+                      <div class="flex items-center gap-1 text-[10px] text-slate-600 whitespace-nowrap">
+                        <template v-if="h.r103 != null">
                           <span class="text-slate-400">R10³</span>
                           <span class="font-semibold tabular-nums">{{ h.r103.toFixed(2).replace('.', ',') }}</span>
-                        </div>
-                        <div v-if="h.cav105 != null" class="flex items-center gap-1">
+                        </template>
+                        <template v-if="h.cav105 != null">
+                          <span class="text-slate-300">|</span>
                           <span class="text-slate-400">Cav 10⁵</span>
                           <span class="font-semibold tabular-nums">{{ h.cav105.toFixed(1).replace('.', ',') }}</span>
-                        </div>
-                        <div v-if="h.vel_nom != null" class="flex items-center gap-1">
+                        </template>
+                        <template v-if="h.vel_nom != null">
+                          <span class="text-slate-300">|</span>
                           <span class="text-slate-400">Vel.</span>
                           <span class="font-semibold tabular-nums">{{ Math.round(h.vel_nom) }}</span>
-                        </div>
+                        </template>
                       </div>
                     </template>
                     <!-- TECELAGEM: Efic% + RU10⁵ + RT10⁵ -->
                     <template v-else-if="h.seletor === 'TECELAGEM'">
-                      <div class="flex flex-col gap-0.5 text-[10px] text-slate-600">
-                        <div v-if="h.efic_pct != null" class="flex items-center gap-1">
+                      <div class="flex items-center gap-1 text-[10px] text-slate-600 whitespace-nowrap">
+                        <template v-if="h.efic_pct != null">
                           <span class="text-slate-400">Efic.%</span>
                           <span :class="h.efic_pct >= 90 ? 'text-green-700 font-bold' : h.efic_pct >= 80 ? 'text-amber-600 font-semibold' : 'text-red-600 font-semibold'" class="tabular-nums">
                             {{ h.efic_pct.toFixed(1).replace('.', ',') }}
                           </span>
-                        </div>
-                        <div v-if="h.ru105 != null" class="flex items-center gap-1">
+                        </template>
+                        <template v-if="h.ru105 != null">
+                          <span class="text-slate-300">|</span>
                           <span class="text-slate-400">RU10⁵</span>
                           <span class="font-semibold tabular-nums">{{ h.ru105.toFixed(1).replace('.', ',') }}</span>
-                        </div>
-                        <div v-if="h.rt105 != null" class="flex items-center gap-1">
+                        </template>
+                        <template v-if="h.rt105 != null">
+                          <span class="text-slate-300">|</span>
                           <span class="text-slate-400">RT10⁵</span>
                           <span class="font-semibold tabular-nums">{{ h.rt105.toFixed(1).replace('.', ',') }}</span>
-                        </div>
+                        </template>
                       </div>
                     </template>
                     <!-- ACABAMENTO: Velocidad -->
@@ -291,17 +295,18 @@
                   <td class="px-3 py-1.5 text-right border-r border-slate-100 font-bold text-slate-800">{{ fmtNum(c.metros, 0) }}</td>
                   <!-- Calidad: Cal% + Pts/100m² -->
                   <td class="px-3 py-1.5 border-r border-slate-100">
-                    <div class="flex flex-col gap-0.5 text-[10px] text-slate-600">
-                      <div v-if="c.cal_pct != null" class="flex items-center gap-1">
+                    <div class="flex items-center gap-1 text-[10px] text-slate-600 whitespace-nowrap">
+                      <template v-if="c.cal_pct != null">
                         <span class="text-slate-400">Cal.%</span>
                         <span :class="c.cal_pct >= 95 ? 'text-emerald-700 font-bold' : c.cal_pct >= 85 ? 'text-amber-600 font-semibold' : 'text-red-600 font-semibold'" class="tabular-nums">
                           {{ c.cal_pct.toFixed(1).replace('.', ',') }}
                         </span>
-                      </div>
-                      <div v-if="c.pts_100m2 != null" class="flex items-center gap-1">
+                      </template>
+                      <template v-if="c.pts_100m2 != null">
+                        <span class="text-slate-300">|</span>
                         <span class="text-slate-400">Pts/m²</span>
                         <span class="font-semibold tabular-nums">{{ c.pts_100m2.toFixed(1).replace('.', ',') }}</span>
-                      </div>
+                      </template>
                     </div>
                   </td>
                   <td class="px-3 py-1.5 border-r border-slate-100 text-slate-600">{{ (c.artigo || '–').substring(0, 10) }}</td>
