@@ -6130,7 +6130,9 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
           ROUND(AVG(CASE WHEN "UI"   ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("UI",   ',', '.')::numeric END), 2) AS ui,
           ROUND(AVG(CASE WHEN "ELG"  ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("ELG",  ',', '.')::numeric END), 2) AS elg_fibra,
           -- Solo fardos con fecha de entrada a producción (consumidos en blendomat)
-          COUNT(CASE WHEN "DT_ENTRADA_PROD" IS NOT NULL AND "DT_ENTRADA_PROD" <> '' THEN 1 END) AS n_fardos,
+          SUM(CASE WHEN "DT_ENTRADA_PROD" IS NOT NULL AND "DT_ENTRADA_PROD" <> ''
+                   THEN ROUND(REPLACE("QTDE"::text, ',', '.')::numeric)::integer
+                   ELSE 0 END) AS n_fardos,
           -- Secuencias distintas que ya ingresaron (DT_ENTRADA_PROD no nulo)
           COUNT(DISTINCT CASE WHEN "DT_ENTRADA_PROD" IS NOT NULL AND "DT_ENTRADA_PROD" <> '' THEN "SEQ" END) AS n_secuencias
         FROM tb_calidad_fibra
@@ -6167,8 +6169,13 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
           ROUND(AVG(t.cvm_percent)::numeric,    2) AS cvm,
           ROUND(AVG(t.h)::numeric,              2) AS vellosidad,
           ROUND(AVG(t.neps_200_km)::numeric,    1) AS neps_200,
+          ROUND(AVG(t.delg_minus30_km)::numeric,1) AS thin_30,
+          ROUND(AVG(t.delg_minus40_km)::numeric,1) AS thin_40,
           ROUND(AVG(t.delg_minus50_km)::numeric,1) AS thin_50,
+          ROUND(AVG(t.grue_35_km)::numeric,     1) AS thick_35,
           ROUND(AVG(t.grue_50_km)::numeric,     1) AS thick_50,
+          ROUND(AVG(t.neps_140_km)::numeric,    1) AS neps_140,
+          ROUND(AVG(t.neps_280_km)::numeric,    1) AS neps_280,
           COUNT(DISTINCT ul.testnr)               AS n_uster
         FROM uster_lotes ul
         JOIN tb_uster_tbl t ON t.testnr = ul.testnr
@@ -6179,7 +6186,9 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
           ul.mistura,
           ul.ne,
           ROUND(AVG(tt.tenacidad)::numeric,  2) AS tenacidad,
-          ROUND(AVG(tt.elongacion)::numeric, 2) AS elongacion
+          ROUND(AVG(tt.elongacion)::numeric, 2) AS elongacion,
+          ROUND(AVG(tt.fuerza_b)::numeric,   2) AS fuerza_b,
+          ROUND(AVG(tt.trabajo)::numeric,    2) AS trabajo_b
         FROM uster_lotes ul
         JOIN tb_tensorapid_par tp ON tp.uster_testnr = ul.testnr
         JOIN tb_tensorapid_tbl tt ON tt.testnr = tp.testnr
@@ -6200,11 +6209,18 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
         ua.cvm,
         ua.vellosidad,
         ua.neps_200,
+        ua.thin_30,
+        ua.thin_40,
         ua.thin_50,
+        ua.thick_35,
         ua.thick_50,
+        ua.neps_140,
+        ua.neps_280,
         ua.n_uster,
         ta.tenacidad,
-        ta.elongacion
+        ta.elongacion,
+        ta.fuerza_b,
+        ta.trabajo_b
       FROM hvi_agg h
       LEFT JOIN uster_agg  ua ON ua.mistura = h.mistura
       LEFT JOIN tenso_agg  ta ON ta.mistura = h.mistura AND ta.ne = ua.ne
@@ -6212,7 +6228,31 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
     `;
 
     const result = await query(sql, [loteList, ne || null], 'dashboard/mezcla-lotes');
-    res.json({ success: true, rows: result.rows, lotes: loteList });
+
+    // ── Análisis por proveedor (PRODUTOR) ────────────────────────────────────
+    const sqlProv = `
+      SELECT
+        CAST(NULLIF(regexp_replace("LOTE_FIAC", '[^0-9]', '', 'g'), '') AS INTEGER) AS mistura,
+        "PRODUTOR" AS produtor,
+        ROUND(AVG(CASE WHEN "STR"  ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("STR",  ',', '.')::numeric END), 2) AS str,
+        ROUND(AVG(CASE WHEN "SCI"  ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("SCI",  ',', '.')::numeric END), 1) AS sci,
+        ROUND(AVG(CASE WHEN "MIC"  ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("MIC",  ',', '.')::numeric END), 3) AS mic,
+        ROUND(AVG(CASE WHEN "UHML" ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("UHML", ',', '.')::numeric END), 2) AS uhml,
+        SUM(CASE WHEN "DT_ENTRADA_PROD" IS NOT NULL AND "DT_ENTRADA_PROD" <> ''
+                 THEN ROUND(REPLACE("QTDE"::text, ',', '.')::numeric)::integer
+                 ELSE 0 END) AS fardos_consumidos,
+        COUNT(DISTINCT CASE WHEN "DT_ENTRADA_PROD" IS NOT NULL AND "DT_ENTRADA_PROD" <> '' THEN "SEQ" END) AS secuencias
+      FROM tb_calidad_fibra
+      WHERE "TIPO_MOV" = 'MIST'
+        AND "LOTE_FIAC" ~ '[0-9]'
+        AND CAST(NULLIF(regexp_replace("LOTE_FIAC", '[^0-9]', '', 'g'), '') AS INTEGER) = ANY($1::integer[])
+      GROUP BY
+        CAST(NULLIF(regexp_replace("LOTE_FIAC", '[^0-9]', '', 'g'), '') AS INTEGER),
+        "PRODUTOR"
+      ORDER BY mistura, fardos_consumidos DESC
+    `;
+    const provResult = await query(sqlProv, [loteList], 'dashboard/mezcla-lotes/proveedores');
+    res.json({ success: true, rows: result.rows, proveedores: provResult.rows, lotes: loteList });
   } catch (err) {
     console.error('Error /api/dashboard/mezcla-lotes:', err.message);
     res.status(500).json({ error: err.message });
@@ -6222,7 +6262,7 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Genera el informe de forma local (sin IA externa) — siempre disponible
 // ─────────────────────────────────────────────────────────────────────────────
-function generarNarrativaLocal(rows, loteActual) {
+function generarNarrativaLocal(rows, loteActual, proveedores = []) {
   const lotesSorted = [...new Set(rows.map(r => Number(r.mistura)))].sort((a, b) => a - b);
   const actual = loteActual ? Number(loteActual) : Math.max(...lotesSorted);
   const refs   = lotesSorted.filter(l => l !== actual);
@@ -6337,7 +6377,115 @@ function generarNarrativaLocal(rows, loteActual) {
     if (!isNaN(nps) && nps < 200)   puntosNe.push(`🔸 Ne${h.ne}: Neps ${f(nps,1)}/km — hilo muy limpio para Índigo.`);
   }
 
+  // ── Análisis por proveedor del lote actual ──────────────────────────────
+  const provActual = (proveedores || []).filter(p => Number(p.mistura) === actual);
+  let bloqueProveedores = [];
+  if (provActual.length > 0) {
+    const totalFardos = provActual.reduce((s, p) => s + (Number(p.fardos_consumidos) || 0), 0);
+
+    // Listas con valor numérico válido por variable
+    const withStr  = provActual.filter(p => p.str  != null && !isNaN(parseFloat(p.str)));
+    const withSci  = provActual.filter(p => p.sci  != null && !isNaN(parseFloat(p.sci)));
+    const withMic  = provActual.filter(p => p.mic  != null && !isNaN(parseFloat(p.mic)));
+    const withUhml = provActual.filter(p => p.uhml != null && !isNaN(parseFloat(p.uhml)));
+
+    // STR / UHML / SCI: mayor = mejor
+    const best  = (arr, key) => arr.length ? arr.reduce((a, b) => parseFloat(a[key]) >= parseFloat(b[key]) ? a : b) : null;
+    const worst = (arr, key) => arr.length ? arr.reduce((a, b) => parseFloat(a[key]) <= parseFloat(b[key]) ? a : b) : null;
+    // MIC: rango óptimo 3.5–4.9; más alejado del centro (4.2) = peor
+    const micDist = p => Math.abs(parseFloat(p.mic) - 4.2);
+    const bestMic  = withMic.length ? withMic.reduce((a, b) => micDist(a) <= micDist(b) ? a : b) : null;
+    const worstMic = withMic.length ? withMic.reduce((a, b) => micDist(a) >= micDist(b) ? a : b) : null;
+    const micOutOfRange = withMic.filter(p => { const v = parseFloat(p.mic); return v < 3.5 || v > 4.9; });
+
+    const obs = [];
+    if (best(withStr, 'str') && worst(withStr, 'str') && best(withStr, 'str').produtor !== worst(withStr, 'str').produtor) {
+      const b = best(withStr, 'str'), w = worst(withStr, 'str');
+      obs.push(`  🏆 STR más alto: ${b.produtor} (${f(b.str)} g/tex) — fibra más resistente para hilatura.`);
+      obs.push(`  ⚠️  STR más bajo: ${w.produtor} (${f(w.str)} g/tex)${parseFloat(w.str) < 25 ? ' — por debajo del límite crítico (25 g/tex).' : ' — monitorear impacto en tenacidad del hilo.'}`);
+    }
+    if (best(withSci, 'sci') && worst(withSci, 'sci') && best(withSci, 'sci').produtor !== worst(withSci, 'sci').produtor) {
+      const b = best(withSci, 'sci'), w = worst(withSci, 'sci');
+      obs.push(`  🏆 SCI más alto: ${b.produtor} (${f(b.sci, 1)}) — mayor índice de hilabilidad, menos paradas esperadas.`);
+      obs.push(`  ⚠️  SCI más bajo: ${w.produtor} (${f(w.sci, 1)})${parseFloat(w.sci) < 130 ? ' — riesgo de inestabilidad en hilatura.' : '.'}`);
+    }
+    if (bestMic && worstMic && bestMic.produtor !== worstMic.produtor) {
+      obs.push(`  🏆 MIC óptimo:   ${bestMic.produtor} (${f(bestMic.mic, 3)}) — finura más cercana al rango ideal (3.5–4.9).`);
+      if (micOutOfRange.length) {
+        obs.push(`  ⚠️  MIC fuera de rango (3.5–4.9): ${micOutOfRange.map(p => `${p.produtor} ${f(p.mic, 3)}`).join(', ')}.`);
+      } else {
+        obs.push(`  ⚠️  MIC más alejado del centro: ${worstMic.produtor} (${f(worstMic.mic, 3)}).`);
+      }
+    }
+    if (best(withUhml, 'uhml') && worst(withUhml, 'uhml') && best(withUhml, 'uhml').produtor !== worst(withUhml, 'uhml').produtor) {
+      const b = best(withUhml, 'uhml'), w = worst(withUhml, 'uhml');
+      obs.push(`  🏆 UHML más largo: ${b.produtor} (${f(b.uhml)} mm) — fibra más larga, menor neps y mejor resistencia.`);
+      obs.push(`  ⚠️  UHML más corto: ${w.produtor} (${f(w.uhml)} mm)${parseFloat(w.uhml) < 25 ? ' — longitud crítica.' : '.'}`);
+    }
+
+    bloqueProveedores = [
+      `📦 ANÁLISIS POR PROVEEDOR — Lote FIAC ${actual}:`,
+      ...provActual.map(p => {
+        const fardos = Number(p.fardos_consumidos) || 0;
+        const pct    = totalFardos > 0 ? ((fardos / totalFardos) * 100).toFixed(1) : '–';
+        const strVal = p.str  != null ? `STR ${f(p.str)} g/tex` : '';
+        const sciVal = p.sci  != null ? `SCI ${f(p.sci, 1)}`     : '';
+        const micVal = p.mic  != null ? `MIC ${f(p.mic, 3)}`     : '';
+        const uhmlVal= p.uhml != null ? `UHML ${f(p.uhml)} mm`   : '';
+        const hvi = [strVal, sciVal, micVal, uhmlVal].filter(Boolean).join(' | ');
+        return `  • ${String(p.produtor).padEnd(16)} ${String(fardos).padStart(4)} fardos (${String(pct).padStart(5)}%)  ${hvi}`;
+      }),
+      ...(obs.length ? [``, `  📌 Observaciones:`, ...obs] : []),
+      ``,
+    ];
+  }
+
   const refStr = refs.length > 0 ? refs.join('/') : 'sin referencia';
+
+  // ── Auditoría de Aptitud por Proceso (texto) ───────────────────────────
+  const MATRIZ = {
+    '7':    { app: 'Trama',    dest: ['TELAR'],                          sciMin: 115, strMin: 24, umb: { tenacidad: { ok: 14.0, t: 'min' }, cvm: { ok: 13.5, t: 'max' }, neps_200: { ok: 700, t: 'max' } } },
+    '9':    { app: 'Trama',    dest: ['TELAR'],                          sciMin: 120, strMin: 25, umb: { tenacidad: { ok: 14.5, t: 'min' }, cvm: { ok: 13.0, t: 'max' }, neps_200: { ok: 600, t: 'max' } } },
+    '10':   { app: 'Urdimbre', dest: ['URDIDORA','INDIGO','TELAR'],      sciMin: 130, strMin: 26, umb: { tenacidad: { ok: 16.0, t: 'min' }, elongacion: { ok: 8.0, t: 'min' }, cvm: { ok: 12.0, t: 'max' }, neps_200: { ok: 500, t: 'max' } } },
+    '12.5': { app: 'Urdimbre', dest: ['URDIDORA','INDIGO','TELAR'],      sciMin: 135, strMin: 27, umb: { tenacidad: { ok: 16.5, t: 'min' }, elongacion: { ok: 8.0, t: 'min' }, cvm: { ok: 11.5, t: 'max' }, neps_200: { ok: 450, t: 'max' } } },
+    '14':   { app: 'Urdimbre', dest: ['URDIDORA','INDIGO','TELAR'],      sciMin: 140, strMin: 28, umb: { tenacidad: { ok: 17.0, t: 'min' }, elongacion: { ok: 8.5, t: 'min' }, cvm: { ok: 11.0, t: 'max' }, neps_200: { ok: 400, t: 'max' } } },
+  };
+  const bloqueAuditoria = [];
+  if (dataActual.hilos.length > 0) {
+    bloqueAuditoria.push(`🔍 AUDITORÍA DE APTITUD POR PROCESO — Lote FIAC ${actual}:`);
+    for (const h of dataActual.hilos) {
+      const ne = String(h.ne);
+      const nN = parseFloat(ne);
+      const mK = Object.keys(MATRIZ).find(k => Math.abs(parseFloat(k) - nN) < 0.1);
+      const m = mK ? MATRIZ[mK] : null;
+      const app = m?.app || (nN <= 9 ? 'Trama' : 'Urdimbre');
+      const dest = m?.dest || (nN <= 9 ? ['TELAR'] : ['URDIDORA','INDIGO','TELAR']);
+      const desvios = [];
+      if (m?.umb) {
+        for (const [k, u] of Object.entries(m.umb)) {
+          const v = h[k] != null ? parseFloat(h[k]) : null;
+          if (v == null) continue;
+          const fail = u.t === 'min' ? v < u.ok : v > u.ok;
+          if (fail) desvios.push(`${k === 'cvm' ? 'CVm%' : k === 'neps_200' ? 'Neps' : k === 'tenacidad' ? 'Tenac.' : k === 'elongacion' ? 'Elong.' : k} ${f(v)} ${u.t === 'min' ? '<' : '>'} ${u.ok}`);
+        }
+      }
+      const estado = desvios.length ? '🔴 Rechazado' : '✅ Aprobado';
+      const procs = dest.map(p => `${p}${desvios.length ? ' ⚠️' : ' ✅'}`).join(' → ');
+      bloqueAuditoria.push(`  Ne ${ne} [${app}] → ${procs} — ${estado}${desvios.length ? ' — Desvío: ' + desvios.join(', ') : ''}`);
+      // Comentario de planta
+      const ten = h.tenacidad != null ? parseFloat(h.tenacidad) : null;
+      const cvm = h.cvm != null ? parseFloat(h.cvm) : null;
+      const elo = h.elongacion != null ? parseFloat(h.elongacion) : null;
+      if (ten != null) {
+        if (ten >= 18) bloqueAuditoria.push(`    💬 "Va sobrado de fuerza (${f(ten)} cN/tex). Sin drama en ningún proceso."`);
+        else if (ten < 14.5) bloqueAuditoria.push(`    💬 "Tenacidad crítica. Alta probabilidad de rotura."`);
+      }
+      if (app === 'Trama' && cvm != null && cvm > 13) bloqueAuditoria.push(`    💬 "La masa viene bailando (CVm ${f(cvm)}%). Riesgo de barras en tela."`);
+      if (app === 'Urdimbre' && elo != null && elo < 7.5) bloqueAuditoria.push(`    💬 "Elongación baja. El hilo no perdona en la Urdidora."`);
+    }
+    bloqueAuditoria.push('');
+  }
+
   const lines = [
     `📋 INFORME DE DESEMPEÑO: LOTE FIAC ${actual} vs ${refStr}`,
     `Análisis Comparativo Fibra ↔️ Hilo`,
@@ -6348,6 +6496,8 @@ function generarNarrativaLocal(rows, loteActual) {
     `📊 COMPARATIVA TÉCNICA (Promedios):`,
     ``,
     ...bloques.flatMap(b => [b, '']),
+    ...bloqueProveedores,
+    ...bloqueAuditoria,
     `⚠️ PUNTOS CLAVE PARA PRODUCCIÓN:`,
     ...(alertas.length
       ? alertas.map(a => `  ⚠️ ${a}`)
@@ -6377,12 +6527,12 @@ function generarNarrativaLocal(rows, loteActual) {
 // ─────────────────────────────────────────────────────────────────────────────
 app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
   try {
-    const { rows, loteActual, model: modelReq, modo } = req.body;
+    const { rows, loteActual, model: modelReq, modo, proveedores } = req.body;
     if (!rows || rows.length === 0) return res.status(400).json({ error: 'Sin datos para analizar' });
 
     // Si piden explícitamente local, o no hay API key → generación local directa
     if (modo === 'local' || !process.env.GOOGLE_API_KEY) {
-      const narrativa = generarNarrativaLocal(rows, loteActual);
+      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || []);
       return res.json({ success: true, narrativa, fuente: 'local' });
     }
 
@@ -6398,23 +6548,45 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
         .map(r => `   • Ne ${r.ne}/1: Tenacidad=${r.tenacidad ?? '-'} cN/tex | Elongación=${r.elongacion ?? '-'}% | CVm%=${r.cvm ?? '-'} | Neps+200%=${r.neps_200 ?? '-'}/km`)
         .join('\n');
       const misturaLabel = hvi.mistura_real ? `${mistura} (Mistura ${hvi.mistura_real})` : `${mistura}`;
+      // Proveedores del lote
+      const provLote = (proveedores || []).filter(p => Number(p.mistura) === mistura);
+      const totalFardosProv = provLote.reduce((s, p) => s + (Number(p.fardos_consumidos) || 0), 0);
+      const provStr = provLote.length
+        ? '\n  Proveedores:\n' + provLote.map(p => {
+            const pct = totalFardosProv > 0 ? ((Number(p.fardos_consumidos) / totalFardosProv) * 100).toFixed(1) : '–';
+            return `   • ${p.produtor}: ${p.fardos_consumidos} fardos (${pct}%) STR=${p.str ?? '-'} SCI=${p.sci ?? '-'} MIC=${p.mic ?? '-'} UHML=${p.uhml ?? '-'}`;
+          }).join('\n')
+        : '';
       return `LOTE_FIAC ${misturaLabel}${mistura === actual ? ' [ACTUAL]' : ' [REFERENCIA]'}:
   HVI: STR=${hvi.str ?? '-'} g/tex | SCI=${hvi.sci ?? '-'} | MIC=${hvi.mic ?? '-'} | UHML=${hvi.uhml ?? '-'} mm | ${hvi.n_fardos ?? '-'} fardos consumidos | ${hvi.n_secuencias ?? '-'} secuencias blendomat
-  Hilo:\n${hilos || '   (sin datos)'}`;  
+  Hilo:\n${hilos || '   (sin datos)'}${provStr}`;
     }).join('\n\n');
 
     const modelName = modelReq || 'gemini-2.0-flash';
     const genAI  = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
     const model  = genAI.getGenerativeModel({ model: modelName });
 
-    const prompt = `Actúa como un Experto en Tejeduría e Hilandería de denim de alta velocidad.
+    const prompt = `Actúa como Auditor de Calidad Textil y Experto en Tejeduría e Hilandería de denim de alta velocidad.
 
 DATOS COMPARATIVOS:
 ${resumenLotes}
 
 UMBRALES: Tenacidad hilo >16.0=APTO, 14.5-16.0=PRECAUCIÓN, <14.5=CRÍTICO | Elongación <7.5%=RIESGO URDIDORA | Neps+200% >700=RIESGO ÍNDIGO | CVm% >13=IRREGULAR | STR fibra >27=ÓPTIMO
 
-Generá exactamente este formato en español (350 palabras máx, cuantificá cambios con %):
+MATRIZ DE REQUISITOS MÍNIMOS POR TÍTULO:
+Ne 7 (Trama):  Tenac≥14.0, CVm≤13.5%, Neps≤700/km    → solo TELAR
+Ne 9 (Trama):  Tenac≥14.5, CVm≤13.0%, Neps≤600/km    → solo TELAR
+Ne 10 (Urdimbre): Tenac≥16.0, Elong≥8.0%, CVm≤12.0%, Neps≤500/km → URDIDORA→ÍNDIGO→TELAR
+Ne 12.5 (Urdimbre): Tenac≥16.5, Elong≥8.0%, CVm≤11.5%, Neps≤450/km → URDIDORA→ÍNDIGO→TELAR
+Ne 14 (Urdimbre): Tenac≥17.0, Elong≥8.5%, CVm≤11.0%, Neps≤400/km → URDIDORA→ÍNDIGO→TELAR
+
+REGLAS DE AUDITORÍA:
+- Si es Urdimbre (Ne≥10): ser implacable con Elongación y CVm% (pasa por Urdidora + Índigo).
+- Si es Trama (Ne≤9): priorizar estabilidad de masa (CVm%) para evitar barreado.
+- Si MIC > 4.7: advertir "cargado al grueso". Si STR supera la matriz por mucho: decir "va sobrado de fuerza".
+- Usar vocabulario natural de hilandería.
+
+Generá exactamente este formato en español (500 palabras máx, cuantificá cambios con %):
 
 📋 INFORME DE DESEMPEÑO: LOTE FIAC ${actual} vs ${refs.join('/') || 'sin referencia'}
 Análisis Comparativo Fibra ↔️ Hilo
@@ -6424,6 +6596,16 @@ Análisis Comparativo Fibra ↔️ Hilo
 
 📊 COMPARATIVA TÉCNICA (Promedios):
 [bloques numerados 1️⃣ 2️⃣ 3️⃣ para STR, Tenacidad, Neps, CVm%, Elongación con valores por lote y 👉 Impacto]
+
+📦 ANÁLISIS POR PROVEEDOR — Lote FIAC ${actual}:
+[Para cada proveedor: nombre, fardos consumidos, % participación, STR, SCI, MIC, UHML.]
+
+  📌 Observaciones:
+[Identificar proveedor con 🏆 mejor STR, 🏆 mejor SCI, 🏆 MIC más cercano a rango 3.5-4.9, 🏆 UHML más largo. Señalar con ⚠️ el peor en cada variable con impacto práctico.]
+
+🔍 AUDITORÍA DE APTITUD POR PROCESO — Lote FIAC ${actual}:
+[Para cada Ne: Ne X [Aplicación] → Proceso1 ✅/⚠️ → Proceso2 ✅/⚠️ — Estado (Aprobado/Rechazado) — Desvío si hay.]
+[Agregar 💬 comentario de planta con vocabulario de hilandería para cada Ne.]
 
 ⚠️ PUNTOS CLAVE PARA PRODUCCIÓN:
 [2-3 bullets accionables]
@@ -6437,7 +6619,7 @@ Análisis Comparativo Fibra ↔️ Hilo
     } catch (geminiErr) {
       // Fallback local ante cualquier error de Gemini (quota, red, etc.)
       console.warn('Gemini no disponible, usando generación local:', geminiErr.message?.slice(0, 120));
-      const narrativa = generarNarrativaLocal(rows, loteActual);
+      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || []);
       return res.json({ success: true, narrativa, fuente: 'local', aviso: 'Gemini no disponible – informe generado localmente.' });
     }
 

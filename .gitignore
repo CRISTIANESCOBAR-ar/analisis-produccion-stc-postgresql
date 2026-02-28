@@ -36,3 +36,6 @@ temp/
 backups/
 backend/import-manager-old.js
 test-import.json
+
+# Build de prueba
+frontend/dist_test/

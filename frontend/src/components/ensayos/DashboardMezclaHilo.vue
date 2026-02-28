@@ -306,6 +306,235 @@
         </div>
       </div>
 
+      <!-- ══════════════════════ AUDITORÍA DE APTITUD POR PROCESO ══════════════════════ -->
+      <div v-if="tablaAptitud.length > 0" class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-100">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="font-bold text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wide">
+                <span>🔍</span> Auditoría de Aptitud por Proceso
+              </h2>
+              <p class="text-[10px] text-slate-400 mt-0.5">
+                Lote FIAC {{ loteActual }} · Validación contra Matriz de Requisitos Mínimos · Urdidora → Índigo → Telar aire
+              </p>
+            </div>
+            <div class="flex items-center gap-3 text-[10px] text-slate-400 uppercase tracking-widest">
+              <span class="flex items-center gap-1">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-200 border border-emerald-400 inline-block"></span>Cumple
+              </span>
+              <span class="flex items-center gap-1">
+                <span class="w-2.5 h-2.5 rounded-full bg-amber-200 border border-amber-400 inline-block"></span>Precaución
+              </span>
+              <span class="flex items-center gap-1">
+                <span class="w-2.5 h-2.5 rounded-full bg-red-200 border border-red-400 inline-block"></span>No apto
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabla principal: Variables clave + Aptitud por proceso -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs">
+            <thead>
+              <tr class="bg-slate-50 text-slate-500 border-b border-slate-200">
+                <th class="text-left px-4 py-2.5 font-bold" rowspan="2">Ne</th>
+                <th class="text-center px-3 py-2.5 font-bold" rowspan="2">Aplic.</th>
+                <th class="text-center px-2 py-1.5 font-bold border-l border-slate-200" colspan="5">Variables de Hilo</th>
+                <th class="text-center px-2 py-1.5 font-bold border-l border-r border-slate-200" colspan="3">Aptitud por Proceso</th>
+                <th class="text-center px-3 py-2.5 font-bold" rowspan="2">Pasador</th>
+                <th class="text-left px-3 py-2.5 font-bold" rowspan="2">Desvío Crítico</th>
+              </tr>
+              <tr class="bg-slate-50 text-[9px] text-slate-400 border-b border-slate-100">
+                <th class="py-1.5 px-2 font-medium border-l border-slate-200">CVm%</th>
+                <th class="py-1.5 px-2 font-medium">Neps +200%</th>
+                <th class="py-1.5 px-2 font-medium">Tenac. cN/tex</th>
+                <th class="py-1.5 px-2 font-medium">Elong. %</th>
+                <th class="py-1.5 px-2 font-medium">H Vell.</th>
+                <th class="py-1.5 px-2 font-medium border-l border-slate-200 bg-amber-50/40">🏭 Urdidora</th>
+                <th class="py-1.5 px-2 font-medium bg-blue-50/40">🎨 Índigo</th>
+                <th class="py-1.5 px-2 font-medium bg-purple-50/40 border-r border-slate-200">🔧 Telar</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in tablaAptitud" :key="`apt-${row.ne}`"
+                class="border-t border-slate-100 hover:bg-slate-50/50 transition-colors">
+                <td class="px-4 py-3 font-bold text-slate-700 whitespace-nowrap">Ne {{ row.ne }}</td>
+                <td class="px-3 py-3 text-center">
+                  <span class="px-2 py-0.5 rounded-full text-[10px] font-bold"
+                    :class="row.app === 'Urdimbre' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'">
+                    {{ row.app }}
+                  </span>
+                </td>
+                <!-- Variables de hilo -->
+                <td class="px-2 py-3 text-center font-mono border-l border-slate-100" :class="aptCellClass(row.ev.cvm)">
+                  {{ row.vals.cvm != null ? row.vals.cvm.toFixed(1) : '–' }}
+                </td>
+                <td class="px-2 py-3 text-center font-mono" :class="aptCellClass(row.ev.neps_200)">
+                  {{ row.vals.neps_200 != null ? row.vals.neps_200.toFixed(0) : '–' }}
+                </td>
+                <td class="px-2 py-3 text-center font-mono" :class="aptCellClass(row.ev.tenacidad)">
+                  {{ row.vals.tenacidad != null ? row.vals.tenacidad.toFixed(1) : '–' }}
+                </td>
+                <td class="px-2 py-3 text-center font-mono" :class="aptCellClass(row.ev.elongacion)">
+                  {{ row.vals.elongacion != null ? row.vals.elongacion.toFixed(1) : '–' }}
+                </td>
+                <td class="px-2 py-3 text-center font-mono" :class="aptCellClass(row.ev.vellosidad)">
+                  {{ row.vals.vellosidad != null ? row.vals.vellosidad.toFixed(1) : '–' }}
+                </td>
+                <!-- Aptitud por proceso -->
+                <td class="px-2 py-3 text-center border-l border-slate-100 bg-amber-50/10"
+                  :title="row.procesos.URDIDORA !== 'na' ? 'Urdidora: elongación + tenacidad + delgados' : 'No aplica (Trama → solo Telar)'">
+                  <div class="text-base leading-none">{{ aptProcIcon(row.procesos.URDIDORA) }}</div>
+                  <div class="text-[8px] mt-0.5" :class="{ 'text-slate-300': row.procesos.URDIDORA === 'na' }">{{ aptProcLabel(row.procesos.URDIDORA) }}</div>
+                </td>
+                <td class="px-2 py-3 text-center bg-blue-50/10"
+                  :title="row.procesos.INDIGO !== 'na' ? 'Índigo: neps + CVm% + vellosidad' : 'No aplica (Trama → solo Telar)'">
+                  <div class="text-base leading-none">{{ aptProcIcon(row.procesos.INDIGO) }}</div>
+                  <div class="text-[8px] mt-0.5" :class="{ 'text-slate-300': row.procesos.INDIGO === 'na' }">{{ aptProcLabel(row.procesos.INDIGO) }}</div>
+                </td>
+                <td class="px-2 py-3 text-center bg-purple-50/10 border-r border-slate-100"
+                  :title="'Telar aire: tenacidad + elongación + CVm% + neps'">
+                  <div class="text-base leading-none">{{ aptProcIcon(row.procesos.TELAR) }}</div>
+                  <div class="text-[8px] mt-0.5">{{ aptProcLabel(row.procesos.TELAR) }}</div>
+                </td>
+                <!-- Pasador -->
+                <td class="px-3 py-3 text-center">
+                  <span class="px-2.5 py-1 rounded-lg text-[10px] font-bold whitespace-nowrap"
+                    :class="aptPasadorClass(row.pasador)">
+                    {{ row.pasador === 'aprobado' ? 'Sí ✓' : row.pasador === 'condicional' ? 'Revisar' : 'No ✗' }}
+                  </span>
+                </td>
+                <!-- Desvío crítico -->
+                <td class="px-3 py-3 text-[10px] max-w-52">
+                  <template v-if="row.desvios.length || row.hviAlerts.length">
+                    <div v-for="d in row.desvios" :key="d.key" class="text-red-600 font-medium">
+                      {{ aptDesvioLabel(d.key) }}: {{ d.val != null ? d.val.toFixed(1) : '?' }}
+                      {{ d.tipo === 'min' ? '↓ mín' : '↑ máx' }} {{ d.req }}
+                    </div>
+                    <div v-for="a in row.hviAlerts" :key="a" class="text-amber-600">🌿 {{ a }}</div>
+                  </template>
+                  <span v-else class="text-emerald-500 font-medium">✓ Sin desvíos</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Detalle Uster + Tensorapid completo -->
+        <div class="px-6 py-3 border-t border-slate-100">
+          <h3 class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+            📊 Detalle Uster + Tensorapid
+            <span class="font-normal text-slate-400 normal-case">— Lote FIAC {{ loteActual }}, promedios por título</span>
+          </h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-[10px] font-mono">
+              <thead>
+                <tr class="text-slate-400 border-b border-slate-100">
+                  <th class="text-left px-2 py-1.5 font-bold">Ne</th>
+                  <th class="text-center px-2 py-1.5">CVm%</th>
+                  <th class="text-center px-2 py-1.5">Delg−30%</th>
+                  <th class="text-center px-2 py-1.5">Delg−40%</th>
+                  <th class="text-center px-2 py-1.5">Delg−50%</th>
+                  <th class="text-center px-2 py-1.5">Grue+35%</th>
+                  <th class="text-center px-2 py-1.5">Grue+50%</th>
+                  <th class="text-center px-2 py-1.5">Neps+140%</th>
+                  <th class="text-center px-2 py-1.5">Neps+200%</th>
+                  <th class="text-center px-2 py-1.5">Neps+280%</th>
+                  <th class="text-center px-2 py-1.5">H Vell.</th>
+                  <th class="text-center px-2 py-1.5">Fuerza B</th>
+                  <th class="text-center px-2 py-1.5">Elong%</th>
+                  <th class="text-center px-2 py-1.5">Tenac.</th>
+                  <th class="text-center px-2 py-1.5">Trabajo B</th>
+                </tr>
+                <tr class="text-[8px] text-slate-300 border-b border-slate-50">
+                  <th></th>
+                  <th class="py-0.5">%</th>
+                  <th class="py-0.5">/km</th>
+                  <th class="py-0.5">/km</th>
+                  <th class="py-0.5">/km</th>
+                  <th class="py-0.5">/km</th>
+                  <th class="py-0.5">/km</th>
+                  <th class="py-0.5">/km</th>
+                  <th class="py-0.5">/km</th>
+                  <th class="py-0.5">/km</th>
+                  <th class="py-0.5">H</th>
+                  <th class="py-0.5">cN</th>
+                  <th class="py-0.5">%</th>
+                  <th class="py-0.5">cN/tex</th>
+                  <th class="py-0.5">cN·cm</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in tablaAptitud" :key="`det-${row.ne}`"
+                  class="border-t border-slate-50 hover:bg-slate-50/70 transition-colors">
+                  <td class="px-2 py-1.5 font-bold text-slate-600">{{ row.ne }}</td>
+                  <td class="px-2 py-1.5 text-center" :class="aptCellClass(row.ev.cvm)">{{ row.vals.cvm != null ? row.vals.cvm.toFixed(2) : '–' }}</td>
+                  <td class="px-2 py-1.5 text-center text-slate-600">{{ row.vals.thin_30 != null ? row.vals.thin_30.toFixed(1) : '–' }}</td>
+                  <td class="px-2 py-1.5 text-center text-slate-600">{{ row.vals.thin_40 != null ? row.vals.thin_40.toFixed(1) : '–' }}</td>
+                  <td class="px-2 py-1.5 text-center text-slate-600">{{ row.vals.thin_50 != null ? row.vals.thin_50.toFixed(1) : '–' }}</td>
+                  <td class="px-2 py-1.5 text-center text-slate-600">{{ row.vals.thick_35 != null ? row.vals.thick_35.toFixed(1) : '–' }}</td>
+                  <td class="px-2 py-1.5 text-center text-slate-600">{{ row.vals.thick_50 != null ? row.vals.thick_50.toFixed(1) : '–' }}</td>
+                  <td class="px-2 py-1.5 text-center text-slate-600">{{ row.vals.neps_140 != null ? row.vals.neps_140.toFixed(1) : '–' }}</td>
+                  <td class="px-2 py-1.5 text-center" :class="aptCellClass(row.ev.neps_200)">{{ row.vals.neps_200 != null ? row.vals.neps_200.toFixed(1) : '–' }}</td>
+                  <td class="px-2 py-1.5 text-center text-slate-600">{{ row.vals.neps_280 != null ? row.vals.neps_280.toFixed(1) : '–' }}</td>
+                  <td class="px-2 py-1.5 text-center" :class="aptCellClass(row.ev.vellosidad)">{{ row.vals.vellosidad != null ? row.vals.vellosidad.toFixed(2) : '–' }}</td>
+                  <td class="px-2 py-1.5 text-center text-slate-600">{{ row.vals.fuerza_b != null ? row.vals.fuerza_b.toFixed(1) : '–' }}</td>
+                  <td class="px-2 py-1.5 text-center" :class="aptCellClass(row.ev.elongacion)">{{ row.vals.elongacion != null ? row.vals.elongacion.toFixed(2) : '–' }}</td>
+                  <td class="px-2 py-1.5 text-center" :class="aptCellClass(row.ev.tenacidad)">{{ row.vals.tenacidad != null ? row.vals.tenacidad.toFixed(2) : '–' }}</td>
+                  <td class="px-2 py-1.5 text-center text-slate-600">{{ row.vals.trabajo_b != null ? row.vals.trabajo_b.toFixed(1) : '–' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Fibra HVI resumen -->
+        <div class="px-6 py-3 border-t border-slate-100 bg-blue-50/30">
+          <div class="flex items-center gap-6 text-xs text-slate-600 flex-wrap">
+            <span class="font-bold text-blue-600 text-[10px] uppercase tracking-wide shrink-0">🌿 HVI Fibra Lote {{ loteActual }}:</span>
+            <span>STR <strong>{{ fmt(getHVI(loteActual, 'str')) }}</strong> g/tex</span>
+            <span>SCI <strong>{{ fmt(getHVI(loteActual, 'sci'), 1) }}</strong></span>
+            <span>MIC <strong>{{ fmt(getHVI(loteActual, 'mic'), 3) }}</strong></span>
+            <span>UHML <strong>{{ fmt(getHVI(loteActual, 'uhml')) }}</strong> mm</span>
+            <span>UI <strong>{{ fmt(getHVI(loteActual, 'ui')) }}</strong>%</span>
+            <span>ELG <strong>{{ fmt(getHVI(loteActual, 'elg_fibra')) }}</strong>%</span>
+          </div>
+        </div>
+
+        <!-- Comentarios de Planta -->
+        <div v-if="tablaAptitud.some(r => r.comentarios.length > 0)" class="px-6 py-4 border-t border-slate-100 space-y-1.5">
+          <h3 class="text-xs font-bold text-slate-600 uppercase tracking-wide flex items-center gap-1.5 mb-2">
+            💬 Comentarios de Planta
+            <span class="text-[9px] font-normal text-slate-400 normal-case">(vocabulario de hilandería)</span>
+          </h3>
+          <div v-for="row in tablaAptitud" :key="`com-${row.ne}`" class="space-y-1">
+            <template v-if="row.comentarios.length">
+              <div v-for="(com, ci) in row.comentarios" :key="ci"
+                class="text-xs text-slate-600 bg-slate-50 rounded-lg px-3 py-1.5 flex items-start gap-2">
+                <span class="font-bold text-slate-500 shrink-0 font-mono">Ne {{ row.ne }}:</span>
+                <span class="italic">{{ com }}</span>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Botón Alerta WhatsApp -->
+        <div class="px-6 py-4 border-t border-slate-100 flex items-center gap-3">
+          <button @click="copiarAlertaWhatsApp"
+            class="px-5 py-2.5 rounded-xl font-bold text-sm transition-all flex items-center gap-2 shadow-sm hover:shadow-md"
+            :class="whatsappCopiado
+              ? 'bg-emerald-600 text-white'
+              : 'bg-green-600 hover:bg-green-700 text-white'">
+            <span v-if="whatsappCopiado">✓</span>
+            <span v-else>📋</span>
+            {{ whatsappCopiado ? '¡Copiado al portapapeles!' : 'Copiar Alerta WhatsApp' }}
+          </button>
+          <span class="text-[10px] text-slate-400">
+            Genera un resumen de alertas en formato WhatsApp listo para enviar a jefes de sección
+          </span>
+        </div>
+      </div>
+
     </div>
   </div>
 </template>
@@ -318,11 +547,13 @@ const lotesInput    = ref('107, 108, 109')
 const neFilter      = ref('')
 const loading       = ref(false)
 const rows          = ref([])
+const proveedores   = ref([])
 const narrativa     = ref('')
 const narrativaError= ref('')
 const narrativaFuente = ref('')   // 'gemini' | 'local'
 const narrativaAviso  = ref('')
 const loadingNarrativa = ref(false)
+const whatsappCopiado = ref(false)
 
 // ── Definición de filas de tabla ──────────────────────────────────────────
 const HVI_ROWS = [
@@ -345,6 +576,23 @@ const HILO_ROWS = [
   { key: 'thick_50',   label: 'Puntos Gruesos +50%', unit: '/km', dec: 1, thresholds: null,  inverse: true },
   { key: 'n_uster',      label: 'Ensayos Uster (por Ne)', unit: '', dec: 0, thresholds: null, inverse: false },
 ]
+
+// ── Matriz de Requisitos Mínimos — Denim ──────────────────────────────────
+// ok = umbral bueno (verde), w = umbral precaución (amarillo); fuera de w = crítico (rojo)
+// t: 'min' → valor mayor = mejor; 'max' → valor menor = mejor
+const MATRIZ_REQUISITOS = {
+  '7':    { app: 'Trama',    dest: ['TELAR'], sciMin: 115, strMin: 24,  umb: { tenacidad: { ok: 14.0, w: 13.0, t: 'min' }, elongacion: { ok: 7.0, w: 6.0, t: 'min' }, cvm: { ok: 13.5, w: 14.5, t: 'max' }, neps_200: { ok: 700, w: 850, t: 'max' }, vellosidad: { ok: 7.0, w: 8.0, t: 'max' } } },
+  '9':    { app: 'Trama',    dest: ['TELAR'], sciMin: 120, strMin: 25,  umb: { tenacidad: { ok: 14.5, w: 13.5, t: 'min' }, elongacion: { ok: 7.0, w: 6.5, t: 'min' }, cvm: { ok: 13.0, w: 14.0, t: 'max' }, neps_200: { ok: 600, w: 750, t: 'max' }, vellosidad: { ok: 6.5, w: 7.5, t: 'max' } } },
+  '10':   { app: 'Urdimbre', dest: ['URDIDORA','INDIGO','TELAR'], sciMin: 130, strMin: 26, umb: { tenacidad: { ok: 16.0, w: 15.0, t: 'min' }, elongacion: { ok: 8.0, w: 7.5, t: 'min' }, cvm: { ok: 12.0, w: 13.0, t: 'max' }, neps_200: { ok: 500, w: 650, t: 'max' }, vellosidad: { ok: 6.0, w: 7.0, t: 'max' } } },
+  '12.5': { app: 'Urdimbre', dest: ['URDIDORA','INDIGO','TELAR'], sciMin: 135, strMin: 27, umb: { tenacidad: { ok: 16.5, w: 15.5, t: 'min' }, elongacion: { ok: 8.0, w: 7.5, t: 'min' }, cvm: { ok: 11.5, w: 12.5, t: 'max' }, neps_200: { ok: 450, w: 600, t: 'max' }, vellosidad: { ok: 5.5, w: 6.5, t: 'max' } } },
+  '14':   { app: 'Urdimbre', dest: ['URDIDORA','INDIGO','TELAR'], sciMin: 140, strMin: 28, umb: { tenacidad: { ok: 17.0, w: 16.0, t: 'min' }, elongacion: { ok: 8.5, w: 8.0, t: 'min' }, cvm: { ok: 11.0, w: 12.0, t: 'max' }, neps_200: { ok: 400, w: 550, t: 'max' }, vellosidad: { ok: 5.0, w: 6.0, t: 'max' } } },
+}
+// Variables críticas por proceso productivo
+const PROC_VARS = {
+  URDIDORA: { label: '🏭 Urdidora',   vars: ['elongacion', 'tenacidad', 'thin_50'], tip: 'Tensión de urdido — elongación y resistencia críticas' },
+  INDIGO:   { label: '🎨 Índigo',      vars: ['neps_200', 'cvm', 'vellosidad'],      tip: 'Teñido en manta — neps y uniformidad de masa' },
+  TELAR:    { label: '🔧 Telar aire',  vars: ['tenacidad', 'elongacion', 'cvm', 'neps_200'], tip: 'Alta velocidad — exige tenacidad, CVm% y limpieza' },
+}
 
 // ── Computed ───────────────────────────────────────────────────────────────
 const hasData     = computed(() => rows.value.length > 0)
@@ -493,6 +741,286 @@ function trendClass(base, current, inverse = false) {
   return better ? 'text-emerald-500' : 'text-red-400'
 }
 
+// ── Auditoría de Aptitud por Proceso ──────────────────────────────────────
+function evalUmbral(val, umbral) {
+  if (val == null || !umbral) return 'sin-dato'
+  if (umbral.t === 'min') return val >= umbral.ok ? 'ok' : val >= umbral.w ? 'warn' : 'crit'
+  return val <= umbral.ok ? 'ok' : val <= umbral.w ? 'warn' : 'crit'
+}
+
+function aptCellClass(estado) {
+  return {
+    'ok':       'bg-emerald-50 text-emerald-700 font-bold',
+    'warn':     'bg-amber-50 text-amber-700 font-bold',
+    'crit':     'bg-red-50 text-red-700 font-bold',
+    'sin-dato': 'text-slate-300',
+    'na':       'text-slate-200',
+  }[estado] || 'text-slate-400'
+}
+
+function aptProcIcon(estado) {
+  return { 'ok': '✅', 'warn': '⚠️', 'crit': '🔴', 'na': '—', 'sin-dato': '?' }[estado] || '?'
+}
+
+function aptProcLabel(estado) {
+  return { 'ok': 'Apto', 'warn': 'Revisar', 'crit': 'No apto', 'na': 'N/A', 'sin-dato': 'S/D' }[estado] || '–'
+}
+
+function aptPasadorClass(p) {
+  return {
+    'aprobado':    'bg-emerald-100 text-emerald-800 border border-emerald-300',
+    'condicional': 'bg-amber-100 text-amber-800 border border-amber-300',
+    'rechazado':   'bg-red-100 text-red-800 border border-red-300',
+  }[p] || 'bg-slate-100 text-slate-500'
+}
+
+function aptDesvioLabel(key) {
+  return { cvm: 'CVm%', neps_200: 'Neps +200%', tenacidad: 'Tenac.', elongacion: 'Elong.', vellosidad: 'Vell. H' }[key] || key
+}
+
+function generarComentarioPlanta(ne, app, vals, hvi) {
+  const coms = []
+  // Tenacidad — vocabulario de planta
+  if (vals.tenacidad != null) {
+    if (vals.tenacidad >= 18) coms.push(`Va sobrado de fuerza (${vals.tenacidad.toFixed(1)} cN/tex). Hilo robusto, sin drama en ningún proceso.`)
+    else if (vals.tenacidad >= 16) coms.push(`Tenacidad sólida (${vals.tenacidad.toFixed(1)} cN/tex). Aguanta bien la tensión en telar a alta velocidad.`)
+    else if (vals.tenacidad >= 14.5) coms.push(`Tenacidad justa (${vals.tenacidad.toFixed(1)} cN/tex). No hay margen de seguridad — monitorear paradas en telar.`)
+    else coms.push(`⚠️ Tenacidad crítica (${vals.tenacidad.toFixed(1)} cN/tex). Alta probabilidad de rotura. Evaluar reducción de velocidad.`)
+  }
+  // CVm% para Trama — barreado
+  if (app === 'Trama' && vals.cvm != null) {
+    if (vals.cvm > 14) coms.push(`La masa viene bailando (CVm ${vals.cvm.toFixed(1)}%). Si arranca así el telar, van a tener barras.`)
+    else if (vals.cvm > 13) coms.push(`CVm ${vals.cvm.toFixed(1)}% — en el límite para trama. Ojo con barreado si la velocidad es alta.`)
+    else coms.push(`Masa estable (CVm ${vals.cvm.toFixed(1)}%). Sin riesgo de barreado.`)
+  }
+  // CVm% para Urdimbre — uniformidad
+  if (app === 'Urdimbre' && vals.cvm != null) {
+    if (vals.cvm > 13) coms.push(`CVm ${vals.cvm.toFixed(1)}% — masa irregular para urdimbre. Teñido desparejo en Índigo.`)
+    else if (vals.cvm > 12) coms.push(`CVm ${vals.cvm.toFixed(1)}% — aceptable, pero sin mucho margen para Índigo.`)
+  }
+  // Elongación para Urdimbre
+  if (app === 'Urdimbre' && vals.elongacion != null) {
+    if (vals.elongacion >= 9) coms.push(`Elongación excelente (${vals.elongacion.toFixed(1)}%). La Urdidora y el Índigo lo van a pasar sin problemas.`)
+    else if (vals.elongacion >= 8) coms.push(`Elongación correcta (${vals.elongacion.toFixed(1)}%). Camina bien por la Urdidora.`)
+    else if (vals.elongacion >= 7.5) coms.push(`Elongación ajustada (${vals.elongacion.toFixed(1)}%). Precaución en tensión de urdido — el hilo no perdona.`)
+    else coms.push(`⚠️ Elongación baja (${vals.elongacion.toFixed(1)}%). Riesgo real de rotura en Urdidora. Bajar tensión o velocidad.`)
+  }
+  // Neps para Índigo
+  if (app === 'Urdimbre' && vals.neps_200 != null) {
+    if (vals.neps_200 < 200) coms.push(`Hilo muy limpio para Índigo (Neps ${vals.neps_200.toFixed(0)}/km). Teñido uniforme.`)
+    else if (vals.neps_200 < 500) coms.push(`Neps aceptables para Índigo (${vals.neps_200.toFixed(0)}/km).`)
+    else if (vals.neps_200 < 700) coms.push(`Neps en zona de riesgo para Índigo (${vals.neps_200.toFixed(0)}/km). Posibles puntos claros en teñido.`)
+    else coms.push(`⚠️ Neps muy altos (${vals.neps_200.toFixed(0)}/km). Van a saltar en el Índigo — colorante desparejo.`)
+  }
+  // MIC — fibra
+  const mic = hvi.mic != null ? parseFloat(hvi.mic) : null
+  if (mic != null && !isNaN(mic)) {
+    if (mic > 4.7) coms.push(`MIC ${mic.toFixed(2)} — cargado al grueso. Fibra madura, menos neps pero hilo más rígido.`)
+    else if (mic > 4.5) coms.push(`MIC ${mic.toFixed(2)} — en el límite superior. Fibra tirando a gruesa.`)
+    else if (mic < 3.5) coms.push(`MIC ${mic.toFixed(2)} — fibra inmadura. Cuidado con neps y absorción desigual de tinte.`)
+  }
+  // STR fibra
+  const str = hvi.str != null ? parseFloat(hvi.str) : null
+  if (str != null && !isNaN(str)) {
+    if (str > 32) coms.push(`Fibra con STR ${str.toFixed(1)} g/tex — va sobrada de fuerza. Impacto positivo directo en tenacidad.`)
+    else if (str < 25) coms.push(`STR ${str.toFixed(1)} g/tex — fibra débil. Limita la tenacidad que se puede lograr con cualquier título.`)
+  }
+  return coms
+}
+
+const tablaAptitud = computed(() => {
+  if (!hasData.value || !loteActual.value) return []
+  const actual = Number(loteActual.value)
+  const hilos = rows.value.filter(r => Number(r.mistura) === actual && r.ne != null)
+  const hvi = rows.value.find(r => Number(r.mistura) === actual) || {}
+
+  return hilos.map(h => {
+    const ne = String(h.ne)
+    const nNum = parseFloat(ne)
+    const mKey = Object.keys(MATRIZ_REQUISITOS).find(k => Math.abs(parseFloat(k) - nNum) < 0.1)
+    const mat = mKey ? MATRIZ_REQUISITOS[mKey] : null
+    const app = mat?.app || (nNum <= 9 ? 'Trama' : 'Urdimbre')
+    const dest = mat?.dest || (nNum <= 9 ? ['TELAR'] : ['URDIDORA', 'INDIGO', 'TELAR'])
+    const umb = mat?.umb || {}
+
+    const pf = (v) => v != null ? parseFloat(v) : null
+    const vals = {
+      cvm: pf(h.cvm), neps_200: pf(h.neps_200), neps_140: pf(h.neps_140), neps_280: pf(h.neps_280),
+      thin_30: pf(h.thin_30), thin_40: pf(h.thin_40), thin_50: pf(h.thin_50),
+      thick_35: pf(h.thick_35), thick_50: pf(h.thick_50),
+      vellosidad: pf(h.vellosidad), tenacidad: pf(h.tenacidad), elongacion: pf(h.elongacion),
+      fuerza_b: pf(h.fuerza_b), trabajo_b: pf(h.trabajo_b),
+    }
+
+    // Evaluar cada variable contra la matriz
+    const ev = {}
+    const desvios = []
+    for (const [k, u] of Object.entries(umb)) {
+      ev[k] = evalUmbral(vals[k], u)
+      if (ev[k] === 'crit') desvios.push({ key: k, val: vals[k], req: u.ok, tipo: u.t })
+    }
+
+    // Chequeo HVI fibra
+    const hviAlerts = []
+    const str = pf(hvi.str), sci = pf(hvi.sci)
+    if (mat?.strMin && str != null && str < mat.strMin) hviAlerts.push(`STR ${str.toFixed(1)} < ${mat.strMin} g/tex`)
+    if (mat?.sciMin && sci != null && sci < mat.sciMin) hviAlerts.push(`SCI ${sci.toFixed(0)} < ${mat.sciMin}`)
+
+    // Evaluación por proceso
+    const procesos = {}
+    for (const [proc, cfg] of Object.entries(PROC_VARS)) {
+      if (!dest.includes(proc)) { procesos[proc] = 'na'; continue }
+      const results = cfg.vars.map(k => ev[k] || (vals[k] != null ? 'ok' : 'sin-dato')).filter(r => r !== 'sin-dato')
+      if (!results.length) { procesos[proc] = 'sin-dato'; continue }
+      procesos[proc] = results.includes('crit') ? 'crit' : results.includes('warn') ? 'warn' : 'ok'
+    }
+
+    // Estado global
+    const allP = Object.values(procesos)
+    const pasador = allP.includes('crit') ? 'rechazado' : (allP.includes('warn') || hviAlerts.length > 0) ? 'condicional' : 'aprobado'
+
+    const comentarios = generarComentarioPlanta(ne, app, vals, hvi)
+
+    return { ne, app, dest, vals, ev, procesos, pasador, desvios, hviAlerts, comentarios, nota: mat?.nota || '' }
+  })
+})
+
+// ── Alerta WhatsApp — clipboard ───────────────────────────────────────────
+function generarAlertaWhatsApp() {
+  if (!tablaAptitud.value.length || !loteActual.value) return ''
+  const actual = Number(loteActual.value)
+  const hvi = rows.value.find(r => Number(r.mistura) === actual) || {}
+  const pf = v => v != null ? parseFloat(v) : null
+  const str = pf(hvi.str), sci = pf(hvi.sci), mic = pf(hvi.mic), uhml = pf(hvi.uhml)
+  const f = (v, d = 1) => v != null && !isNaN(v) ? Number(v).toFixed(d) : '–'
+
+  const alertasNe = []
+  const hayAlerta = tablaAptitud.value.some(r => r.pasador !== 'aprobado')
+  const ico = hayAlerta ? '⚠️' : '✅'
+
+  const lines = [
+    `${ico} *ALERTA CALIDAD - LOTE FIAC ${actual}*`,
+    `_${new Date().toLocaleDateString('es-AR')} · Dashboard Mezcla→Hilo_`,
+    '',
+  ]
+
+  for (const row of tablaAptitud.value) {
+    const { ne, app, vals, ev, procesos, pasador, desvios, hviAlerts } = row
+    const nNum = parseFloat(ne)
+    const mKey = Object.keys(MATRIZ_REQUISITOS).find(k => Math.abs(parseFloat(k) - nNum) < 0.1)
+    const mat = mKey ? MATRIZ_REQUISITOS[mKey] : null
+
+    // Icono de estado
+    const neIco = pasador === 'rechazado' ? '🔴' : pasador === 'condicional' ? '⚠️' : '✅'
+    lines.push(`${neIco} *Ne ${ne} (${app})*:`)
+
+    if (pasador === 'aprobado' && !hviAlerts.length) {
+      lines.push(`✅ Todos los parámetros dentro de la Matriz. Sin observaciones.`)
+      lines.push('')
+      continue
+    }
+
+    // 1) Alerta de elongación para urdimbre
+    if (app === 'Urdimbre' && vals.elongacion != null && vals.elongacion < 8.0) {
+      const critico = vals.elongacion < 7.5
+      lines.push(`🧵 ${critico ? '¡ATENCIÓN' : 'Precaución'} en Urdido! Elongación en *${f(vals.elongacion)}%* ${critico ? '(Límite crítico)' : '(Margen ajustado)'}. El hilo está "seco" y no tiene margen de estiramiento.`)
+      lines.push(`📍 *Acción:* Controlar tensiones en filetero y bajar velocidad si hay cortes frecuentes.`)
+    }
+
+    // 2) Alerta de tenacidad para telar
+    if (vals.tenacidad != null) {
+      if (vals.tenacidad < 14.5) {
+        lines.push(`🔴 Tenacidad *${f(vals.tenacidad)} cN/tex* — CRÍTICA. Alta probabilidad de rotura en telar a velocidad normal.`)
+        lines.push(`📍 *Acción:* Reducir velocidad de inserción. Evaluar si se puede reforzar la mezcla.`)
+      } else if (vals.tenacidad >= 18) {
+        lines.push(`💪 Tenacidad *${f(vals.tenacidad)} cN/tex* — va sobrado de fuerza. Sin drama en ningún proceso.`)
+      }
+    }
+
+    // 3) Correlación de riesgo: fibra débil + hilo OK
+    const fibraDebil = (mat?.sciMin && sci != null && sci < mat.sciMin) || (mat?.strMin && str != null && str < mat.strMin)
+    const hiloOk = vals.tenacidad != null && vals.tenacidad >= (mat?.umb?.tenacidad?.ok || 16)
+    if (fibraDebil && hiloOk) {
+      const sciTxt = sci != null ? `SCI ${f(sci, 0)}` : ''
+      const strTxt = str != null ? `STR ${f(str)}` : ''
+      const matRef = mat?.sciMin ? `Matriz pide SCI≥${mat.sciMin}` : ''
+      lines.push(`📉 *CORRELACIÓN DE RIESGO:* Estamos logrando tenacidad de ${f(vals.tenacidad)} con ${[sciTxt, strTxt].filter(Boolean).join(' y ')} (${matRef}). La calidad es _prestada por el proceso_, la fibra no está ayudando. Ante cualquier salto térmico en planta, el hilo se cae.`)
+    } else if (fibraDebil) {
+      lines.push(`📉 *Fibra por debajo de la Matriz:* ${hviAlerts.join(' / ')}. Impacto directo en estabilidad del proceso.`)
+    }
+
+    // 4) CVm% para trama — barreado
+    if (app === 'Trama' && vals.cvm != null && vals.cvm > 13) {
+      lines.push(`📊 CVm% *${f(vals.cvm)}%* — masa irregular para trama. Riesgo de barreado visible en la tela.`)
+      lines.push(`📍 *Acción:* Revisar ajuste de estiraje y estado de manguitos.`)
+    }
+
+    // 5) MIC — absorción de tinte
+    if (mic != null && !isNaN(mic)) {
+      if (mic > 4.5) {
+        lines.push(`🎨 *ÍNDIGO / TINTURA:* MIC en *${f(mic, 2)}*. Fibra madura/gruesa → mano áspera y diferencia de absorción en tintura. Vigilar tono entre partidas.`)
+      } else if (mic < 3.5) {
+        lines.push(`🎨 *ÍNDIGO / TINTURA:* MIC en *${f(mic, 2)}*. Fibra inmadura → riesgo de neps blancos y absorción desigual de tinte.`)
+      }
+    }
+
+    // 6) Neps altos para Índigo
+    if (app === 'Urdimbre' && vals.neps_200 != null && vals.neps_200 > 500) {
+      lines.push(`🧶 Neps +200% en *${f(vals.neps_200, 0)}/km*. Puntos claros en Índigo. ${vals.neps_200 > 700 ? 'Evaluar ajuste de cardas urgente.' : 'Monitorear partida.'}`)
+    }
+
+    // Desvíos críticos restantes no cubiertos arriba
+    const covered = new Set(['elongacion', 'tenacidad', 'cvm', 'neps_200'])
+    const extra = desvios.filter(d => !covered.has(d.key))
+    if (extra.length) {
+      lines.push(`⚠️ Otros desvíos: ${extra.map(d => `${d.key} ${f(d.val)} ${d.tipo === 'min' ? '<' : '>'} ${d.req}`).join(', ')}`)
+    }
+
+    lines.push('')
+  }
+
+  // Resumen HVI
+  lines.push(`🌿 *HVI Lote ${actual}:* STR ${f(str)} g/tex | SCI ${f(sci, 0)} | MIC ${f(mic, 2)} | UHML ${f(uhml)} mm`)
+  lines.push('')
+
+  // Estado global
+  const globalRechazado = tablaAptitud.value.some(r => r.pasador === 'rechazado')
+  const globalCondicional = tablaAptitud.value.some(r => r.pasador === 'condicional')
+  if (globalRechazado) {
+    lines.push(`🔴 *ESTADO: CRÍTICO — revisar antes de continuar producción*`)
+  } else if (globalCondicional) {
+    lines.push(`⚠️ *ESTADO: PRECAUCIÓN — monitoreo intensivo recomendado*`)
+  } else {
+    lines.push(`✅ *ESTADO: APROBADO — producción sin restricciones*`)
+  }
+
+  lines.push(`_Generado por STC Dashboard · ${new Date().toLocaleString('es-AR')}_`)
+
+  return lines.join('\n')
+}
+
+async function copiarAlertaWhatsApp() {
+  const texto = generarAlertaWhatsApp()
+  if (!texto) return
+  try {
+    await navigator.clipboard.writeText(texto)
+    whatsappCopiado.value = true
+    setTimeout(() => { whatsappCopiado.value = false }, 2500)
+  } catch (err) {
+    // Fallback para navegadores sin clipboard API
+    const ta = document.createElement('textarea')
+    ta.value = texto
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+    whatsappCopiado.value = true
+    setTimeout(() => { whatsappCopiado.value = false }, 2500)
+  }
+}
+
 // ── API calls ─────────────────────────────────────────────────────────────
 async function analizar() {
   if (!lotesInput.value.trim() || loading.value) return
@@ -510,6 +1038,7 @@ async function analizar() {
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || 'Error al obtener datos')
     rows.value = data.rows || []
+    proveedores.value = data.proveedores || []
   } catch (err) {
     console.error('[DashboardMezclaHilo]', err)
     rows.value = []
@@ -532,6 +1061,7 @@ async function generarNarrativa(soloLocal = false) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         rows: rows.value,
+        proveedores: proveedores.value,
         loteActual: loteActual.value,
         modo: soloLocal ? 'local' : undefined
       })

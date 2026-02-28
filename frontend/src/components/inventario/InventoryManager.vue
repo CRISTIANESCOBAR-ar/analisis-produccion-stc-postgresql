@@ -1070,6 +1070,20 @@
             </div>
           </div>
 
+          <!-- CTA: Simular Plan de Mezclas -->
+          <div class="mt-6 flex justify-end">
+            <button
+              @click="mixPlanModal.visible = true"
+              :disabled="!saldoDisponibleRows.length || !activeRules.length"
+              class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold shadow hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+              </svg>
+              Simular Plan de Mezclas con Compra
+            </button>
+          </div>
+
           <!-- Tabla de Remanentes / No Usados -->
           <h3 class="text-lg font-bold text-gray-800 mb-3 mt-8 border-t pt-6">{{ projectionSourceTableTitle }}</h3>
           <div class="overflow-x-auto border rounded-lg">
@@ -1259,6 +1273,7 @@
                 <th class="px-3 py-2 text-right font-semibold text-slate-700">{{ mixDetailVarItem?.label }}</th>
                 <th class="px-3 py-2 text-right font-semibold text-slate-700">Peso Medio</th>
                 <th class="px-3 py-2 text-right font-semibold text-emerald-800">Kg Usables</th>
+                <th class="px-3 py-2 text-right font-semibold text-red-800">Kg No Usados</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
@@ -1316,6 +1331,11 @@
                     :class="row.usadosKg > 0 ? 'text-emerald-700' : 'text-gray-300'">
                   {{ row.usadosKg > 0 ? formatThousandInteger(row.usadosKg) : '—' }}
                 </td>
+                <!-- Kg no usados -->
+                <td class="px-3 py-1.5 text-right font-semibold"
+                    :class="row.sobranteKg > 0 ? 'text-red-700' : 'text-gray-300'">
+                  {{ row.sobranteKg > 0 ? formatThousandInteger(row.sobranteKg) : '—' }}
+                </td>
               </tr>
             </tbody>
 
@@ -1340,10 +1360,11 @@
                 </td>
                 <td class="px-3 py-2"></td>
                 <td class="px-3 py-2 text-right font-bold text-emerald-800">{{ formatThousandInteger(mixDetailSummary.totalUsadosKg) }}</td>
+                <td class="px-3 py-2 text-right font-bold text-red-800">{{ formatThousandInteger(mixDetailSummary.totalSobranteKg) }}</td>
               </tr>
               <!-- Señal de promedio vs objetivo -->
               <tr v-if="mixDetailVarItem" class="border-t border-slate-300">
-                <td colspan="11" class="px-3 py-1.5 text-xs">
+                <td colspan="12" class="px-3 py-1.5 text-xs">
                   <span :class="mixDetailSummary.avgHviUsados !== null && mixDetailSummary.avgHviUsados >= mixDetailVarItem.idealMin ? 'text-emerald-700 font-semibold' : 'text-amber-700 font-semibold'">
                     {{ mixDetailSummary.avgHviUsados !== null && mixDetailSummary.avgHviUsados >= mixDetailVarItem.idealMin
                       ? `✓ Promedio ${mixDetailVarItem.label} de los fardos usados (${formatProjectionValue(mixDetailSummary.avgHviUsados, 2)}) cumple el objetivo ≥ ${mixDetailVarItem.idealMin}`
@@ -1353,6 +1374,331 @@
               </tr>
             </tfoot>
           </table>
+        </div>
+
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- ── Modal: Simulación Plan de Mezclas ────────────────────────────────── -->
+  <Teleport to="body">
+    <div v-if="mixPlanModal.visible"
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+         @click.self="mixPlanModal.visible = false">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[94vh] flex flex-col overflow-hidden">
+
+        <!-- Header -->
+        <div class="flex items-center justify-between px-6 py-4 bg-indigo-700 rounded-t-2xl shrink-0">
+          <div>
+            <h2 class="text-lg font-bold text-white">Plan de Mezclas Simulado — Stock + Compra</h2>
+            <p class="text-xs text-indigo-200 mt-0.5">Sobrante disponible + camiones entrantes (asumidos zona ideal)</p>
+          </div>
+          <button @click="mixPlanModal.visible = false" class="text-indigo-200 hover:text-white transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="overflow-y-auto flex-1 px-6 py-5 space-y-5">
+
+          <!-- Inputs -->
+          <div class="flex flex-wrap items-end gap-4 p-4 bg-indigo-50 border border-indigo-200 rounded-xl">
+            <div>
+              <label class="block text-xs font-semibold text-indigo-700 mb-1">Camiones entrantes</label>
+              <input v-model.number="mixPlanModal.trucks" type="number" min="0" max="99"
+                     class="w-20 border border-indigo-300 rounded-md p-2 text-sm text-center font-bold focus:ring-2 focus:ring-indigo-400" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-indigo-700 mb-1">Fardos por camión</label>
+              <input v-model.number="mixPlanModal.balesPerTruck" type="number" min="1" max="999"
+                     class="w-24 border border-indigo-300 rounded-md p-2 text-sm text-center font-bold focus:ring-2 focus:ring-indigo-400" />
+            </div>
+            <div class="bg-white border border-indigo-200 rounded-md px-4 py-2">
+              <p class="text-[10px] text-indigo-500 uppercase tracking-wide">Fardos entrantes</p>
+              <p class="text-xl font-bold text-indigo-700">{{ formatThousandInteger((mixPlanModal.trucks||0)*(mixPlanModal.balesPerTruck||0)) }}</p>
+            </div>
+            <div class="bg-white border border-indigo-200 rounded-md px-4 py-2">
+              <p class="text-[10px] text-indigo-500 uppercase tracking-wide">Fardos por mezcla</p>
+              <p class="text-xl font-bold text-indigo-700">{{ filters.fardos || '—' }}</p>
+            </div>
+            <template v-if="mixPlanSimulation">
+              <div class="bg-amber-50 border border-amber-300 rounded-md px-4 py-2">
+                <p class="text-[10px] text-amber-600 uppercase tracking-wide">Mezclas — solo stock</p>
+                <p class="text-xl font-bold text-amber-700">
+                  {{ mixPlanSimulation.finalMixesCurrent }}
+                  <span class="text-[11px] font-normal text-amber-500 ml-1">({{ mixPlanSimulation.bindingVarCurrent }})</span>
+                </p>
+              </div>
+              <div class="bg-emerald-50 border border-emerald-400 rounded-md px-4 py-2">
+                <p class="text-[10px] text-emerald-600 uppercase tracking-wide">Mezclas Norma — + compra</p>
+                <p class="text-xl font-bold text-emerald-700">
+                  {{ mixPlanSimulation.finalMixesWithBuy }}
+                  <span class="text-[11px] font-normal text-emerald-500 ml-1">({{ mixPlanSimulation.bindingVarWithBuy }})</span>
+                </p>
+              </div>
+              <div class="bg-indigo-600 border border-indigo-700 rounded-md px-4 py-2 shadow-md">
+                <p class="text-[10px] text-indigo-200 uppercase tracking-wide font-semibold">Mezclas Iguales ◆ Golden Batch</p>
+                <p class="text-2xl font-black text-white">
+                  {{ mixPlanSimulation.N_identical }}
+                  <span class="text-[11px] font-normal text-indigo-300 ml-1">mezclas idénticas</span>
+                </p>
+              </div>
+            </template>
+          </div>
+
+          <div v-if="!mixPlanSimulation" class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+            Configura fardos por mezcla y activa al menos una Regla de Mezclas para ver la simulación.
+          </div>
+
+          <template v-else>
+
+            <!-- Tabla lote por lote -->
+            <div class="overflow-x-auto border border-slate-200 rounded-xl">
+              <table class="min-w-full text-xs">
+                <thead class="sticky top-0 bg-slate-100 border-b border-slate-300 z-10">
+                  <tr>
+                    <th class="px-3 py-2 text-left font-semibold text-slate-700">Productor</th>
+                    <th class="px-3 py-2 text-left font-semibold text-slate-700">Lote</th>
+                    <th class="px-3 py-2 text-center font-semibold text-slate-700">Estado</th>
+                    <th class="px-3 py-2 text-right font-semibold text-slate-700">Stock</th>
+                    <th class="px-3 py-2 text-right font-semibold text-emerald-700">Usados</th>
+                    <th class="px-3 py-2 text-right font-semibold text-red-700">Sobrante</th>
+                    <th class="px-3 py-2 text-left font-semibold text-slate-600">Motivo sobrante</th>
+                    <th class="px-3 py-2 text-right font-semibold text-slate-600">MIC</th>
+                    <th class="px-3 py-2 text-right font-semibold text-slate-600">STR</th>
+                    <th class="px-3 py-2 text-right font-semibold text-slate-600">LEN</th>
+                    <th class="px-3 py-2 text-right font-semibold text-indigo-700 border-l border-slate-300" title="Fardos fijos por mezcla (Golden Batch)">
+                      Receta /&nbsp;mezcla
+                    </th>
+                    <th class="px-3 py-2 text-right font-semibold text-red-700" title="Sobrante tras {{ mixPlanSimulation.N_identical }} mezclas">Saldo</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                  <tr v-for="(row, idx) in mixPlanSimulation.lotRows" :key="`mpl-${idx}`"
+                      :class="{
+                        'bg-emerald-50/50':  row.estado === 'USO',
+                        'bg-amber-50/60':    row.estado === 'TOLER.',
+                        'bg-gray-100/70':    row.estado === 'DESCAR.',
+                      }">
+                    <td class="px-3 py-1.5 font-medium text-slate-800">{{ row.PRODUTOR }}</td>
+                    <td class="px-3 py-1.5 font-mono text-slate-700">{{ row.LOTE }}</td>
+                    <td class="px-3 py-1.5 text-center">
+                      <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold"
+                            :class="{
+                              'bg-emerald-100 text-emerald-800': row.estado === 'USO',
+                              'bg-amber-100  text-amber-800':   row.estado === 'TOLER.',
+                              'bg-gray-200   text-gray-600':    row.estado === 'DESCAR.',
+                            }">
+                        {{ row.estado }}
+                      </span>
+                    </td>
+                    <td class="px-3 py-1.5 text-right text-slate-700">{{ row.stock }}</td>
+                    <td class="px-3 py-1.5 text-right font-semibold"
+                        :class="row.usados > 0 ? 'text-emerald-700' : 'text-gray-300'">
+                      {{ row.usados > 0 ? row.usados : '—' }}
+                    </td>
+                    <td class="px-3 py-1.5 text-right font-semibold"
+                        :class="row.sobrante > 0 ? 'text-red-700' : 'text-gray-300'">
+                      {{ row.sobrante > 0 ? row.sobrante : '—' }}
+                    </td>
+                    <td class="px-3 py-1.5 text-slate-500 italic text-[11px]">{{ row.motivo }}</td>
+                    <td class="px-3 py-1.5 text-right font-mono"
+                        :class="row.MIC !== null && row.MIC >= 3.5 && row.MIC <= 4.9 ? 'text-emerald-700' : 'text-amber-700'">
+                      {{ row.MIC !== null ? formatProjectionValue(row.MIC, 2) : '—' }}
+                    </td>
+                    <td class="px-3 py-1.5 text-right font-mono"
+                        :class="mixPlanSimulation.varResults.find(v=>v.ruleKey==='STR') && row.STR !== null
+                          ? (row.STR >= mixPlanSimulation.varResults.find(v=>v.ruleKey==='STR').idealMin ? 'text-emerald-700' : row.STR >= mixPlanSimulation.varResults.find(v=>v.ruleKey==='STR').tolMax ? 'text-sky-700' : 'text-amber-700')
+                          : 'text-slate-600'">
+                      {{ row.STR !== null ? formatProjectionValue(row.STR, 2) : '—' }}
+                    </td>
+                    <td class="px-3 py-1.5 text-right font-mono"
+                        :class="mixPlanSimulation.varResults.find(v=>v.ruleKey==='LEN') && row.UHML !== null
+                          ? (row.UHML >= mixPlanSimulation.varResults.find(v=>v.ruleKey==='LEN').idealMin ? 'text-emerald-700' : row.UHML >= mixPlanSimulation.varResults.find(v=>v.ruleKey==='LEN').tolMax ? 'text-sky-700' : 'text-amber-700')
+                          : 'text-slate-600'">
+                      {{ row.UHML !== null ? formatProjectionValue(row.UHML, 2) : '—' }}
+                    </td>
+                    <td class="px-3 py-1.5 text-right font-bold border-l border-slate-200"
+                        :class="row.isBottleneck ? 'text-red-700 bg-red-50' : 'text-indigo-700'">
+                      {{ row.balesPerMix > 0 ? row.balesPerMix : '—' }}
+                      <span v-if="row.isBottleneck" class="ml-0.5 text-[9px] font-semibold text-red-600" title="Cuello de botella — limita las mezclas idénticas">⬦</span>
+                    </td>
+                    <td class="px-3 py-1.5 text-right font-semibold"
+                        :class="row.sobrante > 0 ? 'text-red-700' : 'text-gray-300'">
+                      {{ row.sobrante > 0 ? row.sobrante : '—' }}
+                    </td>
+                  </tr>
+
+                  <!-- Separador + filas de camiones entrantes -->
+                  <tr v-if="mixPlanSimulation.truckRows.length" class="border-t-2 border-indigo-300">
+                    <td colspan="12" class="px-3 py-1 bg-indigo-50 text-[10px] font-bold uppercase text-indigo-600 tracking-wide">
+                      Camiones entrantes — asumidos calidad ideal
+                    </td>
+                  </tr>
+                  <tr v-for="(row, idx) in mixPlanSimulation.truckRows" :key="`truck-${idx}`"
+                      class="bg-indigo-50/70">
+                    <td class="px-3 py-1.5 font-medium text-indigo-800">{{ row.PRODUTOR }}</td>
+                    <td class="px-3 py-1.5 font-mono text-indigo-700">{{ row.LOTE }}</td>
+                    <td class="px-3 py-1.5 text-center">
+                      <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800">NUEVO</span>
+                    </td>
+                    <td class="px-3 py-1.5 text-right text-indigo-700 font-semibold">{{ row.stock }}</td>
+                    <td class="px-3 py-1.5 text-right font-semibold text-emerald-700">
+                      {{ row.usados > 0 ? row.usados : '—' }}
+                    </td>
+                    <td class="px-3 py-1.5 text-right font-semibold"
+                        :class="row.sobrante > 0 ? 'text-red-700' : 'text-gray-300'">
+                      {{ row.sobrante > 0 ? row.sobrante : '—' }}
+                    </td>
+                    <td class="px-3 py-1.5 text-indigo-500 italic text-[11px]">{{ row.motivo }}</td>
+                    <td class="px-3 py-1.5 text-center text-slate-300" colspan="3">— ideal asumido —</td>
+                    <td class="px-3 py-1.5 text-right font-bold border-l border-indigo-200"
+                        :class="row.isBottleneck ? 'text-red-700 bg-red-50' : 'text-indigo-700'">
+                      {{ row.balesPerMix > 0 ? row.balesPerMix : '—' }}
+                      <span v-if="row.isBottleneck" class="ml-0.5 text-[9px] font-semibold text-red-600" title="Cuello de botella — limita las mezclas idénticas">⬦</span>
+                    </td>
+                    <td class="px-3 py-1.5 text-right font-semibold"
+                        :class="row.sobrante > 0 ? 'text-red-700' : 'text-gray-300'">
+                      {{ row.sobrante > 0 ? row.sobrante : '—' }}
+                    </td>
+                  </tr>
+                </tbody>
+                <tfoot class="border-t-2 border-slate-400 bg-slate-100 sticky bottom-0">
+                  <!-- Fila 1: stock lots -->
+                  <tr>
+                    <td colspan="3" class="px-3 py-2 font-bold text-slate-700 text-xs">TOTAL STOCK</td>
+                    <td class="px-3 py-2 text-right font-bold text-slate-800">
+                      {{ mixPlanSimulation.lotRows.reduce((s,r) => s+r.stock, 0) }}
+                    </td>
+                    <td class="px-3 py-2 text-right font-bold text-emerald-800">
+                      {{ mixPlanSimulation.lotRows.reduce((s,r) => s+r.usados, 0) }}
+                    </td>
+                    <td class="px-3 py-2 text-right font-bold text-red-800">
+                      {{ mixPlanSimulation.lotRows.reduce((s,r) => s+r.sobrante, 0) }}
+                    </td>
+                    <td colspan="5" class="px-3 py-2"></td>
+                    <td class="px-3 py-2 text-right font-bold text-indigo-800 border-l border-slate-200">
+                      {{ mixPlanSimulation.lotBalesPerMix }}
+                    </td>
+                    <td class="px-3 py-2 text-right font-bold text-red-800">
+                      {{ mixPlanSimulation.lotRows.reduce((s,r) => s+r.sobrante, 0) }}
+                    </td>
+                  </tr>
+                  <!-- Fila 2: camiones entrantes -->
+                  <tr v-if="mixPlanSimulation.truckRows.length" class="border-t border-indigo-300 bg-indigo-50">
+                    <td colspan="3" class="px-3 py-2 font-bold text-indigo-700 text-xs">TOTAL ENTRANTES</td>
+                    <td class="px-3 py-2 text-right font-bold text-indigo-700">
+                      {{ mixPlanSimulation.truckRows.reduce((s,r) => s+r.stock, 0) }}
+                    </td>
+                    <td class="px-3 py-2 text-right font-bold text-emerald-800">
+                      {{ mixPlanSimulation.truckRows.reduce((s,r) => s+r.usados, 0) }}
+                    </td>
+                    <td class="px-3 py-2 text-right font-bold text-red-700">
+                      {{ mixPlanSimulation.truckRows.reduce((s,r) => s+r.sobrante, 0) }}
+                    </td>
+                    <td colspan="5" class="px-3 py-2"></td>
+                    <td class="px-3 py-2 text-right font-bold text-indigo-700 border-l border-indigo-200">
+                      {{ mixPlanSimulation.truckRows.reduce((s,r) => s+r.balesPerMix, 0) }}
+                    </td>
+                    <td class="px-3 py-2 text-right font-bold text-red-700">
+                      {{ mixPlanSimulation.truckRows.reduce((s,r) => s+r.sobrante, 0) }}
+                    </td>
+                  </tr>
+                  <!-- Fila 3: Golden Batch — receta + mezclas idénticas -->
+                  <tr class="border-t-2 border-indigo-600 bg-indigo-100">
+                    <td colspan="3" class="px-3 py-2 text-xs">
+                      <span class="font-black text-indigo-900">GOLDEN BATCH</span>
+                      <span class="ml-1 text-[10px] text-indigo-600">Norma {{ mixPlanSimulation.varResults.map(v=>v.label).join(' · ') }}</span>
+                    </td>
+                    <td class="px-3 py-2 text-right font-bold text-slate-700">
+                      {{ mixPlanSimulation.lotRows.reduce((s,r)=>s+r.stock,0) + mixPlanSimulation.truckRows.reduce((s,r)=>s+r.stock,0) }}
+                    </td>
+                    <td class="px-3 py-2 text-right font-bold text-emerald-900">
+                      {{ mixPlanSimulation.lotRows.reduce((s,r)=>s+r.usados,0) + mixPlanSimulation.truckRows.reduce((s,r)=>s+r.usados,0) }}
+                    </td>
+                    <td class="px-3 py-2 text-right font-bold text-red-900">
+                      {{ mixPlanSimulation.lotRows.reduce((s,r)=>s+r.sobrante,0) + mixPlanSimulation.truckRows.reduce((s,r)=>s+r.sobrante,0) }}
+                    </td>
+                    <!-- Motivo: cupo tolerancia -->
+                    <td colspan="4" class="px-3 py-2 text-[10px] text-indigo-700">
+                      Cupo tol. {{ mixPlanSimulation.maxTolBalesPerMix }} fardos / mezcla
+                    </td>
+                    <!-- Receta total (debe == fardosPorMezcla) -->
+                    <td class="px-3 py-2 text-right border-l border-indigo-300">
+                      <span class="font-black text-base"
+                            :class="mixPlanSimulation.recetaSum === mixPlanSimulation.fardosPorMezcla ? 'text-emerald-800' : 'text-amber-700'">
+                        {{ mixPlanSimulation.recetaSum }}
+                      </span>
+                      <span class="text-[9px] text-indigo-500 ml-0.5">fardos / mezcla ✓</span>
+                    </td>
+                    <!-- N mezclas idénticas Golden Batch -->
+                    <td class="px-3 py-2 text-right">
+                      <span class="inline-flex items-center gap-1 font-black text-lg text-indigo-900">
+                        {{ mixPlanSimulation.N_identical }}
+                      </span>
+                      <span class="text-[9px] text-indigo-600 block">mezclas iguales ⬦</span>
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            <!-- Compra por variable -->
+            <div class="space-y-3">
+              <h3 class="text-sm font-bold text-slate-700 border-b border-slate-200 pb-1">Recomendación de Compra por Variable</h3>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div v-for="v in mixPlanSimulation.varResults" :key="`buy-${v.label}`"
+                     class="rounded-xl border px-4 py-3 text-xs space-y-1"
+                     :class="v.aComprarF > 0 ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50'">
+                  <div class="flex items-center justify-between">
+                    <span class="font-bold text-slate-800 text-sm">{{ v.label }}</span>
+                    <span class="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+                          :class="v.aComprarF > 0 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'">
+                      {{ v.aComprarF > 0 ? 'Compra necesaria' : 'OK - Sin compra' }}
+                    </span>
+                  </div>
+                  <p class="text-slate-500">
+                    Regla {{ v.pctIdeal }}/{{ v.tolLimitPct }} —
+                    Obj. promedio ≥ {{ formatProjectionValue(v.idealMin, 2) }} ·
+                    Tolerancia {{ formatProjectionValue(v.tolMin, 2) }}–{{ formatProjectionValue(v.tolMax, 2) }} máx {{ v.tolLimitPct }}%
+                  </p>
+                  <div v-if="v.aComprarF > 0" class="grid grid-cols-3 gap-1 pt-1 border-t border-red-200">
+                    <div>
+                      <p class="text-[10px] text-red-500 uppercase">A comprar</p>
+                      <p class="font-bold text-red-800">{{ formatThousandInteger(v.aComprarF) }} fardos</p>
+                    </div>
+                    <div>
+                      <p class="text-[10px] text-red-500 uppercase">Kg</p>
+                      <p class="font-bold text-red-800">{{ formatThousandInteger(v.aComprarKg) }}</p>
+                    </div>
+                    <div>
+                      <p class="text-[10px] text-red-500 uppercase">Valor HVI</p>
+                      <p class="font-bold text-red-800">
+                        ≥ {{ v.valorMinCompra !== null ? formatProjectionValue(v.valorMinCompra, 2) : '—' }}
+                      </p>
+                    </div>
+                  </div>
+                  <p v-else class="text-emerald-700 font-semibold pt-1 border-t border-emerald-200">
+                    Stock suficiente para {{ v.mixesWithBuy }} mezcla{{ v.mixesWithBuy !== 1 ? 's' : '' }}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <p class="text-[11px] text-slate-400 italic">
+              * M1–M{{ mixPlanSimulation.N }} = fardos que ese lote aporta a <strong>cada</strong> mezcla del bloque (⁠⁠floor(stock / N)⁠⁠).
+              Los fardos entrantes se asumen de calidad ideal. Descartados no participan en ninguna mezcla.
+            </p>
+          </template>
+        </div>
+
+        <!-- Footer -->
+        <div class="px-6 py-3 bg-slate-50 border-t border-slate-200 flex justify-end rounded-b-2xl shrink-0">
+          <button @click="mixPlanModal.visible = false"
+                  class="px-4 py-2 rounded-lg bg-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-300 transition-colors">
+            Cerrar
+          </button>
         </div>
 
       </div>
@@ -2666,14 +3012,34 @@ const remanenteMixingRuleAnalysis = computed(() => {
       else                     { ideF  += f; ideKg  += kg; ideWsum += val * f; }
     });
 
-    // ── Usable de la zona tolerancia (limitado al tolLimitPct del bloque) ──
-    // Se usa proporcionalmente para conservar el promedio de la zona
-    const usableTolF  = Math.min(tolF, tolLimitF);
-    const tolRatio    = tolF > 0 ? usableTolF / tolF : 0;
-    const usableTolKg = tolKg * tolRatio;
-    const usableTolW  = tolWsum * tolRatio;
-    const sobranteTolF  = Math.max(0, tolF - usableTolF);
-    const sobranteTolKg = Math.max(0, tolKg - usableTolKg);
+    // ── Usable de la zona tolerancia: asignación greedy de enteros (mejor HVI primero) ──
+    // Se llena el cupo entero (floor) tomando primero los lotes con mejor HVI
+    const tolCapInt = Math.floor(tolLimitF);   // cupo máximo en fardos enteros
+
+    // Construir lista de lotes de tolerancia ordenada por HVI desc
+    const tolLotsSorted = saldoRows
+      .map(row => {
+        const val = getHvi(row);
+        const f   = Number(row.Fardos) || 0;
+        const pm  = Number(row.PesoMedio) || 0;
+        return { val, f, kg: f * pm };
+      })
+      .filter(r => r.val !== null && r.val >= tolMin && r.val < tolMax && r.f > 0)
+      .sort((a, b) => b.val - a.val);
+
+    let usableTolF = 0, usableTolKg = 0, usableTolW = 0;
+    let remainingTolCap = tolCapInt;
+    tolLotsSorted.forEach(lot => {
+      if (remainingTolCap <= 0) return;
+      const use = Math.min(lot.f, remainingTolCap);
+      usableTolF  += use;
+      usableTolKg += use * (lot.f > 0 ? lot.kg / lot.f : 0);
+      usableTolW  += lot.val * use;
+      remainingTolCap -= use;
+    });
+
+    const sobranteTolF  = tolF - usableTolF;
+    const sobranteTolKg = tolKg - usableTolKg;
 
     // ── Total usable del stock por esta variable ─────────────────────────
     // Sub-ideal + Ideal (sin límite) + Tolerancia (hasta límite)
@@ -2804,6 +3170,274 @@ const remanenteMixingRuleAnalysis = computed(() => {
 // ── Modal: detalle fardo a fardo por variable ───────────────────────────────
 const mixDetailModal = reactive({ visible: false, uiKey: null });
 
+// ── Modal: Simulación Plan de Mezclas ─────────────────────────────────────────
+const mixPlanModal = reactive({ visible: false, trucks: 3, balesPerTruck: 125 });
+
+const mixPlanSimulation = computed(() => {
+  const fardosPorMezcla = Number(filters.fardos) || 0;
+  if (fardosPorMezcla <= 0) return null;
+
+  const saldoRows = saldoDisponibleRows.value;
+  if (!saldoRows.length) return null;
+
+  const incomingF = (Number(mixPlanModal.trucks) || 0) * (Number(mixPlanModal.balesPerTruck) || 0);
+  const totalStockF  = saldoRows.reduce((s, r) => s + (Number(r.Fardos)     || 0), 0);
+  const totalStockKg = saldoRows.reduce((s, r) => s + (Number(r.Kilogramos) || 0), 0);
+  const avgKgPerBale = totalStockF > 0 ? totalStockKg / totalStockF : 0;
+
+  const varCfg = [
+    { uiKey: 'MIC',  ruleKey: 'MIC', label: 'MIC',
+      getHvi: r => { const v = Number(r.MIC);  return (!isNaN(v) && v > 0) ? v : null; } },
+    { uiKey: 'STR',  ruleKey: 'STR', label: 'STR',
+      getHvi: r => { const v = Number(r.STR);  return (!isNaN(v) && v > 0) ? v : null; } },
+    { uiKey: 'UHML', ruleKey: 'LEN', label: 'LEN (UHML)',
+      getHvi: r => { const v = Number(r.UHML); return (!isNaN(v) && v > 0) ? v : null; } },
+  ];
+
+  // ── Calcular N posibles por variable ────────────────────────────────────────
+  const varResults = [];
+  let bindingMixesCurrent = Infinity;
+  let bindingMixesWithBuy = Infinity;
+  let bindingVarCurrent   = null;
+  let bindingVarWithBuy   = null;
+
+  varCfg.forEach(({ uiKey, ruleKey, label, getHvi }) => {
+    const rule = activeRules.value.find(r => r.parametro === ruleKey);
+    if (!rule) return;
+
+    const idealMin    = parseFloat(rule.valor_ideal_min);
+    const tolMin      = parseFloat(rule.rango_tol_min);
+    const tolMax      = parseFloat(rule.rango_tol_max);
+    const pctIdeal    = parseFloat(rule.porcentaje_min_ideal);
+    if ([idealMin, tolMin, tolMax, pctIdeal].some(isNaN)) return;
+
+    const tolLimitPct  = 100 - pctIdeal;
+    const tolFreeRatio = 1 - tolLimitPct / 100;
+
+    let descF = 0, tolF = 0, subF = 0, ideF = 0;
+    saldoRows.forEach(row => {
+      const val = getHvi(row);
+      const f   = Number(row.Fardos) || 0;
+      if (val === null || f <= 0) return;
+      if      (val < tolMin)   descF += f;
+      else if (val < tolMax)   tolF  += f;
+      else if (val < idealMin) subF  += f;
+      else                     ideF  += f;
+    });
+    const existingFreeF = subF + ideF;
+
+    // Sin compra
+    const N_A  = Math.floor((existingFreeF + tolF) / fardosPorMezcla);
+    const N_B  = tolFreeRatio > 0 ? Math.floor(existingFreeF / (fardosPorMezcla * tolFreeRatio)) : Infinity;
+    const mixesCurrent     = Math.min(N_A, N_B);
+    const usableTolCurrent = Math.min(tolF, Math.floor(mixesCurrent * fardosPorMezcla * tolLimitPct / 100));
+
+    // Con compra (incoming = ideal)
+    const newFreeF     = existingFreeF + incomingF;
+    const N_A_buy      = Math.floor((newFreeF + tolF) / fardosPorMezcla);
+    const N_B_buy      = tolFreeRatio > 0 ? Math.floor(newFreeF / (fardosPorMezcla * tolFreeRatio)) : Infinity;
+    const mixesWithBuy     = Math.min(N_A_buy, N_B_buy);
+    const usableTolWithBuy = Math.min(tolF, Math.floor(mixesWithBuy * fardosPorMezcla * tolLimitPct / 100));
+
+    // Compra por variable (regla inversa del promedio) ────────────────────────
+    // Usamos el mismo cálculo que en remanenteMixingRuleAnalysis
+    const totalBloqueF = fardosPorMezcla * (Number(purchaseProjection.targetMixes) || mixesWithBuy);
+    const usableTolForBuy = Math.min(tolF, Math.floor(totalBloqueF * tolLimitPct / 100));
+    const freeForBuy  = existingFreeF;
+    const totalUsableForBuy = freeForBuy + usableTolForBuy;
+    const faltanteF   = Math.max(0, totalBloqueF - totalUsableForBuy);
+    const faltanteKg  = faltanteF * avgKgPerBale;
+
+    // Promedio actual (sin compra)
+    let wFree = 0;
+    saldoRows.forEach(row => {
+      const val = getHvi(row);
+      const f   = Number(row.Fardos) || 0;
+      if (val === null || f <= 0 || val < tolMax) return;
+      wFree += val * f;
+    });
+    const avgFree = existingFreeF > 0 ? wFree / existingFreeF : 0;
+
+    let compraFPromedio = 0;
+    let valorMinCompra  = null;
+    if (faltanteF === 0 && avgFree < idealMin) {
+      const denom = idealMin - avgFree;
+      if (denom > 0) {
+        compraFPromedio = Math.ceil(totalBloqueF * (idealMin - avgFree) / denom);
+        valorMinCompra  = idealMin;
+      }
+    }
+    if (faltanteF > 0) {
+      const usadosStockF   = totalBloqueF - faltanteF;
+      const rawValor       = (idealMin * totalBloqueF - avgFree * usadosStockF) / faltanteF;
+      const remTolCap      = Math.max(0, totalBloqueF * tolLimitPct / 100 - usableTolForBuy);
+      const umbral         = remTolCap >= faltanteF ? tolMin : tolMax;
+      valorMinCompra       = Math.max(rawValor, umbral);
+    }
+    const aComprarF  = Math.max(faltanteF, compraFPromedio);
+    const aComprarKg = aComprarF * avgKgPerBale;
+
+    if (mixesCurrent < bindingMixesCurrent) { bindingMixesCurrent = mixesCurrent; bindingVarCurrent = label; }
+    if (mixesWithBuy  < bindingMixesWithBuy)  { bindingMixesWithBuy  = mixesWithBuy;  bindingVarWithBuy  = label; }
+
+    varResults.push({
+      label, uiKey, ruleKey, getHvi,
+      idealMin, tolMin, tolMax, tolLimitPct, pctIdeal,
+      descF, tolF, subF, ideF, existingFreeF,
+      usableTolCurrent, totalUsableCurrent : existingFreeF + usableTolCurrent, mixesCurrent,
+      usableTolWithBuy,  totalUsableWithBuy: newFreeF + usableTolWithBuy,    mixesWithBuy,
+      // compra
+      aComprarF, aComprarKg, valorMinCompra, faltanteF, faltanteKg,
+    });
+  });
+
+  if (!varResults.length) return null;
+
+  const finalMixesCurrent = bindingMixesCurrent === Infinity ? 0 : bindingMixesCurrent;
+  const finalMixesWithBuy  = bindingMixesWithBuy  === Infinity ? 0 : bindingMixesWithBuy;
+  const N = finalMixesWithBuy;   // referencia Norma (para tarjetas de compra)
+
+  // ══ GOLDEN BATCH + NORMA ════════════════════════════════════════════════════
+  // Paso 1: Clasificar cada lote (zona más restrictiva entre todas las variables)
+  const trucks = Number(mixPlanModal.trucks)      || 0;
+  const bpt    = Number(mixPlanModal.balesPerTruck) || 0;
+
+  const classifiedLots = saldoRows
+    .filter(row => (Number(row.Fardos) || 0) > 0)
+    .map(row => {
+      const f = Number(row.Fardos) || 0;
+      let estadoPriority = 0;
+      varResults.forEach(vr => {
+        const val = vr.getHvi(row);
+        if (val === null) return;
+        if      (val < vr.tolMin && estadoPriority < 2) estadoPriority = 2;
+        else if (val < vr.tolMax && estadoPriority < 1) estadoPriority = 1;
+      });
+      return {
+        type: 'lot',
+        PRODUTOR: row.PRODUTOR, LOTE: row.LOTE,
+        estado: estadoPriority === 2 ? 'DESCAR.' : estadoPriority === 1 ? 'TOLER.' : 'USO',
+        stock: f,
+        MIC:  Number(row.MIC)  || null,
+        STR:  Number(row.STR)  || null,
+        UHML: Number(row.UHML) || null,
+        pesoMedio: Number(row.PesoMedio) || 0,
+      };
+    });
+
+  // Paso 2: Cupo máx. tolerancia por mezcla (Norma más restrictiva de las vars activas)
+  const maxTolBalesPerMix = varResults.length > 0
+    ? Math.floor(Math.min(...varResults.map(vr => vr.tolLimitPct / 100)) * fardosPorMezcla)
+    : fardosPorMezcla;
+
+  // Paso 3: Lista candidatos activos (no DESCAR.) + camiones
+  const candidates = [
+    ...classifiedLots.filter(r => r.estado !== 'DESCAR.' && r.stock > 0),
+    ...(trucks > 0 && bpt > 0
+      ? Array.from({ length: trucks }, (_, i) => ({
+          type: 'truck', truckIdx: i,
+          PRODUTOR: 'Entrante', LOTE: `Camión ${i + 1}`,
+          estado: 'USO', stock: bpt,
+          MIC: null, STR: null, UHML: null, pesoMedio: avgKgPerBale,
+          isIncoming: true,
+        }))
+      : []),
+  ];
+  const totalActive = candidates.reduce((s, c) => s + c.stock, 0);
+
+  // Paso 4: Receta proporcional al stock (float)
+  candidates.forEach(c => { c.rawRecipe = totalActive > 0 ? (c.stock / totalActive) * fardosPorMezcla : 0; });
+
+  // Paso 5: Aplicar cupo TOLER. (Norma) — rebalancear resto hacia lotes USO
+  const rawTolSum = candidates.filter(c => c.estado === 'TOLER.').reduce((s, c) => s + c.rawRecipe, 0);
+  if (rawTolSum > maxTolBalesPerMix && rawTolSum > 0) {
+    const scale      = maxTolBalesPerMix / rawTolSum;
+    const surplus    = rawTolSum - maxTolBalesPerMix;
+    const usoRawSum  = candidates.filter(c => c.estado !== 'TOLER.').reduce((s, c) => s + c.rawRecipe, 0);
+    candidates.forEach(c => {
+      if (c.estado === 'TOLER.') {
+        c.adjRecipe = c.rawRecipe * scale;
+      } else {
+        c.adjRecipe = c.rawRecipe + (usoRawSum > 0 ? surplus * c.rawRecipe / usoRawSum : 0);
+      }
+    });
+  } else {
+    candidates.forEach(c => { c.adjRecipe = c.rawRecipe; });
+  }
+
+  // Paso 6: Redondeo entero con Largest Remainder Method (suma == fardosPorMezcla)
+  candidates.forEach(c => {
+    c.recipe          = Math.max(0, Math.floor(c.adjRecipe));
+    c.recipeRemainder = c.adjRecipe - Math.floor(c.adjRecipe);
+  });
+  {
+    const sumFloor = candidates.reduce((s, c) => s + c.recipe, 0);
+    const deficit  = fardosPorMezcla - sumFloor;
+    if (deficit > 0) {
+      [...candidates]
+        .sort((a, b) => b.recipeRemainder - a.recipeRemainder)
+        .slice(0, deficit)
+        .forEach(c => { c.recipe += 1; });
+    }
+  }
+
+  // Paso 7: N_identicas = min( floor(stock / recipe) ) para recipe > 0
+  candidates.forEach(c => { c.nPossible = c.recipe > 0 ? Math.floor(c.stock / c.recipe) : Infinity; });
+  const N_identicalRaw = candidates.length > 0
+    ? candidates.reduce((mn, c) => Math.min(mn, c.nPossible), Infinity)
+    : 0;
+  const N_identical = N_identicalRaw === Infinity ? 0 : N_identicalRaw;
+
+  // Paso 8: Materializar filas con usados/sobrante basados en la receta × N_identical
+  candidates.forEach(c => {
+    c.balesPerMix = c.recipe;
+    c.usados      = c.recipe * N_identical;
+    c.sobrante    = c.stock - c.usados;
+    c.isBottleneck = c.recipe > 0 && c.nPossible === N_identical;
+    c.motivo = c.usados > 0
+      ? (c.isIncoming
+          ? (c.sobrante > 0 ? 'Entrante — sobrante de receta' : 'Entrante (receta completa)')
+          : (c.estado === 'TOLER.'
+              ? 'Tolerancia — cupo Norma aplicado'
+              : 'Golden Batch — receta proporcional'))
+      : 'Stock insuficiente para la receta';
+  });
+
+  // Separar en lotRows (con DESCAR. añadidos) y truckRows
+  const lotRows = [
+    ...candidates.filter(c => c.type === 'lot'),
+    ...classifiedLots
+      .filter(r => r.estado === 'DESCAR.' && r.stock > 0)
+      .map(r => ({
+        type: 'lot', PRODUTOR: r.PRODUTOR, LOTE: r.LOTE,
+        estado: 'DESCAR.', stock: r.stock,
+        balesPerMix: 0, usados: 0, sobrante: r.stock,
+        recipe: 0, nPossible: Infinity, isBottleneck: false,
+        motivo: 'Descartado por calidad HVI',
+        MIC: r.MIC, STR: r.STR, UHML: r.UHML, pesoMedio: r.pesoMedio,
+      })),
+  ].sort((a, b) => {
+    const zo = { 'USO': 0, 'TOLER.': 1, 'DESCAR.': 2 };
+    if (zo[a.estado] !== zo[b.estado]) return zo[a.estado] - zo[b.estado];
+    return (a.PRODUTOR + a.LOTE).localeCompare(b.PRODUTOR + b.LOTE);
+  });
+  const truckRows = candidates.filter(c => c.type === 'truck');
+
+  return {
+    totalStockF, totalStockKg, incomingF,
+    incomingKg: incomingF * avgKgPerBale,
+    fardosPorMezcla, avgKgPerBale,
+    varResults,
+    finalMixesCurrent, bindingVarCurrent,
+    finalMixesWithBuy, bindingVarWithBuy,
+    N, N_identical,
+    maxTolBalesPerMix,
+    lotRows, truckRows,
+    recetaSum: candidates.reduce((s, c) => s + c.recipe, 0),
+    lotBalesPerMix: lotRows.reduce((s, r) => s + r.balesPerMix, 0),
+  };
+});
+
 function openMixDetailModal(uiKey) {
   mixDetailModal.uiKey  = uiKey;
   mixDetailModal.visible = true;
@@ -2823,9 +3457,8 @@ const mixDetailRows = computed(() => {
   const varItem = mixDetailVarItem.value;
   if (!varItem) return [];
 
-  const { idealMin, tolMin, tolMax, tolLimitPct, usableTolF, tolF } = varItem;
+  const { idealMin, tolMin, tolMax, tolLimitPct } = varItem;
   const bloqueF  = remanenteMixingRuleAnalysis.value?.totalBloqueF || 0;
-  const tolRatio = tolF > 0 ? usableTolF / tolF : 0;
 
   const hviGetters = {
     MIC:  r => { const v = Number(r.MIC);  return (!isNaN(v) && v > 0) ? v : null; },
@@ -2836,6 +3469,24 @@ const mixDetailRows = computed(() => {
   if (!getHvi) return [];
 
   const ZONE_ORDER = { 'Ideal': 0, 'Sub-ideal': 1, 'Tolerancia': 2, 'Sobrante tol.': 3, 'Descartado': 4, 'Sin dato': 5 };
+
+  // ── Asignación greedy de enteros para la zona de tolerancia ──────────────
+  // Igual que en remanenteMixingRuleAnalysis: mejor HVI primero, fardos enteros
+  const tolCapInt = Math.floor(varItem.tolLimitPct / 100 * (remanenteMixingRuleAnalysis.value?.totalBloqueF || 0));
+  const tolSorted = saldoDisponibleRows.value
+    .map(row => ({ key: `${row.PRODUTOR}||${row.LOTE}`, val: getHvi(row), f: Number(row.Fardos) || 0 }))
+    .filter(r => r.val !== null && r.val >= varItem.tolMin && r.val < varItem.tolMax && r.f > 0)
+    .sort((a, b) => b.val - a.val);
+
+  // Map: clave lote -> fardos asignados (enteros)
+  const tolAssigned = new Map();
+  let remCap = tolCapInt;
+  tolSorted.forEach(lot => {
+    if (remCap <= 0) { tolAssigned.set(lot.key, 0); return; }
+    const use = Math.min(lot.f, remCap);
+    tolAssigned.set(lot.key, use);
+    remCap -= use;
+  });
 
   const rows = saldoDisponibleRows.value.map(row => {
     const val       = getHvi(row);
@@ -2854,14 +3505,15 @@ const mixDetailRows = computed(() => {
       motivo  = `${mixDetailModal.uiKey} ${val.toFixed(2)} < ${tolMin} (mínimo absoluto)`;
       usadosF = 0; usadosKg = 0;
     } else if (val < tolMax) {
-      // Tolerancia: asignación proporcional según el cupo disponible
-      usadosF  = fardos * tolRatio;
+      // Tolerancia: asignación greedy entera (lookup desde Map precalculado)
+      const lotKey = `${row.PRODUTOR}||${row.LOTE}`;
+      usadosF  = tolAssigned.get(lotKey) ?? 0;
       usadosKg = usadosF * pesoMedio;
       const sobF = fardos - usadosF;
-      if (sobF > 0.005) {
+      if (sobF > 0) {
         zona      = 'Tolerancia';   condicion = 'Tolerancia (parcial)';
         noUsado   = true;
-        motivo    = `Cupo tol. ${tolLimitPct}% → máx ${Math.round(bloqueF * tolLimitPct / 100)} fardos en bloque`;
+        motivo    = `Cupo tol. ${tolLimitPct}% → máx ${tolCapInt} fardos en bloque`;
       } else {
         zona      = 'Tolerancia';   condicion = 'Tolerancia';
         noUsado   = false;          motivo    = '';
@@ -2911,8 +3563,10 @@ const mixDetailSummary = computed(() => {
     }
   });
 
+  const totalSobranteKg = rows.reduce((s, r) => s + r.sobranteKg, 0);
+
   return {
-    totalUsadosF, totalSobranteF, totalUsadosKg,
+    totalUsadosF, totalSobranteF, totalUsadosKg, totalSobranteKg,
     avgHviUsados:   wFU > 0 ? wSumU / wFU : null,
     avgHviSobrante: wFS > 0 ? wSumS / wFS : null,
   };
@@ -3389,20 +4043,22 @@ const formatThousandInteger = (value) => {
   const parsedNumber = Number(normalizedValue);
   if (Number.isNaN(parsedNumber)) return value;
 
-  return new Intl.NumberFormat('es-ES', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(Math.round(parsedNumber));
+  // Formateador manual: separador de miles con '.' desde 1.000
+  // (Intl.NumberFormat('es-ES') en Node 18+ / CLDR 42+ usa minimumGroupingDigits=2
+  //  y omite el separador para valores entre 1.000 y 9.999)
+  return Math.round(parsedNumber).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 };
 
 const formatProjectionValue = (value, decimals = 2) => {
   const numberValue = Number(value);
   if (Number.isNaN(numberValue)) return '-';
 
-  return new Intl.NumberFormat('es-ES', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals
-  }).format(numberValue);
+  // Formateador manual: parte entera con '.' como miles, ',' como decimal
+  const fixed   = Math.abs(numberValue).toFixed(decimals);
+  const [intPart, decPart = ''] = fixed.split('.');
+  const intFormatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const sign = numberValue < 0 ? '-' : '';
+  return decimals > 0 ? `${sign}${intFormatted},${decPart}` : `${sign}${intFormatted}`;
 };
 
 const formatGuidanceBound = (value) => {
