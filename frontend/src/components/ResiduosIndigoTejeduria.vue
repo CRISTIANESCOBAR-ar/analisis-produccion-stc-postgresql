@@ -940,76 +940,75 @@ const exportarAExcel = async () => {
 
 const exportarAExcelConFormato = async () => {
   try {
-    // Crear workbook y worksheet con ExcelJS (formato completo con logo)
     const workbook = new ExcelJS.Workbook()
-    const worksheet = workbook.addWorksheet('Residuos', {
-      views: [{ state: 'frozen', xSplit: 0, ySplit: 6 }], // Congelar hasta fila 6
+    const worksheet = workbook.addWorksheet('Resumen Día', {
+      views: [{ showGridLines: false, zoomScale: 100 }],
       pageSetup: {
-        paperSize: 5,
+        paperSize: 9,
         orientation: 'landscape',
         fitToPage: true,
         fitToWidth: 1,
-        fitToHeight: 0,
+        fitToHeight: 1,
+        scale: 65,
         margins: {
-          left: 0.196850393700787,
-          right: 0.196850393700787,
-          top: 0.196850393700787,
-          bottom: 0.393700787401575,
-          header: 0.196850393700787,
-          footer: 0.196850393700787
+          left: 0.1968503937007874,
+          right: 0.1968503937007874,
+          top: 0.1968503937007874,
+          bottom: 0.3937007874015748,
+          header: 0.1968503937007874,
+          footer: 0.1968503937007874
         },
         horizontalCentered: true,
-        verticalCentered: false
+        verticalCentered: false,
+        showRowColHeaders: false,
+        showGridLines: false
       }
     })
-    
-    // Configurar anchos de columnas según archivo de referencia
-    worksheet.columns = [
-      { key: 'col_a', width: 0.86 },
-      { key: 'col_b', width: 14.14 },
-      { key: 'col_c', width: 13.29 },
-      { key: 'col_d', width: 11.43 },
-      { key: 'col_e', width: 8.71 },
-      { key: 'col_f', width: 5.71 },
-      { key: 'col_g', width: 13.0 },
-      { key: 'col_h', width: 8.43 },
-      { key: 'col_i', width: 9.29 },
-      { key: 'col_j', width: 14.86 },
-      { key: 'col_k', width: 11.71 },
-      { key: 'col_l', width: 11.43 },
-      { key: 'col_m', width: 8.71 },
-      { key: 'col_n', width: 5.71 },
-      { key: 'col_o', width: 13.0 },
-      { key: 'col_p', width: 8.43 },
-      { key: 'col_q', width: 9.29 },
-      { key: 'col_r', width: 7.71 },
-      { key: 'col_s', width: 8.71 },
-      { key: 'col_t', width: 14.71 },
-      { key: 'col_u', width: 12.71 },
-      { key: 'col_v', width: 13.0 },
-      { key: 'col_w', width: 10.29 }
-    ]
-    
-    // FILA 1
+
+    // Anchos de columnas exactos del archivo de referencia
+    const colWidths = [0.86, 14.14, 13.29, 11.43, 8.71, 5.71, 5.71, 8.43, 9.29, 14.86, 11.71, 11.43, 8.71, 5.71, 5.71, 8.43, 9.29, 7.71, 8.71, 14.71, 12.71, 12.71, 10.29]
+    colWidths.forEach((w, i) => { worksheet.getColumn(i + 1).width = w })
+
+    // Color de borde del archivo de referencia (theme:4 tint:-0.5 ≈ azul oscuro)
+    const borderColor = { argb: 'FF203864' }
+    const thinBorderDark = { style: 'thin', color: borderColor }
+    const thinBorder = { style: 'thin' }
+    const defaultFont = { name: 'Verdana', size: 10 }
+    const defaultFontBold = { name: 'Verdana', size: 10, bold: true }
+    const defaultAlign = { horizontal: 'center', vertical: 'middle' }
+
+    // Helper: aplicar estilo base a rango de celdas vacías
+    const setBaseStyle = (row, cols, font, align) => {
+      cols.forEach(c => {
+        const cell = row.getCell(c)
+        cell.font = font || defaultFont
+        cell.alignment = align || defaultAlign
+      })
+    }
+
+    // ─── FILA 1: separador superior (altura 4.5) ───
     worksheet.getRow(1).height = 4.5
-    
-    // FILA 2: Logo + Título
+    for (let c = 1; c <= 23; c++) {
+      const cell = worksheet.getRow(1).getCell(c)
+      cell.font = defaultFont
+      cell.alignment = defaultAlign
+    }
+
+    // ─── FILA 2: Logo + Título empresa + "Mes" ───
     worksheet.getRow(2).height = 20.1
     worksheet.mergeCells('B2:B3')
     const cellLogo = worksheet.getCell('B2')
-    cellLogo.alignment = { horizontal: 'center', vertical: 'middle' }
-    
+    cellLogo.font = defaultFont
+    cellLogo.alignment = defaultAlign
+    cellLogo.border = { left: thinBorderDark, right: thinBorderDark, top: thinBorderDark, bottom: thinBorderDark }
+
+    // Insertar logo
     try {
       const logoResponse = await fetch('/LogoSantana.jpg')
       const logoBlob = await logoResponse.blob()
       const logoArrayBuffer = await logoBlob.arrayBuffer()
       const logoBase64 = btoa(new Uint8Array(logoArrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''))
-      
-      const logoId = workbook.addImage({
-        base64: logoBase64,
-        extension: 'jpeg'
-      })
-      
+      const logoId = workbook.addImage({ base64: logoBase64, extension: 'jpeg' })
       worksheet.addImage(logoId, {
         tl: { col: 1.1, row: 1.2 },
         ext: { width: 100, height: 35 }
@@ -1017,97 +1016,158 @@ const exportarAExcelConFormato = async () => {
     } catch (logoError) {
       console.warn('No se pudo cargar el logo:', logoError)
     }
-    
+
     worksheet.mergeCells('C2:T2')
     const cellTitulo = worksheet.getCell('C2')
     cellTitulo.value = 'SANTANA TEXTIL CHACO S.A. - UNIDAD V'
     cellTitulo.font = { name: 'Tahoma', size: 10, bold: true }
-    cellTitulo.alignment = { horizontal: 'center', vertical: 'middle' }
-    
+    cellTitulo.alignment = defaultAlign
+    cellTitulo.border = { left: thinBorderDark, right: thinBorderDark, top: thinBorderDark, bottom: thinBorderDark }
+
     worksheet.mergeCells('U2:W2')
     const cellMesLabel = worksheet.getCell('U2')
     cellMesLabel.value = 'Mes'
-    cellMesLabel.font = { name: 'Tahoma', size: 10 }
-    cellMesLabel.alignment = { horizontal: 'center', vertical: 'middle' }
-    
-    // FILA 3
+    cellMesLabel.font = defaultFont
+    cellMesLabel.alignment = defaultAlign
+    cellMesLabel.border = { left: thinBorderDark, right: thinBorderDark, top: thinBorderDark, bottom: thinBorderDark }
+
+    // ─── FILA 3: Subtítulo + Fecha mes ───
     worksheet.getRow(3).height = 20.1
     worksheet.mergeCells('C3:T3')
     const cellSubtitulo = worksheet.getCell('C3')
-    cellSubtitulo.value = '\"SEGUIMIENTO de RESIDUOS ESTOPA TEÑIDA de ÍNDIGO y TEJEDURÍA\"'
-    cellSubtitulo.font = { name: 'Tahoma', size: 10 }
-    cellSubtitulo.alignment = { horizontal: 'center', vertical: 'middle' }
-    
+    cellSubtitulo.value = '"SEGUIMIENTO de RESIDUOS ESTOPA TEÑIDA de ÍNDIGO y TEJEDURÍA"'
+    cellSubtitulo.font = defaultFont
+    cellSubtitulo.alignment = defaultAlign
+    cellSubtitulo.border = { left: thinBorderDark, right: thinBorderDark, top: thinBorderDark, bottom: thinBorderDark }
+
     worksheet.mergeCells('U3:W3')
     const cellFechaMes = worksheet.getCell('U3')
     if (fechaSeleccionada.value) {
-      const [yyyy, mm, dd] = fechaSeleccionada.value.split('-')
-      cellFechaMes.value = `${mesFormateado.value}`
-      cellFechaMes.alignment = { horizontal: 'center', vertical: 'middle' }
+      const [yyyy, mm] = fechaSeleccionada.value.split('-')
+      cellFechaMes.value = new Date(parseInt(yyyy), parseInt(mm) - 1, 15)
+      cellFechaMes.numFmt = 'mmmm-yy'
     }
-    
-    // FILA 5: Secciones
+    cellFechaMes.font = { name: 'Tahoma', size: 10, bold: true }
+    cellFechaMes.alignment = defaultAlign
+    cellFechaMes.border = { left: thinBorderDark, right: thinBorderDark, top: thinBorderDark, bottom: thinBorderDark }
+
+    // ─── FILA 4: vacía ───
+    // (altura por defecto)
+
+    // ─── FILA 5: Secciones (ÍNDIGO / TEJEDURÍA / BALANCE) + costo ───
     worksheet.getRow(5).height = 20.1
-    worksheet.mergeCells('C5:J5')
-    const cellSeccionIndigo = worksheet.getCell('C5')
-    cellSeccionIndigo.value = 'ÍNDIGO'
-    cellSeccionIndigo.font = { name: 'Tahoma', size: 10, bold: true }
-    cellSeccionIndigo.alignment = { horizontal: 'center', vertical: 'middle' }
-    
-    worksheet.mergeCells('K5:T5')
-    const cellSeccionTej = worksheet.getCell('K5')
-    cellSeccionTej.value = 'TEJEDURÍA'
-    cellSeccionTej.font = { name: 'Tahoma', size: 10, bold: true }
-    cellSeccionTej.alignment = { horizontal: 'center', vertical: 'middle' }
-    
+    // B5: costo URDIMBRE TEÑIDA
+    const cellCosto = worksheet.getCell('B5')
+    cellCosto.value = costoUrdidoTenido.value || 0
+    cellCosto.font = defaultFont
+    cellCosto.alignment = defaultAlign
+    cellCosto.border = { left: thinBorderDark, top: thinBorderDark }
+
+    // C5: "ÍNDIGO" con centerContinuous (C5-I5)
+    const indigoCols5 = [3, 4, 5, 6, 7, 8, 9]
+    indigoCols5.forEach(c => {
+      const cell = worksheet.getRow(5).getCell(c)
+      cell.font = c <= 4 ? defaultFontBold : defaultFont
+      cell.alignment = { horizontal: 'centerContinuous', vertical: 'middle' }
+      cell.border = { top: thinBorderDark }
+      if (c === 3) { cell.value = 'ÍNDIGO'; cell.border = { left: thinBorder, right: thinBorder, top: thinBorderDark } }
+      if (c === 4) cell.border = { left: thinBorder, top: thinBorderDark }
+      if (c === 9) cell.border = { right: thinBorderDark, top: thinBorderDark }
+    })
+    // J5
+    const cellJ5 = worksheet.getRow(5).getCell(10)
+    cellJ5.font = defaultFont
+    cellJ5.alignment = { horizontal: 'centerContinuous', vertical: 'middle' }
+    cellJ5.border = { right: thinBorder, top: thinBorderDark }
+
+    // K5: "TEJEDURÍA" con centerContinuous (K5-T5)
+    const tejCols5 = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    tejCols5.forEach(c => {
+      const cell = worksheet.getRow(5).getCell(c)
+      cell.font = c <= 12 ? defaultFontBold : defaultFont
+      cell.alignment = { horizontal: 'centerContinuous', vertical: 'middle' }
+      cell.border = { top: thinBorderDark }
+      if (c === 11) cell.value = 'TEJEDURÍA'
+      if (c === 20) cell.border = { right: thinBorderDark, top: thinBorderDark }
+    })
+
+    // U5:W5 "BALANCE" merged
     worksheet.mergeCells('U5:W5')
     const cellBalance = worksheet.getCell('U5')
     cellBalance.value = 'BALANCE'
-    cellBalance.font = { name: 'Tahoma', size: 10, bold: true }
-    cellBalance.alignment = { horizontal: 'center', vertical: 'middle' }
-    
-    // FILA 6: Encabezados
+    cellBalance.font = defaultFontBold
+    cellBalance.alignment = defaultAlign
+    cellBalance.border = { left: thinBorderDark, top: thinBorderDark }
+
+    // ─── FILA 6: Encabezados ───
     worksheet.getRow(6).height = 39.95
-    const encabezados = ['', 'Fecha', 'Producción Metros', 'Producción Kg', 'Residuos Kg', 'Resid en %', 'Meta %', 'Desvió en Kg', 'Desvió en Metros', 'Desvió en $', 'Producción Metros', 'Producción Kg', 'Residuos Kg', 'Resid en %', 'Meta %', 'Desvió en Kg', 'Desvió en Metros', 'Cant. Anudados', 'Prom. x Anudado', 'Desvió en $', 'ESTOPA AZUL PRODUCIDA', 'ESTOPA AZUL PRENSADA', 'Diferencia']
-    
-    for (let colNumber = 1; colNumber <= encabezados.length; colNumber++) {
-      const cell = worksheet.getRow(6).getCell(colNumber)
-      cell.value = encabezados[colNumber - 1]
-      cell.font = { name: 'Tahoma', size: 10 }
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEA7E6C' } }
-      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+    const headerFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEA7E6C' }, bgColor: { indexed: 64 } }
+    const headerFont = { name: 'Verdana', size: 10, color: { argb: 'FFFFFFFF' } }
+    const headerAlign = { horizontal: 'center', vertical: 'middle', wrapText: true }
+    const encabezados = [null, 'Fecha', 'Producción Metros', 'Producción Kg', 'Residuos Kg', 'Resid en %', 'Meta %', 'Desvió en Kg', 'Desvió en Metros', 'Desvió en $', 'Producción Metros', 'Producción Kg', 'Residuos Kg', 'Resid en %', 'Meta %', 'Desvió en Kg', 'Desvió en Metros', 'Cant. Anudados', 'Prom. x Anudado', 'Desvió en $', 'ESTOPA AZUL PRODUCIDA', 'ESTOPA AZUL PRENSADA', 'Diferencia']
+
+    for (let c = 1; c <= 23; c++) {
+      const cell = worksheet.getRow(6).getCell(c)
+      cell.value = encabezados[c - 1]
+      cell.font = headerFont
+      cell.fill = c >= 2 ? headerFill : { type: 'pattern', pattern: 'none' }
+      cell.alignment = headerAlign
+      // Bordes específicos por columna
+      const border = {}
+      if (c === 2) { border.left = thinBorderDark; border.right = thinBorder; border.bottom = { style: 'medium', color: { argb: 'FFFFFFFF' } } }
+      if (c === 3) border.left = thinBorder
+      if (c === 10) border.right = thinBorder
+      if (c === 20) border.right = thinBorderDark
+      if (c === 21) border.left = thinBorderDark
+      if (c === 23) border.right = thinBorderDark
+      if (Object.keys(border).length > 0) cell.border = border
     }
-    
-    // Helpers
+
+    // ─── Formatos numéricos por columna ───
+    const numFmts = {
+      2: 'mm-dd-yy', 3: '#,##0', 4: '#,##0', 5: '#,##0',
+      6: '#,##0.0', 7: '', 8: '#,##0', 9: '#,##0',
+      10: '[$$-2C0A] #,##0', 11: '#,##0', 12: '#,##0', 13: '#,##0',
+      14: '#,##0.0', 15: '', 16: '#,##0', 17: '#,##0',
+      18: '#,##0', 19: '#,##0', 20: '[$$-2C0A] #,##0',
+      21: '#,##0', 22: '#,##0', 23: '#,##0'
+    }
+
+    // ─── Helpers de cálculo ───
     const calcDesvioKg = (residuos, produccion, meta) => {
       if (!produccion || produccion === 0) return null
       const residuosPercent = (residuos / produccion) * 100
       const desvio = ((residuosPercent - meta) * produccion) / 100
       return desvio > 0 ? desvio : null
     }
-    
     const calcDesvioMetros = (metros, kg, residuos, meta) => {
       if (!kg || kg === 0) return null
       const desvioKg = calcDesvioKg(residuos, kg, meta)
       if (!desvioKg) return null
       return (metros / kg) * desvioKg
     }
-    
     const calcDesvioArs = (metros, kg, residuos, meta, costo) => {
       if (!costo || costo === 0) return null
       const desvioMetros = calcDesvioMetros(metros, kg, residuos, meta)
       if (!desvioMetros) return null
       return desvioMetros * costo
     }
-    
-    // Agregar datos
-    datosCompletos.value.forEach(item => {
+
+    // Color de relleno para filas alternas (rosa claro del archivo de referencia)
+    const altFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF4BFB6' }, bgColor: { indexed: 64 } }
+    const noFill = { type: 'pattern', pattern: 'none' }
+
+    // ─── FILAS DE DATOS ───
+    const dataStartRow = 7
+    datosCompletos.value.forEach((item, index) => {
       let fechaExcel = null
       if (item.DT_BASE_PRODUCAO) {
         const [dia, mes, anio] = item.DT_BASE_PRODUCAO.split('/')
         fechaExcel = new Date(parseInt(anio), parseInt(mes) - 1, parseInt(dia))
       }
-      
+
+      const residPercent = item.TotalKg ? (item.ResiduosKg / item.TotalKg) * 100 : null
+      const residTejPercent = item.TejeduriaKg ? (item.ResiduosTejeduriaKg / item.TejeduriaKg) * 100 : null
       const desvioIndigoKg = calcDesvioKg(item.ResiduosKg, item.TotalKg, metaPercent.value)
       const desvioIndigoMetros = calcDesvioMetros(item.TotalMetros, item.TotalKg, item.ResiduosKg, metaPercent.value)
       const desvioIndigoPesos = calcDesvioArs(item.TotalMetros, item.TotalKg, item.ResiduosKg, metaPercent.value, costoUrdidoTenido.value)
@@ -1115,73 +1175,120 @@ const exportarAExcelConFormato = async () => {
       const desvioTejMetros = calcDesvioMetros(item.TejeduriaMetros, item.TejeduriaKg, item.ResiduosTejeduriaKg, metaTejeduriaPercent.value)
       const desvioTejPesos = calcDesvioArs(item.TejeduriaMetros, item.TejeduriaKg, item.ResiduosTejeduriaKg, metaTejeduriaPercent.value, costoUrdidoTenido.value)
       const promedioAnudado = (item.ResiduosTejeduriaKg && item.AnudadosCount && item.AnudadosCount > 0) ? item.ResiduosTejeduriaKg / item.AnudadosCount : null
-      
-      const dataRow = worksheet.addRow(['', fechaExcel, item.TotalMetros ?? null, item.TotalKg ?? null, item.ResiduosKg ?? null, item.TotalKg ? (item.ResiduosKg / item.TotalKg) : null, metaPercent.value / 100, desvioIndigoKg, desvioIndigoMetros, desvioIndigoPesos, item.TejeduriaMetros ?? null, item.TejeduriaKg ?? null, item.ResiduosTejeduriaKg ?? null, item.TejeduriaKg ? (item.ResiduosTejeduriaKg / item.TejeduriaKg) : null, metaTejeduriaPercent.value / 100, desvioTejKg, desvioTejMetros, item.AnudadosCount ?? null, promedioAnudado, desvioTejPesos, item.EstopaAzulProducida ?? null, item.ResiduosPrensadaKg ?? null, item.DiferenciaEstopa ?? null])
+
+      const rowValues = [
+        null, fechaExcel,
+        item.TotalMetros || null, item.TotalKg || null, item.ResiduosKg || null,
+        residPercent, metaPercent.value,
+        desvioIndigoKg, desvioIndigoMetros, desvioIndigoPesos,
+        item.TejeduriaMetros || null, item.TejeduriaKg || null, item.ResiduosTejeduriaKg || null,
+        residTejPercent, metaTejeduriaPercent.value,
+        desvioTejKg, desvioTejMetros,
+        item.AnudadosCount || null, promedioAnudado, desvioTejPesos,
+        item.EstopaAzulProducida || null, item.ResiduosPrensadaKg || null, item.DiferenciaEstopa ?? null
+      ]
+
+      const dataRow = worksheet.addRow(rowValues)
       dataRow.height = 20.1
-    })
-    
-    // Totales
-    const totalPromedioAnudado = (totales.value.residuosTejeduriaKg && totales.value.anudadosCount > 0) ? totales.value.residuosTejeduriaKg / totales.value.anudadosCount : null
-    const totalRow = worksheet.addRow(['', null, totales.value.metros, totales.value.kg, totales.value.residuos, totales.value.kg ? (totales.value.residuos / totales.value.kg) : null, metaPercent.value / 100, totales.value.desvioKg > 0 ? totales.value.desvioKg : null, totales.value.desvioMetros > 0 ? totales.value.desvioMetros : null, totales.value.desvioIndigoPesos > 0 ? totales.value.desvioIndigoPesos : null, totales.value.tejeduriaMetros, totales.value.tejeduriaKg, totales.value.residuosTejeduriaKg, totales.value.tejeduriaKg ? (totales.value.residuosTejeduriaKg / totales.value.tejeduriaKg) : null, metaTejeduriaPercent.value / 100, totales.value.desvioTejeduriaKg > 0 ? totales.value.desvioTejeduriaKg : null, totales.value.desvioTejeduriaMetros > 0 ? totales.value.desvioTejeduriaMetros : null, totales.value.anudadosCount, totalPromedioAnudado, totales.value.desvioTejeduriaPesos > 0 ? totales.value.desvioTejeduriaPesos : null, totales.value.estopaAzulProducida, totales.value.residuosPrensadaKg, totales.value.diferenciaEstopa])
-    
-    totalRow.height = 24.95
-    for (let colNumber = 1; colNumber <= 23; colNumber++) {
-      const cell = totalRow.getCell(colNumber)
-      cell.font = { name: 'Tahoma', size: 10, bold: true }
-      cell.alignment = { horizontal: 'center', vertical: 'middle' }
-    }
-    
-    // Formatos
-    const formatos = { 2: 'mm-dd-yy', 3: '#,##0', 4: '#,##0', 5: '#,##0', 6: '0.0%', 7: '0.0%', 8: '#,##0', 9: '#,##0', 10: '#,##0', 11: '#,##0', 12: '#,##0', 13: '#,##0', 14: '0.0%', 15: '0.0%', 16: '#,##0', 17: '#,##0', 18: '#,##0', 19: '#,##0.00', 20: '#,##0', 21: '#,##0', 22: '#,##0', 23: '#,##0' }
 
-    // Aplicar estilos
-    worksheet.eachRow((row, rowNumber) => {
-      if (rowNumber <= 6) return
-      const isTotalRow = (rowNumber === worksheet.rowCount)
-      
-      for (let colNumber = 1; colNumber <= 23; colNumber++) {
-        const cell = row.getCell(colNumber)
-        cell.alignment = { horizontal: 'center', vertical: 'middle' }
-        if (formatos[colNumber]) cell.numFmt = formatos[colNumber]
+      // Alternar filas: índice 0 (fila 7) = rosa, 1 (fila 8) = sin relleno, etc.
+      const isAltRow = index % 2 === 0
+      const rowFill = isAltRow ? altFill : noFill
+      const rowAlign = isAltRow ? { horizontal: 'center', vertical: 'middle', wrapText: true } : defaultAlign
+      const isFirstDataRow = index === 0
 
-        let color = null
-        const val = cell.value
-        
-        if (colNumber === 4 || colNumber === 5) color = isTotalRow ? 'FF1E40AF' : 'FF1D4ED8'
-        else if (colNumber === 6) color = (val > row.getCell(7).value) ? 'FFDC2626' : 'FF16A34A'
-        else if (colNumber === 8 || colNumber === 9 || colNumber === 10) { if (val > 0) color = 'FFDC2626' }
-        else if (colNumber === 12) color = isTotalRow ? 'FF155E75' : 'FF0E7490'
-        else if (colNumber === 13) color = isTotalRow ? 'FF9F1239' : 'FFBE123C'
-        else if (colNumber === 14) color = (val > row.getCell(15).value) ? 'FFDC2626' : 'FF16A34A'
-        else if (colNumber === 16 || colNumber === 17 || colNumber === 20) { if (val > 0) color = 'FFDC2626' }
-        else if (colNumber === 18) color = isTotalRow ? 'FFB45309' : 'FFD97706'
-        else if (colNumber === 19) color = isTotalRow ? 'FF047857' : 'FF059669'
-        else if (colNumber === 21) color = isTotalRow ? 'FF1D4ED8' : 'FF2563EB'
-        else if (colNumber === 22) color = isTotalRow ? 'FF15803D' : 'FF16A34A'
-        else if (colNumber === 23) { if (val !== 0 && val !== null) color = 'FFEF4444' }
+      for (let c = 1; c <= 23; c++) {
+        const cell = dataRow.getCell(c)
+        cell.font = defaultFont
+        cell.alignment = rowAlign
+        if (c >= 2) cell.fill = rowFill
+        if (numFmts[c]) cell.numFmt = numFmts[c]
 
-        if (color) {
-          cell.font = { name: 'Tahoma', size: 10, color: { argb: color }, bold: true }
-        } else if (isTotalRow) {
-          cell.font = { name: 'Tahoma', size: 10, bold: true }
-        } else {
-          cell.font = { name: 'Tahoma', size: 10 }
+        // Bordes
+        const border = {}
+        if (c === 2) border.left = thinBorderDark
+        if (c === 3) border.left = thinBorder
+        if (c === 10) border.right = thinBorder
+        if (c === 20) border.right = thinBorderDark
+        if (c === 21) border.left = thinBorderDark
+        if (c === 23) border.right = thinBorderDark
+        // Primera fila de datos: borde superior medium blanco
+        if (isFirstDataRow && c >= 3 && c <= 23) {
+          border.top = { style: 'medium', color: { argb: 'FFFFFFFF' } }
         }
+        if (Object.keys(border).length > 0) cell.border = border
       }
     })
-    
+
+    // ─── FILA TOTALES ───
+    const totalResidPercent = totales.value.kg ? (totales.value.residuos / totales.value.kg) * 100 : null
+    const totalResidTejPercent = totales.value.tejeduriaKg ? (totales.value.residuosTejeduriaKg / totales.value.tejeduriaKg) * 100 : null
+    const totalPromedioAnudado = (totales.value.residuosTejeduriaKg && totales.value.anudadosCount > 0) ? totales.value.residuosTejeduriaKg / totales.value.anudadosCount : null
+
+    const totalValues = [
+      null, null,
+      totales.value.metros, totales.value.kg, totales.value.residuos,
+      totalResidPercent, metaPercent.value,
+      totales.value.desvioKg > 0 ? totales.value.desvioKg : null,
+      totales.value.desvioMetros > 0 ? totales.value.desvioMetros : null,
+      totales.value.desvioIndigoPesos > 0 ? totales.value.desvioIndigoPesos : null,
+      totales.value.tejeduriaMetros, totales.value.tejeduriaKg, totales.value.residuosTejeduriaKg,
+      totalResidTejPercent, metaTejeduriaPercent.value,
+      totales.value.desvioTejeduriaKg > 0 ? totales.value.desvioTejeduriaKg : null,
+      totales.value.desvioTejeduriaMetros > 0 ? totales.value.desvioTejeduriaMetros : null,
+      totales.value.anudadosCount, totalPromedioAnudado,
+      totales.value.desvioTejeduriaPesos > 0 ? totales.value.desvioTejeduriaPesos : null,
+      totales.value.estopaAzulProducida, totales.value.residuosPrensadaKg, totales.value.diferenciaEstopa
+    ]
+
+    const totalRow = worksheet.addRow(totalValues)
+    totalRow.height = 24.95
+
+    // Formatos especiales para fila totales (% como 0.0 en vez de #,##0.0)
+    const totalNumFmts = { ...numFmts, 6: '0.0', 14: '#,##0.0' }
+
+    for (let c = 1; c <= 23; c++) {
+      const cell = totalRow.getCell(c)
+      cell.font = defaultFontBold
+      cell.alignment = defaultAlign
+      if (totalNumFmts[c]) cell.numFmt = totalNumFmts[c]
+
+      // Bordes: double arriba, thin abajo
+      const border = {}
+      if (c >= 2) { border.top = { style: 'double' }; border.bottom = thinBorderDark }
+      if (c === 2) border.left = thinBorderDark
+      if (c === 3) border.left = thinBorder
+      if (c === 10) border.right = thinBorder
+      if (c === 20) border.right = thinBorderDark
+      if (c === 21) border.left = thinBorderDark
+      if (c === 23) border.right = thinBorderDark
+      if (Object.keys(border).length > 0) cell.border = border
+
+      // Celdas de desvío total en rojo con fondo rojo y texto blanco (H38 y P38)
+      if (c === 8 && cell.value) {
+        cell.font = { ...defaultFontBold, color: { argb: 'FFFFFFFF' } }
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFF0000' }, bgColor: { indexed: 64 } }
+      }
+      if (c === 16 && cell.value) {
+        cell.font = { ...defaultFontBold, color: { argb: 'FFFFFFFF' } }
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFF0000' }, bgColor: { indexed: 64 } }
+      }
+    }
+
+    // ─── Print area ───
     const lastRow = worksheet.rowCount
-    worksheet.pageSetup.printArea = `B1:W${lastRow}`
-    
+    worksheet.pageSetup.printArea = `B2:W${lastRow}`
+
+    // ─── Generar archivo ───
     const ahora = new Date()
     const dia = ahora.getDate().toString().padStart(2, '0')
     const mes = (ahora.getMonth() + 1).toString().padStart(2, '0')
     const anio = ahora.getFullYear()
     const hora = ahora.getHours().toString().padStart(2, '0')
     const minuto = ahora.getMinutes().toString().padStart(2, '0')
-    
-    const nombreArchivo = `Residuos_ProFormat_${mesFormateado.value.replace(' ', '_')}_${dia}-${mes}-${anio}_${hora}${minuto}.xlsx`
-    
+
+    const nombreArchivo = `Resumen_Dia_Residuos_${mesFormateado.value.replace(' ', '_')}_${dia}-${mes}-${anio}_${hora}${minuto}.xlsx`
+
     const buffer = await workbook.xlsx.writeBuffer()
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     const url = URL.createObjectURL(blob)
@@ -1192,13 +1299,13 @@ const exportarAExcelConFormato = async () => {
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
-    
+
     Swal.fire({
       toast: true,
       position: 'top-end',
       icon: 'success',
       title: 'Excel Pro generado',
-      text: 'Archivo con formato completo descargado',
+      text: 'Archivo con formato idéntico al original descargado',
       showConfirmButton: false,
       timer: 3000,
       timerProgressBar: true
