@@ -1002,7 +1002,7 @@ const exportarAExcelConFormato = async () => {
     cellLogo.alignment = defaultAlign
     cellLogo.border = { left: thinBorderDark, right: thinBorderDark, top: thinBorderDark, bottom: thinBorderDark }
 
-    // Insertar logo
+    // Insertar logo (usar tl/br con offsets nativos como en el archivo de referencia)
     try {
       const logoResponse = await fetch('/LogoSantana.jpg')
       const logoBlob = await logoResponse.blob()
@@ -1010,8 +1010,9 @@ const exportarAExcelConFormato = async () => {
       const logoBase64 = btoa(new Uint8Array(logoArrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''))
       const logoId = workbook.addImage({ base64: logoBase64, extension: 'jpeg' })
       worksheet.addImage(logoId, {
-        tl: { col: 1.1, row: 1.2 },
-        ext: { width: 100, height: 35 }
+        tl: { nativeCol: 1, nativeColOff: 285750, nativeRow: 1, nativeRowOff: 55788 },
+        br: { nativeCol: 1, nativeColOff: 618374, nativeRow: 2, nativeRowOff: 170088 },
+        editAs: 'absolute'
       })
     } catch (logoError) {
       console.warn('No se pudo cargar el logo:', logoError)
@@ -1158,37 +1159,30 @@ const exportarAExcelConFormato = async () => {
     const noFill = { type: 'pattern', pattern: 'none' }
 
     // ─── FILAS DE DATOS ───
+    // Helper: solo retorna el valor si es un número válido y > 0, sino undefined
+    const numOrUndef = (v) => (v !== null && v !== undefined && v !== 0 && !isNaN(v)) ? v : undefined
+    const numOrUndefZ = (v) => (v !== null && v !== undefined && !isNaN(v)) ? v : undefined // permite 0
+
     const dataStartRow = 7
     datosCompletos.value.forEach((item, index) => {
-      let fechaExcel = null
+      let fechaExcel = undefined
       if (item.DT_BASE_PRODUCAO) {
         const [dia, mes, anio] = item.DT_BASE_PRODUCAO.split('/')
         fechaExcel = new Date(parseInt(anio), parseInt(mes) - 1, parseInt(dia))
       }
 
-      const residPercent = item.TotalKg ? (item.ResiduosKg / item.TotalKg) * 100 : null
-      const residTejPercent = item.TejeduriaKg ? (item.ResiduosTejeduriaKg / item.TejeduriaKg) * 100 : null
+      const residPercent = item.TotalKg ? (item.ResiduosKg / item.TotalKg) * 100 : undefined
+      const residTejPercent = item.TejeduriaKg ? (item.ResiduosTejeduriaKg / item.TejeduriaKg) * 100 : undefined
       const desvioIndigoKg = calcDesvioKg(item.ResiduosKg, item.TotalKg, metaPercent.value)
       const desvioIndigoMetros = calcDesvioMetros(item.TotalMetros, item.TotalKg, item.ResiduosKg, metaPercent.value)
       const desvioIndigoPesos = calcDesvioArs(item.TotalMetros, item.TotalKg, item.ResiduosKg, metaPercent.value, costoUrdidoTenido.value)
       const desvioTejKg = calcDesvioKg(item.ResiduosTejeduriaKg, item.TejeduriaKg, metaTejeduriaPercent.value)
       const desvioTejMetros = calcDesvioMetros(item.TejeduriaMetros, item.TejeduriaKg, item.ResiduosTejeduriaKg, metaTejeduriaPercent.value)
       const desvioTejPesos = calcDesvioArs(item.TejeduriaMetros, item.TejeduriaKg, item.ResiduosTejeduriaKg, metaTejeduriaPercent.value, costoUrdidoTenido.value)
-      const promedioAnudado = (item.ResiduosTejeduriaKg && item.AnudadosCount && item.AnudadosCount > 0) ? item.ResiduosTejeduriaKg / item.AnudadosCount : null
+      const promedioAnudado = (item.ResiduosTejeduriaKg && item.AnudadosCount && item.AnudadosCount > 0) ? item.ResiduosTejeduriaKg / item.AnudadosCount : undefined
 
-      const rowValues = [
-        null, fechaExcel,
-        item.TotalMetros || null, item.TotalKg || null, item.ResiduosKg || null,
-        residPercent, metaPercent.value,
-        desvioIndigoKg, desvioIndigoMetros, desvioIndigoPesos,
-        item.TejeduriaMetros || null, item.TejeduriaKg || null, item.ResiduosTejeduriaKg || null,
-        residTejPercent, metaTejeduriaPercent.value,
-        desvioTejKg, desvioTejMetros,
-        item.AnudadosCount || null, promedioAnudado, desvioTejPesos,
-        item.EstopaAzulProducida || null, item.ResiduosPrensadaKg || null, item.DiferenciaEstopa ?? null
-      ]
-
-      const dataRow = worksheet.addRow(rowValues)
+      // Crear fila vacía y luego setear solo las celdas con datos
+      const dataRow = worksheet.addRow([])
       dataRow.height = 20.1
 
       // Alternar filas: índice 0 (fila 7) = rosa, 1 (fila 8) = sin relleno, etc.
@@ -1197,12 +1191,31 @@ const exportarAExcelConFormato = async () => {
       const rowAlign = isAltRow ? { horizontal: 'center', vertical: 'middle', wrapText: true } : defaultAlign
       const isFirstDataRow = index === 0
 
+      // Valores por columna (undefined = celda vacía sin numFmt)
+      const cellValues = {
+        2: fechaExcel,
+        3: numOrUndef(item.TotalMetros), 4: numOrUndef(item.TotalKg), 5: numOrUndef(item.ResiduosKg),
+        6: residPercent, 7: metaPercent.value,
+        8: desvioIndigoKg, 9: desvioIndigoMetros, 10: desvioIndigoPesos,
+        11: numOrUndef(item.TejeduriaMetros), 12: numOrUndef(item.TejeduriaKg), 13: numOrUndef(item.ResiduosTejeduriaKg),
+        14: residTejPercent, 15: metaTejeduriaPercent.value,
+        16: desvioTejKg, 17: desvioTejMetros,
+        18: numOrUndef(item.AnudadosCount), 19: promedioAnudado, 20: desvioTejPesos,
+        21: numOrUndef(item.EstopaAzulProducida), 22: numOrUndef(item.ResiduosPrensadaKg), 23: numOrUndefZ(item.DiferenciaEstopa)
+      }
+
       for (let c = 1; c <= 23; c++) {
         const cell = dataRow.getCell(c)
         cell.font = defaultFont
         cell.alignment = rowAlign
         if (c >= 2) cell.fill = rowFill
-        if (numFmts[c]) cell.numFmt = numFmts[c]
+
+        // Solo asignar valor y numFmt si hay dato real
+        const val = cellValues[c]
+        if (val !== undefined && val !== null) {
+          cell.value = val
+          if (numFmts[c]) cell.numFmt = numFmts[c]
+        }
 
         // Bordes
         const border = {}
@@ -1225,23 +1238,22 @@ const exportarAExcelConFormato = async () => {
     const totalResidTejPercent = totales.value.tejeduriaKg ? (totales.value.residuosTejeduriaKg / totales.value.tejeduriaKg) * 100 : null
     const totalPromedioAnudado = (totales.value.residuosTejeduriaKg && totales.value.anudadosCount > 0) ? totales.value.residuosTejeduriaKg / totales.value.anudadosCount : null
 
-    const totalValues = [
-      null, null,
-      totales.value.metros, totales.value.kg, totales.value.residuos,
-      totalResidPercent, metaPercent.value,
-      totales.value.desvioKg > 0 ? totales.value.desvioKg : null,
-      totales.value.desvioMetros > 0 ? totales.value.desvioMetros : null,
-      totales.value.desvioIndigoPesos > 0 ? totales.value.desvioIndigoPesos : null,
-      totales.value.tejeduriaMetros, totales.value.tejeduriaKg, totales.value.residuosTejeduriaKg,
-      totalResidTejPercent, metaTejeduriaPercent.value,
-      totales.value.desvioTejeduriaKg > 0 ? totales.value.desvioTejeduriaKg : null,
-      totales.value.desvioTejeduriaMetros > 0 ? totales.value.desvioTejeduriaMetros : null,
-      totales.value.anudadosCount, totalPromedioAnudado,
-      totales.value.desvioTejeduriaPesos > 0 ? totales.value.desvioTejeduriaPesos : null,
-      totales.value.estopaAzulProducida, totales.value.residuosPrensadaKg, totales.value.diferenciaEstopa
-    ]
+    const totalCellValues = {
+      3: totales.value.metros, 4: totales.value.kg, 5: totales.value.residuos,
+      6: totalResidPercent, 7: metaPercent.value,
+      8: totales.value.desvioKg > 0 ? totales.value.desvioKg : undefined,
+      9: totales.value.desvioMetros > 0 ? totales.value.desvioMetros : undefined,
+      10: totales.value.desvioIndigoPesos > 0 ? totales.value.desvioIndigoPesos : undefined,
+      11: totales.value.tejeduriaMetros, 12: totales.value.tejeduriaKg, 13: totales.value.residuosTejeduriaKg,
+      14: totalResidTejPercent, 15: metaTejeduriaPercent.value,
+      16: totales.value.desvioTejeduriaKg > 0 ? totales.value.desvioTejeduriaKg : undefined,
+      17: totales.value.desvioTejeduriaMetros > 0 ? totales.value.desvioTejeduriaMetros : undefined,
+      18: totales.value.anudadosCount, 19: totalPromedioAnudado,
+      20: totales.value.desvioTejeduriaPesos > 0 ? totales.value.desvioTejeduriaPesos : undefined,
+      21: totales.value.estopaAzulProducida, 22: totales.value.residuosPrensadaKg, 23: totales.value.diferenciaEstopa
+    }
 
-    const totalRow = worksheet.addRow(totalValues)
+    const totalRow = worksheet.addRow([])
     totalRow.height = 24.95
 
     // Formatos especiales para fila totales (% como 0.0 en vez de #,##0.0)
@@ -1251,7 +1263,13 @@ const exportarAExcelConFormato = async () => {
       const cell = totalRow.getCell(c)
       cell.font = defaultFontBold
       cell.alignment = defaultAlign
-      if (totalNumFmts[c]) cell.numFmt = totalNumFmts[c]
+
+      // Solo asignar valor y numFmt si hay dato real
+      const val = totalCellValues[c]
+      if (val !== undefined && val !== null) {
+        cell.value = val
+        if (totalNumFmts[c]) cell.numFmt = totalNumFmts[c]
+      }
 
       // Bordes: double arriba, thin abajo
       const border = {}
