@@ -145,6 +145,11 @@ const routes = [
     path: '/inventario',
     component: () => import('./components/inventario/InventoryManager.vue'),
     meta: { title: 'Gestión de Inventario (MP)' }
+  },
+  {
+    path: '/informe-diario',
+    component: () => import('./components/produccion/InformeDiario.vue'),
+    meta: { title: 'Informe STC Diario' }
   }
 ]
 

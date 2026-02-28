@@ -6630,6 +6630,290 @@ Análisis Comparativo Fibra ↔️ Hilo
 });
 
 // =====================================================
+// INFORME DIARIO – Datos mensuales por día (4 sectores)
+// =====================================================
+app.get('/api/informe-diario', async (req, res) => {
+  try {
+    const fecha = req.query.fecha || new Date(Date.now() - 24*60*60*1000).toISOString().split('T')[0]
+    const [year, month, day] = fecha.split('-').map(Number)
+    const daysInMonth = new Date(year, month, 0).getDate()
+    const maxDay = Math.min(day, daysInMonth)
+    const mesStr = `${year}-${String(month).padStart(2, '0')}`
+
+    // ── helpers SQL reutilizables ──
+    const parseNum = (col) => sqlParseNumberIntl(col)
+    const parseDt  = (col) => sqlParseDate(col)
+
+    // ── 1. METAS (todas las columnas en una sola query) ──
+    const metasRes = await query(`
+      SELECT EXTRACT(DAY FROM "Dia"::date)::int AS dia,
+             COALESCE("Indigo",0)::numeric   AS meta_indigo,
+             COALESCE("Tejeduria",0)::numeric AS meta_tecelagem,
+             COALESCE("Integrada",0)::numeric AS meta_acabamento,
+             COALESCE("Revision",0)::numeric  AS meta_calidad
+      FROM tb_metas
+      WHERE to_char("Dia"::date, 'YYYY-MM') = $1
+      ORDER BY dia
+    `, [mesStr], 'informe-diario/metas')
+
+    const metasPorDia = {}
+    let metaMensualIndigo = 0, metaMensualTecelagem = 0, metaMensualAcabamento = 0, metaMensualCalidad = 0
+    for (const m of metasRes.rows) {
+      const d = m.dia
+      metasPorDia[d] = {
+        INDIGO: +m.meta_indigo,
+        TECELAGEM: +m.meta_tecelagem,
+        ACABAMENTO: +m.meta_acabamento,
+        CALIDAD: +m.meta_calidad
+      }
+      metaMensualIndigo += +m.meta_indigo
+      metaMensualTecelagem += +m.meta_tecelagem
+      metaMensualAcabamento += +m.meta_acabamento
+      metaMensualCalidad += +m.meta_calidad
+    }
+
+    // ── 2. PRODUCCIÓN INDIGO ──
+    const indigoRes = await query(`
+      SELECT EXTRACT(DAY FROM ${parseDt('"DT_BASE_PRODUCAO"')})::int AS dia,
+        SUM(${parseNum('"METRAGEM"')}) AS metragem,
+        SUM(${parseNum('"VELOC"')} * ${parseNum('"METRAGEM"')}) /
+          NULLIF(SUM(${parseNum('"METRAGEM"')}), 0) AS velocidad,
+        SUM(${parseNum('"METRAGEM"')}) /
+          NULLIF(SUM(${parseNum('"VELOC"')} * ${parseNum('"METRAGEM"')}) /
+                 NULLIF(SUM(${parseNum('"METRAGEM"')}), 0) * 1440, 0) * 100 AS eficiencia
+      FROM tb_produccion
+      WHERE ${parseDt('"DT_BASE_PRODUCAO"')} IS NOT NULL
+        AND to_char(${parseDt('"DT_BASE_PRODUCAO"')}, 'YYYY-MM') = $1
+        AND "SELETOR" = 'INDIGO'
+      GROUP BY dia ORDER BY dia
+    `, [mesStr], 'informe-diario/indigo')
+
+    const indigoPorDia = {}
+    for (const r of indigoRes.rows) indigoPorDia[r.dia] = r
+
+    // ── 3. PRODUCCIÓN TECELAGEM ──
+    const tecelagemRes = await query(`
+      SELECT EXTRACT(DAY FROM ${parseDt('"DT_BASE_PRODUCAO"')})::int AS dia,
+        SUM(${parseNum('"TEMPO LEIT MIN"')}) / 1440.0 AS telares,
+        SUM(${parseNum('"METRAGEM ENCOLH"')}) AS metragem,
+        SUM(${parseNum('"PONTOS_LIDOS"')}) /
+          NULLIF(SUM(${parseNum('"PONTOS_100%"')}), 0) * 100.0 AS eficiencia,
+        SUM(${parseNum('"BATIDAS"')} * ${parseNum('"METRAGEM ENCOLH"')}) /
+          NULLIF(SUM(${parseNum('"METRAGEM ENCOLH"')}), 0) AS batidas,
+        SUM(${parseNum('"RPM LEITURA"')} * ${parseNum('"PONTOS_LIDOS"')}) /
+          NULLIF(SUM(${parseNum('"PONTOS_LIDOS"')}), 0) AS rpm
+      FROM tb_produccion
+      WHERE ${parseDt('"DT_BASE_PRODUCAO"')} IS NOT NULL
+        AND to_char(${parseDt('"DT_BASE_PRODUCAO"')}, 'YYYY-MM') = $1
+        AND "SELETOR" = 'TECELAGEM'
+      GROUP BY dia ORDER BY dia
+    `, [mesStr], 'informe-diario/tecelagem')
+
+    const tecelagemPorDia = {}
+    for (const r of tecelagemRes.rows) tecelagemPorDia[r.dia] = r
+
+    // ── 4. PRODUCCIÓN ACABAMENTO (máquina 165001) ──
+    const acabamentoRes = await query(`
+      SELECT EXTRACT(DAY FROM ${parseDt('"DT_BASE_PRODUCAO"')})::int AS dia,
+        SUM(${parseNum('"METRAGEM"')}) AS metragem,
+        SUM(${parseNum('"VELOC"')} * ${parseNum('"METRAGEM"')}) /
+          NULLIF(SUM(${parseNum('"METRAGEM"')}), 0) AS velocidad,
+        SUM(${parseNum('"METRAGEM"')}) /
+          NULLIF(SUM(${parseNum('"VELOC"')} * ${parseNum('"METRAGEM"')}) /
+                 NULLIF(SUM(${parseNum('"METRAGEM"')}), 0) * 1440, 0) * 100 AS eficiencia
+      FROM tb_produccion
+      WHERE ${parseDt('"DT_BASE_PRODUCAO"')} IS NOT NULL
+        AND to_char(${parseDt('"DT_BASE_PRODUCAO"')}, 'YYYY-MM') = $1
+        AND "MAQUINA" = '165001'
+      GROUP BY dia ORDER BY dia
+    `, [mesStr], 'informe-diario/acabamento')
+
+    const acabamentoPorDia = {}
+    for (const r of acabamentoRes.rows) acabamentoPorDia[r.dia] = r
+
+    // ── 5. CALIDAD – metros total y PRIMEIRA ──
+    const calidadRes = await query(`
+      SELECT EXTRACT(DAY FROM ${parseDt('"DAT_PROD"')})::int AS dia,
+        SUM(${parseNum('"METRAGEM"')}) AS metragem_total,
+        SUM(CASE WHEN TRIM("QUALIDADE") = 'PRIMEIRA' THEN ${parseNum('"METRAGEM"')} ELSE 0 END) AS metragem_primeira
+      FROM tb_calidad
+      WHERE ${parseDt('"DAT_PROD"')} IS NOT NULL
+        AND to_char(${parseDt('"DAT_PROD"')}, 'YYYY-MM') = $1
+        AND "EMP" = 'STC'
+      GROUP BY dia ORDER BY dia
+    `, [mesStr], 'informe-diario/calidad-metros')
+
+    const calidadPorDia = {}
+    for (const r of calidadRes.rows) {
+      calidadPorDia[r.dia] = {
+        metragem_total: +r.metragem_total || 0,
+        metragem_primeira: +r.metragem_primeira || 0
+      }
+    }
+
+    // ── 6. CALIDAD – Pts/100m² ──
+    const puntosRes = await query(`
+      WITH pts AS (
+        SELECT EXTRACT(DAY FROM sub.dt)::int AS dia,
+               SUM(pont_avg) AS pontuacao
+        FROM (
+          SELECT "EMP", ${parseDt('"DAT_PROD"')} AS dt, "QUALIDADE", "PEÇA",
+                 AVG(${parseNum('"PONTUACAO"')}) AS pont_avg
+          FROM tb_calidad
+          WHERE ${parseDt('"DAT_PROD"')} IS NOT NULL
+            AND to_char(${parseDt('"DAT_PROD"')}, 'YYYY-MM') = $1
+            AND TRIM("QUALIDADE") = 'PRIMEIRA'
+            AND "EMP" = 'STC'
+          GROUP BY "EMP", ${parseDt('"DAT_PROD"')}, "QUALIDADE", "PEÇA"
+        ) sub
+        GROUP BY dia
+      ),
+      ancho AS (
+        SELECT EXTRACT(DAY FROM ${parseDt('"DAT_PROD"')})::int AS dia,
+               SUM(${parseNum('"METRAGEM"')}) AS metros,
+               SUM(${parseNum('"METRAGEM"')} * ${parseNum('"LARGURA"')}) /
+                 NULLIF(SUM(${parseNum('"METRAGEM"')}), 0) AS ancho_pond
+        FROM tb_calidad
+        WHERE ${parseDt('"DAT_PROD"')} IS NOT NULL
+          AND to_char(${parseDt('"DAT_PROD"')}, 'YYYY-MM') = $1
+          AND TRIM("QUALIDADE") = 'PRIMEIRA'
+          AND "EMP" = 'STC'
+        GROUP BY dia
+      )
+      SELECT ancho.dia,
+        CASE WHEN ancho.metros > 0 AND ancho.ancho_pond > 0
+          THEN (pts.pontuacao * 100) / (ancho.metros * ancho.ancho_pond) * 100
+          ELSE 0 END AS pts100m2
+      FROM ancho LEFT JOIN pts ON ancho.dia = pts.dia
+      ORDER BY ancho.dia
+    `, [mesStr], 'informe-diario/calidad-puntos')
+
+    for (const r of puntosRes.rows) {
+      if (!calidadPorDia[r.dia]) calidadPorDia[r.dia] = {}
+      calidadPorDia[r.dia].puntos100m2 = +r.pts100m2 || 0
+    }
+
+    // ── 7. Construir array de días ──
+    // Detectar primer día con meta > 0
+    let primerDiaIndigo = null, primerDiaTecelagem = null, primerDiaAcabamento = null, primerDiaCalidad = null
+    for (let i = 1; i <= daysInMonth; i++) {
+      if (primerDiaIndigo === null && (metasPorDia[i]?.INDIGO || 0) > 0) primerDiaIndigo = i
+      if (primerDiaTecelagem === null && (metasPorDia[i]?.TECELAGEM || 0) > 0) primerDiaTecelagem = i
+      if (primerDiaAcabamento === null && (metasPorDia[i]?.ACABAMENTO || 0) > 0) primerDiaAcabamento = i
+      if (primerDiaCalidad === null && (metasPorDia[i]?.CALIDAD || 0) > 0) primerDiaCalidad = i
+    }
+
+    // Producción acumulada hasta maxDay
+    let acumIndigo = 0, acumTecelagem = 0, acumAcabamento = 0, acumCalidad = 0
+    for (let i = primerDiaIndigo || 1; i <= maxDay; i++) acumIndigo += +(indigoPorDia[i]?.metragem || 0)
+    for (let i = primerDiaTecelagem || 1; i <= maxDay; i++) acumTecelagem += +(tecelagemPorDia[i]?.metragem || 0)
+    for (let i = primerDiaAcabamento || 1; i <= maxDay; i++) acumAcabamento += +(acabamentoPorDia[i]?.metragem || 0)
+    for (let i = primerDiaCalidad || 1; i <= maxDay; i++) acumCalidad += +(calidadPorDia[i]?.metragem_total || 0)
+
+    const dayNames = ['do', 'lu', 'ma', 'mi', 'ju', 'vi', 'sá']
+    let futIndigo = 0, futTecelagem = 0, futAcabamento = 0, futCalidad = 0
+
+    // Función auxiliar para calcular meta ajustada
+    function calcMetaAjustada(sector, dayNum, primerDia, metaMensual, acumTotal, futAcum, porDia, metaKey, metragKey) {
+      const metaDia = metasPorDia[dayNum]?.[metaKey] || 0
+      if (primerDia === null || dayNum < primerDia || metaDia === 0) return { ma: null, futAcum }
+      
+      if (dayNum <= maxDay) {
+        let prodAcHasta = 0
+        for (let i = primerDia; i <= dayNum; i++) prodAcHasta += +(porDia[i]?.[metragKey] || 0)
+        let diasPost = 0
+        for (let i = dayNum + 1; i <= daysInMonth; i++) {
+          if ((metasPorDia[i]?.[metaKey] || 0) > 0) diasPost++
+        }
+        return { ma: diasPost > 0 ? (metaMensual - prodAcHasta) / diasPost : null, futAcum }
+      } else {
+        let diasRest = 0
+        for (let i = dayNum; i <= daysInMonth; i++) {
+          if ((metasPorDia[i]?.[metaKey] || 0) > 0) diasRest++
+        }
+        if (diasRest > 0) {
+          const ma = (metaMensual - acumTotal - futAcum) / diasRest
+          return { ma, futAcum: futAcum + ma }
+        }
+        return { ma: null, futAcum }
+      }
+    }
+
+    const days = []
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dow = new Date(year, month - 1, d).getDay()
+      const metaDiaIndigo = metasPorDia[d]?.INDIGO || 0
+      const metaDiaTecelagem = metasPorDia[d]?.TECELAGEM || 0
+      const metaDiaAcabamento = metasPorDia[d]?.ACABAMENTO || 0
+      const metaDiaCalidad = metasPorDia[d]?.CALIDAD || 0
+
+      const prodI = d <= maxDay ? +(indigoPorDia[d]?.metragem || 0) : 0
+      const prodT = d <= maxDay ? +(tecelagemPorDia[d]?.metragem || 0) : 0
+      const prodA = d <= maxDay ? +(acabamentoPorDia[d]?.metragem || 0) : 0
+      const prodC = d <= maxDay ? +(calidadPorDia[d]?.metragem_total || 0) : 0
+
+      const rI = calcMetaAjustada('indigo', d, primerDiaIndigo, metaMensualIndigo, acumIndigo, futIndigo, indigoPorDia, 'INDIGO', 'metragem')
+      futIndigo = rI.futAcum
+      const rT = calcMetaAjustada('tecelagem', d, primerDiaTecelagem, metaMensualTecelagem, acumTecelagem, futTecelagem, tecelagemPorDia, 'TECELAGEM', 'metragem')
+      futTecelagem = rT.futAcum
+      const rA = calcMetaAjustada('acabamento', d, primerDiaAcabamento, metaMensualAcabamento, acumAcabamento, futAcabamento, acabamentoPorDia, 'ACABAMENTO', 'metragem')
+      futAcabamento = rA.futAcum
+      const rC = calcMetaAjustada('calidad', d, primerDiaCalidad, metaMensualCalidad, acumCalidad, futCalidad, calidadPorDia, 'CALIDAD', 'metragem_total')
+      futCalidad = rC.futAcum
+
+      let primeraCalidadPct = null
+      if (d <= maxDay && (calidadPorDia[d]?.metragem_total || 0) > 0) {
+        primeraCalidadPct = ((calidadPorDia[d]?.metragem_primeira || 0) / calidadPorDia[d].metragem_total) * 100
+      }
+
+      days.push({
+        dayNumber: d,
+        dayLabel: `${String(d).padStart(2, '0')}- ${dayNames[dow]}`,
+        hasData: d <= maxDay ? !!(indigoPorDia[d] || tecelagemPorDia[d] || acabamentoPorDia[d] || calidadPorDia[d]) : false,
+        indigo: {
+          eficiencia: d <= maxDay ? +(indigoPorDia[d]?.eficiencia || 0) || null : null,
+          produccion: prodI,
+          meta: metaDiaIndigo,
+          saldo: d <= maxDay ? prodI - metaDiaIndigo : null,
+          metaAjustada: rI.ma != null ? +rI.ma.toFixed(0) : null,
+          velocidad: d <= maxDay ? +(indigoPorDia[d]?.velocidad || 0) || null : null
+        },
+        tecelagem: {
+          telares: d <= maxDay ? +(tecelagemPorDia[d]?.telares || 0) || null : null,
+          batidas: d <= maxDay ? +(tecelagemPorDia[d]?.batidas || 0) || null : null,
+          rpm: d <= maxDay ? +(tecelagemPorDia[d]?.rpm || 0) || null : null,
+          eficiencia: d <= maxDay ? +(tecelagemPorDia[d]?.eficiencia || 0) || null : null,
+          produccion: prodT,
+          meta: metaDiaTecelagem,
+          saldo: d <= maxDay ? prodT - metaDiaTecelagem : null,
+          metaAjustada: rT.ma != null ? +rT.ma.toFixed(0) : null
+        },
+        acabamento: {
+          eficiencia: d <= maxDay ? +(acabamentoPorDia[d]?.eficiencia || 0) || null : null,
+          produccion: prodA,
+          meta: metaDiaAcabamento,
+          saldo: d <= maxDay ? prodA - metaDiaAcabamento : null,
+          metaAjustada: rA.ma != null ? +rA.ma.toFixed(0) : null,
+          primeraCalidad: primeraCalidadPct
+        },
+        calidad: {
+          puntos100m2: d <= maxDay ? +(calidadPorDia[d]?.puntos100m2 || 0) || null : null,
+          produccion: prodC,
+          meta: metaDiaCalidad,
+          saldo: d <= maxDay ? prodC - metaDiaCalidad : null,
+          metaAjustada: rC.ma != null ? +rC.ma.toFixed(0) : null
+        }
+      })
+    }
+
+    res.json({ fecha, year, month, daysInMonth, days })
+  } catch (err) {
+    console.error('Error en /api/informe-diario:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// =====================================================
 // INICIAR SERVIDOR
 // =====================================================
 async function startServer() {

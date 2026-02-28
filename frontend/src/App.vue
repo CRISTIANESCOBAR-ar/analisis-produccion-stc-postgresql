@@ -155,6 +155,13 @@
             >
               <span>📥</span> Importar Datos
             </router-link>
+            <router-link 
+              to="/informe-diario" 
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
+              :class="{ 'bg-blue-600': $route.path === '/informe-diario' }"
+            >
+              <span>📊</span> Informe STC Diario
+            </router-link>
           </div>
         </div>
 
@@ -440,7 +447,7 @@ const inventoryMenuOpen = ref(localStorage.getItem('inventoryMenuOpen') !== 'fal
 const labRoutes = ['/resumen', '/resumen-semanal-hilanderia', '/analisis-calidad-fibra', '/golden-batch', '/resumen-diario', '/stats', '/uster', '/tenso']
 const isLabRouteActive = computed(() => labRoutes.includes(route.path))
 
-const prodRoutes = ['/import-control']
+const prodRoutes = ['/import-control', '/informe-diario']
 const isProdRouteActive = computed(() => prodRoutes.includes(route.path))
 
 const inventoryRoutes = ['/inventario']
