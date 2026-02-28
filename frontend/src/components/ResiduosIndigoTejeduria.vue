@@ -1158,11 +1158,22 @@ const exportarAExcelConFormato = async () => {
     const altFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF4BFB6' }, bgColor: { indexed: 64 } }
 
     // ─── FILAS DE DATOS ───
-    // Helper: solo retorna el valor si es un número finito y > 0, sino undefined
-    const numOrUndef = (v) => (typeof v === 'number' && isFinite(v) && v !== 0) ? v : undefined
-    const numOrUndefZ = (v) => (typeof v === 'number' && isFinite(v)) ? v : undefined // permite 0
-    // Helper: calcula porcentaje solo si ambos valores son numéricos válidos
-    const safePercent = (num, den) => (typeof num === 'number' && isFinite(num) && typeof den === 'number' && isFinite(den) && den !== 0) ? (num / den) * 100 : undefined
+    // Helper: convierte a Number (soporta strings de PostgreSQL), retorna undefined si no es finito
+    const toNum = (v) => {
+      if (v === null || v === undefined || v === '') return undefined
+      const n = Number(v)
+      return isFinite(n) ? n : undefined
+    }
+    // Helper: igual que toNum pero excluye 0 (para columnas donde 0 = sin dato)
+    const toNumNZ = (v) => {
+      const n = toNum(v)
+      return (n !== undefined && n !== 0) ? n : undefined
+    }
+    // Helper: calcula porcentaje seguro (soporta strings)
+    const safePercent = (num, den) => {
+      const n = toNum(num), d = toNum(den)
+      return (n !== undefined && d !== undefined && d !== 0) ? (n / d) * 100 : undefined
+    }
 
     const dataStartRow = 7
     datosCompletos.value.forEach((item, index) => {
@@ -1174,13 +1185,20 @@ const exportarAExcelConFormato = async () => {
 
       const residPercent = safePercent(item.ResiduosKg, item.TotalKg)
       const residTejPercent = safePercent(item.ResiduosTejeduriaKg, item.TejeduriaKg)
-      const desvioIndigoKg = calcDesvioKg(item.ResiduosKg, item.TotalKg, metaPercent.value)
-      const desvioIndigoMetros = calcDesvioMetros(item.TotalMetros, item.TotalKg, item.ResiduosKg, metaPercent.value)
-      const desvioIndigoPesos = calcDesvioArs(item.TotalMetros, item.TotalKg, item.ResiduosKg, metaPercent.value, costoUrdidoTenido.value)
-      const desvioTejKg = calcDesvioKg(item.ResiduosTejeduriaKg, item.TejeduriaKg, metaTejeduriaPercent.value)
-      const desvioTejMetros = calcDesvioMetros(item.TejeduriaMetros, item.TejeduriaKg, item.ResiduosTejeduriaKg, metaTejeduriaPercent.value)
-      const desvioTejPesos = calcDesvioArs(item.TejeduriaMetros, item.TejeduriaKg, item.ResiduosTejeduriaKg, metaTejeduriaPercent.value, costoUrdidoTenido.value)
-      const promedioAnudado = (item.ResiduosTejeduriaKg && item.AnudadosCount && item.AnudadosCount > 0) ? item.ResiduosTejeduriaKg / item.AnudadosCount : undefined
+      const nResiduosKg = toNum(item.ResiduosKg) || 0
+      const nTotalKg = toNum(item.TotalKg) || 0
+      const nTotalMetros = toNum(item.TotalMetros) || 0
+      const nResidTejKg = toNum(item.ResiduosTejeduriaKg) || 0
+      const nTejKg = toNum(item.TejeduriaKg) || 0
+      const nTejMetros = toNum(item.TejeduriaMetros) || 0
+      const desvioIndigoKg = calcDesvioKg(nResiduosKg, nTotalKg, metaPercent.value)
+      const desvioIndigoMetros = calcDesvioMetros(nTotalMetros, nTotalKg, nResiduosKg, metaPercent.value)
+      const desvioIndigoPesos = calcDesvioArs(nTotalMetros, nTotalKg, nResiduosKg, metaPercent.value, costoUrdidoTenido.value)
+      const desvioTejKg = calcDesvioKg(nResidTejKg, nTejKg, metaTejeduriaPercent.value)
+      const desvioTejMetros = calcDesvioMetros(nTejMetros, nTejKg, nResidTejKg, metaTejeduriaPercent.value)
+      const desvioTejPesos = calcDesvioArs(nTejMetros, nTejKg, nResidTejKg, metaTejeduriaPercent.value, costoUrdidoTenido.value)
+      const nAnudados = toNum(item.AnudadosCount) || 0
+      const promedioAnudado = (nResidTejKg && nAnudados > 0) ? nResidTejKg / nAnudados : undefined
 
       // Crear fila vacía y luego setear solo las celdas con datos
       const dataRow = worksheet.addRow([])
@@ -1194,14 +1212,14 @@ const exportarAExcelConFormato = async () => {
       // Valores por columna (undefined = celda vacía sin numFmt)
       const cellValues = {
         2: fechaExcel,
-        3: numOrUndef(item.TotalMetros), 4: numOrUndef(item.TotalKg), 5: numOrUndef(item.ResiduosKg),
-        6: residPercent, 7: numOrUndefZ(metaPercent.value),
-        8: numOrUndef(desvioIndigoKg), 9: numOrUndef(desvioIndigoMetros), 10: numOrUndef(desvioIndigoPesos),
-        11: numOrUndef(item.TejeduriaMetros), 12: numOrUndef(item.TejeduriaKg), 13: numOrUndef(item.ResiduosTejeduriaKg),
-        14: residTejPercent, 15: numOrUndefZ(metaTejeduriaPercent.value),
-        16: numOrUndef(desvioTejKg), 17: numOrUndef(desvioTejMetros),
-        18: numOrUndef(item.AnudadosCount), 19: numOrUndef(promedioAnudado), 20: numOrUndef(desvioTejPesos),
-        21: numOrUndef(item.EstopaAzulProducida), 22: numOrUndef(item.ResiduosPrensadaKg), 23: numOrUndefZ(item.DiferenciaEstopa)
+        3: toNum(item.TotalMetros), 4: toNum(item.TotalKg), 5: toNum(item.ResiduosKg),
+        6: residPercent, 7: toNum(metaPercent.value),
+        8: toNumNZ(desvioIndigoKg), 9: toNumNZ(desvioIndigoMetros), 10: toNumNZ(desvioIndigoPesos),
+        11: toNum(item.TejeduriaMetros), 12: toNum(item.TejeduriaKg), 13: toNum(item.ResiduosTejeduriaKg),
+        14: residTejPercent, 15: toNum(metaTejeduriaPercent.value),
+        16: toNumNZ(desvioTejKg), 17: toNumNZ(desvioTejMetros),
+        18: toNumNZ(item.AnudadosCount), 19: toNumNZ(promedioAnudado), 20: toNumNZ(desvioTejPesos),
+        21: toNum(item.EstopaAzulProducida), 22: toNum(item.ResiduosPrensadaKg), 23: toNum(item.DiferenciaEstopa)
       }
 
       for (let c = 1; c <= 23; c++) {
@@ -1236,21 +1254,23 @@ const exportarAExcelConFormato = async () => {
     // ─── FILA TOTALES ───
     const totalResidPercent = safePercent(totales.value.residuos, totales.value.kg)
     const totalResidTejPercent = safePercent(totales.value.residuosTejeduriaKg, totales.value.tejeduriaKg)
-    const totalPromedioAnudado = numOrUndef(totales.value.residuosTejeduriaKg && totales.value.anudadosCount > 0 ? totales.value.residuosTejeduriaKg / totales.value.anudadosCount : undefined)
+    const tResidTej = toNum(totales.value.residuosTejeduriaKg) || 0
+    const tAnudados = toNum(totales.value.anudadosCount) || 0
+    const totalPromedioAnudado = (tResidTej && tAnudados > 0) ? tResidTej / tAnudados : undefined
 
     const totalCellValues = {
-      3: numOrUndef(totales.value.metros), 4: numOrUndef(totales.value.kg), 5: numOrUndef(totales.value.residuos),
-      6: totalResidPercent, 7: numOrUndefZ(metaPercent.value),
-      8: numOrUndef(totales.value.desvioKg),
-      9: numOrUndef(totales.value.desvioMetros),
-      10: numOrUndef(totales.value.desvioIndigoPesos),
-      11: numOrUndef(totales.value.tejeduriaMetros), 12: numOrUndef(totales.value.tejeduriaKg), 13: numOrUndef(totales.value.residuosTejeduriaKg),
-      14: totalResidTejPercent, 15: numOrUndefZ(metaTejeduriaPercent.value),
-      16: numOrUndef(totales.value.desvioTejeduriaKg),
-      17: numOrUndef(totales.value.desvioTejeduriaMetros),
-      18: numOrUndef(totales.value.anudadosCount), 19: totalPromedioAnudado,
-      20: numOrUndef(totales.value.desvioTejeduriaPesos),
-      21: numOrUndef(totales.value.estopaAzulProducida), 22: numOrUndef(totales.value.residuosPrensadaKg), 23: numOrUndefZ(totales.value.diferenciaEstopa)
+      3: toNum(totales.value.metros), 4: toNum(totales.value.kg), 5: toNum(totales.value.residuos),
+      6: totalResidPercent, 7: toNum(metaPercent.value),
+      8: toNumNZ(totales.value.desvioKg),
+      9: toNumNZ(totales.value.desvioMetros),
+      10: toNumNZ(totales.value.desvioIndigoPesos),
+      11: toNum(totales.value.tejeduriaMetros), 12: toNum(totales.value.tejeduriaKg), 13: toNum(totales.value.residuosTejeduriaKg),
+      14: totalResidTejPercent, 15: toNum(metaTejeduriaPercent.value),
+      16: toNumNZ(totales.value.desvioTejeduriaKg),
+      17: toNumNZ(totales.value.desvioTejeduriaMetros),
+      18: toNumNZ(totales.value.anudadosCount), 19: toNumNZ(totalPromedioAnudado),
+      20: toNumNZ(totales.value.desvioTejeduriaPesos),
+      21: toNum(totales.value.estopaAzulProducida), 22: toNum(totales.value.residuosPrensadaKg), 23: toNum(totales.value.diferenciaEstopa)
     }
 
     const totalRow = worksheet.addRow([])
