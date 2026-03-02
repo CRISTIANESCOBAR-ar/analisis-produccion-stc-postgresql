@@ -165,32 +165,81 @@
               </div>
             </div>
           </div>
+
+          <!-- Selector de Modo de Stock -->
+          <div class="flex items-center space-x-2 shrink-0 border-l pl-4 border-gray-300 ml-2">
+            <div class="flex flex-col items-center gap-1.5">
+              <span class="text-sm font-semibold text-gray-600 text-center">Stock Base</span>
+              <div class="inline-flex rounded-lg border border-gray-200 bg-gray-100 p-0.5 shadow-inner">
+                <button
+                  @click="filters.stockMode = 'available'"
+                  :class="[
+                    'px-3 py-1 rounded-md text-xs font-semibold transition-all duration-150 whitespace-nowrap',
+                    filters.stockMode === 'available'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  ]"
+                >Disponible</button>
+                <button
+                  @click="filters.stockMode = 'total'"
+                  :class="[
+                    'px-3 py-1 rounded-md text-xs font-semibold transition-all duration-150 whitespace-nowrap',
+                    filters.stockMode === 'total'
+                      ? 'bg-slate-600 text-white shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  ]"
+                >Total</button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Bloque Derecha: Botones de Configuración -->
         <div class="flex items-center space-x-6 shrink-0 border-t pt-4 xl:border-t-0 xl:pt-0">
-          <!-- Botón de Supervisión -->
-          <button 
-            @click="showRuleSelector = !showRuleSelector"
-            class="flex items-center space-x-2 text-indigo-600 text-sm font-semibold hover:text-indigo-800 transition-colors focus:outline-none"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-            </svg>
-            <span>Reglas de Mezclas</span>
-          </button>
+          
+          <div class="flex flex-col items-start gap-2">
+            <!-- Botón de Supervisión -->
+            <button 
+              @click="showRuleSelector = !showRuleSelector"
+              class="flex items-center space-x-2 text-indigo-600 text-sm font-semibold hover:text-indigo-800 transition-colors focus:outline-none"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+              </svg>
+              <span>Reglas de Mezclas</span>
+            </button>
 
-          <!-- Botón de Columnas -->
-          <button 
-            @click="showColumnSelector = !showColumnSelector"
-            class="flex items-center space-x-2 text-blue-600 text-sm font-semibold hover:text-blue-800 transition-colors focus:outline-none"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            <span>Ver Columnas</span>
-          </button>
+            <div class="flex items-center gap-3">
+              <!-- Botón de Columnas -->
+              <button 
+                @click="showColumnSelector = !showColumnSelector"
+                class="flex items-center space-x-1.5 text-blue-600 text-xs font-semibold hover:text-blue-800 transition-colors focus:outline-none"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Ver Columnas</span>
+              </button>
+
+              <!-- Checkbox Agrupar Lotes Pequeños -->
+              <div class="flex items-center gap-2 border-l border-gray-200 pl-3">
+                 <label class="flex items-center space-x-1 cursor-pointer select-none" title="Agrupar lotes pequeños por condiciones de uso">
+                    <input type="checkbox" v-model="filters.groupSmallLots" class="rounded text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5" />
+                    <span class="text-xs text-slate-700 font-medium whitespace-nowrap">Agrupar</span>
+                 </label>
+                 
+                 <div v-if="filters.groupSmallLots" class="flex items-center gap-1 transition-all duration-300">
+                    <span class="text-xs text-gray-400 font-bold">≤</span>
+                    <input type="number" 
+                        v-model.number="filters.smallLotThreshold"
+                        min="1" max="999"
+                        class="w-10 text-xs text-center border-gray-300 rounded-sm py-0.5 px-0 placeholder-gray-300 focus:ring-indigo-500 focus:border-indigo-500 shadow-sm"
+                        placeholder="20" />
+                 </div>
+              </div>
+            </div>
+          </div>
 
           <!-- Botón Mezclas -->
           <button 
@@ -1740,6 +1789,9 @@ const items = ref([]);
 const USER_PREFS_KEY = 'inventoryManagerUserPrefs_v1';
 
 const filters = reactive({
+  stockMode: 'available',
+  groupSmallLots: false,
+  smallLotThreshold: 20,
   searchText: '',
   fardos: null
 });
@@ -2131,9 +2183,12 @@ const fetchData = async () => {
     const data = await response.json();
     
     // Mapear respuesta raw a modelo CottonBale
-    // El modelo ya maneja las variantes de nombres de columnas y parseo de números locales
-    items.value = data.map(row => new CottonBale(row));
-
+      items.value = data.map(row => {
+        const item = new CottonBale(row);
+        // Guardar stock original para alternar modos
+        item._QTDE_TOTAL = item.QTDE_ESTOQUE;
+        return item;
+      });
   } catch (error) {
     console.error(error);
     alert('No se pudieron cargar los datos del inventario. Verifica que el servidor esté corriendo.');
@@ -4081,9 +4136,174 @@ const projectionVariablePurchaseRows = computed(() => {
   });
 });
 
+// Computed: Items con Stock Mapeado (Total vs Disponible)
+const itemsWithStock = computed(() => {
+  return items.value.map(item => {
+    // Si _QTDE_TOTAL no existe, asumimos que es el valor actual (primera carga)
+    const originalStock = item._QTDE_TOTAL !== undefined ? item._QTDE_TOTAL : item.QTDE_ESTOQUE;
+    const mode = filters.stockMode || 'available';
+    // Por defecto 'available' usa SALDO_DISPONIVEL. 'total' usa QTDE_ESTOQUE (original)
+    const targetQty = mode === 'available' 
+      ? (item.SALDO_DISPONIVEL || 0) 
+      : originalStock;
+    
+    // Crear copia shallow para no mutar el original en items.value
+    // Preservamos el prototipo de CottonBale y propiedades
+    const copy = Object.assign(Object.create(Object.getPrototypeOf(item)), item);
+    copy.QTDE_ESTOQUE = targetQty;
+    return copy;
+  });
+});
+
+// Computed: Agrupación de lotes pequeños (Tipo Simulador)
+const groupedItems = computed(() => {
+  const source = itemsWithStock.value;
+  if (!filters.groupSmallLots) return source;
+
+  const threshold = Number(filters.smallLotThreshold) || 20;
+  const rules = activeRules.value || [];
+
+  // Helper: Clasificar Estado
+  const getEstado = (item) => {
+    if (!rules.length) return 'USO';
+    let priority = 0; // 0=USO, 1=TOLER, 2=DESCAR
+
+    for (const r of rules) {
+      let val = null;
+      if (r.parametro === 'MIC') val = Number(item.MIC);
+      else if (r.parametro === 'STR') val = Number(item.STR);
+      else if (r.parametro === 'LEN') val = Number(item.UHML);
+
+      if (val === null || isNaN(val)) continue;
+      const idealMin = parseFloat(r.valor_ideal_min);
+      const tolMin = parseFloat(r.rango_tol_min);
+      const tolMax = parseFloat(r.rango_tol_max);
+      
+      if (val < tolMin) {
+          if (priority < 2) priority = 2; 
+      } else if (val < tolMax) {
+          if (val < idealMin && priority < 1) priority = 1; 
+      }
+    }
+    return priority === 2 ? 'DESCAR.' : (priority === 1 ? 'TOLER.' : 'USO');
+  };
+
+  const large = [];
+  const short = [];
+  
+  source.forEach(item => {
+    const s = Number(item.QTDE_ESTOQUE) || 0;
+    if (s > threshold) large.push(item);
+    else short.push({ item, stock: s, estado: getEstado(item) });
+  });
+
+  if (!short.length) return large;
+
+  short.sort((a, b) => {
+    if (a.estado !== b.estado) return a.estado.localeCompare(b.estado);
+    const val = (x, k) => Number(x.item[k]) || 0;
+    let d = val(b, 'STR') - val(a, 'STR'); if (d !== 0) return d;
+    d = val(b, 'UHML') - val(a, 'UHML'); if (d !== 0) return d;
+    return val(b, 'MIC') - val(a, 'MIC');
+  });
+
+  const groups = [];
+  let currentGroup = null;
+  let idxUso = 1, idxTol = 1, idxDesc = 1;
+  const numFields = ['MIC', 'STR', 'UHML', 'SCI', 'MST', 'MAT', 'UI', 'SF', 'ELG', 'RD', 'PLUS_B', 'PESO_MEDIO'];
+
+  short.forEach(entry => {
+    if (!currentGroup || currentGroup.estado !== entry.estado || currentGroup.stock >= threshold) {
+      const estado = entry.estado;
+      const isUso = estado === 'USO';
+      const isDesc = estado === 'DESCAR.';
+      const fPrefix = isDesc ? 'FD' : (isUso ? 'FU' : 'FT');
+      const idx = isDesc ? idxDesc++ : (isUso ? idxUso++ : idxTol++);
+      
+      currentGroup = {
+          stock: 0,
+          estado,
+          items: [],
+          acc: {},
+          prods: new Set(),
+          lotes: [],
+          fPrefix, idx
+      };
+      numFields.forEach(k => currentGroup.acc[k] = 0);
+      groups.push(currentGroup);
+    }
+    
+    const s = entry.stock;
+    currentGroup.stock += s;
+    currentGroup.items.push(entry.item);
+    currentGroup.prods.add(entry.item.PRODUTOR);
+    currentGroup.lotes.push(`${entry.item.LOTE} [${s}]`);
+    
+    numFields.forEach(k => {
+        currentGroup.acc[k] += (Number(entry.item[k]) || 0) * s; 
+    });
+  });
+
+  // Merge huérfanos muy pequeños
+  const mergeOrphans = (targetGroups) => {
+    // Implementacion simplificada: si el ultimo grupo de un estado es menor al umbral y hay uno previo, unirlos
+    ['USO', 'TOLER.', 'DESCAR.'].forEach(st => {
+      // Filtrar indices para manipular el array original por referencia si es necesario, pero aqui groups es local
+      // Mejor iterar y buscar candidatos
+      const candidates = targetGroups.filter(g => g.estado === st);
+      if (candidates.length > 1) {
+        const last = candidates[candidates.length - 1];
+         // Si el ultimo no llega al umbral
+        if (last.stock < threshold) {
+           const prev = candidates[candidates.length - 2];
+           // Mover datos de last a prev
+           prev.items.push(...last.items);
+           prev.stock += last.stock;
+           last.prods.forEach(p => prev.prods.add(p));
+           prev.lotes.push(...last.lotes);
+
+           numFields.forEach(k => prev.acc[k] += last.acc[k]);
+           
+           // Eliminar last de targetGroups
+           const idxToRemove = targetGroups.indexOf(last);
+           if(idxToRemove !== -1) targetGroups.splice(idxToRemove, 1);
+        }
+      }
+    });
+  };
+  
+  mergeOrphans(groups);
+
+  const resultGroups = groups.map(g => {
+      // Usar el primer item como base para el prototipo
+      const base = g.items[0];
+      const obj = Object.assign(Object.create(Object.getPrototypeOf(base)), base);
+      
+      obj.QTDE_ESTOQUE = g.stock;
+      // Ajustar saldo disponible tambien si estamos agrupando
+      if (obj.SALDO_DISPONIVEL !== undefined) obj.SALDO_DISPONIVEL = g.stock;
+      
+      numFields.forEach(k => {
+        obj[k] = g.stock > 0 ? parseFloat((g.acc[k] / g.stock).toFixed(2)) : 0;
+      });
+
+      const pList = Array.from(g.prods).join(', ');
+      const lList = g.lotes.join(', ');
+      
+      obj.PRODUTOR = `${g.fPrefix} ${g.idx} (${pList.length > 20 ? pList.substring(0, 17) + '...' : pList})`;
+      obj.LOTE     = `Agrupado (${lList.length > 50 ? lList.substring(0, 47) + '...' : lList})`;
+      obj._isGroup = true; // Flag para UI si se necesita destacar
+      
+      return obj;
+  });
+
+  return [...large, ...resultGroups];
+});
+
 // Computed: Datos Filtrados
 const filteredData = computed(() => {
-  return items.value.filter(item => {
+  // Usamos groupedItems en lugar de itemsWithStock
+  return groupedItems.value.filter(item => {
     // Filtro Texto (Produtor, Lote, Destino)
     const searchLower = filters.searchText.toLowerCase();
     return !filters.searchText || 

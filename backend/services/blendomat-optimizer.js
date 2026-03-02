@@ -159,7 +159,19 @@ function optimizeBlendStability(stock, rules, supervisionSettings, blendSize, en
 
     let iterations = 0;
     const MAX_ITERATIONS = 100;
-    let remainingLots = [...availableLots];
+    
+    // Unir lotes pequeños antes de procesar para optimizar el stock
+    let processedStock = [...availableLots];
+    if (processedStock.length > blendSize) {
+        // Agrupar lotes del mismo productor con calidad similar si tienen pocos fardos
+        // Por ahora, solo los marcamos para que el algoritmo los use juntos
+        processedStock.sort((a, b) => {
+            if (a.PRODUTOR !== b.PRODUTOR) return a.PRODUTOR.localeCompare(b.PRODUTOR);
+            return a._availableCount - b._availableCount;
+        });
+    }
+
+    let remainingLots = [...processedStock];
     let stopReason = '';
 
     const findMaxHorizon = (lots) => {
@@ -186,55 +198,112 @@ function optimizeBlendStability(stock, rules, supervisionSettings, blendSize, en
     };
 
     const buildRecipeForHorizon = (lots, horizon) => {
-        const total = lots.reduce((sum, l) => sum + l._availableCount, 0);
-        // Contar lotes con capacidad >= 1 para decidir si aplicar garantía de mínimo 1
-        const eligibleCount = lots.filter(l => Math.floor(l._availableCount / horizon) >= 1).length;
-        const guaranteeMin1 = eligibleCount <= blendSize;
-
+        const totalStock = lots.reduce((sum, l) => sum + l._availableCount, 0);
+        
+        // 1. Identificar lotes con capacidad real (>= 1 fardo por mezcla en el bloque)
+        // y lotes pequeños que deben ser unidos.
         const candidates = lots.map((lot) => {
-            const ideal = (lot._availableCount / total) * blendSize;
+            const ideal = (lot._availableCount / totalStock) * blendSize;
             const capacity = Math.floor(lot._availableCount / horizon);
-            // Golden Batch: todos los lotes elegibles (capacity >= 1) reciben al menos 1 fardo
-            // para mantener la distribución proporcional completa del stock.
-            // Solo aplica si el total de elegibles <= blendSize (si hay más lotes que fardos,
-            // la proporcionalidad estricta es imposible).
-            const minAssign = (guaranteeMin1 && capacity >= 1) ? 1 : 0;
-            const assigned = Math.min(Math.max(Math.floor(ideal), minAssign), capacity);
             return {
                 lot,
                 idealShare: ideal,
                 capacity,
-                assigned,
+                assigned: 0, 
                 remainder: ideal - Math.floor(ideal)
             };
         });
 
-        let assignedTotal = candidates.reduce((sum, c) => sum + c.assigned, 0);
-        let needed = blendSize - assignedTotal;
+        const capableLots = candidates.filter(c => c.capacity >= 1);
+        const smallLots = candidates.filter(c => c.capacity < 1);
 
+        // 2. Asignación inicial proporcional a los capaces
+        let assignedTotal = 0;
+        capableLots.forEach(c => {
+            // Garantizamos al menos 1 si hay espacio y es proporcionalmente razonable
+            const minAssign = (capableLots.length <= blendSize) ? 1 : 0;
+            c.assigned = Math.min(Math.max(Math.floor(c.idealShare), minAssign), c.capacity);
+            assignedTotal += c.assigned;
+        });
+
+        // 3. Si falta para completar blendSize, intentar completar con sobrantes de capaces
+        let needed = blendSize - assignedTotal;
         if (needed > 0) {
-            candidates.sort((a, b) => {
+            capableLots.sort((a, b) => {
                 const slackA = a.capacity - a.assigned;
                 const slackB = b.capacity - b.assigned;
                 if (slackB !== slackA) return slackB - slackA;
                 return b.remainder - a.remainder;
             });
 
-            let idx = 0;
-            while (needed > 0 && idx < candidates.length) {
-                const c = candidates[idx];
-                if (c.assigned < c.capacity) {
-                    c.assigned += 1;
-                    needed -= 1;
-                } else {
-                    idx += 1;
+            for (const c of capableLots) {
+                if (needed <= 0) break;
+                const canAdd = Math.min(c.capacity - c.assigned, needed);
+                c.assigned += canAdd;
+                assignedTotal += canAdd;
+                needed = blendSize - assignedTotal;
+            }
+        }
+
+        // 4. OPTIMIZACIÓN SOLICITADA: Unir lotes pequeños
+        // Si todavía falta (needed > 0), usamos los lotes pequeños para cubrir los huecos.
+        // Como no pueden estar en TODAS las mezclas del bloque (porque fardos < horizon),
+        // los usaremos secuencialmente dentro del bloque. 
+        // Esto rompe la "identidad estricta" de las mezclas del bloque, 
+        // pero cumple el objetivo de optimizar stock y armar el pedido.
+        
+        const smallAssignments = []; // { slotIndex, fardoList: [] }
+        if (needed > 0 && smallLots.length > 0) {
+            // Ordenamos pequeños por disponibilidad
+            smallLots.sort((a, b) => b.lot._availableCount - a.lot._availableCount);
+            
+            let currentSmallLotIdx = 0;
+            while (needed > 0 && currentSmallLotIdx < smallLots.length) {
+                const slotFardos = [];
+                let fardosInSlot = 0;
+                
+                // Llenamos un "slot" de fardo para el horizonte N
+                while (fardosInSlot < horizon && currentSmallLotIdx < smallLots.length) {
+                    const sLot = smallLots[currentSmallLotIdx];
+                    const take = Math.min(sLot.lot._availableCount, horizon - fardosInSlot);
+                    
+                    for (let i = 0; i < take; i++) {
+                        slotFardos.push({ ...sLot.lot });
+                    }
+                    
+                    sLot.assigned_total = take; // Marcamos lo usado del lote pequeño en este bloque
+                    fardosInSlot += take;
+                    
+                    if (sLot.lot._availableCount <= take) {
+                        currentSmallLotIdx++;
+                    } else {
+                        // El lote tiene más, pero este slot ya se llenó
+                        // El resto del lote se usará en el siguiente slot si needed > 0
+                        sLot.lot._availableCount -= take; 
+                    }
                 }
-                if (idx >= candidates.length && needed > 0) idx = 0;
+                
+                if (fardosInSlot > 0) {
+                    // Si el slot no se llenó (pocos fardos pequeños), se rellena con el último para no fallar
+                    while (fardosInSlot < horizon && slotFardos.length > 0) {
+                        slotFardos.push({ ...slotFardos[slotFardos.length - 1] });
+                        fardosInSlot++;
+                    }
+                    
+                    smallAssignments.push(slotFardos);
+                    needed--;
+                }
             }
         }
 
         if (needed > 0) return null;
-        return candidates.filter(c => c.assigned > 0);
+
+        // Combinar asignaciones
+        const finalRecipeRows = capableLots.filter(c => c.assigned > 0);
+        return {
+            rows: finalRecipeRows,
+            smallAssignments: smallAssignments // Array de arrays (uno por cada slot de fardo cubierto por pequeños)
+        };
     };
 
     /**
@@ -335,21 +404,32 @@ function optimizeBlendStability(stock, rules, supervisionSettings, blendSize, en
             // Si los lotes A no tienen capacidad suficiente para absorber los slots liberados,
             // retorna null → reducir blockDuration (a H menor, la capacidad de A lotses aumenta).
             if (enforceToleranceCap) {
-                const capped = capToleranceInRecipe(rawRecipe);
+                const capped = capToleranceInRecipe(rawRecipe.rows); // Pass only rows for now
                 if (!capped) {
                     stopReason = `Con GB + Norma, el cupo de tolerancia no puede cumplirse para N=${blockDuration} con el stock actual.`;
                     blockDuration -= 1;
                     continue;
                 }
-                activeRecipe = capped;
+                activeRecipe = { ...rawRecipe, rows: capped };
+            } else {
+                activeRecipe = rawRecipe;
             }
 
             recipeFardos = [];
-            activeRecipe.forEach(item => {
+            activeRecipe.rows.forEach(item => {
                 for (let k = 0; k < item.assigned; k++) {
                     recipeFardos.push({ ...item.lot });
                 }
             });
+            
+            // Agregar placeholders para slots de pequeños para validación inicial (usando el primer fardo del slot)
+            if (activeRecipe.smallAssignments && activeRecipe.smallAssignments.length > 0) {
+                activeRecipe.smallAssignments.forEach(slotFardos => {
+                    if (slotFardos.length > 0) {
+                        recipeFardos.push({ ...slotFardos[0] });
+                    }
+                });
+            }
 
             // enforceToleranceCap=false (Golden Batch puro): solo hardCap individual bloquea.
             //   Si el stock tiene mayoria de lotes B, el cupo de tolerancia es imposible
@@ -364,10 +444,25 @@ function optimizeBlendStability(stock, rules, supervisionSettings, blendSize, en
             blockDuration -= 1;
         }
 
-        if (!activeRecipe || !recipeFardos || blockDuration <= 0) break;
+        if (!activeRecipe || blockDuration <= 0) break;
 
         for (let i = 0; i < blockDuration; i++) {
-            const mezclaFardos = recipeFardos.map(f => ({ ...f }));
+            const mezclaFardos = [];
+            // Fardos de lotes "capaces" (están en todas las mezclas del bloque)
+            activeRecipe.rows.forEach(item => {
+                for (let k = 0; k < item.assigned; k++) {
+                    mezclaFardos.push({ ...item.lot });
+                }
+            });
+            
+            // Fardos de lotes "pequeños" (rotan dentro del bloque)
+            if (activeRecipe.smallAssignments) {
+                activeRecipe.smallAssignments.forEach(slotFardos => {
+                    if (slotFardos[i]) {
+                        mezclaFardos.push({ ...slotFardos[i] });
+                    }
+                });
+            }
 
             blends.push({
                 index: blendIndex++,
@@ -375,11 +470,22 @@ function optimizeBlendStability(stock, rules, supervisionSettings, blendSize, en
             });
         }
 
-        activeRecipe.forEach(item => {
+        activeRecipe.rows.forEach(item => {
             const consumed = item.assigned * blockDuration;
             item.lot._availableCount -= consumed;
             item.lot._usedCount += consumed;
         });
+        
+        if (activeRecipe.smallAssignments) {
+            activeRecipe.smallAssignments.forEach((slotFardos, slotIdx) => {
+                slotFardos.forEach((f, i) => {
+                    const originalLot = classifiedStock.find(l => l.LOTE === f.LOTE && l.PRODUTOR === f.PRODUTOR);
+                    if (originalLot && i < blockDuration) { 
+                         originalLot._usedCount += 1;
+                    }
+                });
+            });
+        }
 
         remainingLots = remainingLots.filter(l => l._availableCount > 0);
     }
