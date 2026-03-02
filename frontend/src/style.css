@@ -1,8 +1,9 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
 
-/* Theme fonts: Inter for UI, Space Grotesk for headings */
+/* Theme fonts: Roboto for UI, Space Grotesk for headings */
 :root {
-	--ui-font: 'Inter', -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+	--ui-font: 'Roboto', -apple-system, 'Segoe UI', system-ui, 'Helvetica Neue', Arial, sans-serif;
 	--heading-font: 'Space Grotesk', var(--ui-font);
 	--mono-font: ui-monospace, SFMono-Regular, Menlo, Monaco, 'Roboto Mono', monospace;
 }

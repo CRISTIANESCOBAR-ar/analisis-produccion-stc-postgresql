@@ -68,9 +68,10 @@
       <div v-else class="flex-1 overflow-auto border border-gray-200 rounded-lg">
         <table class="min-w-full divide-y divide-gray-200 text-xs">
           <colgroup>
-            <col style="width: 60px;"> <!-- Día -->
+            <col style="width: 65px;"> <!-- Día -->
             <!-- INDIGO -->
-            <col style="width: 70px;" span="6">
+            <col style="width: 60px;"> <!-- Efic.% (INDIGO) -->
+            <col style="width: 70px;" span="5"> <!-- resto INDIGO -->
             <!-- TECELAGEM -->
             <col style="width: 70px;" span="8">
             <!-- ACABAMENTO -->
@@ -79,10 +80,10 @@
             <col style="width: 70px;" span="7">
           </colgroup>
 
-          <thead class="sticky top-0 z-10">
+          <thead class="sticky top-0 z-50 border-b-2 border-blue-500">
             <!-- Fila 1: Sectores -->
             <tr style="background-color: #2563eb;">
-              <th style="background-color: #2563eb; color: white;" class="px-2 py-2 text-center font-bold border-r border-blue-500"></th>
+              <th style="background-color: #2563eb; color: white; min-width: 65px; width: 65px;" class="pl-2 pr-1 py-2 text-left font-bold border-r border-blue-500"></th>
               <th colspan="6" style="background-color: #2563eb; color: white;" class="px-2 py-2 text-center font-bold border-r border-blue-500">INDIGO</th>
               <th colspan="8" style="background-color: #2563eb; color: white;" class="px-2 py-2 text-center font-bold border-r border-blue-500">TECELAGEM</th>
               <th colspan="3" style="background-color: #2563eb; color: white;" class="px-2 py-2 text-center font-bold border-r border-blue-500">ACABAMENTO</th>
@@ -91,38 +92,38 @@
 
             <!-- Fila 2: Columnas -->
             <tr class="bg-gray-100">
-              <th class="px-2 py-2 text-center font-semibold text-gray-700 border-r">Día</th>
+              <th style="min-width: 65px; width: 65px;" class="pl-2 pr-1 py-2 text-left font-semibold text-gray-700 border-r border-b-2 border-gray-200">Día</th>
 
               <!-- INDIGO -->
-              <th class="px-2 py-2 text-center font-semibold text-gray-700">Efic.%</th>
-              <th class="px-2 py-2 text-center font-semibold text-gray-700">Produc.</th>
-              <th class="px-2 py-2 text-center font-semibold text-gray-700">Meta</th>
-              <th class="px-2 py-2 text-center font-semibold text-gray-700">Saldo</th>
-              <th class="px-2 py-2 text-center font-semibold text-gray-700">Meta Ajust.</th>
-              <th class="px-2 py-2 text-center font-semibold text-gray-700 border-r">Veloc.</th>
+              <th class="px-1 py-2 text-center font-semibold text-gray-700 border-b-2 border-gray-200">Efic.%</th>
+              <th class="px-2 py-2 text-center font-semibold text-gray-700 border-b-2 border-gray-200">Produc.</th>
+              <th class="px-2 py-2 text-center font-semibold text-gray-700 border-b-2 border-gray-200">Meta</th>
+              <th class="px-2 py-2 text-center font-semibold text-gray-700 border-b-2 border-gray-200">Saldo</th>
+              <th class="px-2 py-2 text-center font-semibold text-gray-700 border-b-2 border-gray-200">Meta Ajust.</th>
+              <th class="px-2 py-2 text-center font-semibold text-gray-700 border-r border-b-2 border-gray-200">Veloc.</th>
 
               <!-- TECELAGEM -->
-              <th class="px-2 py-2 text-center font-semibold text-gray-700">Telares</th>
-              <th class="px-2 py-2 text-center font-semibold text-gray-700">Batidas</th>
-              <th class="px-2 py-2 text-center font-semibold text-gray-700">RPM</th>
-              <th class="px-2 py-2 text-center font-semibold text-gray-700">Efic.%</th>
-              <th class="px-2 py-2 text-center font-semibold text-gray-700">Produc.</th>
-              <th class="px-2 py-2 text-center font-semibold text-gray-700">Meta</th>
-              <th class="px-2 py-2 text-center font-semibold text-gray-700">Saldo</th>
-              <th class="px-2 py-2 text-center font-semibold text-gray-700 border-r">Meta Ajust.</th>
+              <th class="px-2 py-2 text-center font-semibold text-gray-700 border-b-2 border-gray-200">Telares</th>
+              <th class="px-2 py-2 text-center font-semibold text-gray-700 border-b-2 border-gray-200">Batidas</th>
+              <th class="px-2 py-2 text-center font-semibold text-gray-700 border-b-2 border-gray-200">RPM</th>
+              <th class="px-2 py-2 text-center font-semibold text-gray-700 border-b-2 border-gray-200">Efic.%</th>
+              <th class="px-2 py-2 text-center font-semibold text-gray-700 border-b-2 border-gray-200">Produc.</th>
+              <th class="px-2 py-2 text-center font-semibold text-gray-700 border-b-2 border-gray-200">Meta</th>
+              <th class="px-2 py-2 text-center font-semibold text-gray-700 border-b-2 border-gray-200">Saldo</th>
+              <th class="px-2 py-2 text-center font-semibold text-gray-700 border-r border-b-2 border-gray-200">Meta Ajust.</th>
 
               <!-- ACABAMENTO -->
-              <th class="px-2 py-2 text-center font-semibold text-gray-700">Produc.</th>
-              <th class="px-2 py-2 text-center font-semibold text-gray-700">Meta</th>
-              <th class="px-2 py-2 text-center font-semibold text-gray-700 border-r">Saldo</th>
+              <th class="px-2 py-2 text-center font-semibold text-gray-700 border-b-2 border-gray-200">Produc.</th>
+              <th class="px-2 py-2 text-center font-semibold text-gray-700 border-b-2 border-gray-200">Meta</th>
+              <th class="px-2 py-2 text-center font-semibold text-gray-700 border-r border-b-2 border-gray-200">Saldo</th>
 
               <!-- CALIDAD -->
-              <th class="px-2 py-2 text-center font-semibold text-gray-700">1ª Qual.%</th>
-              <th class="px-2 py-2 text-center font-semibold text-gray-700">Pts/100m²</th>
-              <th class="px-2 py-2 text-center font-semibold text-gray-700">Produc.</th>
-              <th class="px-2 py-2 text-center font-semibold text-gray-700">Meta</th>
-              <th class="px-2 py-2 text-center font-semibold text-gray-700">Saldo</th>
-              <th class="px-2 py-2 text-center font-semibold text-gray-700">Meta Ajust.</th>
+              <th class="px-2 py-2 text-center font-semibold text-gray-700 border-b-2 border-gray-200">1ª Qual.%</th>
+              <th class="px-2 py-2 text-center font-semibold text-gray-700 border-b-2 border-gray-200">Pts/100m²</th>
+              <th class="px-2 py-2 text-center font-semibold text-gray-700 border-b-2 border-gray-200">Produc.</th>
+              <th class="px-2 py-2 text-center font-semibold text-gray-700 border-b-2 border-gray-200">Meta</th>
+              <th class="px-2 py-2 text-center font-semibold text-gray-700 border-b-2 border-gray-200">Saldo</th>
+              <th class="px-2 py-2 text-center font-semibold text-gray-700 border-b-2 border-gray-200">Meta Ajust.</th>
             </tr>
           </thead>
 
@@ -130,12 +131,12 @@
             <tr v-for="day in daysData" :key="day.dayNumber"
                 :class="day.hasData ? 'hover:bg-blue-50' : 'bg-gray-50'"
                 class="transition-colors">
-              <td class="px-2 py-1 text-center font-medium text-gray-900 border-r">
+              <td style="min-width: 65px; width: 65px;" class="pl-2 pr-1 py-1 text-left font-medium text-gray-900 border-r border-gray-200">
                 {{ day.dayLabel }}
               </td>
 
               <!-- INDIGO -->
-              <td class="px-2 py-1 text-right" :class="getCellClass(day.indigo?.eficiencia)">
+              <td class="px-1 py-1 text-center" :class="getCellClass(day.indigo?.eficiencia)">
                 {{ formatNumber(day.indigo?.eficiencia, 1) }}
               </td>
               <td class="px-2 py-1 text-right">{{ formatNumber(day.indigo?.produccion, 0) }}</td>
@@ -190,9 +191,9 @@
           <!-- TOTALES -->
           <tfoot>
             <tr class="bg-blue-50 font-bold border-t-2 border-blue-600">
-              <td class="px-2 py-2 text-left">TOTAL</td>
+              <td class="pl-2 pr-1 py-2 text-left">TOTAL</td>
               <!-- INDIGO -->
-              <td class="px-2 py-1 text-right"></td>
+              <td class="px-1 py-1 text-center"></td>
               <td class="px-2 py-1 text-right">{{ formatNumber(totales.indigo.produccion, 0) }}</td>
               <td class="px-2 py-1 text-right text-gray-600">{{ formatNumber(totales.indigo.meta, 0) }}</td>
               <td class="px-2 py-1 text-right" :class="getSaldoClass(totales.indigo.saldo)">
