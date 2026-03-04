@@ -597,7 +597,11 @@
                   <td class="px-4 py-2 text-sm text-gray-600">{{ row.TAM || '-' }}</td>
                   <td class="px-4 py-2 text-sm text-gray-600">{{ getCombinedClassif(row) || '-' }}</td>
                   <td class="px-4 py-2 text-sm">
-                    <span :class="row.Estado === 'USO' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'" class="px-2 py-1 rounded text-xs font-bold">
+                    <span :class="row.Estado === 'USO'
+                      ? 'bg-green-100 text-green-800'
+                      : (row.Estado === 'EXCL.'
+                        ? 'bg-slate-100 text-slate-700'
+                        : 'bg-yellow-100 text-yellow-800')" class="px-2 py-1 rounded text-xs font-bold">
                       {{ row.Estado }}
                     </span>
                   </td>
@@ -605,7 +609,8 @@
                   <td class="px-4 py-2 text-sm text-center font-semibold text-blue-700">{{ formatThousandInteger(getRowUsedForVisibleBlocks(row)) }}</td>
                   <td class="px-4 py-2 text-sm text-center font-semibold text-amber-700">{{ formatThousandInteger(getRowSobranteForVisibleBlocks(row)) }}</td>
                   <td class="px-4 py-2 text-sm text-gray-700">
-                    <span v-if="getRowSobranteForVisibleBlocks(row) === 0" class="font-semibold text-emerald-700">{{ getPlanMotivoLogistico(row, getRowSobranteForVisibleBlocks(row)) }}</span>
+                    <span v-if="row.Estado === 'EXCL.'" class="font-medium text-slate-600">{{ getPlanMotivoLogistico(row, getRowSobranteForVisibleBlocks(row)) }}</span>
+                    <span v-else-if="getRowSobranteForVisibleBlocks(row) === 0" class="font-semibold text-emerald-700">{{ getPlanMotivoLogistico(row, getRowSobranteForVisibleBlocks(row)) }}</span>
                     <span v-else-if="row.Estado === 'TOLER.'" class="font-medium text-amber-700">{{ getPlanMotivoLogistico(row, getRowSobranteForVisibleBlocks(row)) }}</span>
                     <span v-else class="font-medium text-slate-700">{{ getPlanMotivoLogistico(row, getRowSobranteForVisibleBlocks(row)) }}</span>
                   </td>
@@ -626,11 +631,11 @@
               <tfoot class="bg-gray-50 border-t-2 border-gray-300 compact-summary-footer">
                 <!-- Resumen Mezcla (Cantidad / Peso) -->
                 <tr class="summary-matrix-row summary-matrix-group-start">
-                  <td colspan="9" class="px-4 py-2 text-sm font-bold text-right text-gray-700 border-b border-gray-300">TOTALES LOTES</td>
+                  <td colspan="5" class="px-4 py-2 text-sm font-bold text-right text-gray-700 border-b border-gray-300">TOTALES LOTES</td>
                   <td class="px-4 py-2 text-sm text-center font-bold text-slate-800 border-b border-gray-300">{{ formatThousandInteger(planLotTotals.stock) }}</td>
                   <td class="px-4 py-2 text-sm text-center font-bold text-blue-700 border-b border-gray-300">{{ formatThousandInteger(planLotTotals.usados) }}</td>
                   <td class="px-4 py-2 text-sm text-center font-bold text-amber-700 border-b border-gray-300">{{ formatThousandInteger(planLotTotals.sobrante) }}</td>
-                  <td class="px-4 py-2 text-sm text-center text-gray-400 border-b border-gray-300">—</td>
+                  <td colspan="2" class="px-4 py-2 text-sm text-center text-gray-400 border-b border-gray-300">—</td>
                   <td rowspan="5" class="summary-matrix-cell px-4 py-2 text-sm font-bold text-center text-gray-800">Mezcla</td>
                   <td rowspan="3" class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Cantidad</td>
                   <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Fardos</td>
@@ -641,11 +646,11 @@
                   </template>
                 </tr>
                 <tr class="summary-matrix-row">
-                  <td colspan="9" class="px-4 py-2 text-sm font-bold text-right text-gray-700 border-b border-gray-300">TOTALES KG</td>
+                  <td colspan="5" class="px-4 py-2 text-sm font-bold text-right text-gray-700 border-b border-gray-300">TOTALES KG</td>
                   <td class="px-4 py-2 text-sm text-center font-bold text-slate-800 border-b border-gray-300">{{ formatThousandInteger(planWeightTotals.stockKg) }}</td>
                   <td class="px-4 py-2 text-sm text-center font-bold text-blue-700 border-b border-gray-300">{{ formatThousandInteger(planWeightTotals.usadosKg) }}</td>
                   <td class="px-4 py-2 text-sm text-center font-bold text-amber-700 border-b border-gray-300">{{ formatThousandInteger(planWeightTotals.sobranteKg) }}</td>
-                  <td class="px-4 py-2 text-sm text-center text-gray-400 border-b border-gray-300">—</td>
+                  <td colspan="2" class="px-4 py-2 text-sm text-center text-gray-400 border-b border-gray-300">—</td>
                   <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Kg</td>
                   <template v-for="col in activeBlendColumns" :key="'mix-kg-'+col">
                     <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center font-bold text-gray-900" :colspan="2">
@@ -654,7 +659,7 @@
                   </template>
                 </tr>
                 <tr class="summary-matrix-row">
-                  <td colspan="13" :rowspan="summaryMatrixRowspan" class="px-4 py-2 align-top border-r border-gray-300">
+                  <td colspan="10" :rowspan="summaryMatrixRowspan" class="px-4 py-2 align-top border-r border-gray-300">
                     <div v-if="activeBlendVariablesForSummary.length" class="h-full border border-slate-300 rounded-md overflow-hidden bg-white">
                       <div class="px-3 py-2 bg-slate-50 border-b border-slate-300">
                         <h3 class="text-sm font-bold text-slate-800">Resumen de lotes (promedios de variables activas)</h3>
@@ -1211,6 +1216,16 @@
       <table class="min-w-full divide-y divide-gray-200 stock-table">
         <thead class="bg-gray-100">
           <tr>
+            <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-10">
+              <input
+                ref="stockSelectAllRef"
+                type="checkbox"
+                :checked="allVisibleStockRowsSelected"
+                @change="toggleSelectAllStockRows($event.target.checked)"
+                class="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                title="Seleccionar / deseleccionar todos"
+              />
+            </th>
             <th 
               v-for="col in visibleColumns" 
               :key="col.key"
@@ -1235,16 +1250,25 @@
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
           <tr v-if="loading">
-             <td :colspan="visibleColumns.length" class="px-6 py-4 text-center text-blue-500 font-medium">
+             <td :colspan="visibleColumns.length + 1" class="px-6 py-4 text-center text-blue-500 font-medium">
                 Cargando inventario...
              </td>
           </tr>
           <tr v-else-if="sortedFilteredData.length === 0">
-            <td :colspan="visibleColumns.length" class="px-6 py-4 text-center text-gray-500 italic">
+            <td :colspan="visibleColumns.length + 1" class="px-6 py-4 text-center text-gray-500 italic">
               No se encontraron resultados ({{ items.length > 0 ? 'ajusta los filtros' : 'Base de datos vacía o sin conexión' }}).
             </td>
           </tr>
           <tr v-else v-for="(item, index) in sortedFilteredData" :key="index" class="hover:bg-gray-50 transition-colors">
+            <td class="px-3 py-2 text-center align-middle">
+              <input
+                type="checkbox"
+                :checked="isStockRowSelected(item)"
+                @change="toggleStockRowSelection(item, $event.target.checked)"
+                class="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                title="Seleccionar lote"
+              />
+            </td>
             <td 
               v-for="col in visibleColumns" 
               :key="col.key"
@@ -1262,6 +1286,7 @@
         </tbody>
         <tfoot v-if="summaryRow" class="bg-gray-100 font-bold border-t-2 border-gray-300">
           <tr>
+            <td class="px-4 py-3 text-sm text-gray-800 whitespace-nowrap text-center">—</td>
             <td 
               v-for="col in visibleColumns" 
               :key="'sum-' + col.key"
@@ -1864,6 +1889,9 @@ const filters = reactive({
   fardos: null
 });
 
+const selectedStockRowKeys = ref(new Set());
+const stockSelectAllRef = ref(null);
+
 const stockSortState = reactive({ key: 'PRODUTOR', direction: 'asc' });
 const blendSortState = reactive({ key: 'PRODUTOR', direction: 'asc' });
 
@@ -2272,10 +2300,11 @@ const fetchData = async () => {
     const data = await response.json();
     
     // Mapear respuesta raw a modelo CottonBale
-      items.value = data.map(row => {
+      items.value = data.map((row, index) => {
         const item = new CottonBale(row);
         // Guardar stock original para alternar modos
         item._QTDE_TOTAL = item.QTDE_ESTOQUE;
+        item._selectionKey = `ITEM::${index}::${normalizeSortText(item.PRODUTOR)}::${normalizeSortText(item.LOTE)}::${normalizeSortText(item.TAM)}`;
         return item;
       });
   } catch (error) {
@@ -2414,6 +2443,9 @@ const getPlanMotivoLogistico = (row, sobranteOverride = null) => {
   const sobrante = hasOverride ? Number(sobranteOverride) : Number(row.Sobrante);
 
   if (!hasOverride && row.MotivoLogistico) return row.MotivoLogistico;
+  if (row._excludedBySelection || row.Estado === 'EXCL.') {
+    return 'Excluido por selección manual (checkbox) - visible para panorama general';
+  }
   if (sobrante === 0) return 'Usado en plan (se usó todo)';
   if (row.Estado === 'TOLER.') return 'Usado en plan (tolerancia permitida)';
   if (row.Estado === 'NO USO') return 'No usado en ninguna mezcla';
@@ -2422,6 +2454,116 @@ const getPlanMotivoLogistico = (row, sobranteOverride = null) => {
 };
 
 const normalizeSortText = (value) => (value ?? '').toString().trim();
+
+const getStockRowSelectionKey = (row) => {
+  if (!row) return '';
+
+  const explicitKey = normalizeSortText(row?._selectionKey);
+  if (explicitKey) return explicitKey;
+
+  const tridNum = Number(row?.TRID);
+  if (Number.isFinite(tridNum) && tridNum > 0) {
+    const produtor = normalizeSortText(row?.PRODUTOR);
+    const lote = normalizeSortText(row?.LOTE);
+    return `TRID::${tridNum}::${produtor}::${lote}`;
+  }
+
+  const produtor = normalizeSortText(row?.PRODUTOR);
+  const lote = normalizeSortText(row?.LOTE);
+  const tam = normalizeSortText(row?.TAM);
+  const classif = normalizeSortText(row?.CLASSIF);
+  const destino = normalizeSortText(row?.DESTINO);
+  const saldo = Number(row?.SALDO_DISPONIVEL ?? row?.QTDE_ESTOQUE ?? 0);
+  const isGroup = row?._isGroup ? 'G' : 'I';
+  return `${isGroup}::${produtor}::${lote}::${tam}::${classif}::${destino}::${saldo}`;
+};
+
+const visibleStockRowKeys = computed(() => {
+  return sortedFilteredData.value
+    .map((row) => getStockRowSelectionKey(row))
+    .filter((key) => key);
+});
+
+const allVisibleStockRowsSelected = computed(() => {
+  const keys = visibleStockRowKeys.value;
+  if (keys.length === 0) return false;
+  return keys.every((key) => selectedStockRowKeys.value.has(key));
+});
+
+const someVisibleStockRowsSelected = computed(() => {
+  const keys = visibleStockRowKeys.value;
+  if (keys.length === 0) return false;
+  const selectedCount = keys.filter((key) => selectedStockRowKeys.value.has(key)).length;
+  return selectedCount > 0 && selectedCount < keys.length;
+});
+
+const isStockRowSelected = (row) => {
+  const key = getStockRowSelectionKey(row);
+  if (!key) return false;
+  return selectedStockRowKeys.value.has(key);
+};
+
+const toggleStockRowSelection = (row, checked) => {
+  const key = getStockRowSelectionKey(row);
+  if (!key) return;
+
+  const next = new Set(selectedStockRowKeys.value);
+  if (checked) next.add(key);
+  else next.delete(key);
+  selectedStockRowKeys.value = next;
+};
+
+const toggleSelectAllStockRows = (checked) => {
+  const next = new Set(selectedStockRowKeys.value);
+  visibleStockRowKeys.value.forEach((key) => {
+    if (checked) next.add(key);
+    else next.delete(key);
+  });
+  selectedStockRowKeys.value = next;
+};
+
+const selectedStockRowsForBlend = computed(() => {
+  return sortedFilteredData.value.filter((row) => isStockRowSelected(row));
+});
+
+const excludedStockRowsForBlend = computed(() => {
+  return sortedFilteredData.value.filter((row) => !isStockRowSelected(row));
+});
+
+const buildExcludedBlendRows = (rows, columnasMezcla = []) => {
+  return rows.map((row) => {
+    const stock = Number(row?.QTDE_ESTOQUE ?? row?.Stock ?? 0) || 0;
+    const mezclas = columnasMezcla.reduce((acc, col) => {
+      acc[col] = 0;
+      return acc;
+    }, {});
+
+    return {
+      ...row,
+      Estado: 'EXCL.',
+      Stock: stock,
+      Usados: 0,
+      Sobrante: stock,
+      LEN: row?.LEN ?? row?.UHML ?? null,
+      MotivoLogistico: 'Excluido por selección manual (checkbox) - visible para panorama general',
+      mezclas,
+      _excludedBySelection: true
+    };
+  });
+};
+
+const mergeExcludedRowsIntoBlendResult = (blendResult, excludedRows) => {
+  if (!blendResult || !Array.isArray(blendResult.plan)) return blendResult;
+  if (!Array.isArray(excludedRows) || excludedRows.length === 0) return blendResult;
+
+  const columnas = Array.isArray(blendResult.columnasMezcla) ? blendResult.columnasMezcla : [];
+  const excludedPlanRows = buildExcludedBlendRows(excludedRows, columnas);
+
+  return {
+    ...blendResult,
+    plan: [...blendResult.plan, ...excludedPlanRows]
+  };
+};
 
 const getCombinedClassif = (row) => {
   const tipo = normalizeSortText(row?.TP);
@@ -5079,6 +5221,7 @@ const groupedItems = computed(() => {
         : `Agrupado (${lList.length > 50 ? lList.substring(0, 47) + '...' : lList})`;
       obj.TAM      = tamList.length > 1 ? 'VARIOS' : (tamList[0] || g.tam || '');
       obj._isGroup = true; // Flag para UI si se necesita destacar
+      obj._selectionKey = `GROUP::${g.estado}::${g.tam}::${g.lotes.join('|')}`;
       
       return obj;
   });
@@ -5102,6 +5245,29 @@ const filteredData = computed(() => {
 const sortedFilteredData = computed(() => {
   return sortRowsByState(filteredData.value, stockSortState);
 });
+
+watch(
+  sortedFilteredData,
+  (rows) => {
+    const next = new Set(selectedStockRowKeys.value);
+    rows.forEach((row) => {
+      const key = getStockRowSelectionKey(row);
+      if (key && !next.has(key)) next.add(key);
+    });
+    selectedStockRowKeys.value = next;
+  },
+  { immediate: true }
+);
+
+watch(
+  someVisibleStockRowsSelected,
+  (isPartial) => {
+    if (stockSelectAllRef.value) {
+      stockSelectAllRef.value.indeterminate = isPartial;
+    }
+  },
+  { immediate: true }
+);
 
 // Computed: Fila de Resumen (Promedios Ponderados y Totales)
 const summaryRow = computed(() => {
@@ -5376,6 +5542,16 @@ const handleMezclas = async ({ silent = false } = {}) => {
 
   blendUserMessage.value = null;
 
+  const stockRowsForBlend = selectedStockRowsForBlend.value;
+  const stockRowsExcludedFromBlend = excludedStockRowsForBlend.value;
+
+  if (!stockRowsForBlend.length) {
+    if (!silent) {
+      alert('Selecciona al menos un lote en la tabla para calcular mezclas.');
+    }
+    return;
+  }
+
   if (!filters.fardos || filters.fardos <= 0) {
     if (!silent) {
       alert('Por favor, especifica la cantidad de fardos para la mezcla.');
@@ -5406,7 +5582,7 @@ const handleMezclas = async ({ silent = false } = {}) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        stock: sortedFilteredData.value, // Enviar stock filtrado y ordenado según selección
+        stock: stockRowsForBlend,
         rules: activeRules.value,
         supervisionSettings: supervisionSettings,
         blendSize: filters.fardos,
@@ -5421,6 +5597,7 @@ const handleMezclas = async ({ silent = false } = {}) => {
 
     const data = await response.json();
     const enrichedData = enrichBlendResultWithTam(data);
+    const enrichedDataWithExcluded = mergeExcludedRowsIntoBlendResult(enrichedData, stockRowsExcludedFromBlend);
 
     if (enrichedData.success) {
       if (!Array.isArray(enrichedData.plan) || enrichedData.plan.length === 0) {
@@ -5435,7 +5612,7 @@ const handleMezclas = async ({ silent = false } = {}) => {
           details
         };
 
-        blendPlan.value = enrichedData;
+        blendPlan.value = enrichedDataWithExcluded;
         loteFiacReferenceSummary.value = [];
         isBlendMode.value = true;
         return;
@@ -5443,7 +5620,7 @@ const handleMezclas = async ({ silent = false } = {}) => {
 
       validateBlendPlanFeasibility(enrichedData);
       blendUserMessage.value = null;
-      blendPlan.value = enrichedData;
+      blendPlan.value = enrichedDataWithExcluded;
       await loadLoteFiacReferenceSummary();
       isBlendMode.value = true;
     } else {
@@ -5649,81 +5826,59 @@ const exportToExcel = async () => {
     applyCellStyleFromUiClass(elgCell, getCellClass(row, 'ELG'));
   });
 
-  // SUBTOTALES
-  // Calcular sumas para las columnas numéricas
-  const subtotales = {
-    stock: 0,
-    usados: 0,
-    sobrante: 0,
-    mezclas: {}, // Para cada columna de mezcla
-    saldos: {}   // Para cada columna de saldo
+  // ===== Footer base (idéntico a UI): Totales Lotes / Totales Kg =====
+  // Usamos la misma lógica de la UI para evitar desvíos en Usados/Sobrante.
+  const exportLotTotals = {
+    stock: Number(planLotTotals.value?.stock) || 0,
+    usados: Number(planLotTotals.value?.usados) || 0,
+    sobrante: Number(planLotTotals.value?.sobrante) || 0
   };
-  
-  plan.forEach(row => {
-    subtotales.stock += Number(row.Stock) || 0;
-    subtotales.usados += Number(row.Usados) || 0;
-    subtotales.sobrante += Number(row.Sobrante) || 0;
-    
-    // Sumar mezclas y saldos
-    columnasMezcla.forEach((mixCol, idx) => {
-      if (!subtotales.mezclas[mixCol]) subtotales.mezclas[mixCol] = 0;
-      if (!subtotales.saldos[mixCol]) subtotales.saldos[mixCol] = 0;
-      
-      const mezclaValue = row.mezclas && row.mezclas[mixCol] ? Number(row.mezclas[mixCol]) : 0;
-      subtotales.mezclas[mixCol] += mezclaValue || 0;
-      
-      const saldoValue = Number(getStockActualForBlock(row, idx));
-      subtotales.saldos[mixCol] += (Number.isNaN(saldoValue) ? 0 : saldoValue);
-    });
-  });
-  
-  // Agregar fila de subtotales
-  const subtotalesRowData = [
-    '', // Productor
-    '', // Lote
-    '', // Clasif.
-    'SUBTOTALES', // Estado
-    subtotales.stock,
-    subtotales.usados,
-    subtotales.sobrante,
-    '', // Motivo Sobrante
-    '', // MIC
-    '', // STR
-    '', // LEN
-    ''  // ELG
-  ];
-  
-  // Agregar subtotales de mezclas y saldos
-  columnasMezcla.forEach((mixCol) => {
-    subtotalesRowData.push(subtotales.mezclas[mixCol] || 0);
-    subtotalesRowData.push(subtotales.saldos[mixCol] || 0);
-  });
-  
-  const subtotalesRow = planSheet.addRow(subtotalesRowData);
-  subtotalesRow.font = { bold: true, size: 11 };
-  subtotalesRow.alignment = { horizontal: 'center', vertical: 'center' };
-  for (let col = 1; col <= headers.length; col += 1) {
-    const cell = subtotalesRow.getCell(col);
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F4F8' } };
-  }
-  
-  // Aplicar borde superior a la fila de subtotales
-  subtotalesRow.eachCell({ includeEmpty: false }, (cell) => {
-    cell.border = {
-      top: { style: 'medium', color: { argb: 'FF1F4E78' } }
-    };
-    // Formato numérico para celdas numéricas (sin decimales, con separador de millar)
-    if (typeof cell.value === 'number') {
-      cell.numFmt = '#,##0';
+
+  const exportWeightTotals = {
+    stockKg: Number(planWeightTotals.value?.stockKg) || 0,
+    usadosKg: Number(planWeightTotals.value?.usadosKg) || 0,
+    sobranteKg: Number(planWeightTotals.value?.sobranteKg) || 0
+  };
+
+  const totalesLotesRow = planSheet.addRow(new Array(headers.length).fill(''));
+  const totalesKgRow = planSheet.addRow(new Array(headers.length).fill(''));
+
+  const totalesLotesRowNumber = totalesLotesRow.number;
+  const totalesKgRowNumber = totalesKgRow.number;
+
+  planSheet.mergeCells(totalesLotesRowNumber, 1, totalesLotesRowNumber, 4);
+  planSheet.mergeCells(totalesKgRowNumber, 1, totalesKgRowNumber, 4);
+
+  planSheet.getCell(totalesLotesRowNumber, 1).value = 'TOTALES LOTES';
+  planSheet.getCell(totalesKgRowNumber, 1).value = 'TOTALES KG';
+
+  planSheet.getCell(totalesLotesRowNumber, 5).value = exportLotTotals.stock;
+  planSheet.getCell(totalesLotesRowNumber, 6).value = exportLotTotals.usados;
+  planSheet.getCell(totalesLotesRowNumber, 7).value = exportLotTotals.sobrante;
+
+  planSheet.getCell(totalesKgRowNumber, 5).value = exportWeightTotals.stockKg;
+  planSheet.getCell(totalesKgRowNumber, 6).value = exportWeightTotals.usadosKg;
+  planSheet.getCell(totalesKgRowNumber, 7).value = exportWeightTotals.sobranteKg;
+
+  planSheet.getCell(totalesLotesRowNumber, 8).value = '—';
+  planSheet.getCell(totalesKgRowNumber, 8).value = '—';
+
+  [totalesLotesRowNumber, totalesKgRowNumber].forEach((rowNumber) => {
+    for (let col = 1; col <= headers.length; col += 1) {
+      const cell = planSheet.getCell(rowNumber, col);
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+      cell.alignment = { horizontal: col === 1 ? 'right' : 'center', vertical: 'middle' };
+      cell.font = { ...(cell.font || {}), bold: true, color: { argb: 'FF1F2937' } };
+      if (col >= 5 && col <= 7) cell.numFmt = '#,##0';
     }
   });
 
-  // Bordes gris claro para toda la tabla (encabezados + datos + subtotales)
-  for (let rowNumber = 3; rowNumber <= subtotalesRow.number; rowNumber += 1) {
+  // Bordes gris claro para toda la tabla (encabezados + datos + totales)
+  for (let rowNumber = 3; rowNumber <= totalesKgRowNumber; rowNumber += 1) {
     const rowRef = planSheet.getRow(rowNumber);
     for (let colNumber = 1; colNumber <= headers.length; colNumber += 1) {
       const cell = rowRef.getCell(colNumber);
-      const hasTopMediumBorder = rowNumber === subtotalesRow.number;
+      const hasTopMediumBorder = rowNumber === totalesLotesRowNumber;
       cell.border = {
         top: hasTopMediumBorder
           ? { style: 'medium', color: { argb: 'FF1F4E78' } }
@@ -5735,13 +5890,14 @@ const exportToExcel = async () => {
     }
   }
 
-  // ===== Estadísticas debajo de subtotales (desde columna H) =====
+  // ===== Matriz de resumen (idéntica al footer UI) =====
   const statsStartCol = 9; // Columna I
   const statsLabelCol = statsStartCol;
   const statsTypeCol = statsStartCol + 1;
   const statsMetricCol = statsStartCol + 2;
+  const statsMetricMergedEndCol = statsMetricCol + 1;
   const firstBlockValueCol = 13; // Primera columna de bloque (M1-...)
-  const statsEndCol = headers.length;
+  const statsEndCol = Math.min(headers.length, firstBlockValueCol + (columnasMezcla.length * 2) - 1);
 
   const toNumeric = (value, fallback = 0) => {
     const numericValue = Number(value);
@@ -5755,7 +5911,44 @@ const exportToExcel = async () => {
     return '0.00';
   };
 
-  const statsRowsConfig = activeBlendVariablesForSummary.value.map((variable) => {
+  const mixSummarySection = {
+    label: 'Mezcla',
+    typeMerges: [[0, 2], [3, 4]],
+    rows: [
+      {
+        type: 'Cantidad',
+        metric: 'Fardos',
+        valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.totalFardos, 0),
+        numFmt: '#,##0'
+      },
+      {
+        type: '',
+        metric: 'Kg',
+        valueGetter: (blockId) => toNumeric(getPesoTotalBloqueForColumn(blockId), 0),
+        numFmt: '#,##0'
+      },
+      {
+        type: '',
+        metric: 'Bloques',
+        valueGetter: (blockId) => toNumeric(getBlockMixCount(blockId), 0),
+        numFmt: '#,##0'
+      },
+      {
+        type: 'Peso',
+        metric: 'Por Mezcla',
+        valueGetter: (blockId) => toNumeric(getPesoPorMezclaForColumn(blockId), 0),
+        numFmt: '#,##0'
+      },
+      {
+        type: '',
+        metric: 'Por Bloque',
+        valueGetter: (blockId) => toNumeric(getPesoTotalBloqueForColumn(blockId), 0),
+        numFmt: '#,##0'
+      }
+    ]
+  };
+
+  const variableStatsSections = activeBlendVariablesForSummary.value.map((variable) => {
     const ruleParam = variable.ruleParam;
     const idealPctLabel = getMatrixIdealPctLabel(variable);
     const tolerancePctLabel = getMatrixTolerancePctLabel(variable);
@@ -5763,6 +5956,7 @@ const exportToExcel = async () => {
 
     return {
       label: getMatrixVariableLabel(variable),
+      typeMerges: [[0, 2], [3, 4]],
       rows: [
         {
           type: 'Promedio',
@@ -5798,7 +5992,9 @@ const exportToExcel = async () => {
     };
   });
 
-  let currentStatsRow = subtotalesRow.number + 1;
+  const statsRowsConfig = [mixSummarySection, ...variableStatsSections];
+
+  let currentStatsRow = totalesKgRowNumber + 1;
 
   statsRowsConfig.forEach((section) => {
     const sectionStartRow = currentStatsRow;
@@ -5812,9 +6008,16 @@ const exportToExcel = async () => {
 
       rowRef.getCell(statsTypeCol).value = rowDef.type || '';
       rowRef.getCell(statsMetricCol).value = rowDef.metric || '';
+      if (statsMetricMergedEndCol < firstBlockValueCol) {
+        planSheet.mergeCells(currentStatsRow, statsMetricCol, currentStatsRow, statsMetricMergedEndCol);
+      }
 
       columnasMezcla.forEach((blockId, blockIndex) => {
         const valueCol = getBlockValueCol(blockIndex);
+        const valueColEnd = Math.min(valueCol + 1, headers.length);
+        if (valueColEnd > valueCol) {
+          planSheet.mergeCells(currentStatsRow, valueCol, currentStatsRow, valueColEnd);
+        }
         const valueCell = rowRef.getCell(valueCol);
         valueCell.value = rowDef.valueGetter(blockId);
         valueCell.numFmt = rowDef.numFmt;
@@ -5855,11 +6058,17 @@ const exportToExcel = async () => {
       planSheet.mergeCells(sectionStartRow, statsLabelCol, currentStatsRow - 1, statsLabelCol);
     }
 
-    // Merge "Promedio" y "Porcentual" para cada variable
-    if (section.rows.length >= 5) {
-      planSheet.mergeCells(sectionStartRow, statsTypeCol, sectionStartRow + 2, statsTypeCol);
-      planSheet.mergeCells(sectionStartRow + 3, statsTypeCol, sectionStartRow + 4, statsTypeCol);
-    }
+    const typeMerges = Array.isArray(section.typeMerges) ? section.typeMerges : [];
+    typeMerges.forEach(([startOffset, endOffset]) => {
+      if (endOffset > startOffset) {
+        planSheet.mergeCells(
+          sectionStartRow + startOffset,
+          statsTypeCol,
+          sectionStartRow + endOffset,
+          statsTypeCol
+        );
+      }
+    });
   });
 
   applyVerticalCenter(planSheet);
