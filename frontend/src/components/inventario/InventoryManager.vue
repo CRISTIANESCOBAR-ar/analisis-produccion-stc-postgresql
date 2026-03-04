@@ -5482,12 +5482,8 @@ const exportToExcel = async () => {
   const workbook = new ExcelJS.Workbook();
   
   // Colores y estilos
-  const headerBg = 'FF1F4E78'; // Azul oscuro
   const headerFont = { color: 'FFFFFFFF', bold: true, size: 11 };
-  const titleFont = { bold: true, size: 14, color: 'FF000000' };
-  const subTitleFont = { bold: true, size: 11, color: 'FF1F4E78' };
   const centerAlign = { horizontal: 'center', vertical: 'center', wrapText: true };
-  const numberFormat = '#,##0.00';
 
   const applyCellStyleFromUiClass = (cell, uiClass) => {
     if (!uiClass || typeof uiClass !== 'string') return;
@@ -5544,7 +5540,7 @@ const exportToExcel = async () => {
   };
   
   // Título
-  const totalCols = 8 + 3 + columnasMezcla.length * 2;
+  const totalCols = 8 + 4 + columnasMezcla.length * 2;
   planSheet.mergeCells(`A1:${String.fromCharCode(64 + totalCols)}1`);
   const titleCell = planSheet.getCell('A1');
   titleCell.value = {
@@ -5582,7 +5578,7 @@ const exportToExcel = async () => {
   // Encabezados (mismo orden que la UI)
   const headers = [
     'Productor', 'Lote', 'Clasif.', 'Estado', 'Stock', 'Usados', 'Sobrante', 
-    'Motivo Sobrante', 'MIC', 'STR', 'LEN'
+    'Motivo Sobrante', 'MIC', 'STR', 'LEN', 'ELG'
   ];
   
   // Agregar columnas de mezclas dinámicamente
@@ -5601,7 +5597,7 @@ const exportToExcel = async () => {
   planSheet.getRow(3).height = 20;
   
   // Ancho de columnas customizado (adaptativo a la cantidad de bloques)
-  const fixedWidths = [16, 7, 12, 9, 9, 9, 9, 33, 7, 7, 7];
+  const fixedWidths = [16, 7, 12, 9, 9, 9, 9, 33, 7, 7, 7, 7];
   const columnWidths = headers.map((_, index) => {
     if (index < fixedWidths.length) return fixedWidths[index];
     return 9;
@@ -5621,7 +5617,8 @@ const exportToExcel = async () => {
       getPlanMotivoLogistico(row),
       row.MIC || '',
       row.STR || '',
-      row.LEN || ''
+      row.LEN || '',
+      row.ELG || ''
     ];
     
     // Mezclas y Saldo
@@ -5645,9 +5642,11 @@ const exportToExcel = async () => {
     const micCell = newRow.getCell(9);
     const strCell = newRow.getCell(10);
     const lenCell = newRow.getCell(11);
+    const elgCell = newRow.getCell(12);
     applyCellStyleFromUiClass(micCell, getCellClass(row, 'MIC'));
     applyCellStyleFromUiClass(strCell, getCellClass(row, 'STR'));
     applyCellStyleFromUiClass(lenCell, getCellClass(row, 'UHML'));
+    applyCellStyleFromUiClass(elgCell, getCellClass(row, 'ELG'));
   });
 
   // SUBTOTALES
@@ -5690,7 +5689,8 @@ const exportToExcel = async () => {
     '', // Motivo Sobrante
     '', // MIC
     '', // STR
-    ''  // LEN
+    '', // LEN
+    ''  // ELG
   ];
   
   // Agregar subtotales de mezclas y saldos
@@ -5740,7 +5740,7 @@ const exportToExcel = async () => {
   const statsLabelCol = statsStartCol;
   const statsTypeCol = statsStartCol + 1;
   const statsMetricCol = statsStartCol + 2;
-  const firstBlockValueCol = 12; // Primera columna de bloque (M1-...)
+  const firstBlockValueCol = 13; // Primera columna de bloque (M1-...)
   const statsEndCol = headers.length;
 
   const toNumeric = (value, fallback = 0) => {
@@ -5750,149 +5750,58 @@ const exportToExcel = async () => {
 
   const getBlockValueCol = (blockIndex) => firstBlockValueCol + (blockIndex * 2);
 
-  const statsRowsConfig = [
-    {
-      label: 'Mezcla',
-      rows: [
-        {
-          type: 'Cantidad',
-          metric: 'Fardos',
-          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.totalFardos, 0),
-          numFmt: '#,##0'
-        },
-        {
-          type: '',
-          metric: 'Bloques',
-          valueGetter: (blockId) => toNumeric(getBlockMixCount(blockId), 0),
-          numFmt: '#,##0'
-        },
-        {
-          type: 'Peso',
-          metric: 'Por Mezcla',
-          valueGetter: (blockId) => toNumeric(getPesoPorMezclaForColumn(blockId), 0),
-          numFmt: '#,##0'
-        },
-        {
-          type: '',
-          metric: 'Por Bloque',
-          valueGetter: (blockId) => toNumeric(getPesoTotalBloqueForColumn(blockId), 0),
-          numFmt: '#,##0'
-        }
-      ]
-    },
-    {
-      label: 'MIC',
+  const getVariableNumFmtForExport = (formatKey) => {
+    if (formatKey === 'PESO') return '#,##0';
+    return '0.00';
+  };
+
+  const statsRowsConfig = activeBlendVariablesForSummary.value.map((variable) => {
+    const ruleParam = variable.ruleParam;
+    const idealPctLabel = getMatrixIdealPctLabel(variable);
+    const tolerancePctLabel = getMatrixTolerancePctLabel(variable);
+    const valueNumFmt = getVariableNumFmtForExport(variable.formatKey);
+
+    return {
+      label: getMatrixVariableLabel(variable),
       rows: [
         {
           type: 'Promedio',
           metric: 'Bloque',
-          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.MIC?.promedioGeneral, 0),
-          numFmt: '0.00'
+          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.[ruleParam]?.promedioGeneral, 0),
+          numFmt: valueNumFmt
         },
         {
           type: '',
-          metric: '90%',
-          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.MIC?.promedioIdeal, 0),
-          numFmt: '0.00'
+          metric: idealPctLabel,
+          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.[ruleParam]?.promedioIdeal, 0),
+          numFmt: valueNumFmt
         },
         {
           type: '',
-          metric: '10%',
-          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.MIC?.promedioTolerancia, 0),
-          numFmt: '0.00'
+          metric: tolerancePctLabel,
+          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.[ruleParam]?.promedioTolerancia, 0),
+          numFmt: valueNumFmt
         },
         {
           type: 'Porcentual',
-          metric: '90%',
-          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.MIC?.pctIdeal, 0) / 100,
+          metric: idealPctLabel,
+          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.[ruleParam]?.pctIdeal, 0) / 100,
           numFmt: '0.0%'
         },
         {
           type: '',
-          metric: '10%',
-          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.MIC?.pctTolerancia, 0) / 100,
-          numFmt: '0.0%'
-        }
-      ]
-    },
-    {
-      label: 'STR',
-      rows: [
-        {
-          type: 'Promedio',
-          metric: 'Bloque',
-          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.STR?.promedioGeneral, 0),
-          numFmt: '0.00'
-        },
-        {
-          type: '',
-          metric: '80%',
-          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.STR?.promedioIdeal, 0),
-          numFmt: '0.00'
-        },
-        {
-          type: '',
-          metric: '20%',
-          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.STR?.promedioTolerancia, 0),
-          numFmt: '0.00'
-        },
-        {
-          type: 'Porcentual',
-          metric: '80%',
-          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.STR?.pctIdeal, 0) / 100,
-          numFmt: '0.0%'
-        },
-        {
-          type: '',
-          metric: '20%',
-          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.STR?.pctTolerancia, 0) / 100,
+          metric: tolerancePctLabel,
+          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.[ruleParam]?.pctTolerancia, 0) / 100,
           numFmt: '0.0%'
         }
       ]
-    },
-    {
-      label: 'LEN',
-      rows: [
-        {
-          type: 'Promedio',
-          metric: 'Bloque',
-          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.LEN?.promedioGeneral, 0),
-          numFmt: '0.00'
-        },
-        {
-          type: '',
-          metric: '80%',
-          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.LEN?.promedioIdeal, 0),
-          numFmt: '0.00'
-        },
-        {
-          type: '',
-          metric: '20%',
-          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.LEN?.promedioTolerancia, 0),
-          numFmt: '0.00'
-        },
-        {
-          type: 'Porcentual',
-          metric: '80%',
-          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.LEN?.pctIdeal, 0) / 100,
-          numFmt: '0.0%'
-        },
-        {
-          type: '',
-          metric: '20%',
-          valueGetter: (blockId) => toNumeric(estadisticas?.[blockId]?.variables?.LEN?.pctTolerancia, 0) / 100,
-          numFmt: '0.0%'
-        }
-      ]
-    }
-  ];
+    };
+  });
 
   let currentStatsRow = subtotalesRow.number + 1;
-  const statsSectionStartRows = [];
 
   statsRowsConfig.forEach((section) => {
     const sectionStartRow = currentStatsRow;
-    statsSectionStartRows.push(sectionStartRow);
 
     section.rows.forEach((rowDef, rowIndex) => {
       const rowRef = planSheet.getRow(currentStatsRow);
@@ -5946,365 +5855,15 @@ const exportToExcel = async () => {
       planSheet.mergeCells(sectionStartRow, statsLabelCol, currentStatsRow - 1, statsLabelCol);
     }
 
-    // Merge "Promedio" y "Porcentual" para MIC/STR/LEN en columna I
-    if (['MIC', 'STR', 'LEN'].includes(section.label)) {
+    // Merge "Promedio" y "Porcentual" para cada variable
+    if (section.rows.length >= 5) {
       planSheet.mergeCells(sectionStartRow, statsTypeCol, sectionStartRow + 2, statsTypeCol);
       planSheet.mergeCells(sectionStartRow + 3, statsTypeCol, sectionStartRow + 4, statsTypeCol);
     }
   });
 
   applyVerticalCenter(planSheet);
-  
-  // ===== Hoja 2: Estadísticas =====
-  const statsSheet = workbook.addWorksheet('Estadísticas');
-  
-  // Título
-  statsSheet.mergeCells('A1:B1');
-  const statsTitle = statsSheet.getCell('A1');
-  statsTitle.value = 'ESTADÍSTICAS Y CONFIGURACIÓN';
-  statsTitle.font = titleFont;
-  statsTitle.alignment = centerAlign;
-  statsSheet.getRow(1).height = 22;
-  
-  let statsRow = 3;
-  
-  // Información general
-  statsSheet.getCell(`A${statsRow}`).value = 'Algoritmo';
-  statsSheet.getCell(`A${statsRow}`).font = subTitleFont;
-  statsSheet.getCell(`B${statsRow}`).value = appliedAlgorithmLabel.value || 'N/A';
-  statsRow++;
-  
-  statsSheet.getCell(`A${statsRow}`).value = 'Fecha de Cálculo';
-  statsSheet.getCell(`A${statsRow}`).font = subTitleFont;
-  statsSheet.getCell(`B${statsRow}`).value = appliedCalculationTimestamp.value || 'N/A';
-  statsRow++;
-  
-  statsSheet.getCell(`A${statsRow}`).value = 'Fardos por mezcla';
-  statsSheet.getCell(`A${statsRow}`).font = subTitleFont;
-  statsSheet.getCell(`B${statsRow}`).value = filters.fardos || 'N/A';
-  statsRow++;
-  
-  // Reglas aplicadas
-  if (appliedRulesSummary.value && appliedRulesSummary.value.length > 0) {
-    statsRow++;
-    statsSheet.getCell(`A${statsRow}`).value = 'REGLAS APLICADAS';
-    statsSheet.getCell(`A${statsRow}`).font = subTitleFont;
-    statsRow++;
-    
-    appliedRulesSummary.value.forEach(rule => {
-      statsSheet.getCell(`A${statsRow}`).value = rule.variable;
-      statsSheet.getCell(`B${statsRow}`).value = rule.target !== undefined ? rule.target : 'N/A';
-      statsRow++;
-    });
-  }
-  
-  // Estadísticas por bloque
-  if (estadisticas.mezclasBloque) {
-    statsRow++;
-    statsSheet.getCell(`A${statsRow}`).value = 'ESTADÍSTICAS POR BLOQUE';
-    statsSheet.getCell(`A${statsRow}`).font = subTitleFont;
-    statsRow++;
-    
-    Object.entries(estadisticas.mezclasBloque).forEach(([blockKey, stats]) => {
-      statsSheet.getCell(`A${statsRow}`).value = blockKey;
-      statsSheet.getCell(`A${statsRow}`).font = { bold: true };
-      statsRow++;
-      
-      if (stats.media !== undefined) {
-        statsSheet.getCell(`B${statsRow}`).value = 'Media';
-        statsSheet.getCell(`C${statsRow}`).value = stats.media;
-        statsRow++;
-      }
-      if (stats.min !== undefined) {
-        statsSheet.getCell(`B${statsRow}`).value = 'Mínimo';
-        statsSheet.getCell(`C${statsRow}`).value = stats.min;
-        statsRow++;
-      }
-      if (stats.max !== undefined) {
-        statsSheet.getCell(`B${statsRow}`).value = 'Máximo';
-        statsSheet.getCell(`C${statsRow}`).value = stats.max;
-        statsRow++;
-      }
-      if (stats.n !== undefined) {
-        statsSheet.getCell(`B${statsRow}`).value = 'Cantidad';
-        statsSheet.getCell(`C${statsRow}`).value = stats.n;
-        statsRow++;
-      }
-    });
-  }
-  
-  statsSheet.columns = [{ width: 25 }, { width: 20 }, { width: 20 }];
-
-  applyVerticalCenter(statsSheet);
-  
-  // ===== Hoja 3: Resumen de Stock =====
-  if (plan.length > 0) {
-    const summarySheet = workbook.addWorksheet('Resumen Stock');
-    
-    summarySheet.mergeCells('A1:H1');
-    const summaryTitle = summarySheet.getCell('A1');
-    summaryTitle.value = 'RESUMEN DE STOCK';
-    summaryTitle.font = titleFont;
-    summaryTitle.alignment = centerAlign;
-    summarySheet.getRow(1).height = 22;
-    
-    const summaryHeaders = ['Productor', 'Lote', 'Clasif.', 'Destino', 'Stock', 'Usados', 'Sobrante', 'Estado'];
-    const summaryHeaderRow = summarySheet.addRow(summaryHeaders);
-    summaryHeaderRow.font = headerFont;
-    summaryHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: headerBg } };
-    summaryHeaderRow.alignment = centerAlign;
-    
-    plan.forEach(row => {
-      const summaryRow = summarySheet.addRow([
-        row.PRODUTOR || '',
-        row.LOTE || '',
-        formatCombinedClassifForExport(row),
-        row.DESTINO || '',
-        row.Stock !== undefined ? row.Stock : '',
-        row.Usados !== undefined ? row.Usados : '',
-        row.Sobrante !== undefined ? row.Sobrante : '',
-        row.Estado || ''
-      ]);
-      summaryRow.alignment = { horizontal: 'center' };
-    });
-    
-    summarySheet.columns = [
-      { width: 15 }, { width: 12 }, { width: 12 }, { width: 15 }, { width: 10 },
-      { width: 10 }, { width: 10 }, { width: 15 }
-    ];
-
-    applyVerticalCenter(summarySheet);
-  }
-
-  // ===== Hoja 4: Compra Sugerida =====
-  const projectionSheet = workbook.addWorksheet('Compra Sugerida');
-
-  projectionSheet.mergeCells('A1:H1');
-  const projectionTitle = projectionSheet.getCell('A1');
-  projectionTitle.value = 'PROYECCIÓN DE COMPRA POR CALIDAD';
-  projectionTitle.font = titleFont;
-  projectionTitle.alignment = centerAlign;
-  projectionSheet.getRow(1).height = 22;
-
-  const projectionSourceLabel = purchaseProjection.source === 'remanente'
-    ? 'Sobrante no usado'
-    : 'Stock actual';
-
-  const projectionMetaRows = [
-    ['Fuente disponible', projectionSourceLabel],
-    ['Mezclas objetivo', Number(purchaseProjection.targetMixes) || 0],
-    ['Mínimo recomendado de bloque', Number(purchaseProjection.minMixesForBlock) || 20],
-    ['Fardos por mezcla', Number(filters.fardos) || 0],
-    ['Mezclas base generadas', Number(generatedMixesCount.value) || 0],
-    ['Stock total fuente (fardos)', Number(projectionSourceTotals.value?.stockFardos) || 0],
-    ['Peso total fuente (kg)', Number(projectionSourceTotals.value?.stockPeso) || 0]
-  ];
-
-  let projectionRowIndex = 3;
-  projectionMetaRows.forEach(([label, value]) => {
-    projectionSheet.getCell(`A${projectionRowIndex}`).value = label;
-    projectionSheet.getCell(`A${projectionRowIndex}`).font = subTitleFont;
-    projectionSheet.getCell(`B${projectionRowIndex}`).value = value;
-    projectionSheet.getCell(`B${projectionRowIndex}`).alignment = { horizontal: 'left', vertical: 'middle' };
-    projectionRowIndex += 1;
-  });
-
-  projectionRowIndex += 1;
-
-  const projectionHeaders = [
-    'Calidad',
-    'Receta x mezcla',
-    'Requerido',
-    'Disponible',
-    'Faltante',
-    'Compra sugerida (fardos)',
-    'Peso estimado compra',
-    'Orientación HVI compra (según selección)'
-  ];
-
-  const projectionHeaderRow = projectionSheet.getRow(projectionRowIndex);
-  projectionHeaders.forEach((header, index) => {
-    const cell = projectionHeaderRow.getCell(index + 1);
-    cell.value = header;
-    cell.font = headerFont;
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2E7D32' } };
-    cell.alignment = centerAlign;
-  });
-  projectionHeaderRow.height = 20;
-
-  const projectionDataStartRow = projectionRowIndex + 1;
-  const projectionRows = purchaseProjectionRows.value || [];
-
-  if (projectionRows.length === 0) {
-    projectionSheet.mergeCells(`A${projectionDataStartRow}:H${projectionDataStartRow}`);
-    const emptyCell = projectionSheet.getCell(`A${projectionDataStartRow}`);
-    emptyCell.value = purchaseProjectionError.value || 'No hay datos suficientes para proyectar compra por calidad.';
-    emptyCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-    emptyCell.font = { color: { argb: 'FF6B7280' }, italic: true };
-  } else {
-    projectionRows.forEach((row, idx) => {
-      const dataRow = projectionSheet.getRow(projectionDataStartRow + idx);
-      dataRow.getCell(1).value = row.calidad;
-      dataRow.getCell(2).value = Number(row.recetaPorMezcla) || 0;
-      dataRow.getCell(3).value = Number(row.requerido) || 0;
-      dataRow.getCell(4).value = Number(row.disponible) || 0;
-      dataRow.getCell(5).value = Number(row.faltante) || 0;
-      dataRow.getCell(6).value = Number(row.compraSugeridaFardos) || 0;
-      dataRow.getCell(7).value = Number(row.compraSugeridaPeso) || 0;
-      const guidanceText = Array.isArray(row.hviGuidance)
-        ? row.hviGuidance
-          .map((guidance) => `${guidance.label} (Disp ${formatProjectionValue(guidance.avgAvailable, 2)}): ${buildGuidanceSummary(guidance, row.compraSugeridaFardos)}`)
-          .join('\n')
-        : '';
-      dataRow.getCell(8).value = guidanceText;
-
-      dataRow.getCell(2).numFmt = '0.00';
-      dataRow.getCell(3).numFmt = '0.00';
-      dataRow.getCell(4).numFmt = '0.00';
-      dataRow.getCell(5).numFmt = '0.00';
-      dataRow.getCell(6).numFmt = '#,##0';
-      dataRow.getCell(7).numFmt = '#,##0';
-
-      for (let col = 1; col <= 8; col += 1) {
-        const cell = dataRow.getCell(col);
-        cell.alignment = {
-          horizontal: col === 1 || col === 8 ? 'left' : 'right',
-          vertical: 'middle'
-        };
-      }
-      dataRow.getCell(8).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
-
-      if ((Number(row.faltante) || 0) > 0) {
-        const shortageCell = dataRow.getCell(5);
-        shortageCell.font = { ...(shortageCell.font || {}), bold: true, color: { argb: 'FFB91C1C' } };
-      }
-    });
-
-    const totalsRowIndex = projectionDataStartRow + projectionRows.length;
-    const totalsRow = projectionSheet.getRow(totalsRowIndex);
-    totalsRow.getCell(1).value = 'TOTALES';
-    totalsRow.getCell(1).font = { bold: true, color: { argb: 'FF14532D' } };
-    totalsRow.getCell(3).value = Number(purchaseProjectionTotals.value.requerido) || 0;
-    totalsRow.getCell(4).value = Number(purchaseProjectionTotals.value.disponible) || 0;
-    totalsRow.getCell(5).value = Number(purchaseProjectionTotals.value.faltante) || 0;
-    totalsRow.getCell(6).value = Number(purchaseProjectionTotals.value.compraSugeridaFardos) || 0;
-    totalsRow.getCell(7).value = Number(purchaseProjectionTotals.value.compraSugeridaPeso) || 0;
-
-    totalsRow.getCell(3).numFmt = '0.00';
-    totalsRow.getCell(4).numFmt = '0.00';
-    totalsRow.getCell(5).numFmt = '0.00';
-    totalsRow.getCell(6).numFmt = '#,##0';
-    totalsRow.getCell(7).numFmt = '#,##0';
-
-    for (let col = 1; col <= 8; col += 1) {
-      const cell = totalsRow.getCell(col);
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
-      cell.font = { ...(cell.font || {}), bold: true, color: { argb: 'FF14532D' } };
-      cell.alignment = {
-        horizontal: col === 1 || col === 8 ? 'left' : 'right',
-        vertical: 'middle'
-      };
-      cell.border = {
-        top: { style: 'medium', color: { argb: 'FF065F46' } },
-        left: { style: 'thin', color: { argb: 'FFA7F3D0' } },
-        bottom: { style: 'thin', color: { argb: 'FFA7F3D0' } },
-        right: { style: 'thin', color: { argb: 'FFA7F3D0' } }
-      };
-    }
-  }
-
-  if (projectionVariablePurchaseRows.value.length > 0) {
-    const variableSectionStart = (projectionSheet.lastRow?.number || projectionDataStartRow) + 2;
-
-    projectionSheet.mergeCells(`A${variableSectionStart}:H${variableSectionStart}`);
-    const variableTitleCell = projectionSheet.getCell(`A${variableSectionStart}`);
-    variableTitleCell.value = 'COMPRA GLOBAL POR VARIABLE HVI (SEGÚN REGLAS ACTIVAS)';
-    variableTitleCell.font = { ...subTitleFont, bold: true };
-    variableTitleCell.alignment = { horizontal: 'left', vertical: 'middle' };
-
-    const variableHeaderRowIndex = variableSectionStart + 1;
-    const variableHeaders = ['Variable', 'Promedio actual', 'Objetivo de compra según regla', 'Kg compra global'];
-    variableHeaders.forEach((header, idx) => {
-      const cell = projectionSheet.getRow(variableHeaderRowIndex).getCell(idx + 1);
-      cell.value = header;
-      cell.font = headerFont;
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2E7D32' } };
-      cell.alignment = centerAlign;
-      cell.border = {
-        top: { style: 'medium', color: { argb: 'FF065F46' } },
-        left: { style: 'thin', color: { argb: 'FFA7F3D0' } },
-        bottom: { style: 'thin', color: { argb: 'FFA7F3D0' } },
-        right: { style: 'thin', color: { argb: 'FFA7F3D0' } }
-      };
-    });
-
-    projectionVariablePurchaseRows.value.forEach((item, index) => {
-      const rowIndex = variableHeaderRowIndex + 1 + index;
-      const rowRef = projectionSheet.getRow(rowIndex);
-
-      rowRef.getCell(1).value = item.label;
-      rowRef.getCell(2).value = Number(item.sourceAverage) || 0;
-      rowRef.getCell(3).value = item.recomendacion;
-      rowRef.getCell(4).value = Number(item.totalKgToBuy) || 0;
-
-      rowRef.getCell(2).numFmt = '0.00';
-      rowRef.getCell(4).numFmt = '#,##0';
-
-      rowRef.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' };
-      rowRef.getCell(2).alignment = { horizontal: 'right', vertical: 'middle' };
-      rowRef.getCell(3).alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
-      rowRef.getCell(4).alignment = { horizontal: 'right', vertical: 'middle' };
-
-      for (let col = 1; col <= 4; col += 1) {
-        const cell = rowRef.getCell(col);
-        cell.border = {
-          top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-          left: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-          bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-          right: { style: 'thin', color: { argb: 'FFD1D5DB' } }
-        };
-      }
-    });
-  }
-
-  projectionSheet.columns = [
-    { width: 20 },
-    { width: 16 },
-    { width: 12 },
-    { width: 12 },
-    { width: 12 },
-    { width: 22 },
-    { width: 20 },
-    { width: 60 }
-  ];
-
-  const projectionLastRow = projectionSheet.lastRow?.number || projectionDataStartRow;
-  for (let rowNumber = projectionRowIndex; rowNumber <= projectionLastRow; rowNumber += 1) {
-    const rowRef = projectionSheet.getRow(rowNumber);
-    for (let colNumber = 1; colNumber <= 8; colNumber += 1) {
-      const cell = rowRef.getCell(colNumber);
-      if (rowNumber === projectionRowIndex) {
-        cell.border = {
-          top: { style: 'medium', color: { argb: 'FF065F46' } },
-          left: { style: 'thin', color: { argb: 'FFA7F3D0' } },
-          bottom: { style: 'thin', color: { argb: 'FFA7F3D0' } },
-          right: { style: 'thin', color: { argb: 'FFA7F3D0' } }
-        };
-        continue;
-      }
-
-      if (cell.border?.top?.style === 'medium') continue;
-
-      cell.border = {
-        top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-        left: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-        bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } },
-        right: { style: 'thin', color: { argb: 'FFD1D5DB' } }
-      };
-    }
-  }
-
-  applyVerticalCenter(projectionSheet);
+  // Exportación enfocada en columnas + promedios (sin hojas narrativas/adicionales)
   
   // Descargar (en navegador, usar blob)
   const now = new Date();
