@@ -702,6 +702,44 @@
                           </tr>
                         </tbody>
                       </table>
+                      <div class="mx-3 my-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-slate-700 leading-relaxed">
+                        <div class="mb-1 flex items-start justify-between gap-2">
+                          <div class="flex items-center gap-2 flex-wrap">
+                            <p class="font-semibold text-slate-800">{{ predictiveFiberAnalysis.title }}</p>
+                            <span v-if="predictiveFiberAnalysis.available" class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold" :class="predictiveFiberAnalysis.badgeClass">
+                              {{ predictiveFiberAnalysis.badgeLabel }}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            @click="copyPredictiveWhatsappMessage"
+                            class="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-semibold transition-colors whitespace-nowrap"
+                            :class="predictiveCopyState === 'success'
+                              ? 'border-emerald-400 bg-emerald-100 text-emerald-700'
+                              : (predictiveCopyState === 'error'
+                                ? 'border-rose-300 bg-rose-50 text-rose-700'
+                                : 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100')"
+                          >
+                            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor" aria-hidden="true">
+                              <path d="M20.52 3.48A11.91 11.91 0 0 0 12.04 0C5.5 0 .16 5.33.16 11.88c0 2.1.55 4.15 1.6 5.95L0 24l6.33-1.66a11.87 11.87 0 0 0 5.7 1.45h.01c6.54 0 11.88-5.33 11.88-11.88 0-3.18-1.24-6.17-3.4-8.43Zm-8.48 18.3h-.01a9.87 9.87 0 0 1-5.02-1.37l-.36-.22-3.76.99 1-3.67-.24-.38a9.85 9.85 0 0 1-1.5-5.25C2.15 6.45 6.58 2 12.04 2a9.84 9.84 0 0 1 7 2.9 9.84 9.84 0 0 1 2.88 6.99c0 5.45-4.44 9.89-9.88 9.89Zm5.42-7.42c-.3-.15-1.77-.87-2.04-.96-.27-.1-.47-.15-.66.15-.2.3-.76.96-.93 1.16-.17.2-.34.23-.63.08-.3-.15-1.24-.46-2.37-1.47-.88-.78-1.47-1.75-1.64-2.05-.17-.3-.02-.46.13-.61.13-.13.3-.34.45-.5.15-.17.2-.3.3-.5.1-.2.05-.38-.02-.53-.08-.15-.66-1.6-.9-2.18-.24-.57-.48-.5-.66-.5h-.56c-.2 0-.53.08-.8.38-.27.3-1.04 1.01-1.04 2.46s1.06 2.86 1.2 3.05c.15.2 2.08 3.17 5.03 4.45.7.3 1.25.49 1.68.63.7.22 1.34.19 1.84.12.56-.08 1.77-.72 2.02-1.42.25-.7.25-1.3.18-1.42-.07-.12-.27-.2-.56-.35Z"/>
+                            </svg>
+                            <span>Copiar mensaje</span>
+                          </button>
+                        </div>
+                        <p class="text-[11px] text-slate-600 mb-1">{{ predictiveFiberAnalysis.subtitle }}</p>
+                        <template v-if="predictiveFiberAnalysis.available">
+                          <p class="font-semibold" :class="predictiveFiberAnalysis.verdictTextClass">{{ predictiveFiberAnalysis.conclusionHeading }}</p>
+                          <p class="text-slate-700">{{ predictiveFiberAnalysis.conclusionBody }}</p>
+                          <p class="mt-1 font-semibold text-slate-800">📊 COMPARATIVA TÉCNICA (Promedios):</p>
+                          <div v-for="(section, sectionIndex) in predictiveFiberAnalysis.sections" :key="`pf-main-sec-${sectionIndex}`" class="mt-1 rounded border border-white/60 bg-white/70 px-2 py-1">
+                            <p class="font-semibold text-slate-800">{{ section.title }}</p>
+                            <p v-for="(bullet, bulletIndex) in section.bullets" :key="`pf-main-bul-${sectionIndex}-${bulletIndex}`" class="text-slate-700">• {{ bullet }}</p>
+                          </div>
+                          <p class="mt-1 font-semibold text-slate-800">{{ predictiveFiberAnalysis.efficiencyHeading }}</p>
+                          <p class="font-semibold" :class="predictiveFiberAnalysis.verdictTextClass">{{ predictiveFiberAnalysis.efficiencyBody }}</p>
+                        </template>
+                        <p v-else class="text-slate-500">No hay datos suficientes para emitir predicción técnica.</p>
+                      </div>
                     </div>
                   </td>
                   <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Bloques</td>
@@ -1653,6 +1691,44 @@
                             </template>
                           </tbody>
                         </table>
+                        <div class="mx-2 mb-2 rounded border border-amber-200 bg-amber-50 px-2 py-2 text-[10px] text-slate-700 leading-relaxed">
+                          <div class="mb-1 flex items-start justify-between gap-2">
+                            <div class="flex items-center gap-2 flex-wrap">
+                              <p class="font-semibold text-slate-800">{{ predictiveFiberAnalysis.title }}</p>
+                              <span v-if="predictiveFiberAnalysis.available" class="inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-bold" :class="predictiveFiberAnalysis.badgeClass">
+                                {{ predictiveFiberAnalysis.badgeLabel }}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              @click="copyPredictiveWhatsappMessage"
+                              class="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors whitespace-nowrap"
+                              :class="predictiveCopyState === 'success'
+                                ? 'border-emerald-400 bg-emerald-100 text-emerald-700'
+                                : (predictiveCopyState === 'error'
+                                  ? 'border-rose-300 bg-rose-50 text-rose-700'
+                                  : 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100')"
+                            >
+                              <svg viewBox="0 0 24 24" class="h-4 w-4" fill="currentColor" aria-hidden="true">
+                                <path d="M20.52 3.48A11.91 11.91 0 0 0 12.04 0C5.5 0 .16 5.33.16 11.88c0 2.1.55 4.15 1.6 5.95L0 24l6.33-1.66a11.87 11.87 0 0 0 5.7 1.45h.01c6.54 0 11.88-5.33 11.88-11.88 0-3.18-1.24-6.17-3.4-8.43Zm-8.48 18.3h-.01a9.87 9.87 0 0 1-5.02-1.37l-.36-.22-3.76.99 1-3.67-.24-.38a9.85 9.85 0 0 1-1.5-5.25C2.15 6.45 6.58 2 12.04 2a9.84 9.84 0 0 1 7 2.9 9.84 9.84 0 0 1 2.88 6.99c0 5.45-4.44 9.89-9.88 9.89Zm5.42-7.42c-.3-.15-1.77-.87-2.04-.96-.27-.1-.47-.15-.66.15-.2.3-.76.96-.93 1.16-.17.2-.34.23-.63.08-.3-.15-1.24-.46-2.37-1.47-.88-.78-1.47-1.75-1.64-2.05-.17-.3-.02-.46.13-.61.13-.13.3-.34.45-.5.15-.17.2-.3.3-.5.1-.2.05-.38-.02-.53-.08-.15-.66-1.6-.9-2.18-.24-.57-.48-.5-.66-.5h-.56c-.2 0-.53.08-.8.38-.27.3-1.04 1.01-1.04 2.46s1.06 2.86 1.2 3.05c.15.2 2.08 3.17 5.03 4.45.7.3 1.25.49 1.68.63.7.22 1.34.19 1.84.12.56-.08 1.77-.72 2.02-1.42.25-.7.25-1.3.18-1.42-.07-.12-.27-.2-.56-.35Z"/>
+                              </svg>
+                              <span>Copiar mensaje</span>
+                            </button>
+                          </div>
+                          <p class="text-[10px] text-slate-600 mb-1">{{ predictiveFiberAnalysis.subtitle }}</p>
+                          <template v-if="predictiveFiberAnalysis.available">
+                            <p class="font-semibold" :class="predictiveFiberAnalysis.verdictTextClass">{{ predictiveFiberAnalysis.conclusionHeading }}</p>
+                            <p class="text-slate-700">{{ predictiveFiberAnalysis.conclusionBody }}</p>
+                            <p class="mt-1 font-semibold text-slate-800">📊 COMPARATIVA TÉCNICA (Promedios):</p>
+                            <div v-for="(section, sectionIndex) in predictiveFiberAnalysis.sections" :key="`pf-sim-sec-${sectionIndex}`" class="mt-1 rounded border border-white/60 bg-white/70 px-2 py-1">
+                              <p class="font-semibold text-slate-800">{{ section.title }}</p>
+                              <p v-for="(bullet, bulletIndex) in section.bullets" :key="`pf-sim-bul-${sectionIndex}-${bulletIndex}`" class="text-slate-700">• {{ bullet }}</p>
+                            </div>
+                            <p class="mt-1 font-semibold text-slate-800">{{ predictiveFiberAnalysis.efficiencyHeading }}</p>
+                            <p class="font-semibold" :class="predictiveFiberAnalysis.verdictTextClass">{{ predictiveFiberAnalysis.efficiencyBody }}</p>
+                          </template>
+                          <p v-else class="text-slate-500">No hay datos suficientes para emitir predicción técnica.</p>
+                        </div>
                       </div>
                     </td>
                   </tr>
@@ -1847,6 +1923,9 @@ const saveUserPreferences = () => {
   try {
     const prefs = {
       fardos: filters.fardos,
+      groupSmallLots: !!filters.groupSmallLots,
+      smallLotThreshold: filters.smallLotThreshold,
+      showOnlyLargestBlendBlock: !!showOnlyLargestBlendBlock.value,
       blendAlgorithm: blendAlgorithm.value,
       purchaseProjectionTargetMixes: purchaseProjection.targetMixes,
       purchaseProjectionSource: purchaseProjection.source,
@@ -1883,6 +1962,21 @@ const loadUserPreferences = () => {
       if (!Number.isNaN(parsedFardos) && parsedFardos > 0) {
         filters.fardos = parsedFardos;
       }
+    }
+
+    if (typeof prefs.groupSmallLots === 'boolean') {
+      filters.groupSmallLots = prefs.groupSmallLots;
+    }
+
+    if (prefs.smallLotThreshold !== null && prefs.smallLotThreshold !== undefined && prefs.smallLotThreshold !== '') {
+      const parsedSmallLotThreshold = Number(prefs.smallLotThreshold);
+      if (!Number.isNaN(parsedSmallLotThreshold) && parsedSmallLotThreshold > 0) {
+        filters.smallLotThreshold = Math.floor(parsedSmallLotThreshold);
+      }
+    }
+
+    if (typeof prefs.showOnlyLargestBlendBlock === 'boolean') {
+      showOnlyLargestBlendBlock.value = prefs.showOnlyLargestBlendBlock;
     }
 
     const allowedAlgorithms = ['standard', 'stability', 'stability-strict'];
@@ -2236,12 +2330,18 @@ watch(supervisionSettings, () => {
 }, { deep: true });
 
 watch(() => filters.groupSmallLots, () => {
+  saveUserPreferences();
   scheduleBlendRecalculation();
 });
 
 watch(() => filters.smallLotThreshold, () => {
+  saveUserPreferences();
   if (!filters.groupSmallLots) return;
   scheduleBlendRecalculation();
+});
+
+watch(showOnlyLargestBlendBlock, () => {
+  saveUserPreferences();
 });
 
 watch(() => purchaseProjection.targetMixes, (value) => {
@@ -2265,6 +2365,11 @@ onBeforeUnmount(() => {
   if (autoBlendRecalcTimeout) {
     clearTimeout(autoBlendRecalcTimeout);
     autoBlendRecalcTimeout = null;
+  }
+
+  if (predictiveCopyTimer) {
+    clearTimeout(predictiveCopyTimer);
+    predictiveCopyTimer = null;
   }
 });
 
@@ -2643,6 +2748,346 @@ const getSummaryComparisonUsedKg = (column) => {
   }
 
   return null;
+};
+
+const getSummaryValueByParam = (column, ruleParam) => {
+  if (!column || !ruleParam) return null;
+
+  if (column.kind === 'reference') {
+    const historicalKey = mapRuleParamToHistoricalKey(ruleParam);
+    const value = Number(column?.data?.averages?.[historicalKey]);
+    return Number.isNaN(value) ? null : value;
+  }
+
+  if (column.kind === 'block') {
+    const value = Number(blendPlan.value?.estadisticas?.[column.blockId]?.variables?.[ruleParam]?.promedioGeneral);
+    return Number.isNaN(value) ? null : value;
+  }
+
+  return null;
+};
+
+const formatSignedNumber = (value, decimals = 2) => {
+  const num = Number(value);
+  if (Number.isNaN(num)) return '—';
+  const fixed = num.toFixed(decimals);
+  return num > 0 ? `+${fixed}` : fixed;
+};
+
+const formatRange = (min, max, decimals = 1) => {
+  if (min === null || min === undefined || max === null || max === undefined) return '—';
+  const nMin = Number(min);
+  const nMax = Number(max);
+  if (Number.isNaN(nMin) || Number.isNaN(nMax)) return '—';
+  return `${nMin.toFixed(decimals)}–${nMax.toFixed(decimals)}`;
+};
+
+const predictiveFiberAnalysis = computed(() => {
+  const refItems = [...(loteFiacReferenceSummary.value || [])]
+    .filter(item => item && item.loteFiac !== null && item.loteFiac !== undefined)
+    .sort((a, b) => Number(a.loteFiac) - Number(b.loteFiac));
+
+  const preferredTargetBlock = (activeBlendColumns.value || []).find((blockId) => /^M1-M\d+$/i.test(String(blockId || '')));
+  const fallbackTargetBlock = primaryBlendBlockId.value || activeBlendColumns.value?.[0] || null;
+  const targetBlockId = preferredTargetBlock || fallbackTargetBlock;
+
+  if (!targetBlockId || refItems.length === 0) {
+    return {
+      available: false,
+      title: '📋 INFORME DE PROYECCIÓN',
+      subtitle: 'Sin datos suficientes para proyectar impacto operativo.',
+      severity: 'unknown',
+      badgeLabel: 'Sin datos',
+      badgeClass: 'bg-slate-100 text-slate-600',
+      conclusionHeading: '⚠️ CONCLUSIÓN GENERAL:',
+      conclusionBody: 'Faltan datos para proyectar desempeño de forma confiable.',
+      conclusionLine: '⚠️ CONCLUSIÓN GENERAL: faltan datos para proyectar desempeño de forma confiable.',
+      sections: [],
+      efficiencyHeading: '🏁 VEREDICTO DE EFICIENCIA:',
+      efficiencyBody: 'Sin datos suficientes para emitir recomendación operativa.',
+      verdictLine: 'Sin datos suficientes para emitir recomendación operativa.',
+      verdictTextClass: 'text-slate-600',
+      lines: []
+    };
+  }
+
+  const targetColumn = { kind: 'block', blockId: targetBlockId, label: targetBlockId };
+  const lote109Ref = refItems.find((item) => Number(item.loteFiac) === 109) || null;
+  const fallbackRef = refItems[refItems.length - 1] || null;
+  const comparisonRef = lote109Ref || fallbackRef;
+
+  if (!comparisonRef) {
+    return {
+      available: false,
+      title: `📋 INFORME DE PROYECCIÓN: ${targetBlockId}`,
+      subtitle: 'No hay referencia histórica para comparar.',
+      severity: 'unknown',
+      badgeLabel: 'Sin datos',
+      badgeClass: 'bg-slate-100 text-slate-600',
+      conclusionHeading: '⚠️ CONCLUSIÓN GENERAL:',
+      conclusionBody: 'No hay lote de referencia para medir impacto real en máquina.',
+      conclusionLine: '⚠️ CONCLUSIÓN GENERAL: no hay lote de referencia para medir impacto real en máquina.',
+      sections: [],
+      efficiencyHeading: '🏁 VEREDICTO DE EFICIENCIA:',
+      efficiencyBody: 'No evaluable hasta contar con referencia histórica consistente.',
+      verdictLine: 'No evaluable hasta contar con referencia histórica consistente.',
+      verdictTextClass: 'text-slate-600',
+      lines: []
+    };
+  }
+
+  const comparisonColumn = { kind: 'reference', data: comparisonRef };
+
+  const targetSTR = getSummaryValueByParam(targetColumn, 'STR');
+  const targetELG = getSummaryValueByParam(targetColumn, 'ELG');
+  const targetLEN = getSummaryValueByParam(targetColumn, 'LEN');
+  const targetMIC = getSummaryValueByParam(targetColumn, 'MIC');
+
+  const referenceSTR = getSummaryValueByParam(comparisonColumn, 'STR');
+  const referenceELG = getSummaryValueByParam(comparisonColumn, 'ELG');
+  const referenceLEN = getSummaryValueByParam(comparisonColumn, 'LEN');
+  const referenceMIC = getSummaryValueByParam(comparisonColumn, 'MIC');
+
+  const calcPct = (next, base) => {
+    if (next === null || base === null || base === 0) return null;
+    return ((next - base) / base) * 100;
+  };
+
+  const lenDelta = (targetLEN !== null && referenceLEN !== null) ? targetLEN - referenceLEN : null;
+  const lenPct = calcPct(targetLEN, referenceLEN);
+  const elgDelta = (targetELG !== null && referenceELG !== null) ? targetELG - referenceELG : null;
+  const strDelta = (targetSTR !== null && referenceSTR !== null) ? targetSTR - referenceSTR : null;
+  const micDelta = (targetMIC !== null && referenceMIC !== null) ? targetMIC - referenceMIC : null;
+
+  const getDeltaIndicator = (delta, { positiveIsGood = true, epsilon = 0.01 } = {}) => {
+    if (delta === null || delta === undefined || Number.isNaN(Number(delta))) {
+      return { emoji: '⚪', label: 'Sin dato' };
+    }
+
+    const numeric = Number(delta);
+    if (Math.abs(numeric) <= epsilon) {
+      return { emoji: '⚠️', label: 'Neutro' };
+    }
+
+    const isGood = positiveIsGood ? numeric > 0 : numeric < 0;
+    if (isGood) return { emoji: '✅', label: 'Óptimo' };
+    return { emoji: '🔴', label: 'Crítico' };
+  };
+
+  const lenStatus = getDeltaIndicator(lenDelta, { positiveIsGood: true, epsilon: 0.02 });
+  const elgStatus = getDeltaIndicator(elgDelta, { positiveIsGood: true, epsilon: 0.02 });
+  const strStatus = getDeltaIndicator(strDelta, { positiveIsGood: true, epsilon: 0.02 });
+
+  const urdidoLine = (lenDelta === null || elgDelta === null)
+    ? 'Urdido: datos insuficientes para proyectar tensión y roturas.'
+    : (lenDelta >= 0 && elgDelta >= 0)
+      ? `Urdido: LEN ${formatSignedNumber(lenDelta)} (${formatSignedNumber(lenPct)}%) y ELG ${formatSignedNumber(elgDelta)} vs Lote ${comparisonRef.loteFiac}; se espera hilo con mejor nervio y mayor capacidad de estiramiento, con menor tasa de roturas por tensión.`
+      : `Urdido: LEN ${formatSignedNumber(lenDelta)} (${formatSignedNumber(lenPct)}%) y ELG ${formatSignedNumber(elgDelta)} vs Lote ${comparisonRef.loteFiac}; se recomienda sostener tensión conservadora porque podría aumentar la sensibilidad a roturas.`;
+
+  const indigoLine = (micDelta === null)
+    ? 'Índigo: datos insuficientes para proyectar comportamiento tintóreo por Micronaire.'
+    : (micDelta < 0)
+      ? `Índigo: MIC ${formatSignedNumber(micDelta)} vs Lote ${comparisonRef.loteFiac}; fibra más fina con mejor penetración de colorante y tendencia a cara de tela más suave (mano más blanda).`
+      : (micDelta > 0)
+        ? `Índigo: MIC ${formatSignedNumber(micDelta)} vs Lote ${comparisonRef.loteFiac}; fibra más gruesa, conviene vigilar profundidad de tono y uniformidad de penetración.`
+        : `Índigo: MIC sin variación relevante vs Lote ${comparisonRef.loteFiac}; se espera comportamiento tintóreo estable.`;
+
+  const tenacityShiftLow = strDelta === null ? null : Math.abs(strDelta) * 0.9;
+  const tenacityShiftHigh = strDelta === null ? null : Math.abs(strDelta) * 1.4;
+
+  const telarLine = (strDelta === null)
+    ? 'Telar (Aire): datos insuficientes para proyectar tenacidad de hilo.'
+    : (strDelta > 0)
+      ? `Telar (Aire): STR ${formatSignedNumber(strDelta)} vs Lote ${comparisonRef.loteFiac}; se proyecta incremento de ${formatRange(tenacityShiftLow, tenacityShiftHigh)} cN/tex en tenacidad de hilo, habilitando evaluar mayor velocidad de inserción de trama.`
+      : (strDelta < 0)
+        ? `Telar (Aire): STR ${formatSignedNumber(strDelta)} vs Lote ${comparisonRef.loteFiac}; se proyecta caída de ${formatRange(tenacityShiftLow, tenacityShiftHigh)} cN/tex en tenacidad de hilo, con recomendación de no forzar velocidad.`
+        : `Telar (Aire): STR estable vs Lote ${comparisonRef.loteFiac}; comportamiento mecánico esperado sin cambios relevantes.`;
+
+  let score = 0;
+  if (lenDelta !== null) score += lenDelta >= 0 ? 1 : -1;
+  if (elgDelta !== null) score += elgDelta >= 0 ? 1 : -1;
+  if (strDelta !== null) score += strDelta >= 0 ? 1 : -1;
+  if (targetMIC !== null && referenceMIC !== null) {
+    const targetDistanceToSweetSpot = Math.abs(targetMIC - 4.5);
+    const referenceDistanceToSweetSpot = Math.abs(referenceMIC - 4.5);
+    score += targetDistanceToSweetSpot <= referenceDistanceToSweetSpot ? 1 : -1;
+  }
+
+  const micDistanceDelta = (targetMIC !== null && referenceMIC !== null)
+    ? Math.abs(targetMIC - 4.5) - Math.abs(referenceMIC - 4.5)
+    : null;
+  const micStatus = getDeltaIndicator(micDistanceDelta, { positiveIsGood: false, epsilon: 0.01 });
+
+  let severity = 'medium';
+  let badgeLabel = 'Atención Operativa';
+  let badgeClass = 'bg-amber-100 text-amber-700 border border-amber-200';
+  let verdictTextClass = 'text-amber-700';
+  let conclusionHeading = '⚠️ CONCLUSIÓN GENERAL:';
+  let conclusionBody = 'La mezcla mejora parcialmente y requiere control operacional fino en línea.';
+  let efficiencyHeading = '🏁 VEREDICTO DE EFICIENCIA:';
+  let efficiencyBody = 'Mejora parcial: facilita producción con control fino de seteo en máquinas.';
+
+  if (score >= 3) {
+    severity = 'low';
+    badgeLabel = '✅ Escenario Favorable';
+    badgeClass = 'bg-emerald-100 text-emerald-700 border border-emerald-200';
+    verdictTextClass = 'text-emerald-700';
+    conclusionHeading = '✅ CONCLUSIÓN GENERAL:';
+    conclusionBody = 'La mezcla entrante eleva el estándar de proceso y facilita producción sostenida.';
+    efficiencyBody = 'La mezcla entrante facilitará la producción y permite evaluar mayor ritmo con baja fricción operativa.';
+  } else if (score <= 0) {
+    severity = 'high';
+    badgeLabel = '🔴 Riesgo Operativo';
+    badgeClass = 'bg-rose-100 text-rose-700 border border-rose-200';
+    verdictTextClass = 'text-rose-700';
+    conclusionHeading = '🔴 CONCLUSIÓN GENERAL:';
+    conclusionBody = 'La mezcla entrante presiona estabilidad y exige operación conservadora.';
+    efficiencyBody = 'La mezcla entrante puede dificultar producción; conviene priorizar estabilidad antes de exigir velocidad.';
+  } else {
+    badgeLabel = '⚠️ Atención Operativa';
+  }
+
+  const comparisonSubtitle = lote109Ref
+    ? `Comparativo principal: ${targetBlockId} vs Lote 109 real.`
+    : `Comparativo principal: ${targetBlockId} vs Lote ${comparisonRef.loteFiac} (no se encontró Lote 109 en referencias).`;
+
+  const sectionUrdido = {
+    title: '1️⃣ URDIDO — NERVIO Y TENSIÓN',
+    bullets: [
+      `LEN: ${formatValue(targetLEN, 'UHML')} vs ${formatValue(referenceLEN, 'UHML')} (${formatSignedNumber(lenPct)}%) ${lenStatus.emoji} ${lenStatus.label}`,
+      `ELG: ${formatValue(targetELG, 'ELG')} vs ${formatValue(referenceELG, 'ELG')} (${formatSignedNumber(elgDelta)} pts) ${elgStatus.emoji} ${elgStatus.label}`,
+      'Proyección: mejor longitud media de fibra y mayor capacidad de estiramiento reducen probabilidad de roturas por tensión.'
+    ]
+  };
+
+  const sectionIndigo = {
+    title: '2️⃣ ÍNDIGO — PENETRACIÓN Y MANO DE TELA',
+    bullets: [
+      `MIC: ${formatValue(targetMIC, 'MIC')} vs ${formatValue(referenceMIC, 'MIC')} (${formatSignedNumber(micDelta)} pts) ${micStatus.emoji} ${micStatus.label}`,
+      'Proyección: la afinidad tintórea por Micronaire tiende a mejorar penetración y uniformidad cuando el valor converge a 4.5.',
+      'Impacto esperado: cara de tela más limpia y tacto más estable lote a lote.'
+    ]
+  };
+
+  const sectionTelar = {
+    title: '3️⃣ TELAR (AIRE) — TENACIDAD Y RITMO',
+    bullets: [
+      `STR: ${formatValue(targetSTR, 'STR')} vs ${formatValue(referenceSTR, 'STR')} (${formatSignedNumber(strDelta)} g/tex) ${strStatus.emoji} ${strStatus.label}`,
+      `Tenacidad hilo proyectada: ${strDelta !== null && strDelta >= 0 ? '↑' : '↓'} ${formatRange(tenacityShiftLow, tenacityShiftHigh)} cN/tex`,
+      strDelta !== null && strDelta > 0
+        ? 'Proyección: recuperación de resistencia estructural; viable evaluar subida gradual de velocidad de inserción.'
+        : 'Proyección: priorizar estabilidad de mezcla antes de exigir más velocidad para evitar penalizar eficiencia.'
+    ]
+  };
+
+  return {
+    available: true,
+    title: `📋 INFORME DE PROYECCIÓN: ${targetBlockId}`,
+    subtitle: `Análisis Predictivo Fibra ↔️ Hilo · ${comparisonSubtitle}`,
+    severity,
+    badgeLabel,
+    badgeClass,
+    conclusionHeading,
+    conclusionBody,
+    conclusionLine: `${conclusionHeading} ${conclusionBody}`,
+    sections: [sectionUrdido, sectionIndigo, sectionTelar],
+    efficiencyHeading,
+    efficiencyBody,
+    verdictTextClass,
+    lines: [
+      'Resumen de Impacto por Sección:',
+      urdidoLine,
+      indigoLine,
+      telarLine
+    ],
+    verdictLine: `${efficiencyBody} Mensaje al equipo: la calidad puede subir un escalón si se sostiene disciplina de parámetros en línea.`
+  };
+});
+
+const predictiveWhatsappMessage = computed(() => {
+  const analysis = predictiveFiberAnalysis.value;
+
+  if (!analysis?.available) {
+    return '📋 INFORME DE PROYECCIÓN\nAnálisis Predictivo Fibra ↔️ Hilo\n\n⚠️ CONCLUSIÓN GENERAL:\nNo hay datos suficientes para proyectar impacto operativo.';
+  }
+
+  const detailLines = Array.isArray(analysis.lines)
+    ? analysis.lines.filter((line) => typeof line === 'string' && line.trim() !== '' && line !== 'Resumen de Impacto por Sección:')
+    : [];
+
+  const sectionBlocks = Array.isArray(analysis.sections)
+    ? analysis.sections.map((section) => {
+      const bullets = Array.isArray(section?.bullets)
+        ? section.bullets.map((bullet) => `  • ${bullet}`).join('\n')
+        : '';
+      return [section?.title || '', bullets].filter(Boolean).join('\n');
+    }).join('\n\n')
+    : '';
+
+  const fallbackSections = detailLines.map((line) => `• ${line}`).join('\n');
+
+  return [
+    analysis.title,
+    'Análisis Predictivo Fibra ↔️ Hilo',
+    '',
+    `*${analysis.conclusionHeading || '⚠️ CONCLUSIÓN GENERAL:'}*`,
+    analysis.conclusionBody || 'Sin datos suficientes para proyectar impacto operativo.',
+    '',
+    '*📊 COMPARATIVA TÉCNICA (Promedios):*',
+    '',
+    sectionBlocks || fallbackSections,
+    '',
+    `*${analysis.efficiencyHeading || '🏁 VEREDICTO DE EFICIENCIA:'}*`,
+    analysis.efficiencyBody || analysis.verdictLine || 'Sin recomendación operativa.'
+  ].join('\n');
+});
+
+const predictiveCopyState = ref('idle');
+let predictiveCopyTimer = null;
+
+const resetPredictiveCopyState = () => {
+  if (predictiveCopyTimer) {
+    clearTimeout(predictiveCopyTimer);
+    predictiveCopyTimer = null;
+  }
+
+  predictiveCopyTimer = setTimeout(() => {
+    predictiveCopyState.value = 'idle';
+    predictiveCopyTimer = null;
+  }, 2000);
+};
+
+const copyPredictiveWhatsappMessage = async () => {
+  try {
+    const text = predictiveWhatsappMessage.value || '';
+    if (!text.trim()) {
+      predictiveCopyState.value = 'error';
+      resetPredictiveCopyState();
+      return;
+    }
+
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.setAttribute('readonly', '');
+      textArea.style.position = 'absolute';
+      textArea.style.left = '-9999px';
+      document.body.appendChild(textArea);
+      textArea.select();
+      const copied = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      if (!copied) throw new Error('No se pudo copiar el mensaje');
+    }
+
+    predictiveCopyState.value = 'success';
+    resetPredictiveCopyState();
+  } catch (error) {
+    console.warn('No se pudo copiar el mensaje de proyección:', error);
+    predictiveCopyState.value = 'error';
+    resetPredictiveCopyState();
+  }
 };
 
 const formatSummaryComparisonKg = (value) => {
