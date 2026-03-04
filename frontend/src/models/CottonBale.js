@@ -36,6 +36,7 @@ export class CottonBale {
     this.PRODUTOR = getVal(['PRODUTOR', 'productor']) || '';
     this.DESTINO = getVal(['DESTINO', 'destino']) || '';
     this.LOTE = getVal(['LOTE', 'lote']) || '';
+    this.TAM = getVal(['TAM', 'tam']) || '';
     this.TP = getVal(['TP', 'tp']) || '';
     this.CLASSIF = getVal(['CLASSIF', 'classif']) || '';
     this.COR = getVal(['COR', 'cor']) || '';

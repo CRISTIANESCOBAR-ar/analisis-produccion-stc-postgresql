@@ -349,7 +349,14 @@
       <!-- Vista: Plan de Mezclas -->
       <div v-if="isBlendMode" class="p-4">
         <div class="flex justify-between items-center mb-4">
-          <h2 class="text-xl font-bold text-gray-800">Plan de Mezclas Generado</h2>
+          <div class="flex flex-col gap-1">
+            <h2 class="text-xl font-bold text-gray-800">Plan de Mezclas Generado</h2>
+            <label class="inline-flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+              <input type="checkbox" v-model="showOnlyLargestBlendBlock" class="rounded text-indigo-600 focus:ring-indigo-500 h-3.5 w-3.5" />
+              <span>Mostrar solo bloque mayor</span>
+              <span v-if="showOnlyLargestBlendBlock && primaryBlendBlockId" class="font-semibold text-indigo-700">({{ primaryBlendBlockId }})</span>
+            </label>
+          </div>
           <div class="flex items-center gap-2">
             <button 
               @click="exportToExcel"
@@ -463,6 +470,26 @@
                       </svg>
                     </button>
                   </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <button type="button" class="inline-flex items-center gap-1" @click="toggleBlendSort('TAM')">
+                      <span>Tam</span>
+                      <svg class="w-3 h-3" :class="getBlendSortDirection('TAM') ? 'text-blue-600' : 'text-gray-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path v-if="getBlendSortDirection('TAM') === 'asc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                        <path v-else-if="getBlendSortDirection('TAM') === 'desc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4M16 15l-4 4-4-4" />
+                      </svg>
+                    </button>
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <button type="button" class="inline-flex items-center gap-1" @click="toggleBlendSort('CLASSIF')">
+                      <span>Clasif.</span>
+                      <svg class="w-3 h-3" :class="getBlendSortDirection('CLASSIF') ? 'text-blue-600' : 'text-gray-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path v-if="getBlendSortDirection('CLASSIF') === 'asc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                        <path v-else-if="getBlendSortDirection('CLASSIF') === 'desc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4M16 15l-4 4-4-4" />
+                      </svg>
+                    </button>
+                  </th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                   <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                     <button type="button" class="inline-flex items-center gap-1" @click="toggleBlendSort('Stock')">
@@ -534,7 +561,17 @@
                       </svg>
                     </button>
                   </th>
-                  <template v-for="(col, colIndex) in blendPlan.columnasMezcla" :key="`mix-head-${col}`">
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <button type="button" class="inline-flex items-center gap-1" @click="toggleBlendSort('ELG')">
+                      <span>ELG</span>
+                      <svg class="w-3 h-3" :class="getBlendSortDirection('ELG') ? 'text-blue-600' : 'text-gray-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path v-if="getBlendSortDirection('ELG') === 'asc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+                        <path v-else-if="getBlendSortDirection('ELG') === 'desc'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4M16 15l-4 4-4-4" />
+                      </svg>
+                    </button>
+                  </th>
+                  <template v-for="(col, colIndex) in activeBlendColumns" :key="`mix-head-${col}`">
                     <th class="px-4 py-3 text-center text-xs font-bold text-indigo-600 uppercase tracking-wider border-l border-gray-300 bg-indigo-50">
                       <button type="button" class="inline-flex items-center gap-1" @click="toggleBlendSort(`MEZCLA::${col}`)">
                         <span>{{ col }}</span>
@@ -557,28 +594,31 @@
                 <tr v-for="(row, index) in sortedBlendPlanRows" :key="index" class="hover:bg-gray-50">
                   <td class="px-4 py-2 text-sm text-gray-900 font-medium">{{ row.PRODUTOR }}</td>
                   <td class="px-4 py-2 text-sm text-gray-600">{{ row.LOTE }}</td>
+                  <td class="px-4 py-2 text-sm text-gray-600">{{ row.TAM || '-' }}</td>
+                  <td class="px-4 py-2 text-sm text-gray-600">{{ getCombinedClassif(row) || '-' }}</td>
                   <td class="px-4 py-2 text-sm">
                     <span :class="row.Estado === 'USO' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'" class="px-2 py-1 rounded text-xs font-bold">
                       {{ row.Estado }}
                     </span>
                   </td>
                   <td class="px-4 py-2 text-sm text-center font-semibold text-slate-700">{{ row.Stock ?? '-' }}</td>
-                  <td class="px-4 py-2 text-sm text-center font-semibold text-blue-700">{{ row.Usados ?? '-' }}</td>
-                  <td class="px-4 py-2 text-sm text-center font-semibold text-amber-700">{{ row.Sobrante ?? '-' }}</td>
+                  <td class="px-4 py-2 text-sm text-center font-semibold text-blue-700">{{ formatThousandInteger(getRowUsedForVisibleBlocks(row)) }}</td>
+                  <td class="px-4 py-2 text-sm text-center font-semibold text-amber-700">{{ formatThousandInteger(getRowSobranteForVisibleBlocks(row)) }}</td>
                   <td class="px-4 py-2 text-sm text-gray-700">
-                    <span v-if="Number(row.Sobrante) === 0" class="font-semibold text-emerald-700">{{ getPlanMotivoLogistico(row) }}</span>
-                    <span v-else-if="row.Estado === 'TOLER.'" class="font-medium text-amber-700">{{ getPlanMotivoLogistico(row) }}</span>
-                    <span v-else class="font-medium text-slate-700">{{ getPlanMotivoLogistico(row) }}</span>
+                    <span v-if="getRowSobranteForVisibleBlocks(row) === 0" class="font-semibold text-emerald-700">{{ getPlanMotivoLogistico(row, getRowSobranteForVisibleBlocks(row)) }}</span>
+                    <span v-else-if="row.Estado === 'TOLER.'" class="font-medium text-amber-700">{{ getPlanMotivoLogistico(row, getRowSobranteForVisibleBlocks(row)) }}</span>
+                    <span v-else class="font-medium text-slate-700">{{ getPlanMotivoLogistico(row, getRowSobranteForVisibleBlocks(row)) }}</span>
                   </td>
                   <td class="px-4 py-2 text-sm" :class="getCellClass(row, 'MIC')">{{ formatValue(row.MIC, 'MIC') }}</td>
                   <td class="px-4 py-2 text-sm" :class="getCellClass(row, 'STR')">{{ formatValue(row.STR, 'STR') }}</td>
                   <td class="px-4 py-2 text-sm" :class="getCellClass(row, 'UHML')">{{ formatValue(row.LEN, 'UHML') }}</td>
-                  <template v-for="(col, colIndex) in blendPlan.columnasMezcla" :key="`mix-row-${index}-${col}`">
+                  <td class="px-4 py-2 text-sm" :class="getCellClass(row, 'ELG')">{{ formatValue(row.ELG, 'ELG') }}</td>
+                  <template v-for="(col, colIndex) in activeBlendColumns" :key="`mix-row-${index}-${col}`">
                     <td class="px-4 py-2 text-sm text-center font-bold border-l border-gray-200" :class="row.mezclas[col] ? 'text-indigo-600 bg-indigo-50/30' : 'text-gray-300'">
                       {{ row.mezclas[col] || '-' }}
                     </td>
                     <td class="px-4 py-2 text-sm text-center font-semibold text-teal-700 border-l border-gray-200 bg-teal-50/30">
-                      {{ getStockActualForBlock(row, colIndex) }}
+                      {{ getStockActualForBlock(row, colIndex, activeBlendColumns) }}
                     </td>
                   </template>
                 </tr>
@@ -586,22 +626,35 @@
               <tfoot class="bg-gray-50 border-t-2 border-gray-300 compact-summary-footer">
                 <!-- Resumen Mezcla (Cantidad / Peso) -->
                 <tr class="summary-matrix-row summary-matrix-group-start">
-                  <td colspan="3" class="px-4 py-2 text-sm font-bold text-right text-gray-700 border-b border-gray-300">TOTALES LOTES</td>
+                  <td colspan="9" class="px-4 py-2 text-sm font-bold text-right text-gray-700 border-b border-gray-300">TOTALES LOTES</td>
                   <td class="px-4 py-2 text-sm text-center font-bold text-slate-800 border-b border-gray-300">{{ formatThousandInteger(planLotTotals.stock) }}</td>
                   <td class="px-4 py-2 text-sm text-center font-bold text-blue-700 border-b border-gray-300">{{ formatThousandInteger(planLotTotals.usados) }}</td>
                   <td class="px-4 py-2 text-sm text-center font-bold text-amber-700 border-b border-gray-300">{{ formatThousandInteger(planLotTotals.sobrante) }}</td>
                   <td class="px-4 py-2 text-sm text-center text-gray-400 border-b border-gray-300">—</td>
-                  <td rowspan="4" class="summary-matrix-cell px-4 py-2 text-sm font-bold text-center text-gray-800">Mezcla</td>
-                  <td rowspan="2" class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Cantidad</td>
+                  <td rowspan="5" class="summary-matrix-cell px-4 py-2 text-sm font-bold text-center text-gray-800">Mezcla</td>
+                  <td rowspan="3" class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Cantidad</td>
                   <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Fardos</td>
-                  <template v-for="col in blendPlan.columnasMezcla" :key="'mix-fardos-'+col">
+                  <template v-for="col in activeBlendColumns" :key="'mix-fardos-'+col">
                     <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center font-bold text-gray-900" :colspan="2">
                       {{ blendPlan.estadisticas[col].totalFardos }}
                     </td>
                   </template>
                 </tr>
                 <tr class="summary-matrix-row">
-                  <td colspan="7" rowspan="18" class="px-4 py-2 align-top border-r border-gray-300">
+                  <td colspan="9" class="px-4 py-2 text-sm font-bold text-right text-gray-700 border-b border-gray-300">TOTALES KG</td>
+                  <td class="px-4 py-2 text-sm text-center font-bold text-slate-800 border-b border-gray-300">{{ formatThousandInteger(planWeightTotals.stockKg) }}</td>
+                  <td class="px-4 py-2 text-sm text-center font-bold text-blue-700 border-b border-gray-300">{{ formatThousandInteger(planWeightTotals.usadosKg) }}</td>
+                  <td class="px-4 py-2 text-sm text-center font-bold text-amber-700 border-b border-gray-300">{{ formatThousandInteger(planWeightTotals.sobranteKg) }}</td>
+                  <td class="px-4 py-2 text-sm text-center text-gray-400 border-b border-gray-300">—</td>
+                  <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Kg</td>
+                  <template v-for="col in activeBlendColumns" :key="'mix-kg-'+col">
+                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center font-bold text-gray-900" :colspan="2">
+                      {{ formatThousandInteger(getPesoTotalBloqueForColumn(col)) }}
+                    </td>
+                  </template>
+                </tr>
+                <tr class="summary-matrix-row">
+                  <td colspan="13" :rowspan="summaryMatrixRowspan" class="px-4 py-2 align-top border-r border-gray-300">
                     <div v-if="activeBlendVariablesForSummary.length" class="h-full border border-slate-300 rounded-md overflow-hidden bg-white">
                       <div class="px-3 py-2 bg-slate-50 border-b border-slate-300">
                         <h3 class="text-sm font-bold text-slate-800">Resumen de lotes (promedios de variables activas)</h3>
@@ -610,21 +663,41 @@
                         <thead class="bg-gray-50">
                           <tr class="border-b border-gray-300">
                             <th class="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Variable</th>
-                            <th v-for="col in blendPlan.columnasMezcla" :key="`res-inline-${col}`" class="px-3 py-2 text-center text-xs font-semibold text-indigo-700 uppercase tracking-wide border-l border-gray-200">
-                              {{ col }}
+                            <th v-for="column in summaryComparisonColumns" :key="`res-inline-${column.key}`" class="px-3 py-2 text-center text-xs font-semibold text-indigo-700 uppercase tracking-wide border-l border-gray-200">
+                              {{ column.label }}
                             </th>
                           </tr>
                         </thead>
                         <tbody class="bg-white divide-y divide-gray-100">
+                          <tr>
+                            <td class="px-3 py-2 text-sm font-semibold text-gray-700">Fecha inicial</td>
+                            <td
+                              v-for="column in summaryComparisonColumns"
+                              :key="`res-inline-fecha-${column.key}`"
+                              class="px-3 py-2 text-sm text-center border-l border-gray-200 text-slate-600"
+                            >
+                              {{ getSummaryComparisonStartDate(column) }}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td class="px-3 py-2 text-sm font-semibold text-gray-700">Kg usados</td>
+                            <td
+                              v-for="column in summaryComparisonColumns"
+                              :key="`res-inline-kg-${column.key}`"
+                              class="px-3 py-2 text-sm text-center border-l border-gray-200 text-slate-700 font-semibold"
+                            >
+                              {{ formatSummaryComparisonKg(getSummaryComparisonUsedKg(column)) }}
+                            </td>
+                          </tr>
                           <tr v-for="variable in activeBlendVariablesForSummary" :key="`res-inline-row-${variable.uiKey}`">
                             <td class="px-3 py-2 text-sm font-semibold text-gray-700">{{ variable.label }}</td>
                             <td
-                              v-for="col in blendPlan.columnasMezcla"
-                              :key="`res-inline-${variable.uiKey}-${col}`"
+                              v-for="column in summaryComparisonColumns"
+                              :key="`res-inline-${variable.uiKey}-${column.key}`"
                               class="px-3 py-2 text-sm text-center border-l border-gray-200"
-                              :class="getSummaryCellClass(blendPlan.estadisticas[col].variables?.[variable.ruleParam]?.promedioGeneral, variable.uiKey)"
+                              :class="getSummaryCellClass(getSummaryComparisonValue(column, variable), variable.uiKey)"
                             >
-                              {{ formatValue(blendPlan.estadisticas[col].variables?.[variable.ruleParam]?.promedioGeneral, variable.formatKey) }}
+                              {{ formatValue(getSummaryComparisonValue(column, variable), variable.formatKey) }}
                             </td>
                           </tr>
                         </tbody>
@@ -632,7 +705,7 @@
                     </div>
                   </td>
                   <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Bloques</td>
-                  <template v-for="col in blendPlan.columnasMezcla" :key="'mix-bloques-'+col">
+                  <template v-for="col in activeBlendColumns" :key="'mix-bloques-'+col">
                     <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center font-bold text-gray-900" :colspan="2">
                       {{ getBlockMixCount(col) }}
                     </td>
@@ -641,7 +714,7 @@
                 <tr class="summary-matrix-row summary-matrix-section-break">
                   <td rowspan="2" class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Peso</td>
                   <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Por Mezcla</td>
-                  <template v-for="col in blendPlan.columnasMezcla" :key="'mix-pmezcla-'+col">
+                  <template v-for="col in activeBlendColumns" :key="'mix-pmezcla-'+col">
                     <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center font-bold text-gray-900" :colspan="2">
                       {{ formatValue(getPesoPorMezclaForColumn(col), 'PESO') }}
                     </td>
@@ -649,147 +722,57 @@
                 </tr>
                 <tr class="summary-matrix-row summary-matrix-group-end">
                   <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Por Bloque</td>
-                  <template v-for="col in blendPlan.columnasMezcla" :key="'mix-pbloque-'+col">
+                  <template v-for="col in activeBlendColumns" :key="'mix-pbloque-'+col">
                     <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center font-bold text-gray-900" :colspan="2">
                       {{ formatValue(getPesoTotalBloqueForColumn(col), 'PESO') }}
                     </td>
                   </template>
                 </tr>
-
-                <!-- MIC -->
-                <tr class="summary-matrix-row summary-matrix-group-start">
-                  <td rowspan="5" class="summary-matrix-cell px-4 py-2 text-sm font-bold text-center text-gray-800">MIC</td>
-                  <td rowspan="3" class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Promedio</td>
-                  <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Bloque</td>
-                  <template v-for="col in blendPlan.columnasMezcla" :key="'mic-bloque-'+col">
-                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.MIC?.promedioGeneral, 'MIC')">
-                      {{ formatValue(blendPlan.estadisticas[col].variables.MIC?.promedioGeneral, 'MIC') }}
-                    </td>
-                  </template>
-                </tr>
-                <tr class="summary-matrix-row">
-                  <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">90%</td>
-                  <template v-for="col in blendPlan.columnasMezcla" :key="'mic-90-'+col">
-                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.MIC?.promedioIdeal, 'MIC')">
-                      {{ formatValue(blendPlan.estadisticas[col].variables.MIC?.promedioIdeal, 'MIC') }}
-                    </td>
-                  </template>
-                </tr>
-                <tr class="summary-matrix-row">
-                  <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">10%</td>
-                  <template v-for="col in blendPlan.columnasMezcla" :key="'mic-10-'+col">
-                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.MIC?.promedioTolerancia, 'MIC')">
-                      {{ formatValue(blendPlan.estadisticas[col].variables.MIC?.promedioTolerancia, 'MIC') }}
-                    </td>
-                  </template>
-                </tr>
-                <tr class="summary-matrix-row summary-matrix-section-break">
-                  <td rowspan="2" class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Porcentual</td>
-                  <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">90%</td>
-                  <template v-for="col in blendPlan.columnasMezcla" :key="'mic-pct-90-'+col">
-                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.MIC?.pctIdeal, 'MIC', 'pctIdeal')">
-                      {{ blendPlan.estadisticas[col].variables.MIC?.pctIdeal !== undefined ? `${blendPlan.estadisticas[col].variables.MIC.pctIdeal.toFixed(1)}%` : '-' }}
-                    </td>
-                  </template>
-                </tr>
-                <tr class="summary-matrix-row summary-matrix-group-end">
-                  <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">10%</td>
-                  <template v-for="col in blendPlan.columnasMezcla" :key="'mic-pct-10-'+col">
-                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.MIC?.pctTolerancia, 'MIC', 'pctTolerancia')">
-                      {{ blendPlan.estadisticas[col].variables.MIC?.pctTolerancia !== undefined ? `${blendPlan.estadisticas[col].variables.MIC.pctTolerancia.toFixed(1)}%` : '-' }}
-                    </td>
-                  </template>
-                </tr>
-
-                <!-- STR -->
-                <tr class="summary-matrix-row summary-matrix-group-start">
-                  <td rowspan="5" class="summary-matrix-cell px-4 py-2 text-sm font-bold text-center text-gray-800">STR</td>
-                  <td rowspan="3" class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Promedio</td>
-                  <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Bloque</td>
-                  <template v-for="col in blendPlan.columnasMezcla" :key="'str-bloque-'+col">
-                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.STR?.promedioGeneral, 'STR')">
-                      {{ formatValue(blendPlan.estadisticas[col].variables.STR?.promedioGeneral, 'STR') }}
-                    </td>
-                  </template>
-                </tr>
-                <tr class="summary-matrix-row">
-                  <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">80%</td>
-                  <template v-for="col in blendPlan.columnasMezcla" :key="'str-80-'+col">
-                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.STR?.promedioIdeal, 'STR')">
-                      {{ formatValue(blendPlan.estadisticas[col].variables.STR?.promedioIdeal, 'STR') }}
-                    </td>
-                  </template>
-                </tr>
-                <tr class="summary-matrix-row">
-                  <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">20%</td>
-                  <template v-for="col in blendPlan.columnasMezcla" :key="'str-20-'+col">
-                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.STR?.promedioTolerancia, 'STR')">
-                      {{ formatValue(blendPlan.estadisticas[col].variables.STR?.promedioTolerancia, 'STR') }}
-                    </td>
-                  </template>
-                </tr>
-                <tr class="summary-matrix-row summary-matrix-section-break">
-                  <td rowspan="2" class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Porcentual</td>
-                  <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">80%</td>
-                  <template v-for="col in blendPlan.columnasMezcla" :key="'str-pct-80-'+col">
-                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.STR?.pctIdeal, 'STR', 'pctIdeal')">
-                      {{ blendPlan.estadisticas[col].variables.STR?.pctIdeal !== undefined ? `${blendPlan.estadisticas[col].variables.STR.pctIdeal.toFixed(1)}%` : '-' }}
-                    </td>
-                  </template>
-                </tr>
-                <tr class="summary-matrix-row summary-matrix-group-end">
-                  <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">20%</td>
-                  <template v-for="col in blendPlan.columnasMezcla" :key="'str-pct-20-'+col">
-                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.STR?.pctTolerancia, 'STR', 'pctTolerancia')">
-                      {{ blendPlan.estadisticas[col].variables.STR?.pctTolerancia !== undefined ? `${blendPlan.estadisticas[col].variables.STR.pctTolerancia.toFixed(1)}%` : '-' }}
-                    </td>
-                  </template>
-                </tr>
-
-                <!-- LEN -->
-                <tr class="summary-matrix-row summary-matrix-group-start">
-                  <td rowspan="5" class="summary-matrix-cell px-4 py-2 text-sm font-bold text-center text-gray-800">LEN</td>
-                  <td rowspan="3" class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Promedio</td>
-                  <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Bloque</td>
-                  <template v-for="col in blendPlan.columnasMezcla" :key="'len-bloque-'+col">
-                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.LEN?.promedioGeneral, 'UHML')">
-                      {{ formatValue(blendPlan.estadisticas[col].variables.LEN?.promedioGeneral, 'UHML') }}
-                    </td>
-                  </template>
-                </tr>
-                <tr class="summary-matrix-row">
-                  <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">80%</td>
-                  <template v-for="col in blendPlan.columnasMezcla" :key="'len-80-'+col">
-                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.LEN?.promedioIdeal, 'UHML')">
-                      {{ formatValue(blendPlan.estadisticas[col].variables.LEN?.promedioIdeal, 'UHML') }}
-                    </td>
-                  </template>
-                </tr>
-                <tr class="summary-matrix-row">
-                  <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">20%</td>
-                  <template v-for="col in blendPlan.columnasMezcla" :key="'len-20-'+col">
-                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.LEN?.promedioTolerancia, 'UHML')">
-                      {{ formatValue(blendPlan.estadisticas[col].variables.LEN?.promedioTolerancia, 'UHML') }}
-                    </td>
-                  </template>
-                </tr>
-                <tr class="summary-matrix-row summary-matrix-section-break">
-                  <td rowspan="2" class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Porcentual</td>
-                  <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">80%</td>
-                  <template v-for="col in blendPlan.columnasMezcla" :key="'len-pct-80-'+col">
-                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.LEN?.pctIdeal, 'UHML', 'pctIdeal')">
-                      {{ blendPlan.estadisticas[col].variables.LEN?.pctIdeal !== undefined ? `${blendPlan.estadisticas[col].variables.LEN.pctIdeal.toFixed(1)}%` : '-' }}
-                    </td>
-                  </template>
-                </tr>
-                <tr class="summary-matrix-row summary-matrix-group-end">
-                  <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">20%</td>
-                  <template v-for="col in blendPlan.columnasMezcla" :key="'len-pct-20-'+col">
-                    <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(blendPlan.estadisticas[col].variables.LEN?.pctTolerancia, 'UHML', 'pctTolerancia')">
-                      {{ blendPlan.estadisticas[col].variables.LEN?.pctTolerancia !== undefined ? `${blendPlan.estadisticas[col].variables.LEN.pctTolerancia.toFixed(1)}%` : '-' }}
-                    </td>
-                  </template>
-                </tr>
+                <template v-for="variable in activeBlendVariablesForSummary" :key="`matrix-${variable.uiKey}`">
+                  <tr class="summary-matrix-row summary-matrix-group-start">
+                    <td rowspan="5" class="summary-matrix-cell px-4 py-2 text-sm font-bold text-center text-gray-800">{{ getMatrixVariableLabel(variable) }}</td>
+                    <td rowspan="3" class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Promedio</td>
+                    <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Bloque</td>
+                    <template v-for="col in activeBlendColumns" :key="`matrix-bloque-${variable.uiKey}-${col}`">
+                      <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(getMatrixStats(col, variable).promedioGeneral, variable.uiKey)">
+                        {{ formatValue(getMatrixStats(col, variable).promedioGeneral, variable.formatKey) }}
+                      </td>
+                    </template>
+                  </tr>
+                  <tr class="summary-matrix-row">
+                    <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">{{ getMatrixIdealPctLabel(variable) }}</td>
+                    <template v-for="col in activeBlendColumns" :key="`matrix-ideal-${variable.uiKey}-${col}`">
+                      <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(getMatrixStats(col, variable).promedioIdeal, variable.uiKey)">
+                        {{ formatValue(getMatrixStats(col, variable).promedioIdeal, variable.formatKey) }}
+                      </td>
+                    </template>
+                  </tr>
+                  <tr class="summary-matrix-row">
+                    <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">{{ getMatrixTolerancePctLabel(variable) }}</td>
+                    <template v-for="col in activeBlendColumns" :key="`matrix-tol-${variable.uiKey}-${col}`">
+                      <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(getMatrixStats(col, variable).promedioTolerancia, variable.uiKey)">
+                        {{ formatValue(getMatrixStats(col, variable).promedioTolerancia, variable.formatKey) }}
+                      </td>
+                    </template>
+                  </tr>
+                  <tr class="summary-matrix-row summary-matrix-section-break">
+                    <td rowspan="2" class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">Porcentual</td>
+                    <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">{{ getMatrixIdealPctLabel(variable) }}</td>
+                    <template v-for="col in activeBlendColumns" :key="`matrix-pct-ideal-${variable.uiKey}-${col}`">
+                      <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(getMatrixStats(col, variable).pctIdeal, variable.uiKey, 'pctIdeal')">
+                        {{ getMatrixStats(col, variable).pctIdeal !== undefined ? `${getMatrixStats(col, variable).pctIdeal.toFixed(1)}%` : '-' }}
+                      </td>
+                    </template>
+                  </tr>
+                  <tr class="summary-matrix-row summary-matrix-group-end">
+                    <td class="summary-matrix-cell px-4 py-2 text-sm font-semibold text-center text-gray-700">{{ getMatrixTolerancePctLabel(variable) }}</td>
+                    <template v-for="col in activeBlendColumns" :key="`matrix-pct-tol-${variable.uiKey}-${col}`">
+                      <td class="summary-matrix-cell summary-matrix-value px-4 py-2 text-sm text-center" :colspan="2" :class="getSummaryCellClass(getMatrixStats(col, variable).pctTolerancia, variable.uiKey, 'pctTolerancia')">
+                        {{ getMatrixStats(col, variable).pctTolerancia !== undefined ? `${getMatrixStats(col, variable).pctTolerancia.toFixed(1)}%` : '-' }}
+                      </td>
+                    </template>
+                  </tr>
+                </template>
               </tfoot>
             </table>
           </div>
@@ -1141,6 +1124,7 @@
                 <tr>
                   <th class="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase tracking-wider">Productor</th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase tracking-wider">Lote</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase tracking-wider">Tam</th>
                   <th class="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase tracking-wider">Fardos</th>
                   <th v-if="projectionSourceShowWeightColumns" class="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase tracking-wider">Kilogramos</th>
                   <th v-if="projectionSourceShowWeightColumns" class="px-4 py-3 text-left text-xs font-medium text-red-800 uppercase tracking-wider">Peso Medio</th>
@@ -1157,6 +1141,7 @@
                 <tr v-else v-for="(row, index) in projectionSourceTableRows" :key="`projection-source-${index}`" class="hover:bg-red-50/50">
                   <td class="px-4 py-2 text-sm text-gray-900 font-medium">{{ row.PRODUTOR }}</td>
                   <td class="px-4 py-2 text-sm text-gray-600">{{ row.LOTE }}</td>
+                  <td class="px-4 py-2 text-sm text-gray-600">{{ row.TAM || '-' }}</td>
                   <td class="px-4 py-2 text-sm font-bold text-gray-800">{{ row.Fardos }}</td>
                   <td v-if="projectionSourceShowWeightColumns" class="px-4 py-2 text-sm font-semibold text-gray-800">{{ formatThousandInteger(row.Kilogramos) }}</td>
                   <td v-if="projectionSourceShowWeightColumns" class="px-4 py-2 text-sm text-gray-700">{{ formatProjectionValue(row.PesoMedio, 2) }}</td>
@@ -1168,7 +1153,7 @@
               </tbody>
               <tfoot v-if="projectionSourceTableRows.length > 0" class="bg-gray-50 border-t-2 border-gray-300">
                 <tr>
-                  <td colspan="2" class="px-4 py-2 text-sm font-bold text-gray-800">Totales</td>
+                  <td colspan="3" class="px-4 py-2 text-sm font-bold text-gray-800">Totales</td>
                   <td class="px-4 py-2 text-sm font-bold text-gray-800">{{ formatThousandInteger(projectionSourceTableTotals.fardos) }}</td>
                   <td v-if="projectionSourceShowWeightColumns" class="px-4 py-2 text-sm font-bold text-gray-800">{{ formatThousandInteger(projectionSourceTableTotals.kilogramos) }}</td>
                   <td v-if="projectionSourceShowWeightColumns" class="px-4 py-2 text-sm font-bold text-gray-800">{{ formatProjectionValue(projectionSourceTableTotals.pesoMedio, 2) }}</td>
@@ -1228,7 +1213,12 @@
               class="px-4 py-2 text-sm text-gray-700 whitespace-nowrap"
               :class="getCellClass(item, col.key)"
             >
-              {{ formatValue(item[col.key], col.key) }}
+              <template v-if="col.key === 'CLASSIF'">
+                {{ getCombinedClassif(item) || '-' }}
+              </template>
+              <template v-else>
+                {{ formatValue(item[col.key], col.key) }}
+              </template>
             </td>
           </tr>
         </tbody>
@@ -1723,8 +1713,8 @@ import ExcelJS from 'exceljs';
 const allColumns = [
   { key: 'PRODUTOR', label: 'Productor', locked: true, default: true },
   { key: 'LOTE', label: 'Lote', locked: true, default: true },
+  { key: 'TAM', label: 'Tam', default: true },
   { key: 'DESTINO', label: 'Destino', default: true },
-  { key: 'TP', label: 'Tipo', default: false },
   { key: 'CLASSIF', label: 'Clasif.', default: true },
   { key: 'COR', label: 'Color', default: true },
   { key: 'QTDE_ESTOQUE', label: 'Stock', default: true },
@@ -1762,6 +1752,8 @@ const activeRules = ref([]);
 
 const isBlendMode = ref(false);
 const blendPlan = ref(null);
+const showOnlyLargestBlendBlock = ref(false);
+const loteFiacReferenceSummary = ref([]);
 const isCalculatingBlend = ref(false);
 const blendUserMessage = ref(null);
 const appliedRulesSummary = ref([]);
@@ -1800,11 +1792,11 @@ const stockSortState = reactive({ key: 'PRODUTOR', direction: 'asc' });
 const blendSortState = reactive({ key: 'PRODUTOR', direction: 'asc' });
 
 const STOCK_SORTABLE_KEYS = new Set([
-  'PRODUTOR', 'LOTE', 'TP', 'CLASSIF', 'COR', 'QTDE_ESTOQUE', 'MIC', 'UHML', 'STR', 'PESO'
+  'PRODUTOR', 'LOTE', 'TAM', 'CLASSIF', 'COR', 'QTDE_ESTOQUE', 'MIC', 'UHML', 'STR', 'PESO'
 ]);
 
 const BLEND_SORTABLE_KEYS = new Set([
-  'PRODUTOR', 'LOTE', 'Stock', 'Usados', 'Sobrante', 'MotivoLogistico', 'MIC', 'STR', 'LEN', 'PESO'
+  'PRODUTOR', 'LOTE', 'TAM', 'CLASSIF', 'Stock', 'Usados', 'Sobrante', 'MotivoLogistico', 'MIC', 'STR', 'LEN', 'ELG', 'PESO'
 ]);
 
 // 'standard' | 'stability' | 'stability-strict'
@@ -1915,6 +1907,9 @@ const loadUserPreferences = () => {
       lockedColumns.forEach(key => {
         if (!restored.includes(key)) restored.push(key);
       });
+      if (validColumns.has('TAM') && !restored.includes('TAM')) {
+        restored.push('TAM');
+      }
 
       selectedColumnKeys.value = new Set(restored);
     }
@@ -2240,6 +2235,15 @@ watch(supervisionSettings, () => {
   scheduleBlendRecalculation();
 }, { deep: true });
 
+watch(() => filters.groupSmallLots, () => {
+  scheduleBlendRecalculation();
+});
+
+watch(() => filters.smallLotThreshold, () => {
+  if (!filters.groupSmallLots) return;
+  scheduleBlendRecalculation();
+});
+
 watch(() => purchaseProjection.targetMixes, (value) => {
   const numericValue = Number(value);
   if (Number.isNaN(numericValue) || numericValue <= 0) return;
@@ -2299,10 +2303,13 @@ const mapUiKeyToFormatKey = (uiKey) => {
   return uiKey;
 };
 
-const getPlanMotivoLogistico = (row) => {
+const getPlanMotivoLogistico = (row, sobranteOverride = null) => {
   if (!row) return '';
-  if (row.MotivoLogistico) return row.MotivoLogistico;
-  if (Number(row.Sobrante) === 0) return 'Usado en plan (se usó todo)';
+  const hasOverride = sobranteOverride !== null && sobranteOverride !== undefined;
+  const sobrante = hasOverride ? Number(sobranteOverride) : Number(row.Sobrante);
+
+  if (!hasOverride && row.MotivoLogistico) return row.MotivoLogistico;
+  if (sobrante === 0) return 'Usado en plan (se usó todo)';
   if (row.Estado === 'TOLER.') return 'Usado en plan (tolerancia permitida)';
   if (row.Estado === 'NO USO') return 'No usado en ninguna mezcla';
   if (row.Estado === 'RECH.') return 'Rechazado por límites absolutos';
@@ -2310,6 +2317,15 @@ const getPlanMotivoLogistico = (row) => {
 };
 
 const normalizeSortText = (value) => (value ?? '').toString().trim();
+
+const getCombinedClassif = (row) => {
+  const tipo = normalizeSortText(row?.TP);
+  const classif = normalizeSortText(row?.CLASSIF);
+
+  if (!classif || classif === '0') return tipo;
+  if (!tipo) return classif;
+  return `${tipo} ${classif}`;
+};
 
 const getSortableValue = (row, key) => {
   if (!row || !key) return '';
@@ -2319,7 +2335,11 @@ const getSortableValue = (row, key) => {
     return Number(row?.mezclas?.[mixColumn]) || 0;
   }
 
+  if (key === 'Usados') return getRowUsedForVisibleBlocks(row);
+  if (key === 'Sobrante') return getRowSobranteForVisibleBlocks(row);
+
   if (key === 'MotivoLogistico') return getPlanMotivoLogistico(row);
+  if (key === 'CLASSIF') return getCombinedClassif(row);
 
   if (key === 'UHML') return row.UHML ?? row.LEN ?? '';
   if (key === 'LEN') return row.LEN ?? row.UHML ?? '';
@@ -2335,6 +2355,7 @@ const NUMERIC_SORT_KEYS = new Set([
   'MIC',
   'UHML',
   'LEN',
+  'ELG',
   'STR',
   'PESO'
 ]);
@@ -2450,10 +2471,185 @@ const getMixesFromBlockId = (blockId) => {
   return end - start + 1;
 };
 
+const buildProducerLotKey = (row) => {
+  const producer = normalizeSortText(row?.PRODUTOR);
+  const lot = normalizeSortText(row?.LOTE);
+  return `${producer}||${lot}`;
+};
+
+const normalizeTamValue = (value) => String(value ?? '').trim();
+const normalizeClassifValue = (value) => String(value ?? '').trim();
+
+const enrichBlendResultWithTam = (result) => {
+  if (!result || typeof result !== 'object') return result;
+
+  const detailsByKey = new Map();
+  const candidates = [
+    ...(Array.isArray(sortedFilteredData.value) ? sortedFilteredData.value : []),
+    ...(Array.isArray(filteredData.value) ? filteredData.value : []),
+    ...(Array.isArray(items.value) ? items.value : [])
+  ];
+
+  candidates.forEach((row) => {
+    const key = buildProducerLotKey(row);
+    if (!key) return;
+
+    const tam = normalizeTamValue(row?.TAM);
+    const classif = normalizeClassifValue(row?.CLASSIF);
+    const tp = normalizeSortText(row?.TP);
+
+    const current = detailsByKey.get(key) || {};
+    if (tam && !current.TAM) current.TAM = tam;
+    if (classif && !current.CLASSIF) current.CLASSIF = classif;
+    if (tp && !current.TP) current.TP = tp;
+
+    detailsByKey.set(key, current);
+  });
+
+  const hydrateRows = (rows) => {
+    if (!Array.isArray(rows)) return rows;
+    return rows.map((row) => {
+      const currentTam = normalizeTamValue(row?.TAM);
+      const currentClassif = normalizeClassifValue(row?.CLASSIF);
+      const currentTp = normalizeSortText(row?.TP);
+
+      const recovered = detailsByKey.get(buildProducerLotKey(row));
+      if (!recovered) return row;
+      if (currentTam && currentClassif && currentTp) return row;
+
+      return {
+        ...row,
+        TAM: currentTam || recovered.TAM || row?.TAM,
+        CLASSIF: currentClassif || recovered.CLASSIF || row?.CLASSIF,
+        TP: currentTp || recovered.TP || row?.TP
+      };
+    });
+  };
+
+  return {
+    ...result,
+    plan: hydrateRows(result.plan),
+    remanentes: hydrateRows(result.remanentes)
+  };
+};
+
 const getBlockMixCount = (colId) => {
   const fromStats = Number(blendPlan.value?.estadisticas?.[colId]?.mezclasBloque);
   if (!Number.isNaN(fromStats) && fromStats > 0) return fromStats;
   return getMixesFromBlockId(colId);
+};
+
+const primaryBlendBlockId = computed(() => {
+  const blocks = blendPlan.value?.columnasMezcla || [];
+  if (!Array.isArray(blocks) || blocks.length === 0) return null;
+
+  let bestBlock = blocks[0];
+  let bestCount = getBlockMixCount(bestBlock);
+
+  for (let index = 1; index < blocks.length; index += 1) {
+    const blockId = blocks[index];
+    const blockCount = getBlockMixCount(blockId);
+    if (blockCount > bestCount) {
+      bestBlock = blockId;
+      bestCount = blockCount;
+    }
+  }
+
+  return bestBlock;
+});
+
+const activeBlendColumns = computed(() => {
+  const blocks = blendPlan.value?.columnasMezcla || [];
+  if (!Array.isArray(blocks) || blocks.length === 0) return [];
+  if (!showOnlyLargestBlendBlock.value) return blocks;
+
+  const primaryBlock = primaryBlendBlockId.value;
+  return primaryBlock ? [primaryBlock] : blocks;
+});
+
+const summaryComparisonColumns = computed(() => {
+  const refs = (loteFiacReferenceSummary.value || []).map((item) => ({
+    key: `ref-${item.loteFiac}`,
+    kind: 'reference',
+    label: `LOTE_FIAC ${item.loteFiac}`,
+    data: item
+  }));
+
+  const blocks = (activeBlendColumns.value || []).map((blockId) => ({
+    key: `block-${blockId}`,
+    kind: 'block',
+    label: blockId,
+    blockId
+  }));
+
+  return [...refs, ...blocks];
+});
+
+const mapRuleParamToHistoricalKey = (ruleParam) => {
+  if (ruleParam === 'LEN') return 'UHML';
+  if (ruleParam === '+b') return 'PLUS_B';
+  return ruleParam;
+};
+
+const getSummaryComparisonValue = (column, variable) => {
+  if (!column || !variable) return null;
+
+  if (column.kind === 'reference') {
+    const historicalKey = mapRuleParamToHistoricalKey(variable.ruleParam);
+    return column?.data?.averages?.[historicalKey] ?? null;
+  }
+
+  if (column.kind === 'block') {
+    return blendPlan.value?.estadisticas?.[column.blockId]?.variables?.[variable.ruleParam]?.promedioGeneral ?? null;
+  }
+
+  return null;
+};
+
+const formatSummaryComparisonDate = (value) => {
+  if (!value) return '—';
+
+  const str = String(value).trim();
+  if (!str) return '—';
+
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    const [year, month, day] = str.slice(0, 10).split('-');
+    return `${day}/${month}/${year}`;
+  }
+
+  const parsed = new Date(str);
+  if (Number.isNaN(parsed.getTime())) return str;
+  return parsed.toLocaleDateString('es-ES');
+};
+
+const getSummaryComparisonStartDate = (column) => {
+  if (!column) return '—';
+  if (column.kind === 'reference') {
+    return formatSummaryComparisonDate(column?.data?.primerIngreso);
+  }
+  return '—';
+};
+
+const getSummaryComparisonUsedKg = (column) => {
+  if (!column) return null;
+
+  if (column.kind === 'reference') {
+    const kg = Number(column?.data?.kgUsados);
+    return Number.isNaN(kg) ? null : kg;
+  }
+
+  if (column.kind === 'block') {
+    return getPesoTotalBloqueForColumn(column.blockId);
+  }
+
+  return null;
+};
+
+const formatSummaryComparisonKg = (value) => {
+  if (value === null || value === undefined) return '—';
+  const num = Number(value);
+  if (Number.isNaN(num)) return '—';
+  return formatThousandInteger(num);
 };
 
 const getPesoPorMezclaForColumn = (colId) => {
@@ -2469,8 +2665,10 @@ const getPesoTotalBloqueForColumn = (colId) => {
   return getPesoPorMezclaForColumn(colId) * getBlockMixCount(colId);
 };
 
-const getStockActualForBlock = (row, blockIndex) => {
-  const blocks = blendPlan.value?.columnasMezcla || [];
+const getStockActualForBlock = (row, blockIndex, blocksOverride = null) => {
+  const blocks = Array.isArray(blocksOverride) && blocksOverride.length
+    ? blocksOverride
+    : (blendPlan.value?.columnasMezcla || []);
   if (!Array.isArray(blocks) || blocks.length === 0) return '-';
 
   const stock = Number(row?.Stock);
@@ -2488,6 +2686,31 @@ const getStockActualForBlock = (row, blockIndex) => {
   return formatThousandInteger(stockActual);
 };
 
+const getRowUsedForVisibleBlocks = (row, blocksOverride = null) => {
+  if (!row) return 0;
+
+  const blocks = Array.isArray(blocksOverride) && blocksOverride.length
+    ? blocksOverride
+    : activeBlendColumns.value;
+
+  if (!Array.isArray(blocks) || blocks.length === 0) {
+    return Number(row?.Usados) || 0;
+  }
+
+  return blocks.reduce((used, blockId) => {
+    const perMixCount = Number(row?.mezclas?.[blockId]) || 0;
+    const mixesCount = getBlockMixCount(blockId);
+    return used + (perMixCount * mixesCount);
+  }, 0);
+};
+
+const getRowSobranteForVisibleBlocks = (row, blocksOverride = null) => {
+  const stock = Number(row?.Stock) || 0;
+  const used = getRowUsedForVisibleBlocks(row, blocksOverride);
+  const sobrante = stock - used;
+  return sobrante > 0 ? sobrante : 0;
+};
+
 const activeBlendVariablesForSummary = computed(() => {
   return monitoredParams
     .filter(({ key }) => {
@@ -2502,15 +2725,104 @@ const activeBlendVariablesForSummary = computed(() => {
     }));
 });
 
+const summaryMatrixRowspan = computed(() => {
+  const variableRows = activeBlendVariablesForSummary.value.length * 5;
+  return 3 + variableRows;
+});
+
+const getMatrixVariableLabel = (variable) => {
+  if (!variable) return '';
+  if (variable.ruleParam === 'LEN') return 'LEN';
+  return variable.ruleParam;
+};
+
+const getMatrixStats = (col, variable) => {
+  return blendPlan.value?.estadisticas?.[col]?.variables?.[variable.ruleParam] || {};
+};
+
+const getMatrixIdealPctValue = (variable) => {
+  if (!variable) return null;
+
+  const rule = getRuleFor(variable.uiKey);
+  const fromRule = Number(rule?.porcentaje_min_ideal);
+  if (!Number.isNaN(fromRule) && fromRule >= 0 && fromRule <= 100) {
+    return fromRule;
+  }
+
+  if (variable.uiKey === 'MIC') return 90;
+  if (variable.uiKey === 'STR' || variable.uiKey === 'UHML') return 80;
+  return 80;
+};
+
+const getMatrixIdealPctLabel = (variable) => {
+  const ideal = getMatrixIdealPctValue(variable);
+  return ideal === null ? '-' : `${ideal}%`;
+};
+
+const getMatrixTolerancePctLabel = (variable) => {
+  const ideal = getMatrixIdealPctValue(variable);
+  if (ideal === null) return '-';
+  const tolerance = Math.max(0, 100 - ideal);
+  return `${tolerance}%`;
+};
+
+const loadLoteFiacReferenceSummary = async () => {
+  try {
+    const response = await fetch('http://localhost:3001/api/inventory/lote-fiac-reference-summary?limit=3');
+    if (!response.ok) throw new Error('No se pudo cargar referencias LOTE_FIAC');
+
+    const data = await response.json();
+    const refs = Array.isArray(data?.referencias) ? data.referencias : [];
+
+    loteFiacReferenceSummary.value = refs.sort((a, b) => Number(a.loteFiac) - Number(b.loteFiac));
+  } catch (error) {
+    console.warn('No se pudieron cargar referencias LOTE_FIAC para resumen comparativo:', error);
+    loteFiacReferenceSummary.value = [];
+  }
+};
+
 const planLotTotals = computed(() => {
   const rows = blendPlan.value?.plan || [];
 
   return rows.reduce((totals, row) => {
     totals.stock += Number(row.Stock) || 0;
-    totals.usados += Number(row.Usados) || 0;
-    totals.sobrante += Number(row.Sobrante) || 0;
+    totals.usados += getRowUsedForVisibleBlocks(row);
+    totals.sobrante += getRowSobranteForVisibleBlocks(row);
     return totals;
   }, { stock: 0, usados: 0, sobrante: 0 });
+});
+
+const planWeightTotals = computed(() => {
+  const rows = blendPlan.value?.plan || [];
+
+  const pesoMedioByKey = new Map();
+  const candidates = [
+    ...(Array.isArray(sortedFilteredData.value) ? sortedFilteredData.value : []),
+    ...(Array.isArray(filteredData.value) ? filteredData.value : []),
+    ...(Array.isArray(items.value) ? items.value : [])
+  ];
+
+  candidates.forEach((row) => {
+    const key = buildProducerLotKey(row);
+    const pesoMedio = Number(row?.PESO_MEDIO ?? row?.PesoMedio);
+    if (!key || Number.isNaN(pesoMedio) || pesoMedio <= 0) return;
+    if (!pesoMedioByKey.has(key)) pesoMedioByKey.set(key, pesoMedio);
+  });
+
+  return rows.reduce((totals, row) => {
+    const key = buildProducerLotKey(row);
+    const fallbackPesoMedio = Number(row?.PESO_MEDIO ?? row?.PesoMedio);
+    const pesoMedio = pesoMedioByKey.get(key) ?? (Number.isNaN(fallbackPesoMedio) ? 0 : fallbackPesoMedio);
+
+    const stock = Number(row?.Stock) || 0;
+    const usados = getRowUsedForVisibleBlocks(row);
+    const sobrante = getRowSobranteForVisibleBlocks(row);
+
+    totals.stockKg += stock * pesoMedio;
+    totals.usadosKg += usados * pesoMedio;
+    totals.sobranteKg += sobrante * pesoMedio;
+    return totals;
+  }, { stockKg: 0, usadosKg: 0, sobranteKg: 0 });
 });
 
 const sortedBlendPlanRows = computed(() => {
@@ -2534,6 +2846,7 @@ const saldoDisponibleRows = computed(() => {
       return {
         PRODUTOR:  item.PRODUTOR,
         LOTE:      item.LOTE,
+        TAM:       item.TAM,
         CLASSIF:   item.CLASSIF,
         TIPO:      item.TIPO,
         COR:       item.COR,
@@ -2566,7 +2879,7 @@ const saldoDisponibleRows = computed(() => {
 
 // Para remanente ahora siempre mostramos columnas de peso (tenemos PESO_MEDIO)
 const projectionSourceShowWeightColumns = computed(() => true);
-const projectionSourceTableColspan = computed(() => (projectionSourceShowWeightColumns.value ? 9 : 7));
+const projectionSourceTableColspan = computed(() => (projectionSourceShowWeightColumns.value ? 10 : 8));
 
 const projectionSourceTableRows = computed(() => {
   const fallbackAverageWeight = getFallbackAverageWeightPerBale();
@@ -2583,6 +2896,7 @@ const projectionSourceTableRows = computed(() => {
       return {
         PRODUTOR: row.PRODUTOR,
         LOTE: row.LOTE,
+        TAM: row.TAM,
         Fardos: fardos,
         Kilogramos: kilogramos,
         PesoMedio: pesoMedio,
@@ -4194,13 +4508,19 @@ const groupedItems = computed(() => {
   source.forEach(item => {
     const s = Number(item.QTDE_ESTOQUE) || 0;
     if (s > threshold) large.push(item);
-    else short.push({ item, stock: s, estado: getEstado(item) });
+    else short.push({
+      item,
+      stock: s,
+      estado: getEstado(item),
+      tam: normalizeSortText(item.TAM)
+    });
   });
 
   if (!short.length) return large;
 
   short.sort((a, b) => {
     if (a.estado !== b.estado) return a.estado.localeCompare(b.estado);
+    if (a.tam !== b.tam) return a.tam.localeCompare(b.tam, 'es', { sensitivity: 'base', numeric: true });
     const val = (x, k) => Number(x.item[k]) || 0;
     let d = val(b, 'STR') - val(a, 'STR'); if (d !== 0) return d;
     d = val(b, 'UHML') - val(a, 'UHML'); if (d !== 0) return d;
@@ -4213,7 +4533,12 @@ const groupedItems = computed(() => {
   const numFields = ['MIC', 'STR', 'UHML', 'SCI', 'MST', 'MAT', 'UI', 'SF', 'ELG', 'RD', 'PLUS_B', 'PESO_MEDIO'];
 
   short.forEach(entry => {
-    if (!currentGroup || currentGroup.estado !== entry.estado || currentGroup.stock >= threshold) {
+    if (
+      !currentGroup ||
+      currentGroup.estado !== entry.estado ||
+      currentGroup.tam !== entry.tam ||
+      currentGroup.stock >= threshold
+    ) {
       const estado = entry.estado;
       const isUso = estado === 'USO';
       const isDesc = estado === 'DESCAR.';
@@ -4223,9 +4548,11 @@ const groupedItems = computed(() => {
       currentGroup = {
           stock: 0,
           estado,
+          tam: entry.tam,
           items: [],
           acc: {},
           prods: new Set(),
+          tamValues: new Set(),
           lotes: [],
           fPrefix, idx
       };
@@ -4237,6 +4564,8 @@ const groupedItems = computed(() => {
     currentGroup.stock += s;
     currentGroup.items.push(entry.item);
     currentGroup.prods.add(entry.item.PRODUTOR);
+    const tamValue = (entry.item.TAM ?? '').toString().trim();
+    if (tamValue) currentGroup.tamValues.add(tamValue);
     currentGroup.lotes.push(`${entry.item.LOTE} [${s}]`);
     
     numFields.forEach(k => {
@@ -4246,11 +4575,14 @@ const groupedItems = computed(() => {
 
   // Merge huérfanos muy pequeños
   const mergeOrphans = (targetGroups) => {
-    // Implementacion simplificada: si el ultimo grupo de un estado es menor al umbral y hay uno previo, unirlos
+    // Implementacion simplificada: si el ultimo grupo de un estado/tam es menor al umbral y hay uno previo, unirlos
     ['USO', 'TOLER.', 'DESCAR.'].forEach(st => {
       // Filtrar indices para manipular el array original por referencia si es necesario, pero aqui groups es local
       // Mejor iterar y buscar candidatos
-      const candidates = targetGroups.filter(g => g.estado === st);
+      const tamKeys = [...new Set(targetGroups.filter(g => g.estado === st).map(g => g.tam))];
+
+      tamKeys.forEach((tamKey) => {
+        const candidates = targetGroups.filter(g => g.estado === st && g.tam === tamKey);
       if (candidates.length > 1) {
         const last = candidates[candidates.length - 1];
          // Si el ultimo no llega al umbral
@@ -4269,6 +4601,7 @@ const groupedItems = computed(() => {
            if(idxToRemove !== -1) targetGroups.splice(idxToRemove, 1);
         }
       }
+      });
     });
   };
   
@@ -4289,9 +4622,17 @@ const groupedItems = computed(() => {
 
       const pList = Array.from(g.prods).join(', ');
       const lList = g.lotes.join(', ');
+      const tamList = Array.from(g.tamValues);
+      const singleLotOriginal = normalizeSortText(g.items?.[0]?.LOTE);
+      const singleProducerOriginal = normalizeSortText(g.items?.[0]?.PRODUTOR);
       
-      obj.PRODUTOR = `${g.fPrefix} ${g.idx} (${pList.length > 20 ? pList.substring(0, 17) + '...' : pList})`;
-      obj.LOTE     = `Agrupado (${lList.length > 50 ? lList.substring(0, 47) + '...' : lList})`;
+      obj.PRODUTOR = g.items.length <= 1
+        ? (singleProducerOriginal || `${g.fPrefix} ${g.idx} (${pList.length > 20 ? pList.substring(0, 17) + '...' : pList})`)
+        : `${g.fPrefix} ${g.idx} (${pList.length > 20 ? pList.substring(0, 17) + '...' : pList})`;
+      obj.LOTE     = g.items.length <= 1
+        ? (singleLotOriginal || `Agrupado (${lList.length > 50 ? lList.substring(0, 47) + '...' : lList})`)
+        : `Agrupado (${lList.length > 50 ? lList.substring(0, 47) + '...' : lList})`;
+      obj.TAM      = tamList.length > 1 ? 'VARIOS' : (tamList[0] || g.tam || '');
       obj._isGroup = true; // Flag para UI si se necesita destacar
       
       return obj;
@@ -4376,7 +4717,7 @@ const formatValue = (value, key) => {
     }
 
     // Campos que requieren 2 decimales
-    const decimalFields = ['MIC', 'STR', 'UHML', 'SCI', 'MST'];
+    const decimalFields = ['MIC', 'STR', 'UHML', 'SCI', 'MST', 'ELG'];
     if (decimalFields.includes(key)) return num.toFixed(2);
 
     // Valores numéricos por defecto: devolver tal cual (sin cambios adicionales)
@@ -4634,9 +4975,11 @@ const handleMezclas = async ({ silent = false } = {}) => {
     }
 
     const data = await response.json();
-    if (data.success) {
-      if (!Array.isArray(data.plan) || data.plan.length === 0) {
-        const diagnostics = data.diagnostics || {};
+    const enrichedData = enrichBlendResultWithTam(data);
+
+    if (enrichedData.success) {
+      if (!Array.isArray(enrichedData.plan) || enrichedData.plan.length === 0) {
+        const diagnostics = enrichedData.diagnostics || {};
         const friendlyMessage = diagnostics.message || 'No se pudo armar ningún bloque de mezcla con la configuración actual.';
         const details = Array.isArray(diagnostics.details) ? diagnostics.details : [];
 
@@ -4647,14 +4990,16 @@ const handleMezclas = async ({ silent = false } = {}) => {
           details
         };
 
-        blendPlan.value = data;
+        blendPlan.value = enrichedData;
+        loteFiacReferenceSummary.value = [];
         isBlendMode.value = true;
         return;
       }
 
-      validateBlendPlanFeasibility(data);
+      validateBlendPlanFeasibility(enrichedData);
       blendUserMessage.value = null;
-      blendPlan.value = data;
+      blendPlan.value = enrichedData;
+      await loadLoteFiacReferenceSummary();
       isBlendMode.value = true;
     } else {
       throw new Error('El cálculo no fue exitoso.');
@@ -4684,7 +5029,9 @@ const exportToExcel = async () => {
 
   const plan = blendPlan.value.plan || [];
   const estadisticas = blendPlan.value.estadisticas || {};
-  const columnasMezcla = blendPlan.value.columnasMezcla || [];
+  const columnasMezcla = (activeBlendColumns.value && activeBlendColumns.value.length)
+    ? [...activeBlendColumns.value]
+    : (blendPlan.value.columnasMezcla || []);
   
   // Crear workbook
   const workbook = new ExcelJS.Workbook();
@@ -4725,12 +5072,20 @@ const exportToExcel = async () => {
       });
     });
   };
+
+  const formatCombinedClassifForExport = (row) => {
+    const combined = getCombinedClassif(row);
+    return combined || '-';
+  };
   
   // ===== Hoja 1: Plan de Mezclas =====
   const planSheet = workbook.addWorksheet('Plan de Mezclas');
   const planHeaderBg = 'FF9DC3E6'; // Azul claro para mejor contraste
 
   const algorithmUsed = appliedAlgorithmLabel.value || 'N/A';
+  const exportScopeLabel = showOnlyLargestBlendBlock.value
+    ? 'BLOQUE MAYOR'
+    : 'TODOS LOS BLOQUES';
   const executedAt = appliedCalculationTimestamp.value || new Date().toLocaleString('es-ES');
 
   const getRuleValuesForExport = (uiKey) => {
@@ -4744,13 +5099,13 @@ const exportToExcel = async () => {
   };
   
   // Título
-  const totalCols = 7 + 3 + columnasMezcla.length * 2;
+  const totalCols = 8 + 3 + columnasMezcla.length * 2;
   planSheet.mergeCells(`A1:${String.fromCharCode(64 + totalCols)}1`);
   const titleCell = planSheet.getCell('A1');
   titleCell.value = {
     richText: [
       { font: { bold: true, size: 14, color: { argb: 'FF000000' } }, text: 'PLAN DE MEZCLAS GENERADO' },
-      { font: { bold: false, size: 12, color: { argb: 'FF000000' } }, text: ` | Algoritmo usado:${algorithmUsed} | Ejecutado:${executedAt}` }
+      { font: { bold: false, size: 12, color: { argb: 'FF000000' } }, text: ` | Alcance:${exportScopeLabel} | Algoritmo usado:${algorithmUsed} | Ejecutado:${executedAt}` }
     ]
   };
   titleCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true, indent: 1 };
@@ -4781,7 +5136,7 @@ const exportToExcel = async () => {
   
   // Encabezados (mismo orden que la UI)
   const headers = [
-    'Productor', 'Lote', 'Estado', 'Stock', 'Usados', 'Sobrante', 
+    'Productor', 'Lote', 'Clasif.', 'Estado', 'Stock', 'Usados', 'Sobrante', 
     'Motivo Sobrante', 'MIC', 'STR', 'LEN'
   ];
   
@@ -4801,7 +5156,7 @@ const exportToExcel = async () => {
   planSheet.getRow(3).height = 20;
   
   // Ancho de columnas customizado (adaptativo a la cantidad de bloques)
-  const fixedWidths = [16, 7, 9, 9, 9, 9, 33, 7, 7, 7];
+  const fixedWidths = [16, 7, 12, 9, 9, 9, 9, 33, 7, 7, 7];
   const columnWidths = headers.map((_, index) => {
     if (index < fixedWidths.length) return fixedWidths[index];
     return 9;
@@ -4813,6 +5168,7 @@ const exportToExcel = async () => {
     const rowData = [
       row.PRODUTOR || '',
       row.LOTE || '',
+      formatCombinedClassifForExport(row),
       row.Estado || '',
       row.Stock !== undefined ? row.Stock : '',
       row.Usados !== undefined ? row.Usados : '',
@@ -4834,16 +5190,16 @@ const exportToExcel = async () => {
     newRow.alignment = { horizontal: 'center', vertical: 'center' };
     
     // Colorear Estado
-    const estadoCell = newRow.getCell(3);
+    const estadoCell = newRow.getCell(4);
     if (row.Estado === 'NO USO' || row.Estado === 'RECH.') {
       estadoCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFCCCC' } };
     } else if (row.Estado === 'USO') {
       estadoCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFCCFFCC' } };
     }
 
-    const micCell = newRow.getCell(8);
-    const strCell = newRow.getCell(9);
-    const lenCell = newRow.getCell(10);
+    const micCell = newRow.getCell(9);
+    const strCell = newRow.getCell(10);
+    const lenCell = newRow.getCell(11);
     applyCellStyleFromUiClass(micCell, getCellClass(row, 'MIC'));
     applyCellStyleFromUiClass(strCell, getCellClass(row, 'STR'));
     applyCellStyleFromUiClass(lenCell, getCellClass(row, 'UHML'));
@@ -4881,6 +5237,7 @@ const exportToExcel = async () => {
   const subtotalesRowData = [
     '', // Productor
     '', // Lote
+    '', // Clasif.
     'SUBTOTALES', // Estado
     subtotales.stock,
     subtotales.usados,
@@ -4934,11 +5291,11 @@ const exportToExcel = async () => {
   }
 
   // ===== Estadísticas debajo de subtotales (desde columna H) =====
-  const statsStartCol = 8; // Columna H
+  const statsStartCol = 9; // Columna I
   const statsLabelCol = statsStartCol;
   const statsTypeCol = statsStartCol + 1;
   const statsMetricCol = statsStartCol + 2;
-  const firstBlockValueCol = 11; // Primera columna de bloque (M1-...)
+  const firstBlockValueCol = 12; // Primera columna de bloque (M1-...)
   const statsEndCol = headers.length;
 
   const toNumeric = (value, fallback = 0) => {
@@ -5239,14 +5596,14 @@ const exportToExcel = async () => {
   if (plan.length > 0) {
     const summarySheet = workbook.addWorksheet('Resumen Stock');
     
-    summarySheet.mergeCells('A1:G1');
+    summarySheet.mergeCells('A1:H1');
     const summaryTitle = summarySheet.getCell('A1');
     summaryTitle.value = 'RESUMEN DE STOCK';
     summaryTitle.font = titleFont;
     summaryTitle.alignment = centerAlign;
     summarySheet.getRow(1).height = 22;
     
-    const summaryHeaders = ['Productor', 'Lote', 'Destino', 'Stock', 'Usados', 'Sobrante', 'Estado'];
+    const summaryHeaders = ['Productor', 'Lote', 'Clasif.', 'Destino', 'Stock', 'Usados', 'Sobrante', 'Estado'];
     const summaryHeaderRow = summarySheet.addRow(summaryHeaders);
     summaryHeaderRow.font = headerFont;
     summaryHeaderRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: headerBg } };
@@ -5256,6 +5613,7 @@ const exportToExcel = async () => {
       const summaryRow = summarySheet.addRow([
         row.PRODUTOR || '',
         row.LOTE || '',
+        formatCombinedClassifForExport(row),
         row.DESTINO || '',
         row.Stock !== undefined ? row.Stock : '',
         row.Usados !== undefined ? row.Usados : '',
@@ -5266,7 +5624,7 @@ const exportToExcel = async () => {
     });
     
     summarySheet.columns = [
-      { width: 15 }, { width: 12 }, { width: 15 }, { width: 10 },
+      { width: 15 }, { width: 12 }, { width: 12 }, { width: 15 }, { width: 10 },
       { width: 10 }, { width: 10 }, { width: 15 }
     ];
 

@@ -1001,6 +1001,8 @@ function generateEmptyResult(stock, message, diagnostics = null) {
         remanentes: stock.map(b => ({
             PRODUTOR: b.PRODUTOR,
             LOTE: b.LOTE,
+            TP: b.TP,
+            CLASSIF: b.CLASSIF,
             Fardos: b._availableCount, // Puede ser 0 o lo que había
             Motivo: b._rejectReason || message
         })),
@@ -1036,11 +1038,15 @@ function buildFullStockPlanRows(classifiedStock) {
         PRODUTOR: lot.PRODUTOR,
         Estado: getEstadoLabelFromLot(lot),
         LOTE: lot.LOTE,
+        TAM: lot.TAM,
+        TP: lot.TP,
+        CLASSIF: lot.CLASSIF,
         Stock: Number(lot.QTDE_ESTOQUE) || 0,
         Usados: Number(lot._usedCount) || 0,
         Sobrante: Number(lot._availableCount) || 0,
         MIC: lot.MIC,
         STR: lot.STR,
+        ELG: lot.ELG,
         LEN: lot.UHML || lot.LEN,
         MotivoLogistico: getMotivoLogisticoFromLot(lot),
         mezclas: {}
@@ -1071,8 +1077,12 @@ function buildFullStockPlanRows(classifiedStock) {
              unusedStock.push({
                 PRODUTOR: b.PRODUTOR,
                 LOTE: b.LOTE,
+                     TAM: b.TAM,
+                     TP: b.TP,
+                     CLASSIF: b.CLASSIF,
                 MIC: b.MIC,
                 STR: b.STR,
+                ELG: b.ELG,
                 LEN: b.UHML || b.LEN,
                 Fardos: b._category === 'C' ? Number(b.QTDE_ESTOQUE) : b._availableCount,
                 Peso: (Number(b.PESO) / (Number(b.QTDE_ESTOQUE)||1)) * (b._category === 'C' ? Number(b.QTDE_ESTOQUE) : b._availableCount),
@@ -1143,31 +1153,39 @@ function calcularEstadisticas(blends, activeRules) {
             variables: {}
         };
 
-        ['MIC', 'STR', 'UHML'].forEach(vKey => {
-            const ruleParam = vKey === 'UHML' ? 'LEN' : vKey;
+        const paramsToCompute = [...new Set((activeRules || []).map(r => r?.parametro).filter(Boolean))];
+
+        paramsToCompute.forEach((ruleParam) => {
+            const vKey = ruleParam === 'LEN' ? 'UHML' : (ruleParam === '+b' ? 'PLUS_B' : ruleParam);
             const rule = activeRules.find(r => r.parametro === ruleParam);
-            
+
             const sumPonderada = fardos.reduce((s, f) => s + ((Number(f[vKey]) || 0) * (Number(f.PESO) / (Number(f.QTDE_ESTOQUE)||1))), 0);
             const prom = pesoPorMezcla > 0 ? sumPonderada / pesoPorMezcla : 0;
-            
+
             stats[bId].variables[ruleParam] = {
                 promedioGeneral: prom
             };
 
             if (rule) {
-                const fardosA = fardos.filter(f => f._category === 'A' || !f._toleranceReasons.includes(ruleParam));
-                const fardosB = fardos.filter(f => f._category === 'B' && f._toleranceReasons.includes(ruleParam));
-                
+                const fardosA = fardos.filter(f => {
+                    const reasons = Array.isArray(f._toleranceReasons) ? f._toleranceReasons : [];
+                    return f._category === 'A' || !reasons.includes(ruleParam);
+                });
+                const fardosB = fardos.filter(f => {
+                    const reasons = Array.isArray(f._toleranceReasons) ? f._toleranceReasons : [];
+                    return f._category === 'B' && reasons.includes(ruleParam);
+                });
+
                 const sumPesoA = fardosA.reduce((s, f) => s + (Number(f.PESO) / (Number(f.QTDE_ESTOQUE)||1)), 0);
                 const sumPesoB = fardosB.reduce((s, f) => s + (Number(f.PESO) / (Number(f.QTDE_ESTOQUE)||1)), 0);
 
                 const sumA = fardosA.reduce((s, f) => s + ((Number(f[vKey]) || 0) * (Number(f.PESO) / (Number(f.QTDE_ESTOQUE)||1))), 0);
                 const sumB = fardosB.reduce((s, f) => s + ((Number(f[vKey]) || 0) * (Number(f.PESO) / (Number(f.QTDE_ESTOQUE)||1))), 0);
-                
+
                 stats[bId].variables[ruleParam].promedioIdeal = sumPesoA > 0 ? sumA / sumPesoA : 0;
                 stats[bId].variables[ruleParam].promedioTolerancia = sumPesoB > 0 ? sumB / sumPesoB : 0;
-                stats[bId].variables[ruleParam].pctIdeal = (fardosA.length / totalFardos) * 100;
-                stats[bId].variables[ruleParam].pctTolerancia = (fardosB.length / totalFardos) * 100;
+                stats[bId].variables[ruleParam].pctIdeal = totalFardos > 0 ? (fardosA.length / totalFardos) * 100 : 0;
+                stats[bId].variables[ruleParam].pctTolerancia = totalFardos > 0 ? (fardosB.length / totalFardos) * 100 : 0;
             }
         });
     });

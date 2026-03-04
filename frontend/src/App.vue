@@ -249,6 +249,13 @@
               <span>📈</span> Metros por Sector
             </router-link>
             <router-link 
+              to="/consulta-calidad-partida" 
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
+              :class="{ 'bg-blue-600': $route.path === '/consulta-calidad-partida' }"
+            >
+              <span>🔍</span> Consulta Partida
+            </router-link>
+            <router-link 
               to="/partida-tejeduria" 
               class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
               :class="{ 'bg-blue-600': $route.path === '/partida-tejeduria' }"

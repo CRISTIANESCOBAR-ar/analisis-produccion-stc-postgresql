@@ -506,6 +506,115 @@ app.post('/api/inventory/blendomat', async (req, res) => {
   }
 });
 
+app.get('/api/inventory/lote-fiac-reference-summary', async (req, res) => {
+  try {
+    const rawLimit = Number.parseInt(String(req.query.limit || ''), 10);
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 10) : 3;
+
+    const sql = `
+      WITH base AS (
+        SELECT
+          CAST(NULLIF(regexp_replace("LOTE_FIAC", '[^0-9]', '', 'g'), '') AS INTEGER) AS lote_fiac_num,
+          CASE
+            WHEN "DT_ENTRADA_PROD" ~ '^\\d{2}/\\d{2}/\\d{4}$' THEN TO_DATE("DT_ENTRADA_PROD", 'DD/MM/YYYY')
+            WHEN "DT_ENTRADA_PROD" ~ '^\\d{4}-\\d{2}-\\d{2}$' THEN TO_DATE("DT_ENTRADA_PROD", 'YYYY-MM-DD')
+            ELSE NULL
+          END AS dt_ingreso,
+          CASE WHEN "SCI" ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("SCI", ',', '.')::numeric END AS sci,
+          CASE WHEN "MST" ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("MST", ',', '.')::numeric END AS mst,
+          CASE WHEN "MIC" ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("MIC", ',', '.')::numeric END AS mic,
+          CASE WHEN "MAT" ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("MAT", ',', '.')::numeric END AS mat,
+          CASE WHEN "UHML" ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("UHML", ',', '.')::numeric END AS uhml,
+          CASE WHEN "UI" ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("UI", ',', '.')::numeric END AS ui,
+          CASE WHEN "SF" ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("SF", ',', '.')::numeric END AS sf,
+          CASE WHEN "STR" ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("STR", ',', '.')::numeric END AS str,
+          CASE WHEN "ELG" ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("ELG", ',', '.')::numeric END AS elg,
+          CASE WHEN "RD" ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("RD", ',', '.')::numeric END AS rd,
+          CASE WHEN "PLUS_B" ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("PLUS_B", ',', '.')::numeric END AS plus_b,
+          CASE WHEN "TrCNT" ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("TrCNT", ',', '.')::numeric END AS trcnt,
+          CASE WHEN "TrAR" ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("TrAR", ',', '.')::numeric END AS trar,
+          CASE WHEN "TRID" ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("TRID", ',', '.')::numeric END AS trid,
+          CASE
+            WHEN "PESO" ~ '^[0-9][0-9,\\.]*$'
+              THEN NULLIF(REPLACE(REPLACE("PESO", '.', ''), ',', '.'), '')::numeric
+            ELSE NULL
+          END AS peso_kg
+        FROM tb_calidad_fibra
+        WHERE "TIPO_MOV" = 'MIST'
+          AND "LOTE_FIAC" ~ '[0-9]'
+      ),
+      lotes_consumidos AS (
+        SELECT
+          lote_fiac_num,
+          MIN(dt_ingreso) AS primer_ingreso
+        FROM base
+        WHERE lote_fiac_num IS NOT NULL
+          AND dt_ingreso IS NOT NULL
+        GROUP BY lote_fiac_num
+      ),
+      ultimos AS (
+        SELECT lote_fiac_num, primer_ingreso
+        FROM lotes_consumidos
+        ORDER BY primer_ingreso DESC, lote_fiac_num DESC
+        LIMIT $1
+      )
+      SELECT
+        u.lote_fiac_num,
+        u.primer_ingreso,
+        ROUND(AVG(b.sci), 2) AS sci,
+        ROUND(AVG(b.mst), 2) AS mst,
+        ROUND(AVG(b.mic), 3) AS mic,
+        ROUND(AVG(b.mat), 2) AS mat,
+        ROUND(AVG(b.uhml), 2) AS uhml,
+        ROUND(AVG(b.ui), 2) AS ui,
+        ROUND(AVG(b.sf), 2) AS sf,
+        ROUND(AVG(b.str), 2) AS str,
+        ROUND(AVG(b.elg), 2) AS elg,
+        ROUND(AVG(b.rd), 2) AS rd,
+        ROUND(AVG(b.plus_b), 2) AS plus_b,
+        ROUND(AVG(b.trcnt), 2) AS trcnt,
+        ROUND(AVG(b.trar), 2) AS trar,
+        ROUND(AVG(b.trid), 2) AS trid,
+        ROUND(COALESCE(SUM(b.peso_kg), 0), 0) AS kg_usados
+      FROM ultimos u
+      JOIN base b
+        ON b.lote_fiac_num = u.lote_fiac_num
+       AND b.dt_ingreso IS NOT NULL
+      GROUP BY u.lote_fiac_num, u.primer_ingreso
+      ORDER BY u.primer_ingreso ASC, u.lote_fiac_num ASC
+    `;
+
+    const result = await query(sql, [limit], 'inventory-lote-fiac-reference-summary');
+
+    const referencias = result.rows.map((row) => ({
+      loteFiac: String(row.lote_fiac_num),
+      primerIngreso: row.primer_ingreso,
+      kgUsados: row.kg_usados,
+      averages: {
+        SCI: row.sci,
+        MST: row.mst,
+        MIC: row.mic,
+        MAT: row.mat,
+        UHML: row.uhml,
+        UI: row.ui,
+        SF: row.sf,
+        STR: row.str,
+        ELG: row.elg,
+        RD: row.rd,
+        PLUS_B: row.plus_b,
+        TrCNT: row.trcnt,
+        TrAR: row.trar,
+        TRID: row.trid
+      }
+    }));
+
+    res.json({ success: true, referencias });
+  } catch (err) {
+    console.error('Error en /api/inventory/lote-fiac-reference-summary:', err);
+    res.status(500).json({ error: err.message || 'Error interno al obtener referencias LOTE_FIAC' });
+  }
+});
+
 async function costosTablesReady() {
   await ensureCostosSchema()
   return true
@@ -1409,6 +1518,60 @@ app.get('/api/calidad/available-dates', async (req, res) => {
     res.status(500).json({ error: err.message })
   }
 })
+
+// GET /api/calidad/partida/:codigo - Detalle de partida
+app.get('/api/calidad/partida/:codigo', async (req, res) => {
+  try {
+    const { codigo } = req.params;
+    if (!codigo) {
+      return res.status(400).json({ error: 'Se requiere código de partida' });
+    }
+
+    const sql = `
+      SELECT
+        "ARTIGO",
+        "COR",
+        "NM MERC",
+        "TRAMA",
+        "PEÇA",
+        "DAT_PROD",
+        "GRP_DEF",
+        "COD_DE",
+        "DEFEITO",
+        "METRAGEM",
+        "QUALIDADE",
+        "REVISOR FINAL",
+        "HORA",
+        "PARTIDA",
+        "EMENDAS",
+        "ETIQUETA"
+      FROM tb_calidad
+      WHERE "PARTIDA" LIKE '%' || $1
+      ORDER BY "PEÇA" ASC
+    `;
+
+    const result = await query(sql, [codigo], 'calidad/partida-by-id');
+    const rows = result.rows || [];
+
+    if (rows.length === 0) {
+      return res.json({ header: null, rows: [] });
+    }
+
+    // Tomamos el primer registro para el encabezado (asumiendo homogeneidad en la partida)
+    const first = rows[0];
+    const header = {
+      ARTIGO: first.ARTIGO,
+      COR: first.COR,
+      NM_MERC: first["NM MERC"],
+      TRAMA: first.TRAMA
+    };
+
+    res.json({ header, rows });
+  } catch (err) {
+    console.error('Error en /api/calidad/partida/:codigo:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // GET /api/calidad/sectores-resumen - Metros revisados por sector
 app.get('/api/calidad/sectores-resumen', async (req, res) => {

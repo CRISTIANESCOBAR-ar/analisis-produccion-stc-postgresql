@@ -96,6 +96,11 @@ const routes = [
     meta: { title: 'Metros por Sector - Control de Calidad' }
   },
   {
+    path: '/consulta-calidad-partida',
+    component: () => import('./components/produccion/ConsultaPartidaCalidad.vue'),
+    meta: { title: 'Consulta Detalle Partida - Calidad' }
+  },
+  {
     path: '/partida-tejeduria',
     component: () => import('./components/produccion/PartidaTejeduria.vue'),
     meta: { title: 'Partida en Producción – Tejeduría' }
