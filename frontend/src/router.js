@@ -60,6 +60,11 @@ const routes = [
     component: () => import('./components/ensayos/DashboardMezclaHilo.vue'),
     meta: { title: 'Dashboard Mezcla → Hilo' }
   },
+  {
+    path: '/informe-auditoria-lote',
+    component: () => import('./components/ensayos/InformeAuditoriaLote.vue'),
+    meta: { title: 'Informe Auditoría por Lote' }
+  },
   { 
     path: '/resumen-diario', 
     component: () => import('./components/ensayos/ResumenDiario.vue'), 

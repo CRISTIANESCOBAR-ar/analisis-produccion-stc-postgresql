@@ -87,6 +87,14 @@
             >
               <span>🏆</span> Golden Batch (OEE)
             </router-link>
+
+            <router-link
+              to="/informe-auditoria-lote"
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm"
+              :class="{ 'bg-blue-600': $route.path === '/informe-auditoria-lote' }"
+            >
+              <span>📋</span> Informe Auditoría Lote
+            </router-link>
             
             <router-link 
               to="/resumen-diario" 
@@ -451,7 +459,7 @@ const indigoMenuOpen = ref(localStorage.getItem('indigoMenuOpen') !== 'false')
 const configMenuOpen = ref(localStorage.getItem('configMenuOpen') !== 'false')
 const inventoryMenuOpen = ref(localStorage.getItem('inventoryMenuOpen') !== 'false')
 
-const labRoutes = ['/resumen', '/resumen-semanal-hilanderia', '/analisis-calidad-fibra', '/golden-batch', '/resumen-diario', '/stats', '/uster', '/tenso']
+const labRoutes = ['/resumen', '/resumen-semanal-hilanderia', '/analisis-calidad-fibra', '/golden-batch', '/informe-auditoria-lote', '/resumen-diario', '/stats', '/uster', '/tenso']
 const isLabRouteActive = computed(() => labRoutes.includes(route.path))
 
 const prodRoutes = ['/import-control', '/informe-diario']
