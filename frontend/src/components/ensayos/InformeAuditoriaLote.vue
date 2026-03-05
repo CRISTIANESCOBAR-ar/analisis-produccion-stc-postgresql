@@ -51,7 +51,16 @@
         >
           {{ copyStatus }}
         </div>
-        <div class="text-slate-800 text-sm whitespace-pre-line leading-6">{{ reportText }}</div>
+        <div class="text-slate-800">
+          <div
+            v-for="(line, index) in reportLines"
+            :key="`report-line-${index}`"
+            :class="reportLineClass(line)"
+          >
+            <template v-if="line === ''">&nbsp;</template>
+            <template v-else>{{ line }}</template>
+          </div>
+        </div>
       </div>
 
       <div v-if="filteredRows.length > 0" class="flex-1 min-h-0 overflow-auto rounded-xl border border-slate-200">
@@ -125,7 +134,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { fetchAllStatsData } from '../../services/dataService'
 
 const loteInput = ref('')
@@ -138,6 +147,29 @@ const copyStatus = ref('')
 const copyStatusType = ref('success')
 const cachedRows = ref([])
 const cachedFibra = ref([])
+
+const reportLines = computed(() => {
+  if (!reportText.value) return []
+  return reportText.value.split('\n')
+})
+
+function reportLineClass(line) {
+  const value = String(line || '')
+
+  if (value.trim() === '') {
+    return 'leading-3'
+  }
+
+  if (/^(?:⚠️|✅|🔥|🧵)\s+Ne\s+/i.test(value)) {
+    return 'text-[15px] font-bold leading-6 text-slate-900'
+  }
+
+  if (/^(?:📋|📅|🧪|⚠️ ALERTAS POR TÍTULO|🛠️ AJUSTES DE PLANTA|🚀 CONCLUSIÓN|📑)/.test(value)) {
+    return 'text-sm font-semibold leading-6 text-slate-800'
+  }
+
+  return 'text-sm leading-6 text-slate-800'
+}
 
 function setCopyStatus(message, type = 'success') {
   copyStatus.value = message
@@ -379,39 +411,81 @@ function parseNumericForSort(neLabel) {
 
 function getNeRole(neLabel) {
   const ne = String(neLabel).toLowerCase()
-  if (ne.includes('flame')) return 'Flame'
+  if (ne.includes('flame')) return 'Urdimbre Flame'
   if (ne.includes('12.5')) return 'Urdimbre Fina'
   if (ne.includes('10')) return 'Urdimbre Estándar'
   if (ne.includes('7')) return 'Trama'
   return 'Proceso General'
 }
 
-function computeMicForLote(calidadFibraRows, loteNormalized) {
-  const matching = (calidadFibraRows || []).filter((row) => {
-    const mistura = normalizeLote(row.MISTURA)
-    const loteFiac = normalizeLote(row.LOTE_FIAC)
-    return mistura === loteNormalized || loteFiac === loteNormalized
-  })
-  if (matching.length === 0) return null
+const MATRIZ_AUDITORIA = {
+  '7':    { app: 'Trama',    umb: { tenacidad: { ok: 14.0, w: 13.0, t: 'min' }, elongacion: { ok: 7.0, w: 6.0, t: 'min' }, cvm: { ok: 13.5, w: 14.5, t: 'max' } } },
+  '9':    { app: 'Trama',    umb: { tenacidad: { ok: 14.5, w: 13.5, t: 'min' }, elongacion: { ok: 7.0, w: 6.5, t: 'min' }, cvm: { ok: 13.0, w: 14.0, t: 'max' } } },
+  '10':   { app: 'Urdimbre', umb: { tenacidad: { ok: 16.0, w: 15.0, t: 'min' }, elongacion: { ok: 8.0, w: 7.5, t: 'min' }, cvm: { ok: 12.0, w: 13.0, t: 'max' } } },
+  '12.5': { app: 'Urdimbre', umb: { tenacidad: { ok: 16.5, w: 15.5, t: 'min' }, elongacion: { ok: 8.0, w: 7.5, t: 'min' }, cvm: { ok: 11.5, w: 12.5, t: 'max' } } },
+  '14':   { app: 'Urdimbre', umb: { tenacidad: { ok: 17.0, w: 16.0, t: 'min' }, elongacion: { ok: 8.5, w: 8.0, t: 'min' }, cvm: { ok: 11.0, w: 12.0, t: 'max' } } },
+}
 
-  let totalWeight = 0
-  let weightedSum = 0
-  const fallback = []
+function resolveMatrizAuditoriaKey(neValue) {
+  if (!Number.isFinite(neValue)) return null
 
-  matching.forEach((row) => {
-    const mic = toNumber(row.MIC)
-    if (mic === null) return
-    fallback.push(mic)
-    const weight = toNumber(row.PESO)
-    if (weight !== null && weight > 0) {
-      totalWeight += weight
-      weightedSum += mic * weight
+  let bestKey = null
+  let bestNum = null
+  let bestDist = Number.POSITIVE_INFINITY
+
+  Object.keys(MATRIZ_AUDITORIA).forEach((key) => {
+    const num = parseFloat(key)
+    if (!Number.isFinite(num)) return
+    const dist = Math.abs(num - neValue)
+    if (dist < bestDist || (Math.abs(dist - bestDist) < 1e-9 && num > (bestNum ?? -Infinity))) {
+      bestDist = dist
+      bestNum = num
+      bestKey = key
     }
   })
 
-  if (totalWeight > 0) return weightedSum / totalWeight
-  if (fallback.length === 0) return null
-  return fallback.reduce((acc, item) => acc + item, 0) / fallback.length
+  return bestDist <= 2 ? bestKey : null
+}
+
+function getMatrizAuditoria(neValue, isFlame = false) {
+  const key = resolveMatrizAuditoriaKey(neValue)
+  if (!key) return null
+
+  const base = MATRIZ_AUDITORIA[key]
+  if (!base || !isFlame || neValue < 9) return base
+
+  return {
+    ...base,
+    app: 'Urdimbre Flame',
+    umb: {
+      ...base.umb,
+      cvm: { ok: 18.0, w: 20.0, t: 'max' }
+    }
+  }
+}
+
+function evalUmbralAuditoria(value, umbral) {
+  if (!Number.isFinite(value) || !umbral) return 'sin-dato'
+  if (umbral.t === 'min') {
+    if (value >= umbral.ok) return 'ok'
+    if (value >= umbral.w) return 'warn'
+    return 'crit'
+  }
+  if (value <= umbral.ok) return 'ok'
+  if (value <= umbral.w) return 'warn'
+  return 'crit'
+}
+
+function computeMicForLote(calidadFibraRows, loteNormalized) {
+  const matching = (calidadFibraRows || []).filter((row) => normalizeLote(row.LOTE_FIAC) === loteNormalized)
+  if (matching.length === 0) return null
+
+  const values = matching
+    .map((row) => toNumber(row.MIC))
+    .filter((value) => value !== null)
+
+  if (values.length === 0) return null
+  return values.reduce((acc, item) => acc + item, 0) / values.length
 }
 
 function buildNarrativeReport(rows, lote, mic) {
@@ -432,7 +506,8 @@ function buildNarrativeReport(rows, lote, mic) {
 
   const sortedNes = Array.from(groups.keys()).sort((a, b) => parseNumericForSort(a) - parseNumericForSort(b))
   const sectionLines = []
-  let priorityLine = 'Prioridad 1: Mantener el monitoreo diario del lote para sostener estabilidad.'
+  const rejectedTitles = []
+  const conditionalTitles = []
 
   sortedNes.forEach((neLabel) => {
     const neRows = groups.get(neLabel) || []
@@ -445,54 +520,52 @@ function buildNarrativeReport(rows, lote, mic) {
     const tenacMinContext = isolatedMinContext(neRows, 'Tenac.', tenac)
 
     const neLower = String(neLabel).toLowerCase()
-    let icon = '✅'
-    let zone = 'ESTABLE'
+    const isFlame = neLower.includes('flame')
+    const neNum = parseNumericForSort(neLabel)
+    const matriz = getMatrizAuditoria(neNum, isFlame)
+
+    const evals = []
+    if (matriz?.umb?.tenacidad && tenac) evals.push(evalUmbralAuditoria(tenac.mean, matriz.umb.tenacidad))
+    if (matriz?.umb?.elongacion && elong) evals.push(evalUmbralAuditoria(elong.mean, matriz.umb.elongacion))
+    if (matriz?.umb?.cvm && cvm) evals.push(evalUmbralAuditoria(cvm.mean, matriz.umb.cvm))
+
+    const hasCrit = evals.includes('crit')
+    const hasWarn = !hasCrit && evals.includes('warn')
+    const status = hasCrit ? 'RECHAZADO' : hasWarn ? 'CONDICIONAL' : 'APROBADO'
+
+    if (status === 'RECHAZADO') rejectedTitles.push(`Ne ${neLabel}`)
+    if (status === 'CONDICIONAL') conditionalTitles.push(`Ne ${neLabel}`)
+
+    let icon = status === 'RECHAZADO' ? '🔴' : status === 'CONDICIONAL' ? '⚠️' : (isFlame ? '🔥' : '✅')
+    let zone = status === 'RECHAZADO' ? 'ZONA CRÍTICA' : status === 'CONDICIONAL' ? 'VIGILAR' : 'APTO'
     let action = 'Sostener reglajes actuales y continuar control por turno.'
 
-    if (neLower.includes('flame')) {
-      icon = '🔥'
-      zone = tenac && tenac.mean >= 16 ? 'EFECTO SEGURO' : 'CONTROLAR FLAMA'
-      action = tenac && tenac.mean >= 16
-        ? 'Mantener receta y tensión actual: el efecto flame no compromete estructura.'
-        : 'Bajar variación de efecto flame y revisar estiraje para evitar pérdida de resistencia.'
+    if (isFlame) {
+      zone = status === 'APROBADO' ? 'EFECTO SEGURO' : status === 'CONDICIONAL' ? 'CONTROLAR FLAMA' : 'REVISAR FLAMA'
+      action = status === 'APROBADO'
+        ? 'Mantener receta y tensión actual: el efecto flame es estable y no compromete estructura.'
+        : status === 'CONDICIONAL'
+          ? 'Controlar variación de efecto flame y estiraje para mantener regularidad visual entre partidas.'
+          : 'Corregir receta/estiraje de fantasía antes de liberar producción para evitar inestabilidad del efecto.'
     } else if (neLower.includes('12.5')) {
-      const riskyElong = elong && elong.min < 8
-      const riskyTenac = tenac && tenac.min < 15.5
-      if (riskyElong || riskyTenac) {
-        icon = '⚠️'
-        zone = 'ZONA CRÍTICA'
-        priorityLine = 'Prioridad 1: Monitorear roturas en Ne 12.5 por elongación ajustada y evitar sobre-tensión en filetero.'
-        action = 'Cuidar tensiones en urdidora y evitar sobre-tensionar filetero; el hilo tiene poco margen de absorción de impacto.'
-      } else {
-        zone = 'VIGILADO'
-        action = 'Mantener tensión moderada en urdidora y control fino de variación en tenacidad.'
-      }
+      action = status === 'APROBADO'
+        ? 'Apto para continuidad con monitoreo normal de urdidora e índigo.'
+        : status === 'CONDICIONAL'
+          ? 'Ajustar tensión de urdido y filetero; sostener vigilancia de elongación y tenacidad.'
+          : 'Detener liberación automática: requiere corrección de tensiones y validación técnica previa.'
     } else if (neLower.includes('10')) {
-      if (elong && tenac && elong.min >= 8.3 && tenac.mean >= 16) {
-        icon = '✅'
-        zone = 'ÓPTIMO'
-        action = 'Apto para máxima velocidad en telares de aire. Hilo estable y noble en corrida.'
-      } else {
-        icon = '⚠️'
-        zone = 'VIGILAR'
-        action = 'Revisar tensiones y dispersión de tenacidad antes de subir velocidad de telar.'
-      }
+      action = status === 'APROBADO'
+        ? 'Apto para corrida estable en telar con parámetros actuales.'
+        : status === 'CONDICIONAL'
+          ? 'Revisar tensiones y dispersión de tenacidad antes de subir velocidad de telar.'
+          : 'No liberar a máxima exigencia hasta recuperar umbrales de matriz en laboratorio.'
     } else if (neLower.includes('7')) {
-      if (cvm && trabajo && cvm.mean <= 11 && trabajo.mean >= 28) {
-        icon = '✅'
-        zone = 'SOBRADO'
-        action = 'Hilo fuerte y limpio. Sin riesgo operativo inmediato de cortes o barreado.'
-      } else {
-        icon = '⚠️'
-        zone = 'ATENCIÓN'
-        action = 'Ajustar limpieza y regularidad para estabilizar trama y evitar paradas puntuales.'
-      }
-    } else {
-      if ((elong && elong.min < 8) || (tenac && tenac.min < 15)) {
-        icon = '⚠️'
-        zone = 'RIESGO'
-        action = 'Ajustar tensión y revisar lote en laboratorio antes de exigir velocidad.'
-      }
+      zone = status === 'APROBADO' ? 'SOBRADO' : status === 'CONDICIONAL' ? 'ATENCIÓN' : 'NO APTO'
+      action = status === 'APROBADO'
+        ? 'Hilo fuerte y limpio. Sin riesgo operativo inmediato de cortes o barreado.'
+        : status === 'CONDICIONAL'
+          ? 'Ajustar limpieza y regularidad para estabilizar trama y evitar paradas puntuales.'
+          : 'Corregir regularidad/tenacidad antes de sostener ritmo de producción en trama.'
     }
 
     const operatorMap = new Map()
@@ -506,15 +579,17 @@ function buildNarrativeReport(rows, lote, mic) {
       })
     const operators = Array.from(operatorMap.values())
 
-    sectionLines.push(`${icon} Ne ${neLabel} (${role}) - ${zone}`)
+    sectionLines.push(`${icon} Ne ${neLabel} (${role}) - ${zone} (${status})`)
     if (elong) {
       sectionLines.push(`• Elongación: Rango ${elong.min.toFixed(1)}% - ${elong.max.toFixed(1)}%. ${elong.min < 8 ? 'El hilo está seco y con poco margen de estiramiento.' : 'Comportamiento elástico estable para proceso.'}${isolatedMinWarning(elong, elongMinContext)}`)
     }
     if (tenac) {
       sectionLines.push(`• Tenacidad: Dispersión ${tenac.min.toFixed(1)} - ${tenac.max.toFixed(1)} cN/tex.${isolatedMinWarning(tenac, tenacMinContext)}`)
     }
-    if (cvm && neLower.includes('7')) {
-      sectionLines.push(`• CVm%: ${cvm.mean.toFixed(1)}. ${cvm.mean <= 11 ? 'Limpieza excelente.' : 'Aún hay ruido de regularidad para corregir.'}`)
+    if (cvm && isFlame) {
+      sectionLines.push(`• CVm%: ${cvm.mean.toFixed(1)}. En FLAME se controla como variación de efecto (objetivo ≤ 18.0%).`)
+    } else if (cvm && (neLower.includes('7') || neLower.includes('10') || neLower.includes('12.5'))) {
+      sectionLines.push(`• CVm%: ${cvm.mean.toFixed(1)}. ${cvm.mean <= 12 ? 'Regularidad consistente con matriz.' : 'Regularidad ajustada; sostener monitoreo.'}`)
     }
     if (trabajo && (neLower.includes('7') || neLower.includes('flame'))) {
       sectionLines.push(`• Trabajo B: ${trabajo.mean.toFixed(1)}.`)
@@ -532,15 +607,19 @@ function buildNarrativeReport(rows, lote, mic) {
   const desvio = rangeStats(rows, 'Desvío %')
 
   const ajustes = []
-  if (delg50 && delg50.mean <= 0.2) {
+  if (delg50 && delg50.mean <= 0.5) {
     ajustes.push('• Puntos Delgados: Delg -50% prácticamente en cero. Mantener reglaje de pasador actual.')
+  } else if (delg50 && delg50.mean <= 1.0) {
+    ajustes.push(`• Puntos Delgados: Delg -50% en ${delg50.mean.toFixed(2)}. Nivel bajo; mantener monitoreo rutinario sin sobreajuste.`)
   } else if (delg50) {
     ajustes.push(`• Puntos Delgados: Delg -50% en ${delg50.mean.toFixed(2)}. Ajustar pasador para reducir cortes en trama.`)
   }
 
   if (mic !== null) {
-    if (mic >= 4.6) {
+    if (mic >= 4.7) {
       ajustes.push(`• Índigo: MIC ${mic.toFixed(2)} alto; vigilar absorción de color y riesgo de diferencias de tono.`)
+    } else if (mic > 4.5) {
+      ajustes.push(`• Índigo: MIC ${mic.toFixed(2)} en zona alta; controlar tono entre partidas y receta de tintura.`)
     } else {
       ajustes.push(`• Índigo: MIC ${mic.toFixed(2)} dentro de zona estable para teñido uniforme.`)
     }
@@ -561,6 +640,18 @@ function buildNarrativeReport(rows, lote, mic) {
     ? `🧪 Mezcla: Lote ${lote} (HVI MIC ${mic.toFixed(2)})`
     : `🧪 Mezcla: Lote ${lote} (HVI MIC sin dato)`
 
+  const priorityLine = rejectedTitles.length > 0
+    ? `Prioridad 1: Detener liberación automática en ${rejectedTitles.join(' / ')} hasta corregir desvíos de matriz.`
+    : conditionalTitles.length > 0
+      ? `Prioridad 1: Monitorear de cerca ${conditionalTitles.join(' / ')} para evitar escalada a rechazo.`
+      : 'Prioridad 1: Mantener el monitoreo diario del lote para sostener estabilidad.'
+
+  const estadoGeneralLine = rejectedTitles.length > 0
+    ? `Estado general: lote ${lote} con títulos rechazados bajo matriz operativa; requiere ajuste antes de continuidad plena.`
+    : conditionalTitles.length > 0
+      ? `Estado general: lote ${lote} en condición de seguimiento intensivo, sin desvíos críticos en este corte.`
+      : `Estado general: lote ${lote} bajo control y apto para continuidad operativa.`
+
   return [
     `📋 Informe de Auditoría Operativa: Lote ${lote}`,
     `📅 Periodo: ${periodStart} al ${periodEnd}`,
@@ -573,7 +664,7 @@ function buildNarrativeReport(rows, lote, mic) {
     ...ajustes,
     '',
     '🚀 CONCLUSIÓN',
-    `Estado general: lote ${lote} bajo control, con seguimiento puntual en los títulos más sensibles.`,
+    estadoGeneralLine,
     priorityLine,
     '',
     '📑 Generado por Control de Calidad - Laboratorio Uster/TensoRapid'

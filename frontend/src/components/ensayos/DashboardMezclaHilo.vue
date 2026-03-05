@@ -217,33 +217,33 @@
               </tr>
 
               <!-- ── Hilo section per Ne ── -->
-              <template v-for="ne in allNes" :key="`ne-${ne}`">
+              <template v-for="neItem in allNes" :key="`ne-${neItem.key}`">
                 <tr class="bg-purple-50/50">
                   <td colspan="100" class="px-5 py-2 font-bold text-purple-600 text-[10px] uppercase tracking-widest">
-                    🧵 Hilo — Ne {{ ne }} / 1 (Uster + Tensorapid)
+                    🧵 Hilo — Ne {{ neItem.label }}{{ neItem.isFlame ? '' : ' / 1' }} (Uster + Tensorapid)
                   </td>
                 </tr>
-                <tr v-for="fila in HILO_ROWS" :key="`hilo-${ne}-${fila.key}`"
+                <tr v-for="fila in HILO_ROWS" :key="`hilo-${neItem.key}-${fila.key}`"
                   class="border-t border-slate-50 hover:bg-slate-50 transition-colors">
                   <td class="px-5 py-2.5 text-slate-600 font-medium">
                     {{ fila.label }}
                     <div v-if="fila.unit" class="text-[9px] text-slate-400">{{ fila.unit }}</div>
                   </td>
-                  <td v-for="(mistura, idx) in lotesList" :key="`hilo-${mistura}-${ne}-${fila.key}`"
+                  <td v-for="(mistura, idx) in lotesList" :key="`hilo-${mistura}-${neItem.key}-${fila.key}`"
                     class="px-4 py-2.5 text-center font-mono"
                     :class="[
                       Number(mistura) === Number(loteActual) ? 'bg-blue-50/40' : '',
-                      getHilo(mistura, ne, fila.key) != null && fila.thresholds
-                        ? cellBg(getHilo(mistura, ne, fila.key), fila.thresholds[0], fila.thresholds[1], fila.inverse) : ''
+                      getHilo(mistura, neItem.key, fila.key) != null && fila.thresholds
+                        ? cellBg(getHilo(mistura, neItem.key, fila.key), fila.thresholds[0], fila.thresholds[1], fila.inverse) : ''
                     ]">
-                    <template v-if="getHilo(mistura, ne, fila.key) != null">
+                    <template v-if="getHilo(mistura, neItem.key, fila.key) != null">
                       <span class="font-bold text-slate-700">
-                        {{ fmt(getHilo(mistura, ne, fila.key), fila.dec) }}
+                        {{ fmt(getHilo(mistura, neItem.key, fila.key), fila.dec) }}
                       </span>
-                      <span v-if="idx > 0 && getHilo(lotesList[0], ne, fila.key) != null"
+                      <span v-if="idx > 0 && getHilo(lotesList[0], neItem.key, fila.key) != null"
                         class="ml-1 text-[9px]"
-                        :class="trendClass(getHilo(lotesList[0], ne, fila.key), getHilo(mistura, ne, fila.key), fila.inverse)">
-                        {{ trendArrow(getHilo(lotesList[0], ne, fila.key), getHilo(mistura, ne, fila.key)) }}
+                        :class="trendClass(getHilo(lotesList[0], neItem.key, fila.key), getHilo(mistura, neItem.key, fila.key), fila.inverse)">
+                        {{ trendArrow(getHilo(lotesList[0], neItem.key, fila.key), getHilo(mistura, neItem.key, fila.key)) }}
                       </span>
                     </template>
                     <span v-else class="text-slate-200">—</span>
@@ -356,12 +356,12 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in tablaAptitud" :key="`apt-${row.ne}`"
+              <tr v-for="row in tablaAptitud" :key="`apt-${row.neKey}`"
                 class="border-t border-slate-100 hover:bg-slate-50/50 transition-colors">
-                <td class="px-4 py-3 font-bold text-slate-700 whitespace-nowrap">Ne {{ row.ne }}</td>
+                <td class="px-4 py-3 font-bold text-slate-700 whitespace-nowrap">Ne {{ row.neDisplay }}</td>
                 <td class="px-3 py-3 text-center">
                   <span class="px-2 py-0.5 rounded-full text-[10px] font-bold"
-                    :class="row.app === 'Urdimbre' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'">
+                    :class="row.app.startsWith('Urdimbre') ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'">
                     {{ row.app }}
                   </span>
                 </td>
@@ -465,9 +465,9 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="row in tablaAptitud" :key="`det-${row.ne}`"
+                <tr v-for="row in tablaAptitud" :key="`det-${row.neKey}`"
                   class="border-t border-slate-50 hover:bg-slate-50/70 transition-colors">
-                  <td class="px-2 py-1.5 font-bold text-slate-600">{{ row.ne }}</td>
+                  <td class="px-2 py-1.5 font-bold text-slate-600">{{ row.neDisplay }}</td>
                   <td class="px-2 py-1.5 text-center" :class="aptCellClass(row.ev.cvm)">{{ row.vals.cvm != null ? row.vals.cvm.toFixed(2) : '–' }}</td>
                   <td class="px-2 py-1.5 text-center text-slate-600">{{ row.vals.thin_30 != null ? row.vals.thin_30.toFixed(1) : '–' }}</td>
                   <td class="px-2 py-1.5 text-center text-slate-600">{{ row.vals.thin_40 != null ? row.vals.thin_40.toFixed(1) : '–' }}</td>
@@ -507,11 +507,11 @@
             💬 Comentarios de Planta
             <span class="text-[9px] font-normal text-slate-400 normal-case">(vocabulario de hilandería)</span>
           </h3>
-          <div v-for="row in tablaAptitud" :key="`com-${row.ne}`" class="space-y-1">
+          <div v-for="row in tablaAptitud" :key="`com-${row.neKey}`" class="space-y-1">
             <template v-if="row.comentarios.length">
               <div v-for="(com, ci) in row.comentarios" :key="ci"
                 class="text-xs text-slate-600 bg-slate-50 rounded-lg px-3 py-1.5 flex items-start gap-2">
-                <span class="font-bold text-slate-500 shrink-0 font-mono">Ne {{ row.ne }}:</span>
+                <span class="font-bold text-slate-500 shrink-0 font-mono">Ne {{ row.neDisplay }}:</span>
                 <span class="italic">{{ com }}</span>
               </div>
             </template>
@@ -587,6 +587,48 @@ const MATRIZ_REQUISITOS = {
   '12.5': { app: 'Urdimbre', dest: ['URDIDORA','INDIGO','TELAR'], sciMin: 135, strMin: 27, umb: { tenacidad: { ok: 16.5, w: 15.5, t: 'min' }, elongacion: { ok: 8.0, w: 7.5, t: 'min' }, cvm: { ok: 11.5, w: 12.5, t: 'max' }, neps_200: { ok: 450, w: 600, t: 'max' }, vellosidad: { ok: 5.5, w: 6.5, t: 'max' } } },
   '14':   { app: 'Urdimbre', dest: ['URDIDORA','INDIGO','TELAR'], sciMin: 140, strMin: 28, umb: { tenacidad: { ok: 17.0, w: 16.0, t: 'min' }, elongacion: { ok: 8.5, w: 8.0, t: 'min' }, cvm: { ok: 11.0, w: 12.0, t: 'max' }, neps_200: { ok: 400, w: 550, t: 'max' }, vellosidad: { ok: 5.0, w: 6.0, t: 'max' } } },
 }
+
+const FLAME_UMB_AJUSTES = {
+  cvm: { ok: 18.0, w: 20.0, t: 'max' },
+  neps_200: { ok: 700, w: 850, t: 'max' },
+}
+
+function resolveMatrizBaseByNe(neValue) {
+  if (!Number.isFinite(neValue)) return null
+  let bestKey = null
+  let bestNum = null
+  let bestDist = Number.POSITIVE_INFINITY
+
+  for (const key of Object.keys(MATRIZ_REQUISITOS)) {
+    const num = parseFloat(key)
+    if (!Number.isFinite(num)) continue
+    const dist = Math.abs(num - neValue)
+    if (dist < bestDist || (Math.abs(dist - bestDist) < 1e-9 && num > (bestNum ?? -Infinity))) {
+      bestDist = dist
+      bestNum = num
+      bestKey = key
+    }
+  }
+
+  return bestDist <= 2 ? bestKey : null
+}
+
+function getMatrizRequisitos(neValue, isFlame = false) {
+  const key = resolveMatrizBaseByNe(neValue)
+  if (!key) return null
+
+  const base = MATRIZ_REQUISITOS[key]
+  if (!base || !isFlame || neValue < 9) return base
+
+  return {
+    ...base,
+    app: 'Urdimbre Flame',
+    umb: {
+      ...base.umb,
+      ...FLAME_UMB_AJUSTES,
+    },
+  }
+}
 // Variables críticas por proceso productivo
 const PROC_VARS = {
   URDIDORA: { label: '🏭 Urdidora',   vars: ['elongacion', 'tenacidad', 'thin_50'], tip: 'Tensión de urdido — elongación y resistencia críticas' },
@@ -594,13 +636,57 @@ const PROC_VARS = {
   TELAR:    { label: '🔧 Telar aire',  vars: ['tenacidad', 'elongacion', 'cvm', 'neps_200'], tip: 'Alta velocidad — exige tenacidad, CVm% y limpieza' },
 }
 
+function getProcVarsForRow(proc, isFlame = false) {
+  const base = PROC_VARS[proc]
+  if (!base || !isFlame) return base
+
+  if (proc === 'INDIGO') {
+    return { ...base, vars: ['neps_200', 'vellosidad'] }
+  }
+  if (proc === 'TELAR') {
+    return { ...base, vars: ['tenacidad', 'elongacion', 'neps_200'] }
+  }
+  return base
+}
+
 // ── Computed ───────────────────────────────────────────────────────────────
 const hasData     = computed(() => rows.value.length > 0)
 const lotesList   = computed(() => [...new Set(rows.value.map(r => r.mistura))].sort((a, b) => Number(a) - Number(b)))
 const loteActual  = computed(() => lotesList.value.length ? lotesList.value[lotesList.value.length - 1] : null)
+
+function parseFlameFlag(value) {
+  if (value === true || value === false) return value
+  if (typeof value === 'number') return value === 1
+  const text = String(value ?? '').trim().toLowerCase()
+  return text === 'true' || text === '1' || text === 't' || text === 'yes'
+}
+
+function buildNeKey(ne, isFlame) {
+  return `${String(ne)}|${isFlame ? 'F' : 'L'}`
+}
+
+function formatNeDisplay(ne, isFlame) {
+  return `${String(ne)}${isFlame ? ' FLAME' : ''}`
+}
+
 const allNes      = computed(() => {
-  const nes = [...new Set(rows.value.filter(r => r.ne != null).map(r => String(r.ne)))]
-  return nes.sort((a, b) => parseFloat(a) - parseFloat(b))
+  const map = new Map()
+  for (const row of rows.value) {
+    if (row.ne == null) continue
+    const ne = String(row.ne)
+    const isFlame = parseFlameFlag(row.is_flame)
+    const key = buildNeKey(ne, isFlame)
+    if (!map.has(key)) {
+      map.set(key, { key, ne, isFlame, label: formatNeDisplay(ne, isFlame) })
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => {
+    const da = parseFloat(a.ne)
+    const db = parseFloat(b.ne)
+    if (!Number.isNaN(da) && !Number.isNaN(db) && da !== db) return da - db
+    if (a.isFlame !== b.isFlame) return a.isFlame ? 1 : -1
+    return a.label.localeCompare(b.label)
+  })
 })
 
 // ── Helpers de datos ──────────────────────────────────────────────────────
@@ -611,8 +697,11 @@ function getHVI(mistura, key) {
   return v != null ? parseFloat(v) : null
 }
 
-function getHilo(mistura, ne, key) {
-  const row = rows.value.find(r => String(r.mistura) === String(mistura) && String(r.ne) === String(ne))
+function getHilo(mistura, neKey, key) {
+  const row = rows.value.find(r =>
+    String(r.mistura) === String(mistura) &&
+    buildNeKey(r.ne, parseFlameFlag(r.is_flame)) === String(neKey)
+  )
   if (!row) return null
   const v = row[key]
   return v != null ? parseFloat(v) : null
@@ -652,26 +741,38 @@ function semaforo(mistura) {
   const issues = []
 
   for (const r of hiloRows) {
+    const rowIsFlame = parseFlameFlag(r.is_flame)
     const ten = r.tenacidad != null ? parseFloat(r.tenacidad) : null
     const elo = r.elongacion != null ? parseFloat(r.elongacion) : null
     const nps = r.neps_200 != null ? parseFloat(r.neps_200) : null
     const cvm = r.cvm != null ? parseFloat(r.cvm) : null
+    const neTxt = formatNeDisplay(r.ne, rowIsFlame)
 
     if (ten != null) {
-      if (ten < 14.5) { level = 'rojo'; issues.push(`Ne${r.ne}: Tenacidad ${ten} cN/tex — CRÍTICO Telar`) }
-      else if (ten < 16.0) { if (level === 'verde') level = 'amarillo'; issues.push(`Ne${r.ne}: Tenacidad ${ten} cN/tex — precaución`) }
+      if (ten < 14.5) { level = 'rojo'; issues.push(`Ne ${neTxt}: Tenacidad ${ten} cN/tex — CRÍTICO Telar`) }
+      else if (ten < 16.0) { if (level === 'verde') level = 'amarillo'; issues.push(`Ne ${neTxt}: Tenacidad ${ten} cN/tex — precaución`) }
     }
     if (elo != null && elo < 7.5) {
       if (level === 'verde') level = 'amarillo'
-      issues.push(`Ne${r.ne}: Elongación ${elo}% — riesgo rotura Urdidora`)
+      issues.push(`Ne ${neTxt}: Elongación ${elo}% — riesgo rotura Urdidora`)
     }
-    if (nps != null && nps > 700) {
+    if (nps != null && nps > (rowIsFlame ? 850 : 700)) {
       level = 'rojo'
-      issues.push(`Ne${r.ne}: Neps ${nps}/km — riesgo en Índigo`)
-    }
-    if (cvm != null && cvm > 13.0) {
+      issues.push(`Ne ${neTxt}: Neps ${nps}/km — riesgo en Índigo`)
+    } else if (nps != null && rowIsFlame && nps > 700) {
       if (level === 'verde') level = 'amarillo'
-      issues.push(`Ne${r.ne}: CVm% ${cvm}% — masa irregular`)
+      issues.push(`Ne ${neTxt}: Neps ${nps}/km — vigilar estabilidad de efecto`)
+    }
+    if (cvm != null) {
+      const cvmWarn = rowIsFlame ? 18.0 : 13.0
+      const cvmCrit = rowIsFlame ? 20.0 : 14.5
+      if (cvm > cvmCrit) {
+        if (level !== 'rojo') level = 'rojo'
+        issues.push(`Ne ${neTxt}: CVm% ${cvm}% — variación fuera de banda`)
+      } else if (cvm > cvmWarn) {
+        if (level === 'verde') level = 'amarillo'
+        issues.push(`Ne ${neTxt}: CVm% ${cvm}% — ${rowIsFlame ? 'controlar efecto flame' : 'masa irregular'}`)
+      }
     }
   }
 
@@ -778,7 +879,7 @@ function aptDesvioLabel(key) {
   return { cvm: 'CVm%', neps_200: 'Neps +200%', tenacidad: 'Tenac.', elongacion: 'Elong.', vellosidad: 'Vell. H' }[key] || key
 }
 
-function generarComentarioPlanta(ne, app, vals, hvi) {
+function generarComentarioPlanta(ne, app, vals, hvi, isFlame = false) {
   const coms = []
   // Tenacidad — vocabulario de planta
   if (vals.tenacidad != null) {
@@ -794,22 +895,29 @@ function generarComentarioPlanta(ne, app, vals, hvi) {
     else coms.push(`Masa estable (CVm ${vals.cvm.toFixed(1)}%). Sin riesgo de barreado.`)
   }
   // CVm% para Urdimbre — uniformidad
-  if (app === 'Urdimbre' && vals.cvm != null) {
-    if (vals.cvm > 13) coms.push(`CVm ${vals.cvm.toFixed(1)}% — masa irregular para urdimbre. Teñido desparejo en Índigo.`)
-    else if (vals.cvm > 12) coms.push(`CVm ${vals.cvm.toFixed(1)}% — aceptable, pero sin mucho margen para Índigo.`)
+  if (app.startsWith('Urdimbre') && vals.cvm != null) {
+    if (isFlame) {
+      if (vals.cvm > 20) coms.push(`CVm ${vals.cvm.toFixed(1)}% — variación flame fuera de banda. Revisar receta y estiraje de fantasía.`)
+      else if (vals.cvm > 18) coms.push(`CVm ${vals.cvm.toFixed(1)}% — efecto flame intenso; monitorear estabilidad visual entre partidas.`)
+      else coms.push(`CVm ${vals.cvm.toFixed(1)}% — variación consistente con hilo flame, sin impacto estructural relevante.`)
+    } else if (vals.cvm > 13) {
+      coms.push(`CVm ${vals.cvm.toFixed(1)}% — masa irregular para urdimbre. Teñido desparejo en Índigo.`)
+    } else if (vals.cvm > 12) {
+      coms.push(`CVm ${vals.cvm.toFixed(1)}% — aceptable, pero sin mucho margen para Índigo.`)
+    }
   }
   // Elongación para Urdimbre
-  if (app === 'Urdimbre' && vals.elongacion != null) {
+  if (app.startsWith('Urdimbre') && vals.elongacion != null) {
     if (vals.elongacion >= 9) coms.push(`Elongación excelente (${vals.elongacion.toFixed(1)}%). La Urdidora y el Índigo lo van a pasar sin problemas.`)
     else if (vals.elongacion >= 8) coms.push(`Elongación correcta (${vals.elongacion.toFixed(1)}%). Camina bien por la Urdidora.`)
     else if (vals.elongacion >= 7.5) coms.push(`Elongación ajustada (${vals.elongacion.toFixed(1)}%). Precaución en tensión de urdido — el hilo no perdona.`)
     else coms.push(`⚠️ Elongación baja (${vals.elongacion.toFixed(1)}%). Riesgo real de rotura en Urdidora. Bajar tensión o velocidad.`)
   }
   // Neps para Índigo
-  if (app === 'Urdimbre' && vals.neps_200 != null) {
+  if (app.startsWith('Urdimbre') && vals.neps_200 != null) {
     if (vals.neps_200 < 200) coms.push(`Hilo muy limpio para Índigo (Neps ${vals.neps_200.toFixed(0)}/km). Teñido uniforme.`)
     else if (vals.neps_200 < 500) coms.push(`Neps aceptables para Índigo (${vals.neps_200.toFixed(0)}/km).`)
-    else if (vals.neps_200 < 700) coms.push(`Neps en zona de riesgo para Índigo (${vals.neps_200.toFixed(0)}/km). Posibles puntos claros en teñido.`)
+    else if (vals.neps_200 < (isFlame ? 850 : 700)) coms.push(`Neps en zona de riesgo para Índigo (${vals.neps_200.toFixed(0)}/km). Posibles puntos claros en teñido.`)
     else coms.push(`⚠️ Neps muy altos (${vals.neps_200.toFixed(0)}/km). Van a saltar en el Índigo — colorante desparejo.`)
   }
   // MIC — fibra
@@ -836,10 +944,12 @@ const tablaAptitud = computed(() => {
 
   return hilos.map(h => {
     const ne = String(h.ne)
+    const isFlame = parseFlameFlag(h.is_flame)
+    const neDisplay = formatNeDisplay(ne, isFlame)
+    const neKey = buildNeKey(ne, isFlame)
     const nNum = parseFloat(ne)
-    const mKey = Object.keys(MATRIZ_REQUISITOS).find(k => Math.abs(parseFloat(k) - nNum) < 0.1)
-    const mat = mKey ? MATRIZ_REQUISITOS[mKey] : null
-    const app = mat?.app || (nNum <= 9 ? 'Trama' : 'Urdimbre')
+    const mat = getMatrizRequisitos(nNum, isFlame)
+    const app = mat?.app || (nNum <= 9 ? 'Trama' : (isFlame ? 'Urdimbre Flame' : 'Urdimbre'))
     const dest = mat?.dest || (nNum <= 9 ? ['TELAR'] : ['URDIDORA', 'INDIGO', 'TELAR'])
     const umb = mat?.umb || {}
 
@@ -868,7 +978,8 @@ const tablaAptitud = computed(() => {
 
     // Evaluación por proceso
     const procesos = {}
-    for (const [proc, cfg] of Object.entries(PROC_VARS)) {
+    for (const proc of Object.keys(PROC_VARS)) {
+      const cfg = getProcVarsForRow(proc, isFlame)
       if (!dest.includes(proc)) { procesos[proc] = 'na'; continue }
       const results = cfg.vars.map(k => ev[k] || (vals[k] != null ? 'ok' : 'sin-dato')).filter(r => r !== 'sin-dato')
       if (!results.length) { procesos[proc] = 'sin-dato'; continue }
@@ -879,9 +990,9 @@ const tablaAptitud = computed(() => {
     const allP = Object.values(procesos)
     const pasador = allP.includes('crit') ? 'rechazado' : (allP.includes('warn') || hviAlerts.length > 0) ? 'condicional' : 'aprobado'
 
-    const comentarios = generarComentarioPlanta(ne, app, vals, hvi)
+    const comentarios = generarComentarioPlanta(neDisplay, app, vals, hvi, isFlame)
 
-    return { ne, app, dest, vals, ev, procesos, pasador, desvios, hviAlerts, comentarios, nota: mat?.nota || '' }
+    return { ne, neDisplay, neKey, isFlame, app, dest, vals, ev, procesos, pasador, desvios, hviAlerts, comentarios, nota: mat?.nota || '' }
   })
 })
 
@@ -905,14 +1016,13 @@ function generarAlertaWhatsApp() {
   ]
 
   for (const row of tablaAptitud.value) {
-    const { ne, app, vals, ev, procesos, pasador, desvios, hviAlerts } = row
+    const { ne, neDisplay, app, vals, pasador, desvios, hviAlerts, isFlame } = row
     const nNum = parseFloat(ne)
-    const mKey = Object.keys(MATRIZ_REQUISITOS).find(k => Math.abs(parseFloat(k) - nNum) < 0.1)
-    const mat = mKey ? MATRIZ_REQUISITOS[mKey] : null
+    const mat = getMatrizRequisitos(nNum, isFlame)
 
     // Icono de estado
     const neIco = pasador === 'rechazado' ? '🔴' : pasador === 'condicional' ? '⚠️' : '✅'
-    lines.push(`${neIco} *Ne ${ne} (${app})*:`)
+    lines.push(`${neIco} *Ne ${neDisplay} (${app})*:`)
 
     if (pasador === 'aprobado' && !hviAlerts.length) {
       lines.push(`✅ Todos los parámetros dentro de la Matriz. Sin observaciones.`)
@@ -921,7 +1031,7 @@ function generarAlertaWhatsApp() {
     }
 
     // 1) Alerta de elongación para urdimbre
-    if (app === 'Urdimbre' && vals.elongacion != null && vals.elongacion < 8.0) {
+    if (app.startsWith('Urdimbre') && vals.elongacion != null && vals.elongacion < 8.0) {
       const critico = vals.elongacion < 7.5
       lines.push(`🧵 ${critico ? '¡ATENCIÓN' : 'Precaución'} en Urdido! Elongación en *${f(vals.elongacion)}%* ${critico ? '(Límite crítico)' : '(Margen ajustado)'}. El hilo está "seco" y no tiene margen de estiramiento.`)
       lines.push(`📍 *Acción:* Controlar tensiones en filetero y bajar velocidad si hay cortes frecuentes.`)
@@ -965,7 +1075,7 @@ function generarAlertaWhatsApp() {
     }
 
     // 6) Neps altos para Índigo
-    if (app === 'Urdimbre' && vals.neps_200 != null && vals.neps_200 > 500) {
+    if (app.startsWith('Urdimbre') && vals.neps_200 != null && vals.neps_200 > (isFlame ? 700 : 500)) {
       lines.push(`🧶 Neps +200% en *${f(vals.neps_200, 0)}/km*. Puntos claros en Índigo. ${vals.neps_200 > 700 ? 'Evaluar ajuste de cardas urgente.' : 'Monitorear partida.'}`)
     }
 

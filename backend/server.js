@@ -6308,6 +6308,10 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
         SELECT
           u.testnr,
           u.nomcount AS ne,
+          CASE
+            WHEN lower(trim(COALESCE(u.matclass, ''))) = 'hilo de fantasia' THEN true
+            ELSE false
+          END AS is_flame,
           COALESCE(
             (regexp_match(u.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1],
             (regexp_match(u.lote, '(\\d+)'))[1]
@@ -6320,7 +6324,7 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
           AND ($2::text IS NULL OR u.nomcount = SPLIT_PART($2, '/', 1) OR u.nomcount::text ILIKE $2)
       ),
       uster_lotes AS (
-        SELECT testnr, ne, mistura_str::integer AS mistura
+        SELECT testnr, ne, is_flame, mistura_str::integer AS mistura
         FROM uster_base
         WHERE mistura_str ~ '^\\d+$'
           AND mistura_str::integer = ANY($1::integer[])
@@ -6329,6 +6333,7 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
         SELECT
           ul.mistura,
           ul.ne,
+          ul.is_flame,
           ROUND(AVG(t.cvm_percent)::numeric,    2) AS cvm,
           ROUND(AVG(t.h)::numeric,              2) AS vellosidad,
           ROUND(AVG(t.neps_200_km)::numeric,    1) AS neps_200,
@@ -6342,12 +6347,13 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
           COUNT(DISTINCT ul.testnr)               AS n_uster
         FROM uster_lotes ul
         JOIN tb_uster_tbl t ON t.testnr = ul.testnr
-        GROUP BY ul.mistura, ul.ne
+        GROUP BY ul.mistura, ul.ne, ul.is_flame
       ),
       tenso_agg AS (
         SELECT
           ul.mistura,
           ul.ne,
+          ul.is_flame,
           ROUND(AVG(tt.tenacidad)::numeric,  2) AS tenacidad,
           ROUND(AVG(tt.elongacion)::numeric, 2) AS elongacion,
           ROUND(AVG(tt.fuerza_b)::numeric,   2) AS fuerza_b,
@@ -6355,7 +6361,7 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
         FROM uster_lotes ul
         JOIN tb_tensorapid_par tp ON tp.uster_testnr = ul.testnr
         JOIN tb_tensorapid_tbl tt ON tt.testnr = tp.testnr
-        GROUP BY ul.mistura, ul.ne
+        GROUP BY ul.mistura, ul.ne, ul.is_flame
       )
       SELECT
         h.mistura,
@@ -6369,6 +6375,7 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
         h.n_fardos,
         h.n_secuencias,
         ua.ne,
+        ua.is_flame,
         ua.cvm,
         ua.vellosidad,
         ua.neps_200,
@@ -6386,8 +6393,8 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
         ta.trabajo_b
       FROM hvi_agg h
       LEFT JOIN uster_agg  ua ON ua.mistura = h.mistura
-      LEFT JOIN tenso_agg  ta ON ta.mistura = h.mistura AND ta.ne = ua.ne
-      ORDER BY h.mistura ASC, ua.ne::numeric ASC NULLS LAST
+      LEFT JOIN tenso_agg  ta ON ta.mistura = h.mistura AND ta.ne = ua.ne AND ta.is_flame = ua.is_flame
+      ORDER BY h.mistura ASC, ua.ne::numeric ASC NULLS LAST, ua.is_flame ASC NULLS FIRST
     `;
 
     const result = await query(sql, [loteList, ne || null], 'dashboard/mezcla-lotes');
@@ -6431,6 +6438,63 @@ function generarNarrativaLocal(rows, loteActual, proveedores = []) {
   const refs   = lotesSorted.filter(l => l !== actual);
 
   const f = (v, d = 2) => (v == null || isNaN(parseFloat(v))) ? '–' : parseFloat(v).toFixed(d);
+  const isFlame = (r) => {
+    if (r?.is_flame === true || r?.is_flame === false) return r.is_flame;
+    const t = String(r?.is_flame ?? '').trim().toLowerCase();
+    return t === 'true' || t === '1' || t === 't' || t === 'yes';
+  };
+  const neLabel = (r) => `${r?.ne}${isFlame(r) ? ' FLAME' : ''}`;
+  const MATRIZ_BASE = {
+    '7':    { app: 'Trama',    dest: ['TELAR'],                     sciMin: 115, strMin: 24, umb: { tenacidad: { ok: 14.0, w: 13.0, t: 'min' }, elongacion: { ok: 7.0, w: 6.0, t: 'min' }, cvm: { ok: 13.5, w: 14.5, t: 'max' }, neps_200: { ok: 700, w: 850, t: 'max' } } },
+    '9':    { app: 'Trama',    dest: ['TELAR'],                     sciMin: 120, strMin: 25, umb: { tenacidad: { ok: 14.5, w: 13.5, t: 'min' }, elongacion: { ok: 7.0, w: 6.5, t: 'min' }, cvm: { ok: 13.0, w: 14.0, t: 'max' }, neps_200: { ok: 600, w: 750, t: 'max' } } },
+    '10':   { app: 'Urdimbre', dest: ['URDIDORA','INDIGO','TELAR'], sciMin: 130, strMin: 26, umb: { tenacidad: { ok: 16.0, w: 15.0, t: 'min' }, elongacion: { ok: 8.0, w: 7.5, t: 'min' }, cvm: { ok: 12.0, w: 13.0, t: 'max' }, neps_200: { ok: 500, w: 650, t: 'max' } } },
+    '12.5': { app: 'Urdimbre', dest: ['URDIDORA','INDIGO','TELAR'], sciMin: 135, strMin: 27, umb: { tenacidad: { ok: 16.5, w: 15.5, t: 'min' }, elongacion: { ok: 8.0, w: 7.5, t: 'min' }, cvm: { ok: 11.5, w: 12.5, t: 'max' }, neps_200: { ok: 450, w: 600, t: 'max' } } },
+    '14':   { app: 'Urdimbre', dest: ['URDIDORA','INDIGO','TELAR'], sciMin: 140, strMin: 28, umb: { tenacidad: { ok: 17.0, w: 16.0, t: 'min' }, elongacion: { ok: 8.5, w: 8.0, t: 'min' }, cvm: { ok: 11.0, w: 12.0, t: 'max' }, neps_200: { ok: 400, w: 550, t: 'max' } } },
+  };
+  const resolveMatrizKey = (neValue) => {
+    if (!Number.isFinite(neValue)) return null;
+    let bestKey = null;
+    let bestNum = null;
+    let bestDist = Number.POSITIVE_INFINITY;
+    for (const key of Object.keys(MATRIZ_BASE)) {
+      const num = parseFloat(key);
+      if (!Number.isFinite(num)) continue;
+      const dist = Math.abs(num - neValue);
+      if (dist < bestDist || (Math.abs(dist - bestDist) < 1e-9 && num > (bestNum ?? -Infinity))) {
+        bestDist = dist;
+        bestNum = num;
+        bestKey = key;
+      }
+    }
+    return bestDist <= 2 ? bestKey : null;
+  };
+  const getMatriz = (neValue, flame) => {
+    const key = resolveMatrizKey(neValue);
+    if (!key) return null;
+    const base = MATRIZ_BASE[key];
+    if (!base || !flame || neValue < 9) return base;
+    return {
+      ...base,
+      app: 'Urdimbre Flame',
+      umb: {
+        ...base.umb,
+        cvm: { ok: 18.0, w: 20.0, t: 'max' },
+        neps_200: { ok: 700, w: 850, t: 'max' },
+      },
+    };
+  };
+  const evalUmbral = (value, umbral) => {
+    if (value == null || !Number.isFinite(value) || !umbral) return 'sin-dato';
+    const warn = Number.isFinite(umbral.w) ? umbral.w : umbral.ok;
+    if (umbral.t === 'min') {
+      if (value >= umbral.ok) return 'ok';
+      if (value >= warn) return 'warn';
+      return 'crit';
+    }
+    if (value <= umbral.ok) return 'ok';
+    if (value <= warn) return 'warn';
+    return 'crit';
+  };
   const pct = (a, b) => {
     if (a == null || b == null) return '';
     const d = parseFloat(b) - parseFloat(a);
@@ -6447,15 +6511,33 @@ function generarNarrativaLocal(rows, loteActual, proveedores = []) {
   let nivelGlobal = 'VERDE';
   const alertas = [];
   for (const h of dataActual.hilos) {
+    const flame = isFlame(h);
     const ten = parseFloat(h.tenacidad);
     const elo = parseFloat(h.elongacion);
     const nps = parseFloat(h.neps_200);
     const cvm = parseFloat(h.cvm);
-    if (!isNaN(ten) && ten < 14.5) { nivelGlobal = 'ROJO'; alertas.push(`Ne${h.ne}: Tenacidad crítica (${f(ten)} cN/tex < 14.5)`); }
-    else if (!isNaN(ten) && ten < 16.0) { if (nivelGlobal === 'VERDE') nivelGlobal = 'AMARILLO'; alertas.push(`Ne${h.ne}: Tenacidad en zona de precaución (${f(ten)} cN/tex)`); }
-    if (!isNaN(elo) && elo < 7.5) { if (nivelGlobal === 'VERDE') nivelGlobal = 'AMARILLO'; alertas.push(`Ne${h.ne}: Elongación ${f(elo)}% – riesgo rotura en Urdidora`); }
-    if (!isNaN(nps) && nps > 700) { nivelGlobal = 'ROJO'; alertas.push(`Ne${h.ne}: Neps ${f(nps,1)}/km – riesgo en Índigo`); }
-    if (!isNaN(cvm) && cvm > 13.0) { if (nivelGlobal === 'VERDE') nivelGlobal = 'AMARILLO'; alertas.push(`Ne${h.ne}: CVm% ${f(cvm)} – masa irregular`); }
+    const neTxt = neLabel(h);
+    if (!isNaN(ten) && ten < 14.5) { nivelGlobal = 'ROJO'; alertas.push(`Ne${neTxt}: Tenacidad crítica (${f(ten)} cN/tex < 14.5)`); }
+    else if (!isNaN(ten) && ten < 16.0) { if (nivelGlobal === 'VERDE') nivelGlobal = 'AMARILLO'; alertas.push(`Ne${neTxt}: Tenacidad en zona de precaución (${f(ten)} cN/tex)`); }
+    if (!isNaN(elo) && elo < 7.5) { if (nivelGlobal === 'VERDE') nivelGlobal = 'AMARILLO'; alertas.push(`Ne${neTxt}: Elongación ${f(elo)}% – riesgo rotura en Urdidora`); }
+    if (!isNaN(nps) && nps > (flame ? 850 : 700)) {
+      nivelGlobal = 'ROJO';
+      alertas.push(`Ne${neTxt}: Neps ${f(nps,1)}/km – riesgo en Índigo`);
+    } else if (!isNaN(nps) && flame && nps > 700) {
+      if (nivelGlobal === 'VERDE') nivelGlobal = 'AMARILLO';
+      alertas.push(`Ne${neTxt}: Neps ${f(nps,1)}/km – vigilar estabilidad del efecto flame`);
+    }
+    if (!isNaN(cvm)) {
+      const cvmWarn = flame ? 18.0 : 13.0;
+      const cvmCrit = flame ? 20.0 : 14.5;
+      if (cvm > cvmCrit) {
+        nivelGlobal = 'ROJO';
+        alertas.push(`Ne${neTxt}: CVm% ${f(cvm)} – variación fuera de banda`);
+      } else if (cvm > cvmWarn) {
+        if (nivelGlobal === 'VERDE') nivelGlobal = 'AMARILLO';
+        alertas.push(`Ne${neTxt}: CVm% ${f(cvm)} – ${flame ? 'controlar efecto flame' : 'masa irregular'}`);
+      }
+    }
   }
 
   const estadoLabel = { VERDE: '✅ APROBADO PARA CONTINUIDAD', AMARILLO: '⚠️ PRECAUCIÓN – REVISAR', ROJO: '🔴 CRÍTICO – DETENER' }[nivelGlobal];
@@ -6535,9 +6617,10 @@ function generarNarrativaLocal(rows, loteActual, proveedores = []) {
     const ten = parseFloat(h.tenacidad);
     const elo = parseFloat(h.elongacion);
     const nps = parseFloat(h.neps_200);
-    if (!isNaN(ten) && ten >= 16.0) puntosNe.push(`🔸 Ne${h.ne}: Tenacidad ${f(ten)} cN/tex — APTO telar alta velocidad.`);
-    if (!isNaN(elo) && elo >= 8.0)  puntosNe.push(`🔸 Ne${h.ne}: Elongación ${f(elo)}% — buena absorción de impacto en Urdidora.`);
-    if (!isNaN(nps) && nps < 200)   puntosNe.push(`🔸 Ne${h.ne}: Neps ${f(nps,1)}/km — hilo muy limpio para Índigo.`);
+    const neTxt = neLabel(h);
+    if (!isNaN(ten) && ten >= 16.0) puntosNe.push(`🔸 Ne${neTxt}: Tenacidad ${f(ten)} cN/tex — APTO telar alta velocidad.`);
+    if (!isNaN(elo) && elo >= 8.0)  puntosNe.push(`🔸 Ne${neTxt}: Elongación ${f(elo)}% — buena absorción de impacto en Urdidora.`);
+    if (!isNaN(nps) && nps < 200)   puntosNe.push(`🔸 Ne${neTxt}: Neps ${f(nps,1)}/km — hilo muy limpio para Índigo.`);
   }
 
   // ── Análisis por proveedor del lote actual ──────────────────────────────
@@ -6606,35 +6689,53 @@ function generarNarrativaLocal(rows, loteActual, proveedores = []) {
   const refStr = refs.length > 0 ? refs.join('/') : 'sin referencia';
 
   // ── Auditoría de Aptitud por Proceso (texto) ───────────────────────────
-  const MATRIZ = {
-    '7':    { app: 'Trama',    dest: ['TELAR'],                          sciMin: 115, strMin: 24, umb: { tenacidad: { ok: 14.0, t: 'min' }, cvm: { ok: 13.5, t: 'max' }, neps_200: { ok: 700, t: 'max' } } },
-    '9':    { app: 'Trama',    dest: ['TELAR'],                          sciMin: 120, strMin: 25, umb: { tenacidad: { ok: 14.5, t: 'min' }, cvm: { ok: 13.0, t: 'max' }, neps_200: { ok: 600, t: 'max' } } },
-    '10':   { app: 'Urdimbre', dest: ['URDIDORA','INDIGO','TELAR'],      sciMin: 130, strMin: 26, umb: { tenacidad: { ok: 16.0, t: 'min' }, elongacion: { ok: 8.0, t: 'min' }, cvm: { ok: 12.0, t: 'max' }, neps_200: { ok: 500, t: 'max' } } },
-    '12.5': { app: 'Urdimbre', dest: ['URDIDORA','INDIGO','TELAR'],      sciMin: 135, strMin: 27, umb: { tenacidad: { ok: 16.5, t: 'min' }, elongacion: { ok: 8.0, t: 'min' }, cvm: { ok: 11.5, t: 'max' }, neps_200: { ok: 450, t: 'max' } } },
-    '14':   { app: 'Urdimbre', dest: ['URDIDORA','INDIGO','TELAR'],      sciMin: 140, strMin: 28, umb: { tenacidad: { ok: 17.0, t: 'min' }, elongacion: { ok: 8.5, t: 'min' }, cvm: { ok: 11.0, t: 'max' }, neps_200: { ok: 400, t: 'max' } } },
-  };
   const bloqueAuditoria = [];
   if (dataActual.hilos.length > 0) {
     bloqueAuditoria.push(`🔍 AUDITORÍA DE APTITUD POR PROCESO — Lote FIAC ${actual}:`);
     for (const h of dataActual.hilos) {
       const ne = String(h.ne);
+      const neTxt = neLabel(h);
       const nN = parseFloat(ne);
-      const mK = Object.keys(MATRIZ).find(k => Math.abs(parseFloat(k) - nN) < 0.1);
-      const m = mK ? MATRIZ[mK] : null;
-      const app = m?.app || (nN <= 9 ? 'Trama' : 'Urdimbre');
+      const flame = isFlame(h);
+      const m = getMatriz(nN, flame);
+      const app = m?.app || (nN <= 9 ? 'Trama' : (flame ? 'Urdimbre Flame' : 'Urdimbre'));
       const dest = m?.dest || (nN <= 9 ? ['TELAR'] : ['URDIDORA','INDIGO','TELAR']);
-      const desvios = [];
+      const desviosCrit = [];
+      const desviosWarn = [];
       if (m?.umb) {
         for (const [k, u] of Object.entries(m.umb)) {
           const v = h[k] != null ? parseFloat(h[k]) : null;
           if (v == null) continue;
-          const fail = u.t === 'min' ? v < u.ok : v > u.ok;
-          if (fail) desvios.push(`${k === 'cvm' ? 'CVm%' : k === 'neps_200' ? 'Neps' : k === 'tenacidad' ? 'Tenac.' : k === 'elongacion' ? 'Elong.' : k} ${f(v)} ${u.t === 'min' ? '<' : '>'} ${u.ok}`);
+          const estadoVar = evalUmbral(v, u);
+          const label = `${k === 'cvm' ? 'CVm%' : k === 'neps_200' ? 'Neps' : k === 'tenacidad' ? 'Tenac.' : k === 'elongacion' ? 'Elong.' : k} ${f(v)} (${estadoVar === 'warn' ? 'zona de vigilancia' : estadoVar === 'crit' ? 'fuera de banda' : 'ok'})`;
+          if (estadoVar === 'crit') desviosCrit.push(label);
+          else if (estadoVar === 'warn') desviosWarn.push(label);
         }
       }
-      const estado = desvios.length ? '🔴 Rechazado' : '✅ Aprobado';
-      const procs = dest.map(p => `${p}${desvios.length ? ' ⚠️' : ' ✅'}`).join(' → ');
-      bloqueAuditoria.push(`  Ne ${ne} [${app}] → ${procs} — ${estado}${desvios.length ? ' — Desvío: ' + desvios.join(', ') : ''}`);
+      const str = dataActual.hvi.str != null ? parseFloat(dataActual.hvi.str) : null;
+      const sci = dataActual.hvi.sci != null ? parseFloat(dataActual.hvi.sci) : null;
+      const hviAlerts = [];
+      if (m?.strMin && str != null && str < m.strMin) hviAlerts.push(`STR ${f(str, 1)} < ${m.strMin}`);
+      if (m?.sciMin && sci != null && sci < m.sciMin) hviAlerts.push(`SCI ${f(sci, 0)} < ${m.sciMin}`);
+
+      const estado = desviosCrit.length
+        ? '🔴 Rechazado'
+        : (desviosWarn.length || hviAlerts.length)
+          ? '⚠️ Condicional'
+          : '✅ Aprobado';
+
+      const procIcon = desviosCrit.length ? '🔴' : (desviosWarn.length || hviAlerts.length ? '⚠️' : '✅');
+      const procs = dest.map(p => `${p} ${procIcon}`).join(' → ');
+      const detalles = [];
+      if (desviosCrit.length) detalles.push(`Crítico: ${desviosCrit.join(', ')}`);
+      if (desviosWarn.length) detalles.push(`Vigilancia: ${desviosWarn.join(', ')}`);
+      if (hviAlerts.length) detalles.push(`Fibra: ${hviAlerts.join(' / ')}`);
+
+      bloqueAuditoria.push(`  Ne ${neTxt} [${app}] → ${procs} — ${estado}${detalles.length ? ' — ' + detalles.join(' | ') : ''}`);
+
+      if (!desviosCrit.length && desviosWarn.length && Math.abs(nN - 12.5) < 0.2) {
+        bloqueAuditoria.push(`    💬 "Ne 12.5 en vigilancia condicional: desvío leve en promedio. Corroborar en Informe Auditoría si hubo mínimos aislados por fecha/operador antes de escalar a rechazo."`);
+      }
       // Comentario de planta
       const ten = h.tenacidad != null ? parseFloat(h.tenacidad) : null;
       const cvm = h.cvm != null ? parseFloat(h.cvm) : null;
@@ -6644,7 +6745,9 @@ function generarNarrativaLocal(rows, loteActual, proveedores = []) {
         else if (ten < 14.5) bloqueAuditoria.push(`    💬 "Tenacidad crítica. Alta probabilidad de rotura."`);
       }
       if (app === 'Trama' && cvm != null && cvm > 13) bloqueAuditoria.push(`    💬 "La masa viene bailando (CVm ${f(cvm)}%). Riesgo de barras en tela."`);
-      if (app === 'Urdimbre' && elo != null && elo < 7.5) bloqueAuditoria.push(`    💬 "Elongación baja. El hilo no perdona en la Urdidora."`);
+      if (app.startsWith('Urdimbre') && flame && cvm != null && cvm <= 18) bloqueAuditoria.push(`    💬 "CVm ${f(cvm)}% coherente con fantasía FLAME. No penaliza aptitud estructural."`);
+      if (app.startsWith('Urdimbre') && flame && cvm != null && cvm > 18) bloqueAuditoria.push(`    💬 "CVm ${f(cvm)}% alto incluso para FLAME. Revisar receta/estiraje de efecto."`);
+      if (app.startsWith('Urdimbre') && elo != null && elo < 7.5) bloqueAuditoria.push(`    💬 "Elongación baja. El hilo no perdona en la Urdidora."`);
     }
     bloqueAuditoria.push('');
   }
@@ -6708,7 +6811,11 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
       const hvi = filas[0] || {};
       const hilos = filas
         .filter(r => r.ne != null)
-        .map(r => `   • Ne ${r.ne}/1: Tenacidad=${r.tenacidad ?? '-'} cN/tex | Elongación=${r.elongacion ?? '-'}% | CVm%=${r.cvm ?? '-'} | Neps+200%=${r.neps_200 ?? '-'}/km`)
+        .map(r => {
+          const flame = r.is_flame === true || String(r.is_flame ?? '').trim().toLowerCase() === 'true' || String(r.is_flame ?? '').trim() === '1';
+          const neTxt = `${r.ne}${flame ? ' FLAME' : '/1'}`;
+          return `   • Ne ${neTxt}: Tenacidad=${r.tenacidad ?? '-'} cN/tex | Elongación=${r.elongacion ?? '-'}% | CVm%=${r.cvm ?? '-'} | Neps+200%=${r.neps_200 ?? '-'}/km`;
+        })
         .join('\n');
       const misturaLabel = hvi.mistura_real ? `${mistura} (Mistura ${hvi.mistura_real})` : `${mistura}`;
       // Proveedores del lote
@@ -6734,18 +6841,22 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
 DATOS COMPARATIVOS:
 ${resumenLotes}
 
-UMBRALES: Tenacidad hilo >16.0=APTO, 14.5-16.0=PRECAUCIÓN, <14.5=CRÍTICO | Elongación <7.5%=RIESGO URDIDORA | Neps+200% >700=RIESGO ÍNDIGO | CVm% >13=IRREGULAR | STR fibra >27=ÓPTIMO
+UMBRALES: Tenacidad hilo >16.0=APTO, 14.5-16.0=PRECAUCIÓN, <14.5=CRÍTICO | Elongación <7.5%=RIESGO URDIDORA | Neps+200% >700=RIESGO ÍNDIGO (liso) / >850 (FLAME)=CRÍTICO | CVm% >13=IRREGULAR (liso) / >18 (FLAME)=ALERTA | STR fibra >27=ÓPTIMO
 
 MATRIZ DE REQUISITOS MÍNIMOS POR TÍTULO:
-Ne 7 (Trama):  Tenac≥14.0, CVm≤13.5%, Neps≤700/km    → solo TELAR
-Ne 9 (Trama):  Tenac≥14.5, CVm≤13.0%, Neps≤600/km    → solo TELAR
-Ne 10 (Urdimbre): Tenac≥16.0, Elong≥8.0%, CVm≤12.0%, Neps≤500/km → URDIDORA→ÍNDIGO→TELAR
-Ne 12.5 (Urdimbre): Tenac≥16.5, Elong≥8.0%, CVm≤11.5%, Neps≤450/km → URDIDORA→ÍNDIGO→TELAR
-Ne 14 (Urdimbre): Tenac≥17.0, Elong≥8.5%, CVm≤11.0%, Neps≤400/km → URDIDORA→ÍNDIGO→TELAR
+Ne 7 (Trama):  Tenac ok≥14.0 (warn 13.0), CVm ok≤13.5 (warn 14.5), Neps ok≤700 (warn 850) → solo TELAR
+Ne 9 (Trama):  Tenac ok≥14.5 (warn 13.5), CVm ok≤13.0 (warn 14.0), Neps ok≤600 (warn 750) → solo TELAR
+Ne 10 (Urdimbre): Tenac ok≥16.0 (warn 15.0), Elong ok≥8.0 (warn 7.5), CVm ok≤12.0 (warn 13.0), Neps ok≤500 (warn 650) → URDIDORA→ÍNDIGO→TELAR
+Ne 10 FLAME (Urdimbre Flame): Tenac ok≥16.0 (warn 15.0), Elong ok≥8.0 (warn 7.5), CVm ok≤18.0 (warn 20.0), Neps ok≤700 (warn 850) → URDIDORA→ÍNDIGO→TELAR
+Ne 12.5 (Urdimbre): Tenac ok≥16.5 (warn 15.5), Elong ok≥8.0 (warn 7.5), CVm ok≤11.5 (warn 12.5), Neps ok≤450 (warn 600) → URDIDORA→ÍNDIGO→TELAR
+Ne 14 (Urdimbre): Tenac ok≥17.0 (warn 16.0), Elong ok≥8.5 (warn 8.0), CVm ok≤11.0 (warn 12.0), Neps ok≤400 (warn 550) → URDIDORA→ÍNDIGO→TELAR
 
 REGLAS DE AUDITORÍA:
 - Si es Urdimbre (Ne≥10): ser implacable con Elongación y CVm% (pasa por Urdidora + Índigo).
+- Si es FLAME: no evaluarlo con criterio de hilo liso; CVm% describe efecto y solo alerta si supera 18.
 - Si es Trama (Ne≤9): priorizar estabilidad de masa (CVm%) para evitar barreado.
+- Estado por Ne: Aprobado (todo OK), Condicional (solo WARN), Rechazado (algún CRIT).
+- No mezclar hilo liso con Hilo de Fantasía: cuando is_flame=true etiquetar como "Ne X FLAME" y tratarlo como serie independiente.
 - Si MIC > 4.7: advertir "cargado al grueso". Si STR supera la matriz por mucho: decir "va sobrado de fuerza".
 - Usar vocabulario natural de hilandería.
 
@@ -6767,7 +6878,7 @@ Análisis Comparativo Fibra ↔️ Hilo
 [Identificar proveedor con 🏆 mejor STR, 🏆 mejor SCI, 🏆 MIC más cercano a rango 3.5-4.9, 🏆 UHML más largo. Señalar con ⚠️ el peor en cada variable con impacto práctico.]
 
 🔍 AUDITORÍA DE APTITUD POR PROCESO — Lote FIAC ${actual}:
-[Para cada Ne: Ne X [Aplicación] → Proceso1 ✅/⚠️ → Proceso2 ✅/⚠️ — Estado (Aprobado/Rechazado) — Desvío si hay.]
+[Para cada Ne: Ne X [Aplicación] → Proceso1 ✅/⚠️/🔴 → Proceso2 ✅/⚠️/🔴 — Estado (Aprobado/Condicional/Rechazado) — Desvío si hay.]
 [Agregar 💬 comentario de planta con vocabulario de hilandería para cada Ne.]
 
 ⚠️ PUNTOS CLAVE PARA PRODUCCIÓN:
@@ -7105,13 +7216,25 @@ async function startServer() {
     // Índices para endpoints de calidad (impacta en performance con muchos datos)
     ensureCalidadIndexes().catch((e) => console.warn('ensureCalidadIndexes falló:', e.message))
     
-    app.listen(PORT, '0.0.0.0', () => {
+    const server = app.listen(PORT, '0.0.0.0', () => {
       console.log('🚀 ========================================')
       console.log(`🚀 STC Backend API v2 - PostgreSQL`)
       console.log(`🚀 Servidor corriendo en puerto ${PORT}`)
       console.log(`🚀 Database: ${process.env.PG_DATABASE || 'stc_produccion'}`)
       console.log(`🚀 Health check: http://localhost:${PORT}/api/health`)
       console.log('🚀 ========================================')
+    })
+
+    server.on('error', (err) => {
+      if (err?.code === 'EADDRINUSE') {
+        console.error(`❌ Puerto ${PORT} ya está en uso (EADDRINUSE).`)
+        console.error('❌ Ya hay otra instancia del backend levantada o algún proceso ocupando ese puerto.')
+        console.error(`❌ Verificar proceso: Get-NetTCPConnection -LocalPort ${PORT} -State Listen | Select-Object LocalAddress,LocalPort,OwningProcess`)
+        console.error('❌ Liberar puerto: Stop-Process -Id <OwningProcess> -Force')
+      } else {
+        console.error('❌ Error iniciando servidor HTTP:', err.message)
+      }
+      process.exit(1)
     })
   } catch (err) {
     console.error('❌ Error conectando a la base de datos:', err.message)
