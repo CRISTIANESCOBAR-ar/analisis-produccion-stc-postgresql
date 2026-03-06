@@ -74,6 +74,11 @@ export function useDatabase() {
     return await fetchApi(`/calidad/revision-cq?${queryString}`)
   }
 
+  const getRevisionCQIA = async (params = {}) => {
+    const queryString = new URLSearchParams(params).toString()
+    return await fetchApi(`/calidad/revision-cq-ia?${queryString}`)
+  }
+
   const getAvailableDates = async () => {
     return await fetchApi('/calidad/available-dates')
   }
@@ -207,6 +212,7 @@ export function useDatabase() {
     getProduccionSummary,
     getCalidad,
     getRevisionCQ,
+    getRevisionCQIA,
     getAvailableDates,
     getRevisorDetalle,
     getPartidaDetalle,

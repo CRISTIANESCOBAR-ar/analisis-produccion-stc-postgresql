@@ -866,6 +866,97 @@ app.get('/api/produccion/calidad/revision-cq', async (req, res) => {
   }
 })
 
+// GET /api/produccion/calidad/revision-cq-ia - Datos rollo a rollo (PRIMEIRA)
+app.get('/api/produccion/calidad/revision-cq-ia', async (req, res) => {
+  try {
+    const t0 = hrMs()
+    const { startDate, endDate } = req.query
+    const tramas = req.query.tramas || 'Todas'
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({ error: 'Se requieren startDate y endDate' })
+    }
+
+    let tramasFilter = ''
+    if (tramas === 'ALG 100%') tramasFilter = `AND left("ARTIGO", 1) = 'A'`
+    else if (tramas === 'P + E') tramasFilter = `AND left("ARTIGO", 1) = 'Y'`
+    else if (tramas === 'POL 100%') tramasFilter = `AND left("ARTIGO", 1) = 'P'`
+
+    const datProdDate = sqlParseDate('"DAT_PROD"')
+    const metragemNum = sqlParseNumberIntl('"METRAGEM"')
+    const pontuacaoNum = sqlParseNumber('"PONTUACAO"')
+
+    const sameDay = String(startDate) === String(endDate)
+    const dateFilterSql = sameDay
+      ? `"DAT_PROD" = ANY($1::text[])`
+      : `${datProdDate} BETWEEN $1::date AND $2::date`
+    const params = sameDay ? [dateTextCandidates(startDate)] : [startDate, endDate]
+
+    const sql = `
+      WITH RAW AS (
+        SELECT
+          "REVISOR FINAL" AS REVISOR_FINAL,
+          "PARTIDA" AS PARTIDA,
+          "PEÇA" AS PECA,
+          "ETIQUETA" AS ETIQUETA,
+          "HORA" AS HORA,
+          ${metragemNum} AS METRAGEM,
+          ${pontuacaoNum} AS PONTUACAO,
+          btrim("QUALIDADE") AS QUALIDADE
+        FROM tb_calidad
+        WHERE
+          "EMP" = 'STC'
+          AND ${dateFilterSql}
+          AND btrim("QUALIDADE") ILIKE 'PRIMEIRA%'
+          AND "QUALIDADE" NOT ILIKE '%RETALHO%'
+          ${tramasFilter}
+      ),
+      ROLLOS AS (
+        SELECT
+          REVISOR_FINAL AS "Revisor",
+          PARTIDA AS "Partida",
+          PECA AS "Peca",
+          ETIQUETA AS "Etiqueta",
+          HORA AS "HoraSalida",
+          ROUND(SUM(METRAGEM)::numeric, 2) AS "MetrosRollo",
+          ROUND(AVG(COALESCE(PONTUACAO, 0))::numeric, 2) AS "PontuacaoRollo"
+        FROM RAW
+        GROUP BY REVISOR_FINAL, PARTIDA, PECA, ETIQUETA, HORA
+      )
+      SELECT
+        "Revisor",
+        "Partida",
+        "Peca",
+        "Etiqueta",
+        "HoraSalida",
+        "MetrosRollo",
+        "PontuacaoRollo"
+      FROM ROLLOS
+      ORDER BY
+        "Revisor" ASC,
+        CASE
+          WHEN regexp_replace(COALESCE("HoraSalida"::text, ''), '[^0-9]', '', 'g') ~ '^[0-9]{1,4}$'
+            THEN lpad(regexp_replace("HoraSalida"::text, '[^0-9]', '', 'g'), 4, '0')
+          ELSE '9999'
+        END ASC,
+        "Partida" ASC,
+        "Peca" ASC,
+        "Etiqueta" ASC
+    `
+
+    const result = await query(sql, params, 'calidad/revision-cq-ia')
+    res.json(result.rows)
+    console.log(
+      `[PERF] GET /calidad/revision-cq-ia ${startDate}..${endDate} tramas=${tramas} rows=${result.rows.length} total=${(
+        hrMs() - t0
+      ).toFixed(1)}ms`
+    )
+  } catch (err) {
+    console.error('Error en calidad/revision-cq-ia:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // GET /api/produccion/calidad/revisor-detalle - Detalle por revisor (con partidas)
 app.get('/api/produccion/calidad/revisor-detalle', async (req, res) => {
   try {
@@ -6501,6 +6592,34 @@ function generarNarrativaLocal(rows, loteActual, proveedores = []) {
     const p = (d / Math.abs(parseFloat(a))) * 100;
     return ` (${d >= 0 ? '+' : ''}${p.toFixed(1)}%)`;
   };
+  const formatPuntosClaveAgrupados = (alertasList, puntosList) => {
+    const grouped = new Map();
+    const pushItem = (neTitleRaw, icon, detalle) => {
+      const neTitle = `Ne${String(neTitleRaw).trim()}`;
+      if (!grouped.has(neTitle)) grouped.set(neTitle, []);
+      grouped.get(neTitle).push(`${icon} ${String(detalle).trim()}`);
+    };
+
+    for (const a of alertasList || []) {
+      const m = String(a).match(/^Ne([^:]+):\s*(.+)$/);
+      if (!m) continue;
+      pushItem(m[1], '⚠️', m[2]);
+    }
+
+    for (const p of puntosList || []) {
+      const m = String(p).match(/^[🔸⚠️]\s*Ne([^:]+):\s*(.+)$/);
+      if (!m) continue;
+      pushItem(m[1], '🔸', m[2]);
+    }
+
+    const neTitles = [...grouped.keys()];
+    const maxNeLen = neTitles.reduce((max, t) => Math.max(max, t.length), 0);
+
+    return neTitles.map((title) => {
+      const detalles = grouped.get(title).join(' | ');
+      return `  • ${title.padEnd(maxNeLen)} | ${detalles}`;
+    });
+  };
 
   // Agrupa por lote y obtiene primer registro HVI + todos los Ne
   const getLote = (m) => ({ hvi: rows.find(r => Number(r.mistura) === m) || {}, hilos: rows.filter(r => Number(r.mistura) === m && r.ne != null) });
@@ -6622,6 +6741,7 @@ function generarNarrativaLocal(rows, loteActual, proveedores = []) {
     if (!isNaN(elo) && elo >= 8.0)  puntosNe.push(`🔸 Ne${neTxt}: Elongación ${f(elo)}% — buena absorción de impacto en Urdidora.`);
     if (!isNaN(nps) && nps < 200)   puntosNe.push(`🔸 Ne${neTxt}: Neps ${f(nps,1)}/km — hilo muy limpio para Índigo.`);
   }
+  const puntosClaveAgrupados = formatPuntosClaveAgrupados(alertas, puntosNe);
 
   // ── Análisis por proveedor del lote actual ──────────────────────────────
   const provActual = (proveedores || []).filter(p => Number(p.mistura) === actual);
@@ -6674,11 +6794,15 @@ function generarNarrativaLocal(rows, loteActual, proveedores = []) {
       ...provActual.map(p => {
         const fardos = Number(p.fardos_consumidos) || 0;
         const pct    = totalFardos > 0 ? ((fardos / totalFardos) * 100).toFixed(1) : '–';
-        const strVal = p.str  != null ? `STR ${f(p.str)} g/tex` : '';
-        const sciVal = p.sci  != null ? `SCI ${f(p.sci, 1)}`     : '';
-        const micVal = p.mic  != null ? `MIC ${f(p.mic, 3)}`     : '';
-        const uhmlVal= p.uhml != null ? `UHML ${f(p.uhml)} mm`   : '';
-        const hvi = [strVal, sciVal, micVal, uhmlVal].filter(Boolean).join(' | ');
+        const strNum  = p.str  != null ? f(p.str) : '–';
+        const sciNum  = p.sci  != null ? f(p.sci, 1) : '–';
+        const micNum  = p.mic  != null ? f(p.mic, 3) : '–';
+        const uhmlNum = p.uhml != null ? f(p.uhml) : '–';
+        const strVal  = `STR ${strNum.padStart(5)} g/tex`;
+        const sciVal  = `SCI ${sciNum.padStart(5)}`;
+        const micVal  = `MIC ${micNum.padStart(5)}`;
+        const uhmlVal = `UHML ${uhmlNum.padStart(5)} mm`;
+        const hvi = [strVal, sciVal, micVal, uhmlVal].join(' | ');
         return `  • ${String(p.produtor).padEnd(16)} ${String(fardos).padStart(4)} fardos (${String(pct).padStart(5)}%)  ${hvi}`;
       }),
       ...(obs.length ? [``, `  📌 Observaciones:`, ...obs] : []),
@@ -6765,10 +6889,9 @@ function generarNarrativaLocal(rows, loteActual, proveedores = []) {
     ...bloqueProveedores,
     ...bloqueAuditoria,
     `⚠️ PUNTOS CLAVE PARA PRODUCCIÓN:`,
-    ...(alertas.length
-      ? alertas.map(a => `  ⚠️ ${a}`)
+    ...(puntosClaveAgrupados.length
+      ? puntosClaveAgrupados
       : ['  ✓ Sin alertas críticas en el lote actual.']),
-    ...(puntosNe.length ? puntosNe : []),
     ``,
     `🚀 ESTADO: ${estadoLabel}`,
     (() => {
@@ -6882,7 +7005,9 @@ Análisis Comparativo Fibra ↔️ Hilo
 [Agregar 💬 comentario de planta con vocabulario de hilandería para cada Ne.]
 
 ⚠️ PUNTOS CLAVE PARA PRODUCCIÓN:
-[2-3 bullets accionables]
+[Agrupar por título Ne en una sola fila: si un Ne tiene varias novedades, listarlas en la misma línea separadas por " | ".]
+[Usar columna fija de título Ne: tomar el Ne más largo del bloque y alinear todas las filas a ese ancho.]
+[Formato sugerido: "  • NeX[...espacios] | ⚠️ ... | 🔸 ..."]
 
 🚀 ESTADO: [APROBADO PARA CONTINUIDAD / PRECAUCIÓN - REVISAR / CRÍTICO - DETENER]
 [oración de cierre]`;

@@ -507,14 +507,13 @@
             💬 Comentarios de Planta
             <span class="text-[9px] font-normal text-slate-400 normal-case">(vocabulario de hilandería)</span>
           </h3>
-          <div v-for="row in tablaAptitud" :key="`com-${row.neKey}`" class="space-y-1">
-            <template v-if="row.comentarios.length">
-              <div v-for="(com, ci) in row.comentarios" :key="ci"
-                class="text-xs text-slate-600 bg-slate-50 rounded-lg px-3 py-1.5 flex items-start gap-2">
-                <span class="font-bold text-slate-500 shrink-0 font-mono">Ne {{ row.neDisplay }}:</span>
-                <span class="italic">{{ com }}</span>
+          <div v-for="row in tablaAptitud" :key="`com-${row.neKey}`">
+            <div v-if="row.comentarios.length" class="text-xs text-slate-600 bg-slate-50 rounded-lg px-3 py-2 flex items-start gap-3">
+              <span class="font-bold text-slate-500 shrink-0 font-mono inline-block" :style="{ width: `${comentarioTituloWidthCh}ch` }">Ne {{ row.neDisplay }}:</span>
+              <div class="min-w-0 flex-1 space-y-0.5">
+                <div v-for="(com, ci) in row.comentarios" :key="ci">{{ com }}</div>
               </div>
-            </template>
+            </div>
           </div>
         </div>
 
@@ -742,37 +741,86 @@ function semaforo(mistura) {
 
   for (const r of hiloRows) {
     const rowIsFlame = parseFlameFlag(r.is_flame)
+    const neNum = parseFloat(String(r.ne))
+    const mat = getMatrizRequisitos(neNum, rowIsFlame)
+    const app = mat?.app || (neNum <= 9 ? 'Trama' : (rowIsFlame ? 'Urdimbre Flame' : 'Urdimbre'))
     const ten = r.tenacidad != null ? parseFloat(r.tenacidad) : null
     const elo = r.elongacion != null ? parseFloat(r.elongacion) : null
     const nps = r.neps_200 != null ? parseFloat(r.neps_200) : null
     const cvm = r.cvm != null ? parseFloat(r.cvm) : null
     const neTxt = formatNeDisplay(r.ne, rowIsFlame)
+    const cvmWarn = mat?.umb?.cvm?.w ?? (rowIsFlame ? 20.0 : 12.5)
+    const cvmCrit = cvmWarn + (rowIsFlame ? 0.8 : 0.6)
+    const tenEval = evalUmbral(ten, mat?.umb?.tenacidad)
+    const eloEval = evalUmbral(elo, mat?.umb?.elongacion)
 
     if (ten != null) {
-      if (ten < 14.5) { level = 'rojo'; issues.push(`Ne ${neTxt}: Tenacidad ${ten} cN/tex — CRÍTICO Telar`) }
-      else if (ten < 16.0) { if (level === 'verde') level = 'amarillo'; issues.push(`Ne ${neTxt}: Tenacidad ${ten} cN/tex — precaución`) }
+      if (app.startsWith('Urdimbre') && ten < 16.0) {
+        level = 'rojo'
+        if (ten < 14.5) {
+          issues.push(`Ne ${neTxt}: Tenacidad CRÍTICA (${ten.toFixed(2)} cN/tex < 14.5) — Alto riesgo de rotura en batea Benninger.`)
+        } else {
+          issues.push(`Ne ${neTxt}: Tenacidad ${ten.toFixed(2)} cN/tex (<16) — precaución en el engomado Benninger.`)
+        }
+      } else if (app === 'Trama' && ten >= 16.5) {
+        issues.push(`Ne ${neTxt}: Tenacidad ${ten.toFixed(2)} cN/tex — APTO telar Toyota (830 RPM).`)
+      } else if (tenEval === 'crit') {
+        level = 'rojo'
+        issues.push(`Ne ${neTxt}: Tenacidad ${ten.toFixed(2)} cN/tex — fuera de matriz de aptitud.`)
+      } else if (tenEval === 'warn') {
+        if (level === 'verde') level = 'amarillo'
+        issues.push(`Ne ${neTxt}: Tenacidad ${ten.toFixed(2)} cN/tex — margen mecánico ajustado.`)
+      }
     }
-    if (elo != null && elo < 7.5) {
-      if (level === 'verde') level = 'amarillo'
-      issues.push(`Ne ${neTxt}: Elongación ${elo}% — riesgo rotura Urdidora`)
+
+    if (elo != null) {
+      if (app.startsWith('Urdimbre') && elo < 8.0) {
+        if (elo < 7.5) {
+          level = 'rojo'
+          issues.push(`Ne ${neTxt}: Elongación ${elo.toFixed(2)}% — RIESGO de rotura en urdidora/engomadora Benninger.`)
+        } else {
+          if (level === 'verde') level = 'amarillo'
+          issues.push(`Ne ${neTxt}: Elongación ${elo.toFixed(2)}% — vigilar estiramiento en batea.`)
+        }
+      } else if (app === 'Trama' && elo >= 8.5) {
+        // Para trama no es crítico pero se reconoce buena absorción
+      } else if (eloEval === 'warn') {
+        if (level === 'verde') level = 'amarillo'
+        issues.push(`Ne ${neTxt}: Elongación ${elo.toFixed(2)}% — vigilar stretch programado.`)
+      }
     }
-    if (nps != null && nps > (rowIsFlame ? 850 : 700)) {
-      level = 'rojo'
-      issues.push(`Ne ${neTxt}: Neps ${nps}/km — riesgo en Índigo`)
-    } else if (nps != null && rowIsFlame && nps > 700) {
-      if (level === 'verde') level = 'amarillo'
-      issues.push(`Ne ${neTxt}: Neps ${nps}/km — vigilar estabilidad de efecto`)
+
+    if (nps != null) {
+      if (nps < 150) {
+        issues.push(`Ne ${neTxt}: Neps ${nps.toFixed(1)}/km — hilo muy limpio para Índigo.`)
+      } else if (nps > (rowIsFlame ? 850 : 700)) {
+        level = 'rojo'
+        issues.push(`Ne ${neTxt}: Neps ${nps}/km — riesgo en Índigo`)
+      } else if (rowIsFlame && nps > 700) {
+        if (level === 'verde') level = 'amarillo'
+        issues.push(`Ne ${neTxt}: Neps ${nps}/km — vigilar estabilidad de efecto`)
+      }
     }
+
     if (cvm != null) {
-      const cvmWarn = rowIsFlame ? 18.0 : 13.0
-      const cvmCrit = rowIsFlame ? 20.0 : 14.5
       if (cvm > cvmCrit) {
         if (level !== 'rojo') level = 'rojo'
-        issues.push(`Ne ${neTxt}: CVm% ${cvm}% — variación fuera de banda`)
+        issues.push(`Ne ${neTxt}: CVm% ${cvm.toFixed(2)} > ${cvmCrit.toFixed(2)} — alto riesgo de barreado en índigo.`)
       } else if (cvm > cvmWarn) {
         if (level === 'verde') level = 'amarillo'
-        issues.push(`Ne ${neTxt}: CVm% ${cvm}% — ${rowIsFlame ? 'controlar efecto flame' : 'masa irregular'}`)
+        issues.push(`Ne ${neTxt}: CVm% ${cvm.toFixed(2)} sobre estándar (${cvmWarn.toFixed(2)}) — ${rowIsFlame ? 'controlar estabilidad visual flame' : 'masa irregular en teñido'}.`)
       }
+    }
+  }
+
+  const mic = getHVI(mistura, 'mic')
+  if (mic != null) {
+    if (mic > 4.5) {
+      if (level === 'verde') level = 'amarillo'
+      issues.push(`MIC ${mic.toFixed(2)}: menor superficie específica de fibra, riesgo de teñido anular en cajas de inmersión Benninger.`)
+    } else if (mic < 3.8) {
+      if (level === 'verde') level = 'amarillo'
+      issues.push(`MIC ${mic.toFixed(2)}: fibra inmadura/fina, riesgo de neps de color en índigo.`)
     }
   }
 
@@ -788,7 +836,7 @@ function semaforo(mistura) {
 
   return {
     level,
-    issues: issues.slice(0, 3),
+    issues: issues.slice(0, 4),
     icon:        { verde: '✅', amarillo: '⚠️', rojo: '🔴' }[level],
     label:       { verde: 'APTO TELAR', amarillo: 'PRECAUCIÓN', rojo: 'CRÍTICO' }[level],
     borderClass: { verde: 'border-emerald-300 shadow-emerald-50', amarillo: 'border-amber-300 shadow-amber-50', rojo: 'border-red-300 shadow-red-50' }[level],
@@ -881,38 +929,53 @@ function aptDesvioLabel(key) {
 
 function generarComentarioPlanta(ne, app, vals, hvi, isFlame = false) {
   const coms = []
+  const neNum = parseFloat(String(ne).replace(',', '.'))
+  const mat = getMatrizRequisitos(neNum, isFlame)
+  const cvmWarn = mat?.umb?.cvm?.w ?? (isFlame ? 20.0 : 12.5)
+
   // Tenacidad — vocabulario de planta
   if (vals.tenacidad != null) {
-    if (vals.tenacidad >= 18) coms.push(`Va sobrado de fuerza (${vals.tenacidad.toFixed(1)} cN/tex). Hilo robusto, sin drama en ningún proceso.`)
-    else if (vals.tenacidad >= 16) coms.push(`Tenacidad sólida (${vals.tenacidad.toFixed(1)} cN/tex). Aguanta bien la tensión en telar a alta velocidad.`)
-    else if (vals.tenacidad >= 14.5) coms.push(`Tenacidad justa (${vals.tenacidad.toFixed(1)} cN/tex). No hay margen de seguridad — monitorear paradas en telar.`)
-    else coms.push(`⚠️ Tenacidad crítica (${vals.tenacidad.toFixed(1)} cN/tex). Alta probabilidad de rotura. Evaluar reducción de velocidad.`)
+    if (app.startsWith('Urdimbre') && vals.tenacidad < 16.0) {
+      coms.push(`⚠️ Tenacidad ${vals.tenacidad.toFixed(1)} cN/tex (<16) en urdimbre. Se esperan paradas por rotura de cabos en batea.`)
+    } else if (vals.tenacidad >= 18) {
+      coms.push(`Va sobrado de fuerza (${vals.tenacidad.toFixed(1)} cN/tex). Hilo robusto para alta exigencia.`)
+    } else if (vals.tenacidad >= 16) {
+      coms.push(`Tenacidad sólida (${vals.tenacidad.toFixed(1)} cN/tex). Margen razonable para línea Benninger.`)
+    } else if (vals.tenacidad >= 14.5) {
+      coms.push(`Tenacidad justa (${vals.tenacidad.toFixed(1)} cN/tex). Sin reserva ante picos de tensión.`)
+    } else {
+      coms.push(`⚠️ Tenacidad crítica (${vals.tenacidad.toFixed(1)} cN/tex). Alta probabilidad de rotura.`)
+    }
   }
+
   // CVm% para Trama — barreado
   if (app === 'Trama' && vals.cvm != null) {
-    if (vals.cvm > 14) coms.push(`La masa viene bailando (CVm ${vals.cvm.toFixed(1)}%). Si arranca así el telar, van a tener barras.`)
-    else if (vals.cvm > 13) coms.push(`CVm ${vals.cvm.toFixed(1)}% — en el límite para trama. Ojo con barreado si la velocidad es alta.`)
+    if (vals.cvm > cvmWarn + 0.6) coms.push(`CVm ${vals.cvm.toFixed(1)}% muy por encima del estándar (${cvmWarn.toFixed(1)}%). Barreado visible con índigo.`)
+    else if (vals.cvm > cvmWarn) coms.push(`CVm ${vals.cvm.toFixed(1)}% sobre estándar (${cvmWarn.toFixed(1)}%). Ojo con barreado si se acelera la corrida.`)
     else coms.push(`Masa estable (CVm ${vals.cvm.toFixed(1)}%). Sin riesgo de barreado.`)
   }
+
   // CVm% para Urdimbre — uniformidad
   if (app.startsWith('Urdimbre') && vals.cvm != null) {
     if (isFlame) {
       if (vals.cvm > 20) coms.push(`CVm ${vals.cvm.toFixed(1)}% — variación flame fuera de banda. Revisar receta y estiraje de fantasía.`)
       else if (vals.cvm > 18) coms.push(`CVm ${vals.cvm.toFixed(1)}% — efecto flame intenso; monitorear estabilidad visual entre partidas.`)
       else coms.push(`CVm ${vals.cvm.toFixed(1)}% — variación consistente con hilo flame, sin impacto estructural relevante.`)
-    } else if (vals.cvm > 13) {
-      coms.push(`CVm ${vals.cvm.toFixed(1)}% — masa irregular para urdimbre. Teñido desparejo en Índigo.`)
-    } else if (vals.cvm > 12) {
-      coms.push(`CVm ${vals.cvm.toFixed(1)}% — aceptable, pero sin mucho margen para Índigo.`)
+    } else if (vals.cvm > cvmWarn + 0.6) {
+      coms.push(`CVm ${vals.cvm.toFixed(1)}% — fuera de estándar de título (${cvmWarn.toFixed(1)}%). Alto riesgo de barreado en índigo.`)
+    } else if (vals.cvm > cvmWarn) {
+      coms.push(`CVm ${vals.cvm.toFixed(1)}% — por encima del estándar (${cvmWarn.toFixed(1)}%). Vigilar uniformidad en slashing.`)
     }
   }
+
   // Elongación para Urdimbre
   if (app.startsWith('Urdimbre') && vals.elongacion != null) {
-    if (vals.elongacion >= 9) coms.push(`Elongación excelente (${vals.elongacion.toFixed(1)}%). La Urdidora y el Índigo lo van a pasar sin problemas.`)
-    else if (vals.elongacion >= 8) coms.push(`Elongación correcta (${vals.elongacion.toFixed(1)}%). Camina bien por la Urdidora.`)
-    else if (vals.elongacion >= 7.5) coms.push(`Elongación ajustada (${vals.elongacion.toFixed(1)}%). Precaución en tensión de urdido — el hilo no perdona.`)
-    else coms.push(`⚠️ Elongación baja (${vals.elongacion.toFixed(1)}%). Riesgo real de rotura en Urdidora. Bajar tensión o velocidad.`)
+    if (vals.elongacion >= 8.5) coms.push(`Elongación ${vals.elongacion.toFixed(1)}%: buena reserva elástica para stretch programado.`)
+    else if (vals.elongacion >= 8.0) coms.push(`Elongación ${vals.elongacion.toFixed(1)}%: cumple mínimo operativo para control de tensión Benninger.`)
+    else if (vals.elongacion >= 7.5) coms.push(`Elongación ${vals.elongacion.toFixed(1)}% (<8): riesgo en rodillos exprimidores y cajas de oxidación.`)
+    else coms.push(`⚠️ Elongación ${vals.elongacion.toFixed(1)}% muy baja: alto riesgo de rotura bajo tensión constante de manta.`)
   }
+
   // Neps para Índigo
   if (app.startsWith('Urdimbre') && vals.neps_200 != null) {
     if (vals.neps_200 < 200) coms.push(`Hilo muy limpio para Índigo (Neps ${vals.neps_200.toFixed(0)}/km). Teñido uniforme.`)
@@ -923,10 +986,10 @@ function generarComentarioPlanta(ne, app, vals, hvi, isFlame = false) {
   // MIC — fibra
   const mic = hvi.mic != null ? parseFloat(hvi.mic) : null
   if (mic != null && !isNaN(mic)) {
-    if (mic > 4.7) coms.push(`MIC ${mic.toFixed(2)} — cargado al grueso. Fibra madura, menos neps pero hilo más rígido.`)
-    else if (mic > 4.5) coms.push(`MIC ${mic.toFixed(2)} — en el límite superior. Fibra tirando a gruesa.`)
-    else if (mic < 3.5) coms.push(`MIC ${mic.toFixed(2)} — fibra inmadura. Cuidado con neps y absorción desigual de tinte.`)
+    if (mic > 4.5) coms.push(`MIC ${mic.toFixed(2)} (>4.5): menor superficie específica. Riesgo de teñido anular por pobre penetración en cajas Benninger.`)
+    else if (mic < 3.8) coms.push(`MIC ${mic.toFixed(2)} (<3.8): riesgo de neps de color y puntos claros en índigo.`)
   }
+
   // STR fibra
   const str = hvi.str != null ? parseFloat(hvi.str) : null
   if (str != null && !isNaN(str)) {
@@ -996,6 +1059,14 @@ const tablaAptitud = computed(() => {
   })
 })
 
+const comentarioTituloWidthCh = computed(() => {
+  const maxLen = tablaAptitud.value
+    .filter(r => r.comentarios.length > 0)
+    .map(r => `Ne ${r.neDisplay}:`.length)
+    .reduce((m, len) => Math.max(m, len), 0)
+  return Math.max(8, maxLen)
+})
+
 // ── Alerta WhatsApp — clipboard ───────────────────────────────────────────
 function generarAlertaWhatsApp() {
   if (!tablaAptitud.value.length || !loteActual.value) return ''
@@ -1005,7 +1076,6 @@ function generarAlertaWhatsApp() {
   const str = pf(hvi.str), sci = pf(hvi.sci), mic = pf(hvi.mic), uhml = pf(hvi.uhml)
   const f = (v, d = 1) => v != null && !isNaN(v) ? Number(v).toFixed(d) : '–'
 
-  const alertasNe = []
   const hayAlerta = tablaAptitud.value.some(r => r.pasador !== 'aprobado')
   const ico = hayAlerta ? '⚠️' : '✅'
 
@@ -1019,6 +1089,7 @@ function generarAlertaWhatsApp() {
     const { ne, neDisplay, app, vals, pasador, desvios, hviAlerts, isFlame } = row
     const nNum = parseFloat(ne)
     const mat = getMatrizRequisitos(nNum, isFlame)
+    const cvmWarn = mat?.umb?.cvm?.w ?? (isFlame ? 20.0 : 12.5)
 
     // Icono de estado
     const neIco = pasador === 'rechazado' ? '🔴' : pasador === 'condicional' ? '⚠️' : '✅'
@@ -1033,15 +1104,15 @@ function generarAlertaWhatsApp() {
     // 1) Alerta de elongación para urdimbre
     if (app.startsWith('Urdimbre') && vals.elongacion != null && vals.elongacion < 8.0) {
       const critico = vals.elongacion < 7.5
-      lines.push(`🧵 ${critico ? '¡ATENCIÓN' : 'Precaución'} en Urdido! Elongación en *${f(vals.elongacion)}%* ${critico ? '(Límite crítico)' : '(Margen ajustado)'}. El hilo está "seco" y no tiene margen de estiramiento.`)
-      lines.push(`📍 *Acción:* Controlar tensiones en filetero y bajar velocidad si hay cortes frecuentes.`)
+      lines.push(`🧵 ${critico ? '¡ATENCIÓN' : 'Precaución'} en Urdido/Índigo: Elongación *${f(vals.elongacion)}%* (<8). Riesgo en exprimidores y cajas de oxidación por tensión constante.`)
+      lines.push(`📍 *Acción:* bajar stretch programado y reducir velocidad de línea hasta estabilizar.`)
     }
 
-    // 2) Alerta de tenacidad para telar
-    if (vals.tenacidad != null) {
-      if (vals.tenacidad < 14.5) {
-        lines.push(`🔴 Tenacidad *${f(vals.tenacidad)} cN/tex* — CRÍTICA. Alta probabilidad de rotura en telar a velocidad normal.`)
-        lines.push(`📍 *Acción:* Reducir velocidad de inserción. Evaluar si se puede reforzar la mezcla.`)
+    // 2) Alerta de tenacidad para urdimbre/telar
+    if (vals.tenacidad != null && app.startsWith('Urdimbre')) {
+      if (vals.tenacidad < 16.0) {
+        lines.push(`🔴 Tenacidad *${f(vals.tenacidad)} cN/tex* en urdimbre (<16). Se anticipan paradas por rotura de cabos en batea.`)
+        lines.push(`📍 *Acción:* reducir velocidad y tensión mientras se corrige mezcla/proceso.`)
       } else if (vals.tenacidad >= 18) {
         lines.push(`💪 Tenacidad *${f(vals.tenacidad)} cN/tex* — va sobrado de fuerza. Sin drama en ningún proceso.`)
       }
@@ -1059,18 +1130,18 @@ function generarAlertaWhatsApp() {
       lines.push(`📉 *Fibra por debajo de la Matriz:* ${hviAlerts.join(' / ')}. Impacto directo en estabilidad del proceso.`)
     }
 
-    // 4) CVm% para trama — barreado
-    if (app === 'Trama' && vals.cvm != null && vals.cvm > 13) {
-      lines.push(`📊 CVm% *${f(vals.cvm)}%* — masa irregular para trama. Riesgo de barreado visible en la tela.`)
-      lines.push(`📍 *Acción:* Revisar ajuste de estiraje y estado de manguitos.`)
+    // 4) CVm% vs estándar de título — barreado
+    if (!isFlame && vals.cvm != null && vals.cvm > cvmWarn) {
+      lines.push(`📊 CVm% *${f(vals.cvm)}%* > estándar *${f(cvmWarn)}%* para Ne ${neDisplay}. Riesgo de barreado que se intensifica con índigo.`)
+      lines.push(`📍 *Acción:* evitar velocidad pico y revisar uniformidad de alimentación/estiraje.`)
     }
 
     // 5) MIC — absorción de tinte
     if (mic != null && !isNaN(mic)) {
       if (mic > 4.5) {
-        lines.push(`🎨 *ÍNDIGO / TINTURA:* MIC en *${f(mic, 2)}*. Fibra madura/gruesa → mano áspera y diferencia de absorción en tintura. Vigilar tono entre partidas.`)
-      } else if (mic < 3.5) {
-        lines.push(`🎨 *ÍNDIGO / TINTURA:* MIC en *${f(mic, 2)}*. Fibra inmadura → riesgo de neps blancos y absorción desigual de tinte.`)
+        lines.push(`🎨 *ÍNDIGO / TINTURA:* MIC *${f(mic, 2)}* (>4.5). Menor superficie específica, con riesgo de teñido anular y pobre penetración en cajas Benninger.`)
+      } else if (mic < 3.8) {
+        lines.push(`🎨 *ÍNDIGO / TINTURA:* MIC *${f(mic, 2)}* (<3.8). Riesgo de neps de color y puntos claros.`)
       }
     }
 

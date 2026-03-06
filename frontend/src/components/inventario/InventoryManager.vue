@@ -4316,8 +4316,6 @@ const mixPlanSimulation = computed(() => {
       
       let prodsStr = g.componentProds.join(', ');
       let lotesStr = g.componentLotes.join(', ');
-      if (prodsStr.length > 25) prodsStr = prodsStr.substring(0, 22) + '...';
-      if (lotesStr.length > 25) lotesStr = lotesStr.substring(0, 22) + '...';
       
       g.PRODUTOR = `${g.fPrefix} ${g.idx} (${prodsStr})`;
       g.LOTE = `${g.lPrefix} (${lotesStr})`;
@@ -5214,11 +5212,11 @@ const groupedItems = computed(() => {
       const singleProducerOriginal = normalizeSortText(g.items?.[0]?.PRODUTOR);
       
       obj.PRODUTOR = g.items.length <= 1
-        ? (singleProducerOriginal || `${g.fPrefix} ${g.idx} (${pList.length > 20 ? pList.substring(0, 17) + '...' : pList})`)
-        : `${g.fPrefix} ${g.idx} (${pList.length > 20 ? pList.substring(0, 17) + '...' : pList})`;
+        ? (singleProducerOriginal || `${g.fPrefix} ${g.idx} (${pList})`)
+        : `${g.fPrefix} ${g.idx} (${pList})`;
       obj.LOTE     = g.items.length <= 1
-        ? (singleLotOriginal || `Agrupado (${lList.length > 50 ? lList.substring(0, 47) + '...' : lList})`)
-        : `Agrupado (${lList.length > 50 ? lList.substring(0, 47) + '...' : lList})`;
+        ? (singleLotOriginal || `Agrupado (${lList})`)
+        : `Agrupado (${lList})`;
       obj.TAM      = tamList.length > 1 ? 'VARIOS' : (tamList[0] || g.tam || '');
       obj._isGroup = true; // Flag para UI si se necesita destacar
       obj._selectionKey = `GROUP::${g.estado}::${g.tam}::${g.lotes.join('|')}`;

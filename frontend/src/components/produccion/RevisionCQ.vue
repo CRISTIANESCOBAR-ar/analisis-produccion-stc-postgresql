@@ -113,6 +113,62 @@
       </div>
 
     <!-- Layout de dos tablas lado a lado -->
+    <div class="mb-4 rounded-xl border border-indigo-200 bg-indigo-50/40 p-3">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-sm font-bold text-indigo-800">Analisis IA de Revision (PRIMEIRA)</h3>
+        <span class="text-[10px] text-indigo-600">Ritmo por rollo = metros / minutos entre salidas</span>
+      </div>
+
+      <div v-if="loadingAnalisisIA" class="text-xs text-indigo-700">Analizando desempeno de revisores...</div>
+      <div v-else-if="analisisIARevisores.length === 0" class="text-xs text-slate-500">Sin datos PRIMEIRA para construir analisis.</div>
+      <div v-else class="space-y-3">
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">
+          <div class="bg-white/80 border border-indigo-100 rounded-lg p-2.5">
+            <div class="text-[11px] font-bold text-indigo-800 mb-1">Resumen ejecutivo</div>
+            <div class="text-xs text-slate-700 space-y-1">
+              <div v-for="(linea, idx) in analisisIAResumen" :key="`ia-res-${idx}`">{{ linea }}</div>
+            </div>
+          </div>
+
+          <div class="bg-white/80 border border-indigo-100 rounded-lg p-2.5 overflow-auto">
+            <div class="text-[11px] font-bold text-indigo-800 mb-1">Desempeno por revisor</div>
+            <table class="w-full text-[11px]">
+              <thead>
+                <tr class="text-slate-500 border-b border-slate-200">
+                  <th class="text-left py-1 pr-2">Revisor</th>
+                  <th class="text-center py-1 px-2">Turno</th>
+                  <th class="text-center py-1 px-2">Primer rollo</th>
+                  <th class="text-center py-1 px-2">m/min (jornada) + etiqueta</th>
+                  <th class="text-center py-1 px-2">Pts/100m2 (proceso)</th>
+                  <th class="text-center py-1 px-2">Sin Pts + etiqueta</th>
+                  <th class="text-center py-1 pl-2">Metros</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in analisisIARevisores" :key="`ia-row-${row.revisor}`" class="border-b border-slate-100 text-slate-700">
+                  <td class="py-1 pr-2 font-semibold">{{ row.revisor }}</td>
+                  <td class="py-1 px-2 text-center">{{ row.turno }} ({{ row.turnoInicio }})</td>
+                  <td class="py-1 px-2 text-center">{{ row.primerRollo }} (+{{ row.minDesdeInicio }} min)</td>
+                  <td class="py-1 px-2 text-center">
+                    <div class="font-semibold">{{ formatNumber(row.ritmoPromMMin) }}</div>
+                    <div class="text-[10px] text-slate-500">entre salidas {{ formatNumber(row.ritmoEntreSalidasMMin) }}</div>
+                    <span class="inline-flex mt-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold" :class="row.ritmoTagClass">{{ row.ritmoTag }}</span>
+                  </td>
+                  <td class="py-1 px-2 text-center">{{ row.pts100m2 != null ? formatNumber(row.pts100m2) : '-' }}</td>
+                  <td class="py-1 px-2 text-center">
+                    <div>{{ row.rollosSinPts }}/{{ row.rollos }} ({{ formatNumber(row.pctSinPts) }}%)</div>
+                    <span class="inline-flex mt-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold" :class="row.sinPtsTagClass">{{ row.sinPtsTag }}</span>
+                  </td>
+                  <td class="py-1 pl-2 text-center font-semibold">{{ formatInteger(row.metrosTotales) }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="text-[10px] text-slate-500 mt-1">Las etiquetas del revisor se calculan solo con % de rollos sin puntos y ritmo (m/min).</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="grid grid-cols-1 lg:grid-cols-[450px_1fr] gap-4">
       <!-- Tabla Izquierda: Resumen por Revisor -->
       <div class="flex flex-col gap-2">
@@ -424,6 +480,8 @@ const totals = ref({
 // Variables para la segunda tabla (detalle)
 const selectedRevisor = ref(null)
 const detalleRevisor = ref([])
+const revisionIAData = ref([])
+const loadingAnalisisIA = ref(false)
 
 // Variables para la tercera tabla (detalle de partida)
 const selectedPartida = ref(null)
@@ -647,6 +705,227 @@ const canGenerateReport = computed(() => {
   return filters.value.fecha
 })
 
+const resumenPorRevisor = computed(() => {
+  const map = new Map()
+  for (const row of calidadData.value || []) {
+    const revisor = String(row?.Revisor ?? '').trim()
+    if (!revisor || revisor.toUpperCase() === 'RETALHO') continue
+    map.set(revisor, row)
+  }
+  return map
+})
+
+function parseHoraToMinutes(hora) {
+  const digits = String(hora ?? '').replace(/\D/g, '')
+  if (!digits) return null
+  const normalized = digits.padStart(4, '0').slice(-4)
+  const hh = Number(normalized.slice(0, 2))
+  const mm = Number(normalized.slice(2, 4))
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null
+  if (hh < 0 || hh > 23 || mm < 0 || mm > 59) return null
+  return (hh * 60) + mm
+}
+
+function formatMinutesToHHMM(minutes) {
+  if (!Number.isFinite(minutes)) return '-'
+  const normalized = ((Math.round(minutes) % 1440) + 1440) % 1440
+  const hh = String(Math.floor(normalized / 60)).padStart(2, '0')
+  const mm = String(normalized % 60).padStart(2, '0')
+  return `${hh}:${mm}`
+}
+
+function inferTurno(firstRollMinute) {
+  if (!Number.isFinite(firstRollMinute)) {
+    return { turno: '-', startMinute: 360, label: '06:00' }
+  }
+  if (firstRollMinute >= 360 && firstRollMinute < 840) {
+    return { turno: 'A', startMinute: 360, label: '06:00' }
+  }
+  if (firstRollMinute >= 840 && firstRollMinute < 1320) {
+    return { turno: 'B', startMinute: 840, label: '14:00' }
+  }
+  return { turno: 'C', startMinute: 1320, label: '22:00' }
+}
+
+function clasificarEtiquetaSinPts(pctSinPts, avgSinPts) {
+  if (!Number.isFinite(pctSinPts)) return { label: 'Sin dato', className: 'bg-slate-100 text-slate-600' }
+  if (!Number.isFinite(avgSinPts)) return { label: 'En control', className: 'bg-slate-100 text-slate-700' }
+  if (pctSinPts >= 25) return { label: 'Muy alto (auditar)', className: 'bg-red-100 text-red-700' }
+  if (pctSinPts >= 15) return { label: 'Alto (revisar)', className: 'bg-amber-100 text-amber-700' }
+  if (pctSinPts >= 3) return { label: 'En control', className: 'bg-emerald-100 text-emerald-700' }
+  return { label: 'Bajo', className: 'bg-slate-100 text-slate-700' }
+}
+
+function clasificarEtiquetaRitmo(ritmoPromMMin, avgRitmo) {
+  if (!Number.isFinite(ritmoPromMMin) || ritmoPromMMin <= 0) return { label: 'Sin dato', className: 'bg-slate-100 text-slate-600' }
+  if (!Number.isFinite(avgRitmo) || avgRitmo <= 0) return { label: 'Ritmo estable', className: 'bg-slate-100 text-slate-700' }
+  if (ritmoPromMMin >= avgRitmo * 1.15) return { label: 'Ritmo alto', className: 'bg-emerald-100 text-emerald-700' }
+  if (ritmoPromMMin >= avgRitmo * 0.85) return { label: 'Ritmo estable', className: 'bg-amber-100 text-amber-700' }
+  return { label: 'Ritmo bajo', className: 'bg-red-100 text-red-700' }
+}
+
+const analisisIARevisores = computed(() => {
+  if (!revisionIAData.value.length) return []
+
+  const grouped = new Map()
+  for (const row of revisionIAData.value) {
+    const revisor = String(row?.Revisor ?? '').trim()
+    if (!revisor || revisor.toUpperCase() === 'RETALHO') continue
+    if (!grouped.has(revisor)) grouped.set(revisor, [])
+    grouped.get(revisor).push(row)
+  }
+
+  const output = []
+  for (const [revisor, items] of grouped.entries()) {
+    const parsed = items
+      .map((item) => {
+        const horaMin = parseHoraToMinutes(item.HoraSalida)
+        const metros = Number(item.MetrosRollo || 0)
+        const pontuacao = Number(item.PontuacaoRollo || 0)
+        return {
+          horaMin,
+          metros: Number.isFinite(metros) ? metros : 0,
+          pontuacao: Number.isFinite(pontuacao) ? pontuacao : 0,
+        }
+      })
+      .filter((item) => item.horaMin != null)
+
+    if (!parsed.length) continue
+
+    parsed.sort((a, b) => a.horaMin - b.horaMin)
+    const firstRawMinute = parsed[0].horaMin
+    const turnoInfo = inferTurno(firstRawMinute)
+
+    const ordered = parsed
+      .map((item) => ({
+        ...item,
+        effectiveMinute: item.horaMin < turnoInfo.startMinute ? item.horaMin + 1440 : item.horaMin,
+      }))
+      .sort((a, b) => a.effectiveMinute - b.effectiveMinute)
+
+    const firstEffective = ordered[0].effectiveMinute
+    const minDesdeInicio = Math.max(0, firstEffective - turnoInfo.startMinute)
+
+    let prevMinute = turnoInfo.startMinute
+    let metrosConDelta = 0
+    let minutosConDelta = 0
+    let metrosTotales = 0
+    let rollosSinPts = 0
+
+    const byMinute = new Map()
+
+    for (const rollo of ordered) {
+      metrosTotales += rollo.metros
+      if (rollo.pontuacao === 0) rollosSinPts += 1
+
+      const minuteKey = rollo.effectiveMinute
+      if (!byMinute.has(minuteKey)) byMinute.set(minuteKey, 0)
+      byMinute.set(minuteKey, byMinute.get(minuteKey) + rollo.metros)
+
+      prevMinute = rollo.effectiveMinute
+    }
+
+    prevMinute = turnoInfo.startMinute
+    const minuteBuckets = Array.from(byMinute.entries()).sort((a, b) => a[0] - b[0])
+    for (const [minutePoint, metrosBucket] of minuteBuckets) {
+      const deltaMin = minutePoint - prevMinute
+      if (deltaMin > 0 && metrosBucket > 0) {
+        metrosConDelta += metrosBucket
+        minutosConDelta += deltaMin
+      }
+      prevMinute = minutePoint
+    }
+
+    const lastEffectiveMinute = ordered[ordered.length - 1].effectiveMinute
+    const minutosJornada = Math.max(0, lastEffectiveMinute - turnoInfo.startMinute)
+    const ritmoJornada = minutosJornada > 0 ? (metrosTotales / minutosJornada) : 0
+    const ritmoEntreSalidas = minutosConDelta > 0 ? (metrosConDelta / minutosConDelta) : 0
+
+    const resumen = resumenPorRevisor.value.get(revisor)
+    const pts = resumen != null ? Number(resumen.Pts_100m2) : NaN
+    const pts100m2 = Number.isFinite(pts) ? pts : null
+
+    output.push({
+      revisor,
+      turno: turnoInfo.turno,
+      turnoInicio: turnoInfo.label,
+      primerRollo: formatMinutesToHHMM(firstRawMinute),
+      minDesdeInicio,
+      ritmoPromMMin: ritmoJornada,
+      ritmoEntreSalidasMMin: ritmoEntreSalidas,
+      metrosTotales,
+      rollos: ordered.length,
+      rollosSinPts,
+      pctSinPts: ordered.length > 0 ? (rollosSinPts / ordered.length) * 100 : 0,
+      pts100m2,
+    })
+  }
+
+  const avgSinPts = output.length ? output.reduce((sum, r) => sum + r.pctSinPts, 0) / output.length : NaN
+  const ritmoRows = output.filter(r => Number.isFinite(r.ritmoPromMMin) && r.ritmoPromMMin > 0)
+  const avgRitmo = ritmoRows.length ? ritmoRows.reduce((sum, r) => sum + r.ritmoPromMMin, 0) / ritmoRows.length : NaN
+
+  const withTags = output.map((row) => {
+    const sinPtsTag = clasificarEtiquetaSinPts(row.pctSinPts, avgSinPts)
+    const ritmoTag = clasificarEtiquetaRitmo(row.ritmoPromMMin, avgRitmo)
+    return {
+      ...row,
+      sinPtsTag: sinPtsTag.label,
+      sinPtsTagClass: sinPtsTag.className,
+      ritmoTag: ritmoTag.label,
+      ritmoTagClass: ritmoTag.className,
+    }
+  })
+
+  return withTags.sort((a, b) => b.metrosTotales - a.metrosTotales)
+})
+
+const analisisIAResumen = computed(() => {
+  if (!analisisIARevisores.value.length) return []
+
+  const revisores = analisisIARevisores.value
+  const withRitmo = revisores.filter(r => r.ritmoPromMMin > 0)
+
+  const mejoresRitmo = [...withRitmo].sort((a, b) => b.ritmoPromMMin - a.ritmoPromMMin).slice(0, 3)
+  const sinPtsAltos = [...revisores].filter(r => r.pctSinPts >= 15).sort((a, b) => b.pctSinPts - a.pctSinPts)
+  const sinPtsControl = [...revisores].filter(r => r.pctSinPts >= 3 && r.pctSinPts < 15).sort((a, b) => b.pctSinPts - a.pctSinPts)
+
+  const avgSinPts = revisores.length ? revisores.reduce((sum, r) => sum + r.pctSinPts, 0) / revisores.length : null
+  const avgRitmo = withRitmo.length ? withRitmo.reduce((sum, r) => sum + r.ritmoPromMMin, 0) / withRitmo.length : null
+  const withPts = revisores.filter(r => r.pts100m2 != null)
+  const avgPts = withPts.length ? withPts.reduce((sum, r) => sum + r.pts100m2, 0) / withPts.length : null
+  const minPts = withPts.length ? Math.min(...withPts.map(r => r.pts100m2)) : null
+  const maxPts = withPts.length ? Math.max(...withPts.map(r => r.pts100m2)) : null
+
+  const recomendados = revisores
+    .filter(r => (avgSinPts == null || (r.pctSinPts >= 3 && r.pctSinPts < 15))
+      && (avgRitmo == null || r.ritmoPromMMin >= avgRitmo))
+    .sort((a, b) => {
+      const qa = (a.pctSinPts * 0.65) + (a.ritmoPromMMin * 10 * 0.35)
+      const qb = (b.pctSinPts * 0.65) + (b.ritmoPromMMin * 10 * 0.35)
+      return qb - qa
+    })
+    .slice(0, 3)
+
+  const lines = []
+  if (sinPtsAltos.length) {
+    lines.push(`• Punto de control (Sin Pts alto): ${sinPtsAltos.slice(0, 3).map(r => `${r.revisor} (${formatNumber(r.pctSinPts)}%)`).join(', ')}.`)
+  }
+  if (sinPtsControl.length) {
+    lines.push(`• Sin Pts en rango de control: ${sinPtsControl.slice(0, 3).map(r => `${r.revisor} (${formatNumber(r.pctSinPts)}%)`).join(', ')}.`)
+  }
+  if (mejoresRitmo.length) {
+    lines.push(`• Mejor ritmo de jornada (m/min): ${mejoresRitmo.map(r => `${r.revisor} (${formatNumber(r.ritmoPromMMin)})`).join(', ')}.`)
+  }
+  if (recomendados.length) {
+    lines.push(`• Recomendacion de mayor carga de metros: ${recomendados.map(r => r.revisor).join(', ')} (sin pts en control + buen ritmo).`)
+  }
+  if (avgPts != null) {
+    lines.push(`• Contexto de proceso tejeduria (no KPI del revisor): Pts/100m2 promedio ${formatNumber(avgPts)} (rango ${formatNumber(minPts)} - ${formatNumber(maxPts)}).`)
+  }
+  return lines
+})
+
 // Cambiar fecha por días (-1 = ayer, +1 = mañana)
 function cambiarFecha(dias) {
   if (!filters.value.fecha) return
@@ -724,6 +1003,18 @@ async function loadData() {
   
   calidadData.value = result || []
   calculateTotals()
+
+  loadingAnalisisIA.value = true
+  const iaResult = await tryCatch(async () => {
+    const params = {
+      startDate: filters.value.fecha,
+      endDate: filters.value.fecha,
+      tramas: filters.value.tramas
+    }
+    return await db.getRevisionCQIA(params)
+  }, 'Cargar analisis IA revision', { toast: false })
+  revisionIAData.value = iaResult || []
+  loadingAnalisisIA.value = false
 }
 
 function applyFilters() {

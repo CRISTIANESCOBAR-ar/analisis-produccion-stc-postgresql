@@ -164,7 +164,7 @@ function reportLineClass(line) {
     return 'text-[15px] font-bold leading-6 text-slate-900'
   }
 
-  if (/^(?:📋|📅|🧪|⚠️ ALERTAS POR TÍTULO|🛠️ AJUSTES DE PLANTA|🚀 CONCLUSIÓN|📑)/.test(value)) {
+  if (/^(?:📋|📅|👷|📌|🧪|⚙️|🎛️|📑)/.test(value)) {
     return 'text-sm font-semibold leading-6 text-slate-800'
   }
 
@@ -505,24 +505,24 @@ function buildNarrativeReport(rows, lote, mic) {
   })
 
   const sortedNes = Array.from(groups.keys()).sort((a, b) => parseNumericForSort(a) - parseNumericForSort(b))
-  const sectionLines = []
+  const titleAssessments = []
   const rejectedTitles = []
   const conditionalTitles = []
 
   sortedNes.forEach((neLabel) => {
     const neRows = groups.get(neLabel) || []
-    const role = getNeRole(neLabel)
     const elong = rangeStats(neRows, 'Elong. %')
     const tenac = rangeStats(neRows, 'Tenac.')
     const cvm = rangeStats(neRows, 'CVm %')
-    const trabajo = rangeStats(neRows, 'Trabajo B')
-    const elongMinContext = isolatedMinContext(neRows, 'Elong. %', elong)
-    const tenacMinContext = isolatedMinContext(neRows, 'Tenac.', tenac)
+    const neps140 = rangeStats(neRows, 'Neps +140%')
+    const neps280 = rangeStats(neRows, 'Neps +280%')
 
     const neLower = String(neLabel).toLowerCase()
     const isFlame = neLower.includes('flame')
     const neNum = parseNumericForSort(neLabel)
     const matriz = getMatrizAuditoria(neNum, isFlame)
+    const app = matriz?.app || getNeRole(neLabel)
+    const cvmWarn = matriz?.umb?.cvm?.w ?? (isFlame ? 20.0 : 12.5)
 
     const evals = []
     if (matriz?.umb?.tenacidad && tenac) evals.push(evalUmbralAuditoria(tenac.mean, matriz.umb.tenacidad))
@@ -536,109 +536,139 @@ function buildNarrativeReport(rows, lote, mic) {
     if (status === 'RECHAZADO') rejectedTitles.push(`Ne ${neLabel}`)
     if (status === 'CONDICIONAL') conditionalTitles.push(`Ne ${neLabel}`)
 
-    let icon = status === 'RECHAZADO' ? '🔴' : status === 'CONDICIONAL' ? '⚠️' : (isFlame ? '🔥' : '✅')
-    let zone = status === 'RECHAZADO' ? 'ZONA CRÍTICA' : status === 'CONDICIONAL' ? 'VIGILAR' : 'APTO'
-    let action = 'Sostener reglajes actuales y continuar control por turno.'
+    const isUrdimbre = app.startsWith('Urdimbre') || neNum >= 10
+    const elongRisk = Boolean(elong && elong.mean < 8.0)
+    const tenacidadRisk = Boolean(isUrdimbre && tenac && tenac.mean < 16.0)
+    const cvmRisk = Boolean(cvm && cvm.mean > cvmWarn)
 
-    if (isFlame) {
-      zone = status === 'APROBADO' ? 'EFECTO SEGURO' : status === 'CONDICIONAL' ? 'CONTROLAR FLAMA' : 'REVISAR FLAMA'
-      action = status === 'APROBADO'
-        ? 'Mantener receta y tensión actual: el efecto flame es estable y no compromete estructura.'
-        : status === 'CONDICIONAL'
-          ? 'Controlar variación de efecto flame y estiraje para mantener regularidad visual entre partidas.'
-          : 'Corregir receta/estiraje de fantasía antes de liberar producción para evitar inestabilidad del efecto.'
-    } else if (neLower.includes('12.5')) {
-      action = status === 'APROBADO'
-        ? 'Apto para continuidad con monitoreo normal de urdidora e índigo.'
-        : status === 'CONDICIONAL'
-          ? 'Ajustar tensión de urdido y filetero; sostener vigilancia de elongación y tenacidad.'
-          : 'Detener liberación automática: requiere corrección de tensiones y validación técnica previa.'
-    } else if (neLower.includes('10')) {
-      action = status === 'APROBADO'
-        ? 'Apto para corrida estable en telar con parámetros actuales.'
-        : status === 'CONDICIONAL'
-          ? 'Revisar tensiones y dispersión de tenacidad antes de subir velocidad de telar.'
-          : 'No liberar a máxima exigencia hasta recuperar umbrales de matriz en laboratorio.'
-    } else if (neLower.includes('7')) {
-      zone = status === 'APROBADO' ? 'SOBRADO' : status === 'CONDICIONAL' ? 'ATENCIÓN' : 'NO APTO'
-      action = status === 'APROBADO'
-        ? 'Hilo fuerte y limpio. Sin riesgo operativo inmediato de cortes o barreado.'
-        : status === 'CONDICIONAL'
-          ? 'Ajustar limpieza y regularidad para estabilizar trama y evitar paradas puntuales.'
-          : 'Corregir regularidad/tenacidad antes de sostener ritmo de producción en trama.'
-    }
-
-    const operatorMap = new Map()
-    neRows
-      .flatMap((row) => [row['Op. Uster'], row['Op. TensoRapid']])
-      .map((value) => String(value || '').trim())
-      .filter((value) => value && value !== '—')
-      .forEach((name) => {
-        const key = name.toUpperCase()
-        if (!operatorMap.has(key)) operatorMap.set(key, name)
-      })
-    const operators = Array.from(operatorMap.values())
-
-    sectionLines.push(`${icon} Ne ${neLabel} (${role}) - ${zone} (${status})`)
-    if (elong) {
-      sectionLines.push(`• Elongación: Rango ${elong.min.toFixed(1)}% - ${elong.max.toFixed(1)}%. ${elong.min < 8 ? 'El hilo está seco y con poco margen de estiramiento.' : 'Comportamiento elástico estable para proceso.'}${isolatedMinWarning(elong, elongMinContext)}`)
-    }
-    if (tenac) {
-      sectionLines.push(`• Tenacidad: Dispersión ${tenac.min.toFixed(1)} - ${tenac.max.toFixed(1)} cN/tex.${isolatedMinWarning(tenac, tenacMinContext)}`)
-    }
-    if (cvm && isFlame) {
-      sectionLines.push(`• CVm%: ${cvm.mean.toFixed(1)}. En FLAME se controla como variación de efecto (objetivo ≤ 18.0%).`)
-    } else if (cvm && (neLower.includes('7') || neLower.includes('10') || neLower.includes('12.5'))) {
-      sectionLines.push(`• CVm%: ${cvm.mean.toFixed(1)}. ${cvm.mean <= 12 ? 'Regularidad consistente con matriz.' : 'Regularidad ajustada; sostener monitoreo.'}`)
-    }
-    if (trabajo && (neLower.includes('7') || neLower.includes('flame'))) {
-      sectionLines.push(`• Trabajo B: ${trabajo.mean.toFixed(1)}.`)
-    }
-    sectionLines.push(`👉 ACCIÓN: ${action}`)
-    if (operators.length > 0) {
-      sectionLines.push(`👩‍🔬 Responsables: ${operators.join(' / ')}.`)
-    }
-    sectionLines.push('')
+    titleAssessments.push({
+      neLabel,
+      app,
+      isFlame,
+      status,
+      isUrdimbre,
+      elong,
+      tenac,
+      cvm,
+      neps140,
+      neps280,
+      cvmWarn,
+      elongRisk,
+      tenacidadRisk,
+      cvmRisk,
+    })
   })
 
-  const delg50 = rangeStats(rows, 'Delg -50%')
-  const neps140 = rangeStats(rows, 'Neps +140%')
-  const neps280 = rangeStats(rows, 'Neps +280%')
-  const desvio = rangeStats(rows, 'Desvío %')
+  const tenibilidad = []
+  const hasUrdimbreTitles = titleAssessments.some((item) => item.isUrdimbre)
+  const TELAR_MODELO_TRAMA = 'Toyota JA2S-190TP-EF-T710'
+  const TELAR_RPM_TRAMA = 830
 
-  const ajustes = []
-  if (delg50 && delg50.mean <= 0.5) {
-    ajustes.push('• Puntos Delgados: Delg -50% prácticamente en cero. Mantener reglaje de pasador actual.')
-  } else if (delg50 && delg50.mean <= 1.0) {
-    ajustes.push(`• Puntos Delgados: Delg -50% en ${delg50.mean.toFixed(2)}. Nivel bajo; mantener monitoreo rutinario sin sobreajuste.`)
-  } else if (delg50) {
-    ajustes.push(`• Puntos Delgados: Delg -50% en ${delg50.mean.toFixed(2)}. Ajustar pasador para reducir cortes en trama.`)
-  }
-
-  if (mic !== null) {
-    if (mic >= 4.7) {
-      ajustes.push(`• Índigo: MIC ${mic.toFixed(2)} alto; vigilar absorción de color y riesgo de diferencias de tono.`)
-    } else if (mic > 4.5) {
-      ajustes.push(`• Índigo: MIC ${mic.toFixed(2)} en zona alta; controlar tono entre partidas y receta de tintura.`)
+  if (mic === null) {
+    tenibilidad.push('• MIC sin dato: no se puede cerrar diagnóstico de afinidad tintórea en cajas Benninger.')
+  } else if (mic > 4.5) {
+    if (hasUrdimbreTitles) {
+      tenibilidad.push(`• MIC ${mic.toFixed(2)} (>4.5): fibra con menor superficie específica. Aumenta riesgo de teñido anular y pobre penetración en cajas de inmersión Benninger (aplica a títulos de urdimbre).`)
     } else {
-      ajustes.push(`• Índigo: MIC ${mic.toFixed(2)} dentro de zona estable para teñido uniforme.`)
+      tenibilidad.push(`• MIC ${mic.toFixed(2)} (>4.5): lote de trama (sin paso por Benninger). Se espera hilo más rígido y mayor fricción dinámica; vigilar continuidad en telar de aire ${TELAR_MODELO_TRAMA} a ${TELAR_RPM_TRAMA} RPM.`)
+    }
+  } else if (mic < 3.8) {
+    if (hasUrdimbreTitles) {
+      tenibilidad.push(`• MIC ${mic.toFixed(2)} (<3.8): fibra más inmadura/fina. Sube probabilidad de neps de color y puntos claros en índigo.`)
+    } else {
+      tenibilidad.push(`• MIC ${mic.toFixed(2)} (<3.8): lote de trama (sin Benninger). Riesgo de neps/irregularidad visual y variación de limpieza en telar de aire ${TELAR_MODELO_TRAMA}.`)
+    }
+  } else {
+    if (hasUrdimbreTitles) {
+      tenibilidad.push(`• MIC ${mic.toFixed(2)}: ventana balanceada para penetración y build-up de índigo en slashing.`)
+    } else {
+      tenibilidad.push(`• MIC ${mic.toFixed(2)}: rango estable para lote de trama; no se anticipa impacto crítico por finura en telar de aire ${TELAR_MODELO_TRAMA}.`)
     }
   }
 
-  if (neps140 && neps280 && neps140.mean < 200 && neps280.mean < 50) {
-    ajustes.push('• Limpieza: Neps controlados; no se anticipan puntos blancos por suciedad de hilo.')
+  titleAssessments.forEach((item) => {
+    if (!item.cvm || item.isFlame) return
+    if (item.cvmRisk) {
+      tenibilidad.push(`• Ne ${item.neLabel}: CVm ${item.cvm.mean.toFixed(2)}% > estándar ${item.cvmWarn.toFixed(2)}%. Riesgo de barreado que se intensifica con el color índigo.`)
+    }
+  })
+
+  const lowMicWithHighNeps = mic !== null && mic < 3.8 && titleAssessments.some((item) => {
+    if (!item.neps280) return false
+    return item.neps280.mean > 60
+  })
+  if (lowMicWithHighNeps) {
+    tenibilidad.push('• MIC bajo + Neps elevados: escenario típico de neps de color, revisar limpieza y preparación antes de liberar lote.')
+  }
+  if (tenibilidad.length === 0) {
+    tenibilidad.push('• Sin alertas de teñibilidad para las variables disponibles.')
   }
 
-  if (desvio) {
-    const absMean = Math.abs(desvio.mean)
-    ajustes.push(absMean <= 0.5
-      ? `• Título: Desvío bajo control (±${absMean.toFixed(2)}%).`
-      : `• Título: Desvío promedio en ±${absMean.toFixed(2)}%; revisar ajuste de título objetivo.`)
-  }
+  const mecanico = []
+  titleAssessments.forEach((item) => {
+    const icon = item.status === 'RECHAZADO' ? '🔴' : item.status === 'CONDICIONAL' ? '⚠️' : '✅'
+    const tramo = `${icon} Ne ${item.neLabel} (${item.app}):`
+    const detalles = []
 
-  const mezcla = mic !== null
-    ? `🧪 Mezcla: Lote ${lote} (HVI MIC ${mic.toFixed(2)})`
-    : `🧪 Mezcla: Lote ${lote} (HVI MIC sin dato)`
+    if (item.elong) {
+      if (item.isUrdimbre && item.elongRisk) {
+        detalles.push(`elongación ${item.elong.mean.toFixed(2)}% (<8.0): riesgo en rodillos exprimidores y cajas de oxidación por tensión constante de manta`)
+      } else if (item.isUrdimbre) {
+        detalles.push(`elongación ${item.elong.mean.toFixed(2)}%: elasticidad suficiente para el stretch programado de Benninger`)
+      } else if (item.elong.mean < 7.0) {
+        detalles.push(`elongación ${item.elong.mean.toFixed(2)}%: baja para trama; riesgo de mayor tasa de rotura en telar de aire ${TELAR_MODELO_TRAMA} a ${TELAR_RPM_TRAMA} RPM`)
+      } else {
+        detalles.push(`elongación ${item.elong.mean.toFixed(2)}%: comportamiento elástico estable para trama en telar de aire ${TELAR_MODELO_TRAMA} a ${TELAR_RPM_TRAMA} RPM`)
+      }
+    }
+
+    if (item.tenac && item.isUrdimbre) {
+      if (item.tenacidadRisk) {
+        detalles.push(`tenacidad ${item.tenac.mean.toFixed(2)} cN/tex (<16.0): probables paradas por rotura de cabos en batea`)
+      } else {
+        detalles.push(`tenacidad ${item.tenac.mean.toFixed(2)} cN/tex: margen mecánico compatible con línea`)
+      }
+    } else if (item.tenac) {
+      if (item.tenac.mean < 14.0) {
+        detalles.push(`tenacidad ${item.tenac.mean.toFixed(2)} cN/tex: nivel bajo para trama a ${TELAR_RPM_TRAMA} RPM, posible incremento de paradas en telar`)
+      } else {
+        detalles.push(`tenacidad ${item.tenac.mean.toFixed(2)} cN/tex: margen suficiente para estabilidad de inserción en ${TELAR_MODELO_TRAMA}`)
+      }
+    }
+
+    if (detalles.length === 0) {
+      detalles.push('sin datos mecánicos suficientes para cerrar diagnóstico')
+    }
+
+    mecanico.push(`${tramo} ${detalles.join(' | ')}.`)
+  })
+
+  const configuracion = []
+  const hasHighMic = mic !== null && mic > 4.5
+  const hasLowMic = mic !== null && mic < 3.8
+  const hasElongRisk = titleAssessments.some((item) => item.elongRisk)
+  const hasTenRisk = titleAssessments.some((item) => item.tenacidadRisk)
+  const hasCvmRisk = titleAssessments.some((item) => item.cvmRisk && !item.isFlame)
+
+  if (hasHighMic && hasUrdimbreTitles) {
+    configuracion.push('• Ajustar presión de exprimido a la baja y/o bajar velocidad de línea para ganar tiempo de difusión y reducir riesgo de anular.')
+  } else if (hasHighMic) {
+    configuracion.push(`• Trama sin Benninger: mantener presión de planta y priorizar reducción de paros en telar ${TELAR_MODELO_TRAMA} (830 RPM) con control de tensión y limpieza de urdido/tejeduría.`)
+  }
+  if (hasLowMic && hasUrdimbreTitles) {
+    configuracion.push('• Mantener presión de exprimido moderada y reforzar filtración/limpieza para controlar neps de color en cajas y oxidación.')
+  } else if (hasLowMic) {
+    configuracion.push(`• Trama con MIC bajo: reforzar control de neps y limpieza para evitar defectos visuales y paradas en telar ${TELAR_MODELO_TRAMA}.`)
+  }
+  if (hasElongRisk || hasTenRisk) {
+    configuracion.push('• Reducir stretch programado y velocidad de corrida hasta recuperar elongación >= 8% y tenacidad >= 16 cN/tex en urdimbre.')
+  }
+  if (hasCvmRisk) {
+    configuracion.push('• Para títulos con CVm fuera de estándar, evitar velocidades pico y sostener rampas suaves para minimizar barreado en índigo.')
+  }
+  if (!configuracion.length) {
+    configuracion.push('• Mantener set points actuales de presión y velocidad; el lote muestra comportamiento estable para slashing Benninger.')
+  }
 
   const priorityLine = rejectedTitles.length > 0
     ? `Prioridad 1: Detener liberación automática en ${rejectedTitles.join(' / ')} hasta corregir desvíos de matriz.`
@@ -653,17 +683,20 @@ function buildNarrativeReport(rows, lote, mic) {
       : `Estado general: lote ${lote} bajo control y apto para continuidad operativa.`
 
   return [
-    `📋 Informe de Auditoría Operativa: Lote ${lote}`,
+    `📋 Informe Predictivo - Slashing Benninger: Lote ${lote}`,
     `📅 Periodo: ${periodStart} al ${periodEnd}`,
-    mezcla,
+    '👷 Rol técnico: Ingeniería de Procesos Tintorería Índigo (análisis local)',
+    `📌 Estado global: ${rejectedTitles.length > 0 ? 'RECHAZADO' : conditionalTitles.length > 0 ? 'CONDICIONAL' : 'APROBADO'}`,
     '',
-    '⚠️ ALERTAS POR TÍTULO',
+    '🧪 Análisis de Teñibilidad',
+    ...tenibilidad,
     '',
-    ...sectionLines,
-    '🛠️ AJUSTES DE PLANTA',
-    ...ajustes,
+    '⚙️ Comportamiento Mecánico en Línea',
+    ...mecanico,
     '',
-    '🚀 CONCLUSIÓN',
+    '🎛️ Configuración Sugerida',
+    ...configuracion,
+    '',
     estadoGeneralLine,
     priorityLine,
     '',
