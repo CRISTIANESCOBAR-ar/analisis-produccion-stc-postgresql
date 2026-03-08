@@ -112,11 +112,16 @@ function formatNumber(val) {
 
 // Helpers SQL (PostgreSQL): parseo robusto de fechas/números desde TEXT
 function sqlParseDate(colIdent) {
-  // Soporta DD/MM/YYYY y YYYY-MM-DD (opcional con hora)
+  // Soporta D/M/YYYY o DD/MM/YYYY y YYYY-MM-DD (opcional con hora)
   return `(
     CASE
       WHEN ${colIdent} IS NULL OR ${colIdent} = '' THEN NULL
-      WHEN ${colIdent} ~ '^[0-3][0-9]/[0-1][0-9]/[0-9]{4}' THEN to_date(substring(${colIdent} from 1 for 10), 'DD/MM/YYYY')
+      WHEN ${colIdent} ~ '^[0-3]?[0-9]/[0-1]?[0-9]/[0-9]{4}(\\s|$)' THEN to_date(
+        lpad(split_part(split_part(${colIdent}, ' ', 1), '/', 1), 2, '0') || '/' ||
+        lpad(split_part(split_part(${colIdent}, ' ', 1), '/', 2), 2, '0') || '/' ||
+        split_part(split_part(${colIdent}, ' ', 1), '/', 3),
+        'DD/MM/YYYY'
+      )
       WHEN ${colIdent} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' THEN substring(${colIdent} from 1 for 10)::date
       ELSE NULL
     END
@@ -145,6 +150,395 @@ function sqlParseNumberIntl(colIdent) {
       ELSE NULL
     END
   )`
+}
+
+function sqlBuildTimestamp(dateColIdent, timeColIdent) {
+  const dateExpr = sqlParseDate(dateColIdent)
+  return `(
+    CASE
+      WHEN ${dateExpr} IS NULL THEN NULL
+      ELSE to_timestamp(
+        to_char(${dateExpr}, 'YYYY-MM-DD') || ' ' || COALESCE(
+          CASE
+            WHEN btrim(COALESCE(${timeColIdent}, '')) ~ '^[0-2][0-9]:[0-5][0-9]$' THEN btrim(${timeColIdent}) || ':00'
+            WHEN btrim(COALESCE(${timeColIdent}, '')) ~ '^[0-2][0-9]:[0-5][0-9]:[0-5][0-9]$' THEN btrim(${timeColIdent})
+            ELSE NULL
+          END,
+          '00:00:00'
+        ),
+        'YYYY-MM-DD HH24:MI:SS'
+      )
+    END
+  )`
+}
+
+function parseBenningerDateTime(raw) {
+  const value = String(raw || '').trim()
+  if (!value) return null
+  const m = value.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{2,4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/)
+  if (!m) return null
+
+  let year = Number(m[3])
+  if (!Number.isFinite(year)) return null
+  if (year < 100) year += 2000
+
+  const dd = String(Number(m[1])).padStart(2, '0')
+  const mm = String(Number(m[2])).padStart(2, '0')
+  const yyyy = String(year).padStart(4, '0')
+  const hh = String(Number(m[4])).padStart(2, '0')
+  const mi = String(Number(m[5])).padStart(2, '0')
+  const ss = String(Number(m[6] || '0')).padStart(2, '0')
+
+  return {
+    raw: value,
+    date: `${yyyy}-${mm}-${dd}`,
+    time: `${hh}:${mi}:${ss}`,
+    sqlTimestamp: `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`
+  }
+}
+
+function parseBenningerDurationSeconds(raw) {
+  const value = String(raw || '').trim().toLowerCase()
+  if (!value) return null
+
+  const dhms = value.match(/d\s*:\s*(\d+)\s*,?\s*h\s*:\s*(\d+)\s*,?\s*m\s*:\s*(\d+)\s*,?\s*s\s*:\s*(\d+)/i)
+  if (dhms) {
+    const d = Number(dhms[1])
+    const h = Number(dhms[2])
+    const m = Number(dhms[3])
+    const s = Number(dhms[4])
+    return (d * 86400) + (h * 3600) + (m * 60) + s
+  }
+
+  const hms = value.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/)
+  if (hms) {
+    const h = Number(hms[1])
+    const m = Number(hms[2])
+    const s = Number(hms[3] || '0')
+    return (h * 3600) + (m * 60) + s
+  }
+
+  return null
+}
+
+function normalizeDigitsKey(value) {
+  const digits = String(value || '').replace(/\D/g, '')
+  if (!digits) return null
+  return digits.replace(/^0+/, '') || '0'
+}
+
+function deriveRoladaFromPartida(partida) {
+  const digits = String(partida || '').replace(/\D/g, '')
+  if (!digits) return null
+  const right6 = digits.slice(-6)
+  if (right6.length < 4) return null
+  return normalizeDigitsKey(right6.slice(0, 4))
+}
+
+function computeBenningerMatchScore({ startDiffSec, endDiffSec, durationDiffSec }) {
+  const safeStart = Number.isFinite(startDiffSec) ? Math.max(0, startDiffSec) : Number.POSITIVE_INFINITY
+  const safeEnd = Number.isFinite(endDiffSec) ? Math.max(0, endDiffSec) : null
+  const safeDuration = Number.isFinite(durationDiffSec) ? Math.max(0, durationDiffSec) : null
+
+  const startPenalty = Number.isFinite(safeStart) ? Math.min(70, (safeStart / 60) * 2.0) : 70
+  const endPenalty = Number.isFinite(safeEnd) ? Math.min(20, (safeEnd / 60) * 0.8) : 0
+  const durationPenalty = Number.isFinite(safeDuration) ? Math.min(10, (safeDuration / 60) * 0.4) : 0
+
+  const score = 100 - startPenalty - endPenalty - durationPenalty
+  return Math.max(0, Math.min(100, Number(score.toFixed(2))))
+}
+
+function classifyBenningerConfidence(bestScore, scoreGap) {
+  if (!Number.isFinite(bestScore)) return 'none'
+  if (bestScore >= 85 && scoreGap >= 12) return 'high'
+  if (bestScore >= 70) return 'medium'
+  if (bestScore >= 55) return 'low'
+  return 'none'
+}
+
+function roundNullable(value, decimals = 2) {
+  if (value === null || value === undefined || value === '') return null
+  const n = Number(value)
+  if (!Number.isFinite(n)) return null
+  return Number(n.toFixed(decimals))
+}
+
+function buildFibraSummaryFromLots(lotes, fibraByLot) {
+  const lotList = Array.isArray(lotes) ? lotes.filter(Boolean) : []
+  if (!lotList.length) return null
+
+  let totalWeight = 0
+  let sumMic = 0
+  let sumStr = 0
+  let sumUhml = 0
+  let sumSci = 0
+  let sumElg = 0
+  let sumRd = 0
+  let sumPlusB = 0
+  let hasAny = false
+
+  for (const lote of lotList) {
+    const row = fibraByLot.get(lote)
+    if (!row) continue
+
+    const w = Number(row.muestras)
+    if (!Number.isFinite(w) || w <= 0) continue
+
+    totalWeight += w
+    sumMic += (Number(row.mic) || 0) * w
+    sumStr += (Number(row.str) || 0) * w
+    sumUhml += (Number(row.uhml) || 0) * w
+    sumSci += (Number(row.sci) || 0) * w
+    sumElg += (Number(row.elg) || 0) * w
+    sumRd += (Number(row.rd) || 0) * w
+    sumPlusB += (Number(row.plusB) || 0) * w
+    hasAny = true
+  }
+
+  if (!hasAny || totalWeight <= 0) return null
+
+  return {
+    lotes: lotList,
+    muestras: totalWeight,
+    mic: roundNullable(sumMic / totalWeight, 3),
+    str: roundNullable(sumStr / totalWeight, 3),
+    uhml: roundNullable(sumUhml / totalWeight, 3),
+    sci: roundNullable(sumSci / totalWeight, 3),
+    elg: roundNullable(sumElg / totalWeight, 3),
+    rd: roundNullable(sumRd / totalWeight, 3),
+    plusB: roundNullable(sumPlusB / totalWeight, 3)
+  }
+}
+
+function parseLooseNumber(raw) {
+  if (raw === null || raw === undefined) return null
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null
+  const value = String(raw).trim()
+  if (!value) return null
+  const m = value.match(/-?[0-9]+(?:[.,][0-9]+)?/)
+  if (!m) return null
+  const n = Number(m[0].replace(',', '.'))
+  return Number.isFinite(n) ? n : null
+}
+
+function pickHeaderNumber(header, keys) {
+  if (!header || typeof header !== 'object') return null
+  for (const key of keys) {
+    if (!(key in header)) continue
+    const n = parseLooseNumber(header[key])
+    if (Number.isFinite(n)) return n
+  }
+  return null
+}
+
+function normalizeTimelineEntry(entry) {
+  if (!entry || typeof entry !== 'object') return null
+  const punto = String(entry.punto || entry.point || '').trim()
+  const tensionN = parseLooseNumber(entry.tensionN ?? entry.tension ?? entry.value)
+  if (!punto || !Number.isFinite(tensionN)) return null
+  return { punto, tensionN: Number(tensionN.toFixed(2)) }
+}
+
+function buildTimelineFromHeader(header, tensionPlegador) {
+  const source = Array.isArray(header?.tensionTimeline)
+    ? header.tensionTimeline.map(normalizeTimelineEntry).filter(Boolean)
+    : []
+  if (source.length) return source
+
+  const map = [
+    ['M12', ['tensionM12', 'tension_1S002', '1S002']],
+    ['M13', ['tensionM13', 'tension_1S003', '1S003']],
+    ['M14', ['tensionM14', 'tension_1S004', '1S004']],
+    ['M15', ['tensionM15', 'tension_1S005', '1S005']],
+    ['M17', ['tensionM17', 'tension_2S007', '2S007']],
+    ['M18', ['tensionM18', 'tension_2S008', '2S008']],
+    ['M20', ['tensionM20', 'tension_1S009', '1S009']],
+    ['M21', ['tensionM21', 'tension_1S010', '1S010']],
+    ['M22', ['tensionM22', 'tension_1S011', '1S011']],
+    ['M24', ['tensionM24', 'tension_1S012', '1S012']],
+    ['M25', ['tensionM25', 'tension_1S013', '1S013']],
+    ['M26', ['tensionM26', 'tension_1S014', '1S014']],
+    ['S800', ['tensionPlegador', 'tension_1S054', '1S054']]
+  ]
+
+  const out = []
+  for (const [punto, keys] of map) {
+    const n = pickHeaderNumber(header, keys)
+    if (!Number.isFinite(n)) continue
+    out.push({ punto, tensionN: Number(n.toFixed(2)) })
+  }
+
+  if (!out.length && Number.isFinite(tensionPlegador)) {
+    out.push({ punto: 'S800', tensionN: Number(tensionPlegador.toFixed(2)) })
+  }
+
+  return out
+}
+
+function extractLotNumbersFromText(values) {
+  const set = new Set()
+  for (const value of values) {
+    const text = String(value || '').trim()
+    if (!text) continue
+
+    const byBracket = text.match(/\[(\d+)\]/)
+    if (byBracket?.[1]) set.add(byBracket[1])
+
+    const byPattern = text.match(/[A-Za-z]+[-\s]+(\d+)/)
+    if (byPattern?.[1]) set.add(byPattern[1])
+
+    const byAnyDigits = text.match(/(\d{2,})/)
+    if (byAnyDigits?.[1]) set.add(byAnyDigits[1])
+  }
+  return [...set]
+}
+
+function buildBenningerProcessFromHeader(rawHeader) {
+  const header = rawHeader && typeof rawHeader === 'object' ? rawHeader : {}
+
+  const stretchAplicado = pickHeaderNumber(header, ['stretchFinal', 'stretchAplicado', 'stretch1S034', '1S034'])
+  const humedadSalida = pickHeaderNumber(header, ['humedadSalida', 'humedad1S068', '1S068'])
+  const tensionPlegador = pickHeaderNumber(header, ['tensionPlegador', 'tension1S054', '1S054'])
+  const gomaReal = pickHeaderNumber(header, ['gomaReal', 'gomaReal1A41', '1A41'])
+  const velocidad = pickHeaderNumber(header, ['velocidad', 'velocidad1S102', 'velMMin', '1S102'])
+  const presionExprimido = pickHeaderNumber(header, ['presionExprimido', 'presionExprimidoMax', '1S086'])
+
+  return {
+    stretchAplicado: Number.isFinite(stretchAplicado) ? Number(stretchAplicado.toFixed(3)) : null,
+    humedadSalida: Number.isFinite(humedadSalida) ? Number(humedadSalida.toFixed(3)) : null,
+    tensionPlegador: Number.isFinite(tensionPlegador) ? Number(tensionPlegador.toFixed(2)) : null,
+    gomaReal: Number.isFinite(gomaReal) ? Number(gomaReal.toFixed(3)) : null,
+    velocidad: Number.isFinite(velocidad) ? Number(velocidad.toFixed(3)) : null,
+    presionExprimido: Number.isFinite(presionExprimido) ? Number(presionExprimido.toFixed(3)) : null,
+    tensionTimeline: buildTimelineFromHeader(header, tensionPlegador)
+  }
+}
+
+async function ensureBenningerRtfSchema() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS tb_benninger_rtf_links (
+      source_file TEXT PRIMARY KEY,
+      id_rolo TEXT,
+      indicativo TEXT,
+      receita TEXT,
+      comeco_raw TEXT,
+      comeco_ts TIMESTAMPTZ,
+      fim_raw TEXT,
+      fim_ts TIMESTAMPTZ,
+      duracao_raw TEXT,
+      match_partida TEXT,
+      match_rolada TEXT,
+      match_dt_inicio TEXT,
+      match_hora_inicio TEXT,
+      match_dt_final TEXT,
+      match_hora_final TEXT,
+      match_score NUMERIC(6,2),
+      match_confidence TEXT,
+      match_mode TEXT,
+      match_reason TEXT,
+      raw_header JSONB,
+      match_payload JSONB,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `)
+
+  await query('CREATE INDEX IF NOT EXISTS idx_benninger_rtf_comeco_ts ON tb_benninger_rtf_links (comeco_ts)')
+  await query('CREATE INDEX IF NOT EXISTS idx_benninger_rtf_partida ON tb_benninger_rtf_links (match_partida)')
+  await query('CREATE INDEX IF NOT EXISTS idx_benninger_rtf_rolada ON tb_benninger_rtf_links (match_rolada)')
+}
+
+async function upsertBenningerRtfLink(payload) {
+  const {
+    sourceFile,
+    header,
+    comecoParsed,
+    fimParsed,
+    selected,
+    confidence,
+    mode,
+    reason,
+    matchPayload
+  } = payload
+
+  await query(
+    `
+      INSERT INTO tb_benninger_rtf_links (
+        source_file,
+        id_rolo,
+        indicativo,
+        receita,
+        comeco_raw,
+        comeco_ts,
+        fim_raw,
+        fim_ts,
+        duracao_raw,
+        match_partida,
+        match_rolada,
+        match_dt_inicio,
+        match_hora_inicio,
+        match_dt_final,
+        match_hora_final,
+        match_score,
+        match_confidence,
+        match_mode,
+        match_reason,
+        raw_header,
+        match_payload,
+        updated_at
+      ) VALUES (
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,
+        $10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
+        NOW()
+      )
+      ON CONFLICT (source_file) DO UPDATE SET
+        id_rolo = EXCLUDED.id_rolo,
+        indicativo = EXCLUDED.indicativo,
+        receita = EXCLUDED.receita,
+        comeco_raw = EXCLUDED.comeco_raw,
+        comeco_ts = EXCLUDED.comeco_ts,
+        fim_raw = EXCLUDED.fim_raw,
+        fim_ts = EXCLUDED.fim_ts,
+        duracao_raw = EXCLUDED.duracao_raw,
+        match_partida = EXCLUDED.match_partida,
+        match_rolada = EXCLUDED.match_rolada,
+        match_dt_inicio = EXCLUDED.match_dt_inicio,
+        match_hora_inicio = EXCLUDED.match_hora_inicio,
+        match_dt_final = EXCLUDED.match_dt_final,
+        match_hora_final = EXCLUDED.match_hora_final,
+        match_score = EXCLUDED.match_score,
+        match_confidence = EXCLUDED.match_confidence,
+        match_mode = EXCLUDED.match_mode,
+        match_reason = EXCLUDED.match_reason,
+        raw_header = EXCLUDED.raw_header,
+        match_payload = EXCLUDED.match_payload,
+        updated_at = NOW()
+    `,
+    [
+      sourceFile,
+      header?.idRolo || null,
+      header?.indicativo || null,
+      header?.receita || null,
+      header?.comeco || null,
+      comecoParsed ? comecoParsed.sqlTimestamp : null,
+      header?.fim || null,
+      fimParsed ? fimParsed.sqlTimestamp : null,
+      header?.duracao || null,
+      selected?.partida || null,
+      selected?.rolada || null,
+      selected?.dtInicio || null,
+      selected?.horaInicio || null,
+      selected?.dtFinal || null,
+      selected?.horaFinal || null,
+      Number.isFinite(selected?.score) ? selected.score : null,
+      confidence || null,
+      mode || null,
+      reason || null,
+      JSON.stringify(header || {}),
+      JSON.stringify(matchPayload || {})
+    ],
+    'benninger-rtf/upsert-link'
+  )
 }
 
 function quoteIdent(name) {
@@ -2462,6 +2856,857 @@ app.get('/api/produccion/eficiencia-roturas', async (req, res) => {
   } catch (err) {
     console.error('Error en /api/produccion/eficiencia-roturas:', err)
     res.status(500).json({ error: err.message })
+  }
+})
+
+// =====================================================
+// ENDPOINTS BENNINGER RTF (MATCH + VALIDACION)
+// =====================================================
+
+app.post('/api/benninger-rtf/status', async (req, res) => {
+  try {
+    await ensureBenningerRtfSchema()
+
+    const rawList = Array.isArray(req.body?.fileNames) ? req.body.fileNames : []
+    const fileNames = [...new Set(rawList.map((v) => String(v || '').trim()).filter(Boolean))]
+    if (!fileNames.length) return res.json({ existing: [] })
+
+    const result = await query(
+      'SELECT source_file FROM tb_benninger_rtf_links WHERE source_file = ANY($1::text[])',
+      [fileNames],
+      'benninger-rtf/status'
+    )
+
+    res.json({ existing: (result.rows || []).map((r) => r.source_file) })
+  } catch (err) {
+    console.error('Error en /api/benninger-rtf/status:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.post('/api/benninger-rtf/match', async (req, res) => {
+  try {
+    await ensureBenningerRtfSchema()
+
+    const files = Array.isArray(req.body?.files) ? req.body.files : []
+    const autoConfirmHighConfidence = req.body?.autoConfirmHighConfidence === true
+
+    if (!files.length) {
+      return res.status(400).json({ error: 'files must be a non-empty array' })
+    }
+
+    const startExpr = sqlBuildTimestamp('p."DT_INICIO"', 'p."HORA_INICIO"')
+
+    const matchResults = []
+
+    for (const item of files) {
+      const sourceFile = String(item?.sourceFile || item?.fileName || '').trim()
+      const headerIn = item?.header || item || {}
+      const header = {
+        idRolo: String(headerIn.idRolo || headerIn.id_rolo || headerIn.ID_ROLO || '').trim(),
+        indicativo: String(headerIn.indicativo || headerIn.INDICATIVO || '').trim(),
+        receita: String(headerIn.receita || headerIn.RECEITA || '').trim(),
+        comeco: String(headerIn.comeco || headerIn['comeco'] || headerIn.COMECO || '').trim(),
+        fim: String(headerIn.fim || headerIn.FIM || '').trim(),
+        duracao: String(headerIn.duracao || headerIn.DURACAO || '').trim()
+      }
+
+      const comecoParsed = parseBenningerDateTime(header.comeco)
+      const fimParsed = parseBenningerDateTime(header.fim)
+
+      if (!comecoParsed) {
+        matchResults.push({
+          sourceFile,
+          header,
+          candidates: [],
+          suggested: null,
+          confidence: 'none',
+          scoreGap: 0,
+          decision: 'review',
+          error: 'No se pudo interpretar Comeco del RTF'
+        })
+        continue
+      }
+
+      const fetchCandidates = async (onlyFilial05, windowHours) => {
+        const filialClause = onlyFilial05 ? `AND ltrim(COALESCE(p."FILIAL"::text, ''), '0') = '5'` : ''
+        const sql = `
+          WITH raw AS (
+            SELECT
+              p."PARTIDA" AS partida,
+              p."ROLADA" AS rolada,
+              p."FILIAL" AS filial,
+              p."SELETOR" AS seletor,
+              p."DT_INICIO" AS dt_inicio,
+              p."HORA_INICIO" AS hora_inicio,
+              p."DT_FINAL" AS dt_final,
+              p."HORA_FINAL" AS hora_final,
+              ${sqlParseNumberIntl('p."METRAGEM"')} AS metragem_num,
+              COALESCE(${sqlParseNumberIntl('p."VELOC"')}, ${sqlParseNumberIntl('p."VELOC CALC"')}) AS velocidade_num,
+              ${startExpr} AS start_ts
+            FROM tb_produccion p
+            WHERE upper(btrim(COALESCE(p."SELETOR"::text, ''))) LIKE 'INDIGO%'
+              ${filialClause}
+          ),
+          scored AS (
+            SELECT
+              r.*,
+              SUM(COALESCE(r.metragem_num, 0)) OVER (PARTITION BY r.partida) AS partida_metragem,
+              AVG(r.velocidade_num) FILTER (WHERE r.velocidade_num IS NOT NULL) OVER (PARTITION BY r.partida) AS partida_velocidade,
+              ABS(EXTRACT(EPOCH FROM (
+                date_trunc('minute', r.start_ts) - date_trunc('minute', $1::timestamp)
+              ))) AS start_diff_sec
+            FROM raw r
+            WHERE r.start_ts IS NOT NULL
+              AND date_trunc('minute', r.start_ts) BETWEEN
+                (date_trunc('minute', $1::timestamp) - (($2::text || ' hours')::interval))
+                AND
+                (date_trunc('minute', $1::timestamp) + (($2::text || ' hours')::interval))
+          ),
+          ranked AS (
+            SELECT
+              s.*,
+              row_number() OVER (
+                PARTITION BY s.partida
+                ORDER BY s.start_diff_sec ASC, s.start_ts ASC
+              ) AS rn_partida
+            FROM scored s
+          )
+          SELECT
+            r.partida,
+            r.rolada,
+            r.filial,
+            r.seletor,
+            r.dt_inicio,
+            r.hora_inicio,
+            r.dt_final,
+            r.hora_final,
+            r.start_ts,
+            r.partida_metragem,
+            r.partida_velocidade,
+            r.start_diff_sec
+          FROM ranked r
+          WHERE r.rn_partida = 1
+          ORDER BY r.start_diff_sec ASC, r.partida DESC NULLS LAST
+          LIMIT 30
+        `
+
+        const result = await query(
+          sql,
+          [
+            comecoParsed.sqlTimestamp,
+            windowHours
+          ],
+          onlyFilial05 ? 'benninger-rtf/match-candidates-start-minute-filial05' : 'benninger-rtf/match-candidates-start-minute'
+        )
+        return result.rows || []
+      }
+
+      const firstPass = await fetchCandidates(true, 12)
+      const secondPass = await fetchCandidates(false, 48)
+
+      const rawByKey = new Map()
+      for (const row of [...firstPass, ...secondPass]) {
+        const key = String(row.partida ?? '')
+        const existing = rawByKey.get(key)
+        if (!existing) {
+          rawByKey.set(key, row)
+          continue
+        }
+
+        const existingDiff = Number.isFinite(Number(existing.start_diff_sec)) ? Number(existing.start_diff_sec) : Number.POSITIVE_INFINITY
+        const incomingDiff = Number.isFinite(Number(row.start_diff_sec)) ? Number(row.start_diff_sec) : Number.POSITIVE_INFINITY
+
+        if (incomingDiff < existingDiff) {
+          rawByKey.set(key, row)
+        }
+      }
+
+      const candidateRows = [...rawByKey.values()]
+
+      const partidaKeys = [...new Set(candidateRows.map((r) => String(r.partida || '').trim()).filter(Boolean))]
+      const lotesByPartida = new Map()
+      const fibraByLot = new Map()
+
+      if (partidaKeys.length) {
+        const lotesSql = `
+          SELECT
+            btrim(p."PARTIDA") AS partida,
+            array_remove(array_agg(DISTINCT NULLIF(btrim(p."LOTE FIACAO"), '')), NULL) AS lotes
+          FROM tb_produccion p
+          WHERE btrim(p."PARTIDA") = ANY($1::text[])
+            AND upper(btrim(COALESCE(p."SELETOR"::text, ''))) LIKE 'INDIGO%'
+          GROUP BY btrim(p."PARTIDA")
+        `
+
+        try {
+          const lotesResult = await query(lotesSql, [partidaKeys], 'benninger-rtf/match-quality-lotes')
+          for (const row of lotesResult.rows || []) {
+            const key = String(row.partida || '').trim()
+            const lotes = Array.isArray(row.lotes) ? row.lotes.map((l) => String(l || '').trim()).filter(Boolean) : []
+            if (!key) continue
+            lotesByPartida.set(key, lotes)
+          }
+        } catch (qualityErr) {
+          console.warn('benninger-rtf/match-quality-lotes warning:', qualityErr.message)
+        }
+
+        const allLotes = [...new Set([...lotesByPartida.values()].flat().filter(Boolean))]
+        if (allLotes.length) {
+          const fibraSql = `
+            SELECT
+              btrim(cf."LOTE_FIAC") AS lote_fiac,
+              COUNT(*)::int AS muestras,
+              AVG(${sqlParseNumberIntl('cf."MIC"')}) AS mic,
+              AVG(${sqlParseNumberIntl('cf."STR"')}) AS str,
+              AVG(${sqlParseNumberIntl('cf."UHML"')}) AS uhml,
+              AVG(${sqlParseNumberIntl('cf."SCI"')}) AS sci,
+              AVG(${sqlParseNumberIntl('cf."ELG"')}) AS elg,
+              AVG(${sqlParseNumberIntl('cf."RD"')}) AS rd,
+              AVG(${sqlParseNumberIntl('cf."PLUS_B"')}) AS plus_b
+            FROM tb_CALIDAD_FIBRA cf
+            WHERE btrim(COALESCE(cf."LOTE_FIAC", '')) = ANY($1::text[])
+            GROUP BY btrim(cf."LOTE_FIAC")
+          `
+
+          try {
+            const fibraResult = await query(fibraSql, [allLotes], 'benninger-rtf/match-quality-fibra')
+            for (const row of fibraResult.rows || []) {
+              const key = String(row.lote_fiac || '').trim()
+              if (!key) continue
+              fibraByLot.set(key, {
+                muestras: Number(row.muestras) || 0,
+                mic: roundNullable(row.mic, 3),
+                str: roundNullable(row.str, 3),
+                uhml: roundNullable(row.uhml, 3),
+                sci: roundNullable(row.sci, 3),
+                elg: roundNullable(row.elg, 3),
+                rd: roundNullable(row.rd, 3),
+                plusB: roundNullable(row.plus_b, 3)
+              })
+            }
+          } catch (qualityErr) {
+            console.warn('benninger-rtf/match-quality-fibra warning:', qualityErr.message)
+          }
+        }
+      }
+
+      const candidates = candidateRows.map((row) => {
+        const startDiffSec = row.start_diff_sec == null ? null : Number(row.start_diff_sec)
+
+        const baseScore = computeBenningerMatchScore({
+          startDiffSec,
+          endDiffSec: null,
+          durationDiffSec: null
+        })
+
+        const score = baseScore
+
+        const partidaKey = String(row.partida || '').trim()
+        const lotes = lotesByPartida.get(partidaKey) || []
+        const fibraQuality = buildFibraSummaryFromLots(lotes, fibraByLot)
+
+        return {
+          partida: row.partida,
+          rolada: row.rolada,
+          filial: row.filial,
+          seletor: row.seletor,
+          dtInicio: row.dt_inicio,
+          horaInicio: row.hora_inicio,
+          dtFinal: row.dt_final,
+          horaFinal: row.hora_final,
+          metragemPartida: row.partida_metragem == null ? null : Number(row.partida_metragem),
+          velocidadeMediaPartida: row.partida_velocidade == null ? null : Number(row.partida_velocidade),
+          fibraQuality,
+          startDiffSec,
+          endDiffSec: null,
+          prodDurationSec: null,
+          durationDiffSec: null,
+          score
+        }
+      }).sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score
+        const aDiff = Number.isFinite(a.startDiffSec) ? a.startDiffSec : Number.POSITIVE_INFINITY
+        const bDiff = Number.isFinite(b.startDiffSec) ? b.startDiffSec : Number.POSITIVE_INFINITY
+        return aDiff - bDiff
+      })
+
+      const suggested = candidates[0] || null
+      const second = candidates[1] || null
+      const scoreGap = suggested && second ? Number((suggested.score - second.score).toFixed(2)) : (suggested ? suggested.score : 0)
+      const confidence = classifyBenningerConfidence(suggested ? suggested.score : NaN, scoreGap)
+      const decision = confidence === 'high' ? 'auto' : 'review'
+
+      let saved = false
+      if (autoConfirmHighConfidence && decision === 'auto' && suggested && sourceFile) {
+        await upsertBenningerRtfLink({
+          sourceFile,
+          header,
+          comecoParsed,
+          fimParsed,
+          selected: suggested,
+          confidence,
+          mode: 'auto',
+          reason: 'AUTO_HIGH_CONFIDENCE',
+          matchPayload: { candidates: candidates.slice(0, 5), scoreGap }
+        })
+        saved = true
+      }
+
+      matchResults.push({
+        sourceFile,
+        header,
+        parsed: {
+          comecoSql: comecoParsed.sqlTimestamp,
+          fimSql: fimParsed ? fimParsed.sqlTimestamp : null
+        },
+        candidates: candidates.slice(0, 5),
+        suggested,
+        confidence,
+        scoreGap,
+        decision,
+        saved
+      })
+    }
+
+    const summary = {
+      total: matchResults.length,
+      high: matchResults.filter((r) => r.confidence === 'high').length,
+      medium: matchResults.filter((r) => r.confidence === 'medium').length,
+      low: matchResults.filter((r) => r.confidence === 'low').length,
+      none: matchResults.filter((r) => r.confidence === 'none').length,
+      autoSaved: matchResults.filter((r) => r.saved === true).length
+    }
+
+    res.json({ success: true, summary, rows: matchResults })
+  } catch (err) {
+    console.error('Error en /api/benninger-rtf/match:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.post('/api/benninger-rtf/confirm', async (req, res) => {
+  try {
+    await ensureBenningerRtfSchema()
+
+    const items = Array.isArray(req.body?.items) ? req.body.items : []
+    if (!items.length) {
+      return res.status(400).json({ error: 'items must be a non-empty array' })
+    }
+
+    const saved = []
+    const errors = []
+
+    for (const item of items) {
+      const sourceFile = String(item?.sourceFile || item?.fileName || '').trim()
+      const header = item?.header || {}
+      const selected = item?.selected || item?.suggested || null
+
+      if (!sourceFile) {
+        errors.push({ sourceFile: null, error: 'sourceFile requerido' })
+        continue
+      }
+      if (!selected || (!selected.partida && !selected.rolada)) {
+        errors.push({ sourceFile, error: 'Se requiere partida o rolada seleccionada' })
+        continue
+      }
+
+      const comecoParsed = parseBenningerDateTime(header?.comeco)
+      const fimParsed = parseBenningerDateTime(header?.fim)
+
+      await upsertBenningerRtfLink({
+        sourceFile,
+        header,
+        comecoParsed,
+        fimParsed,
+        selected,
+        confidence: String(item?.confidence || item?.matchConfidence || 'manual').trim() || 'manual',
+        mode: String(item?.mode || item?.matchMode || 'manual').trim() || 'manual',
+        reason: String(item?.reason || 'USER_VALIDATED').trim() || 'USER_VALIDATED',
+        matchPayload: {
+          candidates: Array.isArray(item?.candidates) ? item.candidates.slice(0, 5) : [],
+          scoreGap: Number(item?.scoreGap || 0)
+        }
+      })
+
+      saved.push({
+        sourceFile,
+        partida: selected.partida || null,
+        rolada: selected.rolada || null,
+        mode: item?.mode || item?.matchMode || 'manual'
+      })
+    }
+
+    res.json({
+      success: true,
+      savedCount: saved.length,
+      errorCount: errors.length,
+      saved,
+      errors
+    })
+  } catch (err) {
+    console.error('Error en /api/benninger-rtf/confirm:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get(['/api/benninger-impacto', '/api/benninger-impacto/:sourceFile'], async (req, res) => {
+  try {
+    await ensureBenningerRtfSchema()
+
+    const partidaParam = String(req.query?.partida || '').trim()
+    const sourceFileParam = String(req.query?.sourceFile || req.params?.sourceFile || '').trim()
+
+    const linkSql = partidaParam
+      ? `
+          SELECT
+            source_file,
+            comeco_ts,
+            match_partida,
+            match_rolada,
+            match_dt_inicio,
+            match_hora_inicio,
+            raw_header,
+            updated_at
+          FROM tb_benninger_rtf_links
+          WHERE (
+            upper(btrim(COALESCE(match_partida, ''))) = upper(btrim($1::text))
+            OR (
+              regexp_replace(COALESCE(match_partida, ''), '\\D', '', 'g') <> ''
+              AND regexp_replace($1::text, '\\D', '', 'g') <> ''
+              AND COALESCE(
+                NULLIF(ltrim(regexp_replace(COALESCE(match_partida, ''), '\\D', '', 'g'), '0'), ''),
+                '0'
+              ) = COALESCE(
+                NULLIF(ltrim(regexp_replace($1::text, '\\D', '', 'g'), '0'), ''),
+                '0'
+              )
+            )
+          )
+          ORDER BY updated_at DESC
+          LIMIT 1
+        `
+      : sourceFileParam
+      ? `
+          SELECT
+            source_file,
+            comeco_ts,
+            match_partida,
+            match_rolada,
+            match_dt_inicio,
+            match_hora_inicio,
+            raw_header,
+            updated_at
+          FROM tb_benninger_rtf_links
+          WHERE source_file = $1
+          LIMIT 1
+        `
+      : `
+          SELECT
+            source_file,
+            comeco_ts,
+            match_partida,
+            match_rolada,
+            match_dt_inicio,
+            match_hora_inicio,
+            raw_header,
+            updated_at
+          FROM tb_benninger_rtf_links
+          WHERE match_partida IS NOT NULL OR match_rolada IS NOT NULL
+          ORDER BY updated_at DESC
+          LIMIT 1
+        `
+
+    const linkResult = await query(
+      linkSql,
+      partidaParam ? [partidaParam] : (sourceFileParam ? [sourceFileParam] : []),
+      partidaParam
+        ? 'benninger-impacto/link-by-partida'
+        : (sourceFileParam ? 'benninger-impacto/link-by-source' : 'benninger-impacto/link-latest')
+    )
+
+    const link = linkResult.rows?.[0]
+    if (!link) {
+      return res.status(404).json({
+        success: false,
+        error: partidaParam
+          ? `No existe enlace Benninger para partida ${partidaParam}`
+          : (sourceFileParam
+              ? `No existe enlace Benninger para sourceFile ${sourceFileParam}`
+              : 'No hay enlaces Benninger confirmados')
+      })
+    }
+
+    const partida = String(link.match_partida || '').trim() || null
+    const rolada = String(link.match_rolada || '').trim() || null
+    const header = link.raw_header && typeof link.raw_header === 'object' ? link.raw_header : {}
+    const partidaNorm = normalizeDigitsKey(partida)
+    const roladaNorm = normalizeDigitsKey(rolada)
+    const roladaFromPartida = deriveRoladaFromPartida(partida)
+
+    let lotesFiacion = []
+    if (partidaNorm || roladaFromPartida || roladaNorm) {
+      const lotesSql = `
+        WITH prod AS (
+          SELECT
+            NULLIF(btrim(p."LOTE FIACAO"), '') AS lote_fiac,
+            upper(btrim(COALESCE(p."SELETOR"::text, ''))) AS seletor,
+            COALESCE(
+              NULLIF(ltrim(regexp_replace(btrim(COALESCE(p."PARTIDA"::text, '')), '\\D', '', 'g'), '0'), ''),
+              '0'
+            ) AS partida_norm,
+            COALESCE(
+              NULLIF(ltrim(regexp_replace(btrim(COALESCE(p."ROLADA"::text, '')), '\\D', '', 'g'), '0'), ''),
+              '0'
+            ) AS rolada_norm
+          FROM tb_produccion p
+        )
+        SELECT array_remove(array_agg(DISTINCT lote_fiac), NULL) AS lotes
+        FROM prod
+        WHERE lote_fiac IS NOT NULL
+          AND seletor IN ('URDIDEIRA', 'URIDEIRA')
+          AND (
+            ($1::text IS NOT NULL AND $1::text <> '' AND partida_norm = $1::text)
+            OR ($2::text IS NOT NULL AND $2::text <> '' AND rolada_norm = $2::text)
+            OR ($3::text IS NOT NULL AND $3::text <> '' AND rolada_norm = $3::text)
+          )
+      `
+      const lotesResult = await query(
+        lotesSql,
+        [partidaNorm, roladaFromPartida, roladaNorm],
+        'benninger-impacto/lotes-by-partida-rolada-urdideira'
+      )
+      lotesFiacion = Array.isArray(lotesResult.rows?.[0]?.lotes)
+        ? lotesResult.rows[0].lotes.map((l) => String(l || '').trim()).filter(Boolean)
+        : []
+    }
+
+    const loteNumbers = extractLotNumbersFromText([
+      ...lotesFiacion,
+      partida,
+      rolada,
+      header?.idRolo,
+      header?.lote,
+      header?.mistura,
+      header?.partida
+    ])
+
+    let fibra = {
+      muestras: 0,
+      mic: null,
+      sci: null,
+      str: null,
+      uhml: null,
+      elg: null,
+      rd: null,
+      plusB: null
+    }
+
+    if (lotesFiacion.length) {
+      const fibraSql = `
+        WITH lotes_input AS (
+          SELECT unnest($1::text[]) AS lote_raw
+        ),
+        lotes_norm AS (
+          SELECT DISTINCT
+            COALESCE(
+              NULLIF(ltrim(regexp_replace(btrim(COALESCE(lote_raw, '')), '\\D', '', 'g'), '0'), ''),
+              '0'
+            ) AS lote_norm
+          FROM lotes_input
+          WHERE NULLIF(btrim(COALESCE(lote_raw, '')), '') IS NOT NULL
+        ),
+        fibra_src AS (
+          SELECT cf.*
+          FROM tb_CALIDAD_FIBRA cf
+          WHERE upper(btrim(COALESCE(cf."TIPO_MOV"::text, ''))) = 'MIST'
+            AND (
+              btrim(COALESCE(cf."LOTE_FIAC", '')) = ANY($1::text[])
+              OR (
+                regexp_replace(btrim(COALESCE(cf."LOTE_FIAC", '')), '\\D', '', 'g') <> ''
+                AND COALESCE(
+                  NULLIF(ltrim(regexp_replace(btrim(COALESCE(cf."LOTE_FIAC", '')), '\\D', '', 'g'), '0'), ''),
+                  '0'
+                ) IN (SELECT lote_norm FROM lotes_norm)
+              )
+            )
+        )
+        SELECT
+          COUNT(*)::int AS muestras,
+          AVG(${sqlParseNumberIntl('cf."MIC"')}) AS mic,
+          AVG(${sqlParseNumberIntl('cf."SCI"')}) AS sci,
+          AVG(${sqlParseNumberIntl('cf."STR"')}) AS str,
+          AVG(${sqlParseNumberIntl('cf."UHML"')}) AS uhml,
+          AVG(${sqlParseNumberIntl('cf."ELG"')}) AS elg,
+          AVG(${sqlParseNumberIntl('cf."RD"')}) AS rd,
+          AVG(${sqlParseNumberIntl('cf."PLUS_B"')}) AS plus_b
+        FROM fibra_src cf
+      `
+      const fibraResult = await query(fibraSql, [lotesFiacion], 'benninger-impacto/fibra-by-lote-fiac-mist')
+      if (fibraResult.rows?.[0]) {
+        fibra = {
+          muestras: Number(fibraResult.rows[0].muestras) || 0,
+          mic: roundNullable(fibraResult.rows[0].mic, 3),
+          sci: roundNullable(fibraResult.rows[0].sci, 3),
+          str: roundNullable(fibraResult.rows[0].str, 3),
+          uhml: roundNullable(fibraResult.rows[0].uhml, 3),
+          elg: roundNullable(fibraResult.rows[0].elg, 3),
+          rd: roundNullable(fibraResult.rows[0].rd, 3),
+          plusB: roundNullable(fibraResult.rows[0].plus_b, 3)
+        }
+      }
+    }
+
+    if (fibra.muestras === 0 && loteNumbers.length) {
+      const fibraFallbackSql = `
+        WITH base AS (
+          SELECT
+            cf.*,
+            COALESCE(
+              NULLIF(ltrim(regexp_replace(btrim(COALESCE(cf."LOTE_FIAC", '')), '\\D', '', 'g'), '0'), ''),
+              '0'
+            ) AS lote_num
+          FROM tb_CALIDAD_FIBRA cf
+          WHERE upper(btrim(COALESCE(cf."TIPO_MOV"::text, ''))) = 'MIST'
+        )
+        SELECT
+          COUNT(*)::int AS muestras,
+          AVG(${sqlParseNumberIntl('b."MIC"')}) AS mic,
+          AVG(${sqlParseNumberIntl('b."SCI"')}) AS sci,
+          AVG(${sqlParseNumberIntl('b."STR"')}) AS str,
+          AVG(${sqlParseNumberIntl('b."UHML"')}) AS uhml,
+          AVG(${sqlParseNumberIntl('b."ELG"')}) AS elg,
+          AVG(${sqlParseNumberIntl('b."RD"')}) AS rd,
+          AVG(${sqlParseNumberIntl('b."PLUS_B"')}) AS plus_b
+        FROM base b
+        WHERE b.lote_num = ANY($1::text[])
+      `
+      const fibraFallbackResult = await query(
+        fibraFallbackSql,
+        [loteNumbers],
+        'benninger-impacto/fibra-fallback-by-lote-number'
+      )
+
+      if (fibraFallbackResult.rows?.[0] && Number(fibraFallbackResult.rows[0].muestras) > 0) {
+        fibra = {
+          muestras: Number(fibraFallbackResult.rows[0].muestras) || 0,
+          mic: roundNullable(fibraFallbackResult.rows[0].mic, 3),
+          sci: roundNullable(fibraFallbackResult.rows[0].sci, 3),
+          str: roundNullable(fibraFallbackResult.rows[0].str, 3),
+          uhml: roundNullable(fibraFallbackResult.rows[0].uhml, 3),
+          elg: roundNullable(fibraFallbackResult.rows[0].elg, 3),
+          rd: roundNullable(fibraFallbackResult.rows[0].rd, 3),
+          plusB: roundNullable(fibraFallbackResult.rows[0].plus_b, 3)
+        }
+      }
+    }
+
+    let usterPar = null
+    let usterAgg = {
+      cvm: null,
+      neps: null,
+      testnr: null,
+      lote: null
+    }
+
+    if (loteNumbers.length) {
+      const usterParSql = `
+        WITH base AS (
+          SELECT
+            u.testnr,
+            u.lote,
+            u.nomcount,
+            u.time_stamp,
+            TO_DATE(SPLIT_PART(COALESCE(u.time_stamp, ''), ' ', 1), 'DD/MM/YYYY') AS fecha,
+            COALESCE(
+              (regexp_match(u.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1],
+              (regexp_match(u.lote, '(\\d+)'))[1]
+            ) AS lote_num
+          FROM tb_uster_par u
+          WHERE u.lote IS NOT NULL
+        )
+        SELECT testnr, lote, nomcount, time_stamp, fecha
+        FROM base
+        WHERE lote_num = ANY($1::text[])
+        ORDER BY
+          CASE WHEN $2::date IS NULL OR fecha IS NULL THEN 1 ELSE 0 END ASC,
+          CASE WHEN $2::date IS NULL OR fecha IS NULL THEN NULL ELSE ABS(fecha - $2::date) END ASC NULLS LAST,
+          testnr DESC
+        LIMIT 1
+      `
+
+      const usterParResult = await query(
+        usterParSql,
+        [loteNumbers, link.comeco_ts || null],
+        'benninger-impacto/uster-par-by-lote'
+      )
+      usterPar = usterParResult.rows?.[0] || null
+
+      if (usterPar?.testnr) {
+        const usterAggSql = `
+          SELECT
+            ROUND(AVG(cvm_percent)::numeric, 3) AS cvm,
+            ROUND(AVG(neps_200_km)::numeric, 3) AS neps
+          FROM tb_uster_tbl
+          WHERE testnr = $1
+        `
+        const usterAggResult = await query(usterAggSql, [usterPar.testnr], 'benninger-impacto/uster-agg-by-testnr')
+        const row = usterAggResult.rows?.[0] || {}
+        usterAgg = {
+          cvm: row.cvm == null ? null : Number(row.cvm),
+          neps: row.neps == null ? null : Number(row.neps),
+          testnr: String(usterPar.testnr || '').trim() || null,
+          lote: String(usterPar.lote || '').trim() || null
+        }
+      }
+    }
+
+    let tensorapidAgg = {
+      tenacidad: null,
+      elongacion: null,
+      testnr: null,
+      via: null
+    }
+
+    if (usterAgg.testnr) {
+      const tensoFromUsterSql = `
+        SELECT
+          p.testnr,
+          ROUND(AVG(t.tenacidad)::numeric, 3) AS tenacidad,
+          ROUND(AVG(t.elongacion)::numeric, 3) AS elongacion
+        FROM tb_tensorapid_par p
+        JOIN tb_tensorapid_tbl t ON t.testnr = p.testnr
+        WHERE p.uster_testnr = $1
+        GROUP BY p.testnr
+        ORDER BY p.testnr DESC
+        LIMIT 1
+      `
+      const tensoFromUsterResult = await query(
+        tensoFromUsterSql,
+        [usterAgg.testnr],
+        'benninger-impacto/tensorapid-by-uster-testnr'
+      )
+
+      const best = tensoFromUsterResult.rows?.[0]
+      if (best) {
+        tensorapidAgg = {
+          tenacidad: best.tenacidad == null ? null : Number(best.tenacidad),
+          elongacion: best.elongacion == null ? null : Number(best.elongacion),
+          testnr: String(best.testnr || '').trim() || null,
+          via: 'uster_testnr'
+        }
+      }
+    }
+
+    if (!tensorapidAgg.testnr && loteNumbers.length) {
+      const tensoParByLoteSql = `
+        WITH base AS (
+          SELECT
+            p.testnr,
+            p.lote,
+            p.time_stamp,
+            TO_DATE(SPLIT_PART(COALESCE(p.time_stamp, ''), ' ', 1), 'DD/MM/YYYY') AS fecha,
+            COALESCE(
+              (regexp_match(p.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1],
+              (regexp_match(p.lote, '(\\d+)'))[1]
+            ) AS lote_num
+          FROM tb_tensorapid_par p
+          WHERE p.lote IS NOT NULL
+        )
+        SELECT testnr, lote, fecha
+        FROM base
+        WHERE lote_num = ANY($1::text[])
+        ORDER BY
+          CASE WHEN $2::date IS NULL OR fecha IS NULL THEN 1 ELSE 0 END ASC,
+          CASE WHEN $2::date IS NULL OR fecha IS NULL THEN NULL ELSE ABS(fecha - $2::date) END ASC NULLS LAST,
+          testnr DESC
+        LIMIT 1
+      `
+
+      const tensoParByLoteResult = await query(
+        tensoParByLoteSql,
+        [loteNumbers, link.comeco_ts || null],
+        'benninger-impacto/tensorapid-par-by-lote'
+      )
+      const tensoParByLote = tensoParByLoteResult.rows?.[0]
+
+      if (tensoParByLote?.testnr) {
+        const tensoAggSql = `
+          SELECT
+            ROUND(AVG(tenacidad)::numeric, 3) AS tenacidad,
+            ROUND(AVG(elongacion)::numeric, 3) AS elongacion
+          FROM tb_tensorapid_tbl
+          WHERE testnr = $1
+        `
+        const tensoAggResult = await query(
+          tensoAggSql,
+          [tensoParByLote.testnr],
+          'benninger-impacto/tensorapid-agg-by-testnr'
+        )
+        const row = tensoAggResult.rows?.[0] || {}
+        tensorapidAgg = {
+          tenacidad: row.tenacidad == null ? null : Number(row.tenacidad),
+          elongacion: row.elongacion == null ? null : Number(row.elongacion),
+          testnr: String(tensoParByLote.testnr || '').trim() || null,
+          via: 'lote'
+        }
+      }
+    }
+
+    const proceso = buildBenningerProcessFromHeader(header)
+
+    res.json({
+      success: true,
+      sourceFile: link.source_file,
+      match: {
+        partida,
+        rolada,
+        dtInicio: link.match_dt_inicio || null,
+        horaInicio: link.match_hora_inicio || null,
+        comecoTs: link.comeco_ts || null,
+        roladaDerivada: roladaFromPartida,
+        lotesFiacion,
+        loteNumbers
+      },
+      laboratorio: {
+        elongacionInicial: tensorapidAgg.elongacion,
+        cvm: usterAgg.cvm,
+        tenacidad: tensorapidAgg.tenacidad,
+        neps: usterAgg.neps,
+        sci: fibra.sci,
+        mic: fibra.mic,
+        str: fibra.str,
+        uhml: fibra.uhml,
+        elg: fibra.elg,
+        rd: fibra.rd,
+        plusB: fibra.plusB
+      },
+      proceso,
+      referencias: {
+        uster: {
+          testnr: usterAgg.testnr,
+          lote: usterAgg.lote
+        },
+        tensorapid: {
+          testnr: tensorapidAgg.testnr,
+          via: tensorapidAgg.via
+        },
+        fibra: {
+          muestras: fibra.muestras,
+          lotes: lotesFiacion,
+          sci: fibra.sci,
+          mic: fibra.mic,
+          str: fibra.str,
+          uhml: fibra.uhml,
+          elg: fibra.elg,
+          rd: fibra.rd,
+          plusB: fibra.plusB
+        }
+      }
+    })
+  } catch (err) {
+    console.error('Error en /api/benninger-impacto:', err)
+    res.status(500).json({ success: false, error: err.message })
   }
 })
 
