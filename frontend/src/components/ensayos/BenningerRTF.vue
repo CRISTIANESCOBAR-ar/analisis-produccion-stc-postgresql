@@ -1,0 +1,809 @@
+<template>
+  <div class="md:hidden p-4">
+    <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 text-slate-700 text-sm">
+      Esta pantalla de conciliacion RTF esta disponible solo en escritorio.
+    </div>
+  </div>
+
+  <div class="hidden md:flex w-full h-screen flex-col p-1">
+    <main class="w-full flex-1 min-h-0 bg-white rounded-2xl shadow-xl px-4 py-3 border border-slate-200 flex flex-col overflow-hidden">
+      <div class="shrink-0 mb-3 flex items-center gap-3">
+        <label class="text-sm font-semibold text-slate-700 shrink-0">Carpeta de archivos RTF:</label>
+
+        <div class="flex-1 min-w-0">
+          <div
+            class="px-3 py-2 border border-slate-300 rounded-lg bg-white text-sm text-slate-800 truncate shadow-sm"
+            :title="folderPathDisplay"
+          >
+            {{ folderPathDisplay || selectedFolderName || 'Ninguna carpeta seleccionada' }}
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button
+            @click="selectFolder"
+            class="inline-flex items-center gap-2 px-3 py-1 border border-slate-200 bg-white text-slate-700 rounded-md text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm"
+          >
+            Seleccionar
+          </button>
+
+          <button
+            v-if="hasPersistedHandle"
+            @click="refreshFolder"
+            class="inline-flex items-center gap-2 px-3 py-1 border border-slate-200 bg-white text-slate-700 rounded-md text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm"
+          >
+            Actualizar
+          </button>
+
+          <input ref="folderInput" type="file" webkitdirectory directory multiple class="hidden" @change="onFolderInputChange" />
+        </div>
+      </div>
+
+      <div class="shrink-0 mb-3 flex flex-wrap items-center gap-2">
+        <button
+          @click="runAutomaticMatch"
+          :disabled="isMatching || !pendingRows.length"
+          class="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
+        >
+          {{ isMatching ? 'Matcheando...' : 'Matcheo automatico' }}
+        </button>
+
+        <button
+          @click="applyAutoHighConfidence"
+          :disabled="isSaving || !highConfidenceRows.length"
+          class="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
+        >
+          {{ isSaving ? 'Guardando...' : 'Aplicar automaticos (alta confianza)' }}
+        </button>
+
+        <label class="flex items-center gap-2 text-xs text-slate-700 ml-2">
+          <input type="checkbox" v-model="showOnlyPending" class="rounded" />
+          Mostrar solo no guardados
+        </label>
+
+        <div class="text-xs text-slate-600 ml-auto">
+          {{ summaryText }}
+        </div>
+      </div>
+
+      <div class="shrink-0 mb-2 text-sm text-slate-600 min-h-[20px]">
+        {{ scanStatus }}
+      </div>
+
+      <div class="grid grid-cols-[560px_1fr] gap-3 flex-1 min-h-0">
+        <div class="rounded-xl border border-slate-200 overflow-hidden bg-white min-h-0 flex flex-col">
+          <table class="min-w-full text-xs">
+            <thead class="bg-slate-100 border-b border-slate-200">
+              <tr>
+                <th class="px-2 py-2 text-left">Archivo</th>
+                <th class="px-2 py-2 text-left">Comeco</th>
+                <th class="px-2 py-2 text-left">Partida sugerida</th>
+                <th class="px-2 py-2 text-left">Conf.</th>
+                <th class="px-2 py-2 text-left">Estado</th>
+              </tr>
+            </thead>
+          </table>
+
+          <div class="overflow-auto flex-1 min-h-0">
+            <table class="min-w-full text-xs">
+              <tbody>
+                <tr
+                  v-for="row in displayRows"
+                  :key="row.sourceFile"
+                  class="border-b border-slate-100 cursor-pointer hover:bg-slate-50"
+                  :class="selectedSourceFile === row.sourceFile ? 'bg-blue-50' : ''"
+                  @click="selectedSourceFile = row.sourceFile"
+                >
+                  <td class="px-2 py-2 align-top w-[190px]">
+                    <div class="font-medium text-slate-800 truncate" :title="row.fileName">{{ row.fileName }}</div>
+                    <div class="text-[11px] text-slate-500 truncate" :title="row.header.idRolo">{{ row.header.idRolo || 'sin #ID Rolo' }}</div>
+                  </td>
+                  <td class="px-2 py-2 align-top w-[120px]">{{ row.header.comeco || 'sin dato' }}</td>
+                  <td class="px-2 py-2 align-top w-[120px]">
+                    <div v-if="row.suggested" class="font-semibold text-slate-700">{{ row.suggested.partida || 'sin partida' }}</div>
+                    <div v-else class="text-slate-400">-</div>
+                  </td>
+                  <td class="px-2 py-2 align-top w-[70px]">
+                    <span
+                      class="px-2 py-0.5 rounded-full text-[11px] font-semibold"
+                      :class="confidenceClass(row.confidence)"
+                    >
+                      {{ row.confidence || 'none' }}
+                    </span>
+                  </td>
+                  <td class="px-2 py-2 align-top">
+                    <span
+                      class="px-2 py-0.5 rounded-full text-[11px] font-semibold"
+                      :class="row.saved ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'"
+                    >
+                      {{ row.saved ? 'Guardado' : 'Pendiente' }}
+                    </span>
+                  </td>
+                </tr>
+                <tr v-if="!displayRows.length">
+                  <td colspan="5" class="px-3 py-8 text-center text-slate-500">No hay archivos para mostrar.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-slate-200 bg-white p-3 flex flex-col min-h-0">
+          <template v-if="selectedRow">
+            <div class="text-sm font-semibold text-slate-800 mb-2">Detalle del RTF</div>
+
+            <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs mb-3">
+              <div><span class="text-slate-500">Archivo:</span> {{ selectedRow.fileName }}</div>
+              <div><span class="text-slate-500">#ID Rolo:</span> {{ selectedRow.header.idRolo || '-' }}</div>
+              <div><span class="text-slate-500">Indicativo:</span> {{ selectedRow.header.indicativo || '-' }}</div>
+              <div><span class="text-slate-500">Receita:</span> {{ selectedRow.header.receita || '-' }}</div>
+              <div><span class="text-slate-500">Comeco:</span> {{ selectedRow.header.comeco || '-' }}</div>
+              <div><span class="text-slate-500">Fim:</span> {{ selectedRow.header.fim || '-' }}</div>
+              <div><span class="text-slate-500">Duracao:</span> {{ selectedRow.header.duracao || '-' }}</div>
+              <div><span class="text-slate-500">Metros:</span> {{ selectedRow.header.metros || '-' }}</div>
+              <div><span class="text-slate-500">Vel. m/min:</span> {{ selectedRow.header.velMMin || '-' }}</div>
+              <div><span class="text-slate-500">Score Gap:</span> {{ selectedRow.scoreGap || 0 }}</div>
+            </div>
+
+            <div class="text-sm font-semibold text-slate-800 mb-1">Candidatos tb_produccion (INDIGO)</div>
+
+            <div class="overflow-auto border border-slate-200 rounded-lg flex-1 min-h-0">
+              <table class="min-w-full text-xs">
+                <thead class="bg-slate-100">
+                  <tr>
+                    <th class="px-2 py-1">Sel.</th>
+                    <th class="px-2 py-1 text-left">Partida</th>
+                    <th class="px-2 py-1 text-left">Rolada</th>
+                    <th class="px-2 py-1 text-left">DT/Hora Inicio</th>
+                    <th class="px-2 py-1 text-left">Metragem</th>
+                    <th class="px-2 py-1 text-left">Velocidade</th>
+                    <th class="px-2 py-1 text-left">Fibra</th>
+                    <th class="px-2 py-1 text-left">Diff Inicio</th>
+                    <th class="px-2 py-1 text-left">Score</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="(cand, idx) in selectedRow.candidates"
+                    :key="`${selectedRow.sourceFile}-${idx}`"
+                    class="border-t border-slate-100"
+                  >
+                    <td class="px-2 py-1">
+                      <input
+                        type="radio"
+                        :name="`cand-${selectedRow.sourceFile}`"
+                        :checked="isCandidateSelected(selectedRow, cand)"
+                        @change="selectCandidate(selectedRow.sourceFile, cand)"
+                      />
+                    </td>
+                    <td class="px-2 py-1">{{ cand.partida || '-' }}</td>
+                    <td class="px-2 py-1">{{ cand.rolada || '-' }}</td>
+                    <td class="px-2 py-1">{{ cand.dtInicio || '-' }} {{ cand.horaInicio || '' }}</td>
+                    <td class="px-2 py-1">{{ formatMetric(cand.metragemPartida, 'm', 0) }}</td>
+                    <td class="px-2 py-1">{{ formatMetric(cand.velocidadeMediaPartida, 'm/min', 1) }}</td>
+                    <td class="px-2 py-1">{{ formatFibraQuality(cand.fibraQuality) }}</td>
+                    <td class="px-2 py-1">{{ formatSeconds(cand.startDiffSec) }}</td>
+                    <td class="px-2 py-1 font-semibold">{{ cand.score }}</td>
+                  </tr>
+                  <tr v-if="!selectedRow.candidates.length">
+                    <td colspan="9" class="px-3 py-4 text-slate-500 text-center">Sin candidatos. Revisa fecha/hora o CSV de produccion.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="mt-3 flex items-center gap-2">
+              <button
+                @click="confirmSelectedRow"
+                :disabled="isSaving || !selectedRow.selectedCandidate || selectedRow.saved"
+                class="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+              >
+                Confirmar vinculo
+              </button>
+
+              <span v-if="selectedRow.saved" class="text-xs text-emerald-700 font-semibold">Este archivo ya esta vinculado.</span>
+              <span v-else class="text-xs text-slate-500">Usa este boton para resolver casos dudosos manualmente.</span>
+            </div>
+          </template>
+
+          <template v-else>
+            <div class="h-full flex items-center justify-center text-sm text-slate-500">
+              Selecciona un archivo RTF para revisar el match.
+            </div>
+          </template>
+        </div>
+      </div>
+    </main>
+  </div>
+</template>
+
+<script setup>
+import { computed, onMounted, ref } from 'vue'
+import Swal from 'sweetalert2'
+
+const folderInput = ref(null)
+const selectedFolderName = ref('')
+const folderPathDisplay = ref('')
+const hasPersistedHandle = ref(false)
+const scanStatus = ref('')
+
+const rtfRows = ref([])
+const showOnlyPending = ref(true)
+const selectedSourceFile = ref('')
+
+const isMatching = ref(false)
+const isSaving = ref(false)
+
+function openDb() {
+  return new Promise((resolve, reject) => {
+    const req = window.indexedDB.open('benninger-rtf-matcher')
+    req.onupgradeneeded = () => {
+      const db = req.result
+      if (!db.objectStoreNames.contains('handles')) db.createObjectStore('handles')
+    }
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error)
+  })
+}
+
+async function saveDirHandleToIDB(dirHandle) {
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('handles', 'readwrite')
+    const store = tx.objectStore('handles')
+    const req = store.put(dirHandle, 'dir')
+    req.onsuccess = () => resolve(true)
+    req.onerror = () => reject(req.error)
+  })
+}
+
+async function getDirHandleFromIDB() {
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('handles', 'readonly')
+    const store = tx.objectStore('handles')
+    const req = store.get('dir')
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error)
+  })
+}
+
+async function verifyPermission(handle, mode = 'read') {
+  if (!handle) return false
+  const opts = { mode }
+  if (await handle.queryPermission(opts) === 'granted') return true
+  if (await handle.requestPermission(opts) === 'granted') return true
+  return false
+}
+
+function normalizeLoose(text) {
+  return String(text || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function rtfToPlainText(raw) {
+  let text = String(raw || '')
+
+  text = text.replace(/\\'[0-9a-fA-F]{2}/g, (m) => {
+    const code = Number.parseInt(m.slice(2), 16)
+    return Number.isFinite(code) ? String.fromCharCode(code) : ''
+  })
+  text = text.replace(/\\par[d]?/g, '\n')
+  text = text.replace(/\\tab/g, '\t')
+  text = text.replace(/\\[a-zA-Z]+-?\d* ?/g, '')
+  text = text.replace(/[{}]/g, ' ')
+  text = text.replace(/\r/g, '')
+  text = text.replace(/[ \t]+\n/g, '\n')
+  text = text.replace(/\n{3,}/g, '\n\n')
+
+  return text
+}
+
+function extractField(lines, keyLike) {
+  const keyNorm = normalizeLoose(keyLike)
+  for (const line of lines) {
+    const parts = line.split(':')
+    if (parts.length < 2) continue
+    const left = normalizeLoose(parts[0])
+    if (!left.includes(keyNorm)) continue
+    return parts.slice(1).join(':').trim()
+  }
+  return ''
+}
+
+function extractMetricValue(normalizedText, patterns, unit) {
+  for (const pattern of patterns) {
+    const m = normalizedText.match(pattern)
+    if (!m) continue
+    const value = String(m[1] || '').trim()
+    if (!value) continue
+    return `${value} ${unit}`
+  }
+  return ''
+}
+
+function toNumberOrNull(value) {
+  if (value === null || value === undefined || value === '') return null
+  const n = Number(String(value).replace(',', '.'))
+  return Number.isFinite(n) ? n : null
+}
+
+function extractMetricNumber(normalizedText, patterns) {
+  for (const pattern of patterns) {
+    const m = normalizedText.match(pattern)
+    if (!m) continue
+    const n = toNumberOrNull(m[1])
+    if (Number.isFinite(n)) return n
+  }
+  return null
+}
+
+function extractCodeNumber(normalizedText, code, customPatterns = []) {
+  const escaped = String(code || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const defaults = [
+    new RegExp(`${escaped}\\s*:\\s*([0-9]+(?:[.,][0-9]+)?)\\b`, 'i'),
+    new RegExp(`${escaped}\\s*:\\s*.{0,120}?([0-9]+(?:[.,][0-9]+)?)\\s*(?:%|n|kn|m\\/min)?\\b`, 'i')
+  ]
+  return extractMetricNumber(normalizedText, [...customPatterns, ...defaults])
+}
+
+function parseRtfHeader(rawText) {
+  const plain = rtfToPlainText(rawText)
+  const plainNorm = normalizeLoose(plain)
+  const lines = plain
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  const metros = extractMetricValue(
+    plainNorm,
+    [
+      /1x014\s*:\s*comprimento\s+de\s+saida\s*([0-9]+(?:[.,][0-9]+)?)\s*m\b/i,
+      /1x014\s*:\s*.{0,120}?([0-9]+(?:[.,][0-9]+)?)\s*m\b/i
+    ],
+    'm'
+  )
+
+  const velMMin = extractMetricValue(
+    plainNorm,
+    [
+      /1s102\s*:\s*velo\.?\s*de\s*producao\s*tingindo\s*([0-9]+(?:[.,][0-9]+)?)\s*m\/min\b/i,
+      /1s102\s*:\s*.{0,120}?([0-9]+(?:[.,][0-9]+)?)\s*m\/min\b/i
+    ],
+    'm/min'
+  )
+
+  const stretchAplicado = extractCodeNumber(plainNorm, '1s034')
+  const humedadSalida = extractCodeNumber(plainNorm, '1s068')
+  const tensionPlegador = extractCodeNumber(plainNorm, '1s054')
+  const gomaReal = extractCodeNumber(plainNorm, '1a41')
+  const presionExprimido = extractCodeNumber(plainNorm, '1s086')
+
+  const timelineCodeMap = [
+    { punto: 'M12', code: '1s002' },
+    { punto: 'M13', code: '1s003' },
+    { punto: 'M14', code: '1s004' },
+    { punto: 'M15', code: '1s005' },
+    { punto: 'M17', code: '2s007' },
+    { punto: 'M18', code: '2s008' },
+    { punto: 'M20', code: '1s009' },
+    { punto: 'M21', code: '1s010' },
+    { punto: 'M22', code: '1s011' },
+    { punto: 'M24', code: '1s012' },
+    { punto: 'M25', code: '1s013' },
+    { punto: 'M26', code: '1s014' },
+    { punto: 'S800', code: '1s054' }
+  ]
+
+  const tensionTimeline = timelineCodeMap
+    .map(({ punto, code }) => {
+      const tensionN = extractCodeNumber(plainNorm, code)
+      if (!Number.isFinite(tensionN)) return null
+      return { punto, tensionN: Number(tensionN.toFixed(3)) }
+    })
+    .filter(Boolean)
+
+  return {
+    idRolo: extractField(lines, 'id rolo'),
+    indicativo: extractField(lines, 'indicativo'),
+    comeco: extractField(lines, 'comeco'),
+    fim: extractField(lines, 'fim'),
+    duracao: extractField(lines, 'duracao'),
+    receita: extractField(lines, 'receita'),
+    metros,
+    velMMin,
+    stretchAplicado,
+    humedadSalida,
+    tensionPlegador,
+    gomaReal,
+    presionExprimido,
+    '1S034': stretchAplicado,
+    '1S068': humedadSalida,
+    '1S054': tensionPlegador,
+    '1A41': gomaReal,
+    '1S086': presionExprimido,
+    tensionTimeline
+  }
+}
+
+function confidenceClass(confidence) {
+  if (confidence === 'high') return 'bg-emerald-100 text-emerald-700'
+  if (confidence === 'medium') return 'bg-amber-100 text-amber-700'
+  if (confidence === 'low') return 'bg-orange-100 text-orange-700'
+  return 'bg-slate-100 text-slate-600'
+}
+
+function formatSeconds(seconds) {
+  const sec = Number(seconds)
+  if (!Number.isFinite(sec)) return '-'
+  if (sec < 60) return `${Math.round(sec)}s`
+  const min = sec / 60
+  return `${min.toFixed(1)}m`
+}
+
+function formatMetric(value, unit, decimals = 0) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return '-'
+  return `${n.toLocaleString('es-ES', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals
+  })} ${unit}`
+}
+
+function formatFibraQuality(fibra) {
+  if (!fibra) return '-'
+  const parts = []
+  if (Number.isFinite(Number(fibra.mic))) parts.push(`MIC ${Number(fibra.mic).toFixed(2)}`)
+  if (Number.isFinite(Number(fibra.str))) parts.push(`STR ${Number(fibra.str).toFixed(2)}`)
+  if (Number.isFinite(Number(fibra.sci))) parts.push(`SCI ${Number(fibra.sci).toFixed(1)}`)
+  return parts.length ? parts.join(' | ') : '-'
+}
+
+const pendingRows = computed(() => rtfRows.value.filter((row) => !row.saved))
+const highConfidenceRows = computed(() => pendingRows.value.filter((row) => row.confidence === 'high' && row.suggested))
+
+const displayRows = computed(() => {
+  const list = showOnlyPending.value ? pendingRows.value : rtfRows.value
+  return [...list].sort((a, b) => a.fileName.localeCompare(b.fileName))
+})
+
+const selectedRow = computed(() => {
+  return rtfRows.value.find((row) => row.sourceFile === selectedSourceFile.value) || null
+})
+
+const summaryText = computed(() => {
+  const total = rtfRows.value.length
+  const saved = rtfRows.value.filter((r) => r.saved).length
+  const high = rtfRows.value.filter((r) => r.confidence === 'high').length
+  const mediumLow = rtfRows.value.filter((r) => r.confidence === 'medium' || r.confidence === 'low').length
+  return `Total ${total} | Guardados ${saved} | Alta conf. ${high} | Dudosos ${mediumLow}`
+})
+
+function mergeRows(rowsFromApi) {
+  const bySource = new Map(rowsFromApi.map((row) => [row.sourceFile, row]))
+  rtfRows.value = rtfRows.value.map((row) => {
+    const incoming = bySource.get(row.sourceFile)
+    if (!incoming) return row
+
+    const selectedCandidate = incoming.suggested || null
+    return {
+      ...row,
+      candidates: incoming.candidates || [],
+      suggested: incoming.suggested || null,
+      selectedCandidate,
+      confidence: incoming.confidence || 'none',
+      scoreGap: incoming.scoreGap || 0,
+      decision: incoming.decision || 'review',
+      saved: incoming.saved === true ? true : row.saved,
+      matchError: incoming.error || null
+    }
+  })
+}
+
+async function selectFolder() {
+  try {
+    if (typeof window !== 'undefined' && 'showDirectoryPicker' in window) {
+      const dirHandle = await window.showDirectoryPicker()
+      await saveDirHandleToIDB(dirHandle)
+      hasPersistedHandle.value = true
+      selectedFolderName.value = dirHandle.name || 'Carpeta seleccionada'
+      folderPathDisplay.value = dirHandle.name || ''
+      await scanDirectory(dirHandle)
+      return
+    }
+  } catch (err) {
+    console.warn('selectFolder error:', err)
+  }
+
+  if (folderInput.value) {
+    folderInput.value.click()
+  }
+}
+
+async function refreshFolder() {
+  try {
+    const dirHandle = await getDirHandleFromIDB()
+    if (!dirHandle) return
+    const ok = await verifyPermission(dirHandle, 'read')
+    if (!ok) {
+      await Swal.fire({
+        icon: 'warning',
+        title: 'Permisos requeridos',
+        text: 'Selecciona la carpeta nuevamente para refrescar el escaneo.'
+      })
+      return
+    }
+    await scanDirectory(dirHandle)
+  } catch (err) {
+    console.warn('refreshFolder error:', err)
+  }
+}
+
+async function scanDirectory(dirHandle) {
+  const rows = []
+  let fileCount = 0
+
+  for await (const [name, handle] of dirHandle.entries()) {
+    if (!handle || handle.kind !== 'file') continue
+    if (!String(name || '').toLowerCase().endsWith('.rtf')) continue
+
+    fileCount += 1
+    const file = await handle.getFile()
+    const text = await file.text()
+    const header = parseRtfHeader(text)
+
+    rows.push({
+      sourceFile: name,
+      fileName: name,
+      header,
+      saved: false,
+      candidates: [],
+      suggested: null,
+      selectedCandidate: null,
+      confidence: 'none',
+      scoreGap: 0,
+      decision: 'review',
+      matchError: null
+    })
+  }
+
+  rtfRows.value = rows.sort((a, b) => a.fileName.localeCompare(b.fileName))
+  await refreshSavedStatus()
+
+  if (rtfRows.value.length) {
+    selectedSourceFile.value = rtfRows.value[0].sourceFile
+  }
+
+  scanStatus.value = fileCount
+    ? `Escaneo completado. ${fileCount} archivos RTF detectados.`
+    : 'No se encontraron archivos .rtf en la carpeta seleccionada.'
+}
+
+async function onFolderInputChange(event) {
+  try {
+    const files = Array.from(event?.target?.files || [])
+    const rows = []
+
+    for (const file of files) {
+      if (!String(file.name || '').toLowerCase().endsWith('.rtf')) continue
+      const text = await file.text()
+      const header = parseRtfHeader(text)
+      const relative = String(file.webkitRelativePath || file.name || '')
+
+      rows.push({
+        sourceFile: relative || file.name,
+        fileName: file.name,
+        header,
+        saved: false,
+        candidates: [],
+        suggested: null,
+        selectedCandidate: null,
+        confidence: 'none',
+        scoreGap: 0,
+        decision: 'review',
+        matchError: null
+      })
+    }
+
+    rtfRows.value = rows.sort((a, b) => a.fileName.localeCompare(b.fileName))
+    folderPathDisplay.value = files[0]?.webkitRelativePath ? files[0].webkitRelativePath.split('/')[0] : 'Carpeta local'
+    selectedFolderName.value = 'Carpeta local'
+    hasPersistedHandle.value = false
+
+    await refreshSavedStatus()
+
+    if (rtfRows.value.length) {
+      selectedSourceFile.value = rtfRows.value[0].sourceFile
+    }
+
+    scanStatus.value = rtfRows.value.length
+      ? `Escaneo local completado. ${rtfRows.value.length} archivos RTF detectados.`
+      : 'No se encontraron archivos .rtf en la seleccion.'
+  } catch (err) {
+    console.warn('onFolderInputChange error:', err)
+    scanStatus.value = `Error leyendo carpeta: ${err.message}`
+  }
+}
+
+async function refreshSavedStatus() {
+  if (!rtfRows.value.length) return
+
+  try {
+    const response = await fetch('/api/benninger-rtf/status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileNames: rtfRows.value.map((row) => row.sourceFile) })
+    })
+
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+    const data = await response.json()
+    const existing = new Set((data.existing || []).map((v) => String(v)))
+
+    rtfRows.value = rtfRows.value.map((row) => ({
+      ...row,
+      saved: existing.has(row.sourceFile)
+    }))
+  } catch (err) {
+    console.warn('refreshSavedStatus error:', err)
+  }
+}
+
+async function runAutomaticMatch() {
+  const filesToMatch = pendingRows.value.map((row) => ({
+    sourceFile: row.sourceFile,
+    header: row.header
+  }))
+
+  if (!filesToMatch.length) {
+    scanStatus.value = 'No hay archivos pendientes para matchear.'
+    return
+  }
+
+  isMatching.value = true
+  scanStatus.value = 'Ejecutando matcheo automatico...'
+
+  try {
+    const response = await fetch('/api/benninger-rtf/match', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files: filesToMatch, autoConfirmHighConfidence: false })
+    })
+
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+    const data = await response.json()
+    mergeRows(data.rows || [])
+
+    const high = data.summary?.high || 0
+    const doubt = (data.summary?.medium || 0) + (data.summary?.low || 0)
+    scanStatus.value = `Matcheo completado. Alta confianza: ${high}. Casos dudosos: ${doubt}.`
+  } catch (err) {
+    scanStatus.value = `Error en matcheo automatico: ${err.message}`
+  } finally {
+    isMatching.value = false
+  }
+}
+
+async function applyAutoHighConfidence() {
+  const items = highConfidenceRows.value.map((row) => ({
+    sourceFile: row.sourceFile,
+    header: row.header,
+    selected: row.suggested,
+    confidence: row.confidence,
+    mode: 'auto',
+    reason: 'AUTO_HIGH_CONFIDENCE',
+    candidates: row.candidates,
+    scoreGap: row.scoreGap
+  }))
+
+  if (!items.length) {
+    scanStatus.value = 'No hay filas de alta confianza para guardar automaticamente.'
+    return
+  }
+
+  isSaving.value = true
+
+  try {
+    const response = await fetch('/api/benninger-rtf/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items })
+    })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+    const data = await response.json()
+    const savedSet = new Set((data.saved || []).map((row) => row.sourceFile))
+    rtfRows.value = rtfRows.value.map((row) => ({
+      ...row,
+      saved: savedSet.has(row.sourceFile) ? true : row.saved
+    }))
+
+    scanStatus.value = `Guardado automatico completado. ${data.savedCount || 0} vinculaciones aplicadas.`
+  } catch (err) {
+    scanStatus.value = `Error guardando automaticos: ${err.message}`
+  } finally {
+    isSaving.value = false
+  }
+}
+
+function isCandidateSelected(row, candidate) {
+  if (!row.selectedCandidate) return false
+  return row.selectedCandidate.partida === candidate.partida
+    && row.selectedCandidate.rolada === candidate.rolada
+    && row.selectedCandidate.dtInicio === candidate.dtInicio
+    && row.selectedCandidate.horaInicio === candidate.horaInicio
+}
+
+function selectCandidate(sourceFile, candidate) {
+  rtfRows.value = rtfRows.value.map((row) => {
+    if (row.sourceFile !== sourceFile) return row
+    return { ...row, selectedCandidate: candidate }
+  })
+}
+
+async function confirmSelectedRow() {
+  const row = selectedRow.value
+  if (!row || !row.selectedCandidate || row.saved) return
+
+  isSaving.value = true
+  try {
+    const response = await fetch('/api/benninger-rtf/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        items: [{
+          sourceFile: row.sourceFile,
+          header: row.header,
+          selected: row.selectedCandidate,
+          confidence: row.confidence,
+          mode: 'manual',
+          reason: 'USER_VALIDATED',
+          candidates: row.candidates,
+          scoreGap: row.scoreGap
+        }]
+      })
+    })
+
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const data = await response.json()
+
+    if ((data.savedCount || 0) > 0) {
+      rtfRows.value = rtfRows.value.map((item) =>
+        item.sourceFile === row.sourceFile ? { ...item, saved: true } : item
+      )
+      scanStatus.value = 'Vinculo confirmado manualmente.'
+    } else {
+      scanStatus.value = 'No se pudo confirmar el vinculo seleccionado.'
+    }
+  } catch (err) {
+    scanStatus.value = `Error al confirmar vinculo: ${err.message}`
+  } finally {
+    isSaving.value = false
+  }
+}
+
+onMounted(async () => {
+  if (typeof document !== 'undefined') document.title = 'Benninger RTF'
+
+  try {
+    const dirHandle = await getDirHandleFromIDB()
+    if (!dirHandle) return
+
+    const ok = await verifyPermission(dirHandle, 'read')
+    if (!ok) return
+
+    hasPersistedHandle.value = true
+    selectedFolderName.value = dirHandle.name || 'Carpeta seleccionada'
+    folderPathDisplay.value = dirHandle.name || ''
+
+    await scanDirectory(dirHandle)
+  } catch (err) {
+    console.warn('onMounted BenningerRTF error:', err)
+  }
+})
+</script>

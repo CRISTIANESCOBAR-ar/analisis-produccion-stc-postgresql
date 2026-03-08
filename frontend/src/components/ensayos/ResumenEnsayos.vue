@@ -149,6 +149,86 @@
             </button>
           </div>
         </div>
+
+        <!-- Consulta en lenguaje natural -->
+        <div class="rounded-xl border border-indigo-200 bg-indigo-50/40 p-3">
+          <div class="flex flex-col gap-2">
+            <div class="text-sm font-semibold text-indigo-800">Consulta en lenguaje natural</div>
+            <div class="flex flex-col lg:flex-row gap-2">
+              <input
+                v-model="iaPregunta"
+                @keydown.enter.prevent="ejecutarAnalisisNatural"
+                type="text"
+                placeholder="Ej: Quiero comparar el hilo 10/1 del lote 109 entre máquinas para ver si está desparejo"
+                class="flex-1 px-3 py-2 border border-indigo-200 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+              />
+              <button
+                @click="ejecutarAnalisisNatural"
+                class="inline-flex items-center justify-center px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors"
+              >
+                Analizar
+              </button>
+            </div>
+
+            <div class="text-[11px] text-indigo-700/80">
+              Entiende frases tipo: "compara", "desigual", "desparejo", "maquinas/OE/telar", "hilo/ne/titulo", "lote/fiac".
+            </div>
+
+            <div v-if="iaError" class="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              {{ iaError }}
+            </div>
+
+            <div v-if="iaAnalisis" class="bg-white border border-indigo-100 rounded-lg px-3 py-2 text-xs text-slate-700 space-y-2">
+              <div class="text-[11px] text-slate-500">
+                {{ iaAnalisis.interpretacion }}
+              </div>
+
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="font-semibold text-slate-800">Diagnóstico:</span>
+                <span
+                  class="px-2 py-0.5 rounded-full text-[11px] font-bold"
+                  :class="iaAnalisis.nivel === 'alto' ? 'bg-red-100 text-red-700' : iaAnalisis.nivel === 'medio' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'"
+                >
+                  {{ iaAnalisis.diagnostico }}
+                </span>
+              </div>
+
+              <div>
+                {{ iaAnalisis.resumen }}
+              </div>
+
+              <div class="bg-indigo-50/60 border border-indigo-100 rounded-md px-2 py-1.5 text-slate-700">
+                <span class="font-semibold text-indigo-900">En criollo:</span>
+                {{ iaAnalisis.mensajeHumano }}
+              </div>
+
+              <div v-if="iaAnalisis.topVariables.length">
+                <div class="font-semibold text-slate-800 mb-1">Variables con mayor variación entre máquinas</div>
+                <div class="space-y-0.5">
+                  <div v-for="(item, idx) in iaAnalisis.topVariables" :key="`ia-var-${idx}`">
+                    • {{ item.label }} ({{ item.source }}): rango {{ item.minText }} - {{ item.maxText }} · Δ {{ item.deltaText }} · CV entre máquinas {{ item.cvText }}% ({{ item.oeMin }} vs {{ item.oeMax }})
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="iaAnalisis.maquinas.length">
+                <div class="font-semibold text-slate-800 mb-1">Resumen por máquina (OE)</div>
+                <div class="space-y-0.5">
+                  <div v-for="(m, idx) in iaAnalisis.maquinas" :key="`ia-maq-${idx}`">
+                    • {{ m.oe }}: {{ m.ensayos }} ensayos · Título {{ m.titulo }} · CVm {{ m.cvm }} · Tenac {{ m.tenac }} · Elong {{ m.elong }}
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="iaAnalisis.acciones.length">
+                <div class="font-semibold text-slate-800 mb-1">Acciones sugeridas</div>
+                <div class="space-y-0.5">
+                  <div v-for="(act, idx) in iaAnalisis.acciones" :key="`ia-act-${idx}`">• {{ act }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div v-if="loading" class="text-sm text-slate-600 py-8 text-center flex-1">
@@ -862,6 +942,241 @@ const keystrokeTimes = ref([])
 const searchTimeout = ref(null)
 const debounceDefault = 500
 const debounceMsDisplay = ref(debounceDefault)
+const iaPregunta = ref('')
+const iaAnalisis = ref(null)
+const iaError = ref('')
+
+function parseLooseNumber(value) {
+  if (value == null || value === '') return null
+  const text = String(value)
+    .replace('%', '')
+    .replace(',', '.')
+    .replace('+', '')
+    .trim()
+  if (!text) return null
+  const parsed = Number(text)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function formatNumFixed(value, decimals = 2) {
+  if (!Number.isFinite(value)) return '—'
+  return Number(value.toFixed(decimals)).toString()
+}
+
+function normalizeHumanText(text) {
+  return String(text || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+const METRIC_DEFS = [
+  { key: 'Titulo', label: 'Título', source: 'Uster', terms: ['titulo', 'count', 'ne'] },
+  { key: 'Desvío %', label: 'Desvío %', source: 'Uster', terms: ['desvio', 'desv', 'tolerancia'] },
+  { key: 'CVm %', label: 'CVm %', source: 'Uster', terms: ['cvm', 'irregularidad', 'masa'] },
+  { key: 'Neps +140%', label: 'Neps +140%', source: 'Uster', terms: ['neps', '140'] },
+  { key: 'Neps +280%', label: 'Neps +280%', source: 'Uster', terms: ['neps', '280'] },
+  { key: 'Fuerza B', label: 'Fuerza B', source: 'Tensorapid', terms: ['fuerza', 'break'] },
+  { key: 'Elong. %', label: 'Elong. %', source: 'Tensorapid', terms: ['elong', 'alarg', 'elasticidad'] },
+  { key: 'Tenac.', label: 'Tenac.', source: 'Tensorapid', terms: ['tenac', 'resistencia'] },
+  { key: 'Trabajo B', label: 'Trabajo B', source: 'Tensorapid', terms: ['trabajo', 'energia'] },
+]
+
+function parseNaturalQuestion(question) {
+  const raw = String(question || '').trim()
+  const text = normalizeHumanText(raw)
+
+  const loteMatch = text.match(/(?:lote|fiac)\s*#?\s*(\d{1,4})\b/i)
+  const slashNeMatch = text.match(/(?:hilo|ne|titulo|count)?\s*(\d+(?:[.,]\d+)?)\s*(?:\/|x|\*|-)\s*1\b(?:\s*(flame|fantasia))?/i)
+  const plainNeMatch = text.match(/(?:hilo|ne|titulo|count)\s*#?\s*(\d+(?:[.,]\d+)?)(?:\s*(flame|fantasia))?/i)
+  const neMatch = slashNeMatch || plainNeMatch
+
+  const lote = loteMatch ? String(parseInt(loteMatch[1], 10)) : ''
+  const ne = neMatch ? parseFloat(String(neMatch[1]).replace(',', '.')) : null
+  const flameByKeyword = /(flame|fantasia)/i.test(text)
+  const comparaMaquinas = /(maquina|maquinas|oe|telar|equipo|compar|desigual|desparej|diferent|variac|comportamiento)/i.test(text)
+
+  const mentionUster = /(uster|cvm|neps|desvio|titulo|irregularidad|masa)/i.test(text)
+  const mentionTensor = /(tensorapid|tenso|tenac|elong|fuerza|trabajo|resistencia|elasticidad)/i.test(text)
+  const fuentes = {
+    uster: mentionUster || (!mentionUster && !mentionTensor),
+    tensor: mentionTensor || (!mentionUster && !mentionTensor),
+  }
+
+  const metricHints = METRIC_DEFS.filter((def) => def.terms.some((term) => text.includes(term))).map((d) => d.key)
+
+  return {
+    raw,
+    normalized: text,
+    lote,
+    ne: Number.isFinite(ne) ? ne : null,
+    flame: flameByKeyword,
+    comparaMaquinas,
+    fuentes,
+    metricHints,
+  }
+}
+
+function ejecutarAnalisisNatural() {
+  iaError.value = ''
+  iaAnalisis.value = null
+
+  const parsed = parseNaturalQuestion(iaPregunta.value)
+  if (!parsed.raw) {
+    iaError.value = 'Escribe una pregunta para poder analizar. Ejemplo: compara hilo 10/1 lote 109 entre máquinas.'
+    return
+  }
+
+  let subset = [...(rows.value || [])]
+  if (parsed.lote) {
+    subset = subset.filter((r) => String(r.Lote || '').trim() === parsed.lote)
+  }
+  if (parsed.ne != null) {
+    subset = subset.filter((r) => {
+      const rowNe = parseFloat(String(r.Ne || '').toLowerCase().replace('flame', '').replace(',', '.'))
+      return Number.isFinite(rowNe) && Math.abs(rowNe - parsed.ne) <= 0.11
+    })
+  }
+  if (parsed.flame) {
+    subset = subset.filter((r) => /flame/i.test(String(r.Ne || '')))
+  }
+
+  if (!subset.length) {
+    iaError.value = 'No encontré ensayos que coincidan con la pregunta. Revisa lote/Ne o limpia filtros.'
+    return
+  }
+
+  const byMachine = new Map()
+  for (const row of subset) {
+    const key = String(row.OE || 'SIN OE').trim() || 'SIN OE'
+    if (!byMachine.has(key)) byMachine.set(key, [])
+    byMachine.get(key).push(row)
+  }
+
+  if (parsed.comparaMaquinas && byMachine.size < 2) {
+    iaError.value = 'La consulta pide comparar máquinas, pero solo hay una máquina (OE) con datos para ese filtro.'
+    return
+  }
+
+  const metricDefsBySource = METRIC_DEFS.filter((def) => {
+    if (def.source === 'Uster' && !parsed.fuentes.uster) return false
+    if (def.source === 'Tensorapid' && !parsed.fuentes.tensor) return false
+    return true
+  })
+  const metricDefs = parsed.metricHints.length
+    ? metricDefsBySource.filter((def) => parsed.metricHints.includes(def.key))
+    : metricDefsBySource
+
+  const metricComparisons = []
+  for (const metric of metricDefs) {
+    const machineMeans = []
+    for (const [machine, list] of byMachine.entries()) {
+      const values = list
+        .map((r) => parseLooseNumber(r[metric.key]))
+        .filter((n) => n != null)
+      if (!values.length) continue
+      const avg = values.reduce((a, b) => a + b, 0) / values.length
+      machineMeans.push({ machine, avg, count: values.length })
+    }
+
+    if (machineMeans.length < 2) continue
+    const avgAll = machineMeans.reduce((a, b) => a + b.avg, 0) / machineMeans.length
+    const variance = machineMeans.reduce((acc, item) => acc + Math.pow(item.avg - avgAll, 2), 0) / machineMeans.length
+    const sd = Math.sqrt(variance)
+    const cv = Math.abs(avgAll) > 0 ? (sd / Math.abs(avgAll)) * 100 : 0
+    const min = Math.min(...machineMeans.map((m) => m.avg))
+    const max = Math.max(...machineMeans.map((m) => m.avg))
+    const sorted = [...machineMeans].sort((a, b) => a.avg - b.avg)
+
+    metricComparisons.push({
+      ...metric,
+      cv,
+      min,
+      max,
+      delta: max - min,
+      oeMin: sorted[0]?.machine || '—',
+      oeMax: sorted[sorted.length - 1]?.machine || '—',
+    })
+  }
+
+  const avgCv = metricComparisons.length
+    ? metricComparisons.reduce((sum, m) => sum + m.cv, 0) / metricComparisons.length
+    : 0
+  const highSpreadCount = metricComparisons.filter((m) => m.cv >= 10).length
+
+  let nivel = 'bajo'
+  let diagnostico = 'Comportamiento homogéneo entre máquinas'
+  if (highSpreadCount >= 3 || avgCv >= 12) {
+    nivel = 'alto'
+    diagnostico = 'Comportamiento desigual entre máquinas'
+  } else if (highSpreadCount >= 1 || avgCv >= 7) {
+    nivel = 'medio'
+    diagnostico = 'Comportamiento con diferencias moderadas'
+  }
+
+  const topVariables = [...metricComparisons]
+    .sort((a, b) => b.cv - a.cv)
+    .slice(0, 5)
+    .map((m) => ({
+      ...m,
+      minText: formatNumFixed(m.min),
+      maxText: formatNumFixed(m.max),
+      deltaText: formatNumFixed(m.delta),
+      cvText: formatNumFixed(m.cv),
+    }))
+
+  const maquinas = [...byMachine.entries()].map(([oe, list]) => {
+    const avgMetric = (key) => {
+      const vals = list.map((r) => parseLooseNumber(r[key])).filter((n) => n != null)
+      if (!vals.length) return '—'
+      return formatNumFixed(vals.reduce((a, b) => a + b, 0) / vals.length)
+    }
+    return {
+      oe,
+      ensayos: list.length,
+      titulo: avgMetric('Titulo'),
+      cvm: avgMetric('CVm %'),
+      tenac: avgMetric('Tenac.'),
+      elong: avgMetric('Elong. %'),
+    }
+  }).sort((a, b) => b.ensayos - a.ensayos)
+
+  const sortedMachines = [...byMachine.entries()].sort((a, b) => b[1].length - a[1].length)
+  const machineLabel = sortedMachines.map(([k, v]) => `${k} (${v.length})`).join(', ')
+  const neLabel = parsed.ne != null ? `${formatNumFixed(parsed.ne, 1)}/1` : 'sin Ne específico'
+  const loteLabel = parsed.lote || 'sin lote específico'
+  const topHuman = topVariables.slice(0, 2).map((v) => `${v.label} (${v.oeMin} vs ${v.oeMax})`).join(' y ')
+
+  const mensajeHumano = nivel === 'alto'
+    ? `Se ve desparejo entre máquinas. Lo más sensible aparece en ${topHuman || 'las variables principales'}. Conviene atacar calibración y set points por OE.`
+    : nivel === 'medio'
+      ? `Hay diferencias, pero todavía controlables. El foco debería estar en ${topHuman || 'las variables de mayor dispersión'} para evitar que se amplifiquen.`
+      : `El comportamiento está bastante parejo entre máquinas para este lote/título. Solo mantener seguimiento normal por turno.`
+
+  const acciones = []
+  if (topVariables.length) {
+    acciones.push(`Revisar primero ${topVariables[0].label} en ${topVariables[0].oeMin} y ${topVariables[0].oeMax}; son los extremos actuales.`)
+  }
+  if (nivel !== 'bajo') {
+    acciones.push('Correr una verificación rápida de seteo por OE (tensión, limpieza y condición de puntos de contacto).')
+  }
+  acciones.push('Volver a ejecutar esta consulta tras el siguiente bloque de ensayos para confirmar si la brecha se reduce.')
+
+  const interpretacion = `Interpreté: ${parsed.comparaMaquinas ? 'comparación entre máquinas/OE' : 'análisis general'}${parsed.lote ? ` · lote ${parsed.lote}` : ''}${parsed.ne != null ? ` · Ne ${neLabel}` : ''}${parsed.flame ? ' · FLAME' : ''}${parsed.fuentes.uster && parsed.fuentes.tensor ? ' · Uster + Tensorapid' : parsed.fuentes.uster ? ' · Uster' : ' · Tensorapid'}.`
+
+  iaAnalisis.value = {
+    nivel,
+    diagnostico,
+    interpretacion,
+    resumen: `Consulta interpretada para lote ${loteLabel}, hilo ${neLabel}. Base: ${subset.length} ensayos en ${byMachine.size} máquinas (OE): ${machineLabel}. CV promedio entre máquinas: ${formatNumFixed(avgCv)}%.`,
+    mensajeHumano,
+    acciones,
+    topVariables,
+    maquinas,
+  }
+}
 
 // Formatea fecha a formato europeo dd/mm/yy
 function formatFechaEuropea(fecha) {

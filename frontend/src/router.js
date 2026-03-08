@@ -15,6 +15,16 @@ const routes = [
     component: () => import('./components/ensayos/TensoRapid.vue'), 
     meta: { title: 'TensoRapid' } 
   },
+  {
+    path: '/benninger-rtf',
+    component: () => import('./components/ensayos/BenningerRTF.vue'),
+    meta: { title: 'Benninger RTF' }
+  },
+  {
+    path: '/benninger-impacto',
+    component: () => import('./components/ensayos/BenningerImpactDashboard.vue'),
+    meta: { title: 'Benninger Impacto Hilo' }
+  },
   { 
     path: '/resumen', 
     component: () => import('./components/ensayos/ResumenEnsayos.vue'), 

@@ -1,53 +1,35 @@
 <template>
   <div class="benninger-impact min-h-screen p-4 md:p-6">
     <div class="mx-auto max-w-7xl space-y-6">
-      <header class="rounded-2xl border border-slate-700/80 bg-slate-900/80 p-5 shadow-xl">
-        <p class="text-xs uppercase tracking-[0.22em] text-cyan-300/80">Analisis Benninger</p>
-        <h1 class="mt-2 text-2xl md:text-3xl font-semibold text-slate-100">Impacto de Estiraje sobre Elongacion</h1>
-        <p class="mt-2 max-w-4xl text-sm text-slate-300">
-          Compara "lo que el hilo prometia" (laboratorio) versus "lo que la maquina le hizo" (proceso Benninger).
-        </p>
-
-        <ExpertDiagnosis
-          class="mt-4"
-          :partida="matchInfo?.partida || partidaInput"
-          :mic="laboratorio.mic"
-          :presion-exprimido="proceso.presionExprimido"
-          :tenacidad="laboratorio.tenacidad"
-          :elongacion-residual="elongacionResidual"
-          :humedad-salida="proceso.humedadSalida"
-          :tension-plegador="proceso.tensionPlegador"
-          :tension-timeline="proceso.tensionTimeline"
-        />
-
-        <div class="mt-4 grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-3 items-end">
-          <div>
-            <label for="partida" class="block text-xs uppercase tracking-[0.12em] text-slate-400">Buscar por PARTIDA</label>
-            <div class="mt-2 flex flex-col sm:flex-row gap-2">
-              <input
-                id="partida"
-                v-model="partidaInput"
-                type="text"
-                placeholder="Ej: 307501"
-                class="w-full rounded-lg border border-slate-600 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyan-400"
-              />
-              <button
-                class="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-500 disabled:opacity-60"
-                :disabled="loading"
-                @click="applyPartidaFilter"
-              >
-                {{ loading ? 'Cargando...' : 'Cargar' }}
-              </button>
-            </div>
+      <header class="rounded-2xl border border-slate-700/80 bg-slate-900/80 p-4 shadow-xl">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <div class="flex items-center gap-2">
+            <label for="partida" class="text-xs uppercase tracking-[0.12em] text-slate-300">Partida</label>
+            <input
+              id="partida"
+              v-model="partidaInput"
+              type="text"
+              maxlength="7"
+              class="w-[10ch] rounded-lg border border-slate-600 bg-slate-950/80 px-2 py-1.5 text-sm font-semibold text-slate-100 outline-none focus:border-cyan-400"
+              @keydown.enter.prevent="applyPartidaFilter"
+            />
+            <button
+              class="rounded-lg bg-cyan-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-cyan-500 disabled:opacity-60"
+              :disabled="loading"
+              @click="applyPartidaFilter"
+            >
+              {{ loading ? 'Cargando...' : 'Cargar' }}
+            </button>
           </div>
 
-          <div class="rounded-lg border border-slate-700 bg-slate-950/60 px-3 py-2 text-xs text-slate-300">
-            <p><span class="text-slate-400">Partida activa:</span> {{ matchInfo?.partida || '-' }}</p>
-            <p><span class="text-slate-400">Source vinculado:</span> {{ loadedSourceFile || '-' }}</p>
-            <p><span class="text-slate-400">Lotes:</span> {{ matchLotesLabel }}</p>
-            <p><span class="text-slate-400">Uster:</span> {{ referencias?.uster?.testnr || '-' }}</p>
-            <p><span class="text-slate-400">TensoRapid:</span> {{ referencias?.tensorapid?.testnr || '-' }}</p>
-          </div>
+          <p class="text-xs uppercase tracking-[0.22em] text-cyan-300/80">Analisis Benninger</p>
+        </div>
+
+        <div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-200">
+          <span class="header-chip"><span class="text-slate-400">Partida activa:</span> {{ matchInfo?.partida || '-' }}</span>
+          <span class="header-chip"><span class="text-slate-400">Lotes:</span> {{ matchLotesLabel }}</span>
+          <span class="header-chip"><span class="text-slate-400">Uster:</span> {{ referencias?.uster?.testnr || '-' }}</span>
+          <span class="header-chip"><span class="text-slate-400">TensoRapid:</span> {{ referencias?.tensorapid?.testnr || '-' }}</span>
         </div>
 
         <p v-if="errorMessage" class="mt-3 rounded-lg border border-rose-500/50 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
@@ -79,7 +61,50 @@
         </div>
       </header>
 
-      <section class="grid grid-cols-1 xl:grid-cols-[1.2fr_1fr] gap-6">
+      <section class="grid grid-cols-1 xl:grid-cols-2 gap-6 items-stretch">
+        <div class="xl:w-full">
+          <ExpertDiagnosis
+            class="h-full"
+            :partida="matchInfo?.partida || partidaInput"
+            :mic="laboratorio.mic"
+            :presion-exprimido="proceso.presionExprimido"
+            :tenacidad="laboratorio.tenacidad"
+            :elongacion-residual="elongacionResidual"
+            :humedad-salida="proceso.humedadSalida"
+            :tension-plegador="proceso.tensionPlegador"
+            :tension-timeline="proceso.tensionTimeline"
+            :aml-cel="proceso.amlCel"
+          />
+        </div>
+
+        <article class="rounded-2xl border border-slate-700/80 bg-slate-900/80 p-5 shadow-lg xl:w-full">
+          <h2 class="text-lg font-semibold text-slate-100">Barra Progresiva Apilada</h2>
+          <p class="mt-1 text-xs text-slate-300">Total de barra = Elongacion Inicial del laboratorio (100%)</p>
+
+          <div class="mt-4 space-y-2">
+            <div class="h-5 w-full overflow-hidden rounded-full border border-slate-700 bg-slate-950">
+              <div class="flex h-full w-full">
+                <div class="segment segment-estiraje" :style="{ width: `${stackedPct.danio}%` }"></div>
+                <div class="segment segment-residual" :style="{ width: `${stackedPct.residual}%` }"></div>
+              </div>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+              <div class="legend-chip"><span class="dot dot-inicial"></span> Total (Elongacion Inicial): {{ formatNumber(laboratorio.elongacionInicial, 2) }}%</div>
+              <div class="legend-chip"><span class="dot dot-estiraje"></span> Dano por estiraje: {{ formatNumber(proceso.stretchAplicado, 2) }}%</div>
+              <div class="legend-chip"><span class="dot dot-residual"></span> Residual real: {{ formatNumber(elongacionResidual, 2) }}%</div>
+            </div>
+          </div>
+
+          <div class="mt-5 rounded-xl border border-slate-700 bg-slate-950/70 p-4">
+            <p class="text-sm font-medium text-slate-200">Insight de Aptitud</p>
+            <p class="mt-2 text-sm" :class="residualTextClass">
+              {{ residualMessage }}
+            </p>
+          </div>
+        </article>
+      </section>
+
+      <section class="grid grid-cols-1 gap-6">
         <article class="rounded-2xl border border-slate-700/80 bg-slate-900/80 p-5 shadow-lg">
           <div class="flex items-center justify-between gap-3 flex-wrap">
             <h2 class="text-lg font-semibold text-slate-100">1. Header de Salud del Lote</h2>
@@ -111,32 +136,6 @@
             <div class="mt-3 h-72">
               <Radar :data="radarData" :options="radarOptions" />
             </div>
-          </div>
-        </article>
-
-        <article class="rounded-2xl border border-slate-700/80 bg-slate-900/80 p-5 shadow-lg">
-          <h2 class="text-lg font-semibold text-slate-100">Barra Progresiva Apilada</h2>
-          <p class="mt-1 text-xs text-slate-300">Total de barra = Elongacion Inicial del laboratorio (100%)</p>
-
-          <div class="mt-4 space-y-2">
-            <div class="h-5 w-full overflow-hidden rounded-full border border-slate-700 bg-slate-950">
-              <div class="flex h-full w-full">
-                <div class="segment segment-estiraje" :style="{ width: `${stackedPct.danio}%` }"></div>
-                <div class="segment segment-residual" :style="{ width: `${stackedPct.residual}%` }"></div>
-              </div>
-            </div>
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-              <div class="legend-chip"><span class="dot dot-inicial"></span> Total (Elongacion Inicial): {{ formatNumber(laboratorio.elongacionInicial, 2) }}%</div>
-              <div class="legend-chip"><span class="dot dot-estiraje"></span> Dano por estiraje: {{ formatNumber(proceso.stretchAplicado, 2) }}%</div>
-              <div class="legend-chip"><span class="dot dot-residual"></span> Residual real: {{ formatNumber(elongacionResidual, 2) }}%</div>
-            </div>
-          </div>
-
-          <div class="mt-5 rounded-xl border border-slate-700 bg-slate-950/70 p-4">
-            <p class="text-sm font-medium text-slate-200">Insight de Aptitud</p>
-            <p class="mt-2 text-sm" :class="residualTextClass">
-              {{ residualMessage }}
-            </p>
           </div>
         </article>
       </section>
@@ -308,6 +307,15 @@ const defaultDataModel = {
     gomaReal: null,
     velocidad: null,
     presionExprimido: null,
+    amlCel: {
+      total: 0,
+      aml: 0,
+      cel: 0,
+      riesgo: 'bajo',
+      codigos: [],
+      recurrentes: [],
+      eventos: []
+    },
     tensionTimeline: []
   }
 }
@@ -584,6 +592,46 @@ function normalizeTimeline(timeline) {
     .filter(Boolean)
 }
 
+function normalizeAmlCel(input) {
+  const source = input && typeof input === 'object' ? input : {}
+  const eventosSource = Array.isArray(source.eventos) ? source.eventos : []
+  const recurrentesSource = Array.isArray(source.recurrentes) ? source.recurrentes : []
+  const codigosSource = Array.isArray(source.codigos) ? source.codigos : []
+
+  const eventos = eventosSource
+    .map((row) => {
+      if (!row || typeof row !== 'object') return null
+      const tipo = String(row.tipo || '').trim().toUpperCase() || null
+      const codigo = String(row.codigo || '').trim().toUpperCase() || null
+      const detalle = String(row.detalle || '').trim() || null
+      const timestamp = String(row.timestamp || '').trim() || null
+      const severidad = String(row.severidad || '').trim().toLowerCase() || 'medio'
+      if (!tipo && !codigo && !detalle) return null
+      return { tipo, codigo, detalle, timestamp, severidad }
+    })
+    .filter(Boolean)
+
+  const recurrentes = recurrentesSource
+    .map((row) => {
+      if (!row || typeof row !== 'object') return null
+      const codigo = String(row.codigo || '').trim().toUpperCase()
+      const count = parseNumber(row.count)
+      if (!codigo || !Number.isFinite(count)) return null
+      return { codigo, count: Number(count) }
+    })
+    .filter(Boolean)
+
+  return {
+    total: Number.isFinite(parseNumber(source.total)) ? Number(source.total) : eventos.length,
+    aml: Number.isFinite(parseNumber(source.aml)) ? Number(source.aml) : eventos.filter((e) => e.tipo === 'AML').length,
+    cel: Number.isFinite(parseNumber(source.cel)) ? Number(source.cel) : eventos.filter((e) => e.tipo === 'CEL').length,
+    riesgo: String(source.riesgo || 'bajo').toLowerCase(),
+    codigos: codigosSource.map((code) => String(code || '').trim().toUpperCase()).filter(Boolean),
+    recurrentes,
+    eventos
+  }
+}
+
 function normalizeApiPayload(payload) {
   const lab = payload?.laboratorio && typeof payload.laboratorio === 'object' ? payload.laboratorio : {}
   const proc = payload?.proceso && typeof payload.proceso === 'object' ? payload.proceso : {}
@@ -609,6 +657,7 @@ function normalizeApiPayload(payload) {
       gomaReal: parseNumber(proc.gomaReal),
       velocidad: parseNumber(proc.velocidad),
       presionExprimido: parseNumber(proc.presionExprimido),
+      amlCel: normalizeAmlCel(proc.amlCel),
       tensionTimeline: normalizeTimeline(proc.tensionTimeline)
     }
   }
@@ -692,6 +741,16 @@ function formatNumber(value, decimals = 2) {
   border-radius: 0.9rem;
   background: linear-gradient(145deg, rgba(15, 23, 42, 0.86) 0%, rgba(2, 6, 23, 0.88) 100%);
   padding: 0.8rem 0.95rem;
+}
+
+.header-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid rgba(71, 85, 105, 0.8);
+  border-radius: 999px;
+  padding: 0.25rem 0.6rem;
+  background: rgba(2, 6, 23, 0.55);
 }
 
 .kpi-label {

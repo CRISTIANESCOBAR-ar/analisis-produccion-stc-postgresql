@@ -127,6 +127,22 @@
             >
               <span>🧬</span> TensoRapid
             </router-link>
+
+            <router-link
+              to="/benninger-rtf"
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm"
+              :class="{ 'bg-blue-600': $route.path === '/benninger-rtf' }"
+            >
+              <span>🧾</span> Benninger RTF
+            </router-link>
+
+            <router-link
+              to="/benninger-impacto"
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm"
+              :class="{ 'bg-blue-600': $route.path === '/benninger-impacto' }"
+            >
+              <span>⚙️</span> Benninger Impacto Hilo
+            </router-link>
           </div>
         </div>
 
@@ -459,7 +475,7 @@ const indigoMenuOpen = ref(localStorage.getItem('indigoMenuOpen') !== 'false')
 const configMenuOpen = ref(localStorage.getItem('configMenuOpen') !== 'false')
 const inventoryMenuOpen = ref(localStorage.getItem('inventoryMenuOpen') !== 'false')
 
-const labRoutes = ['/resumen', '/resumen-semanal-hilanderia', '/analisis-calidad-fibra', '/golden-batch', '/informe-auditoria-lote', '/resumen-diario', '/stats', '/uster', '/tenso']
+const labRoutes = ['/resumen', '/resumen-semanal-hilanderia', '/analisis-calidad-fibra', '/golden-batch', '/informe-auditoria-lote', '/resumen-diario', '/stats', '/uster', '/tenso', '/benninger-rtf', '/benninger-impacto']
 const isLabRouteActive = computed(() => labRoutes.includes(route.path))
 
 const prodRoutes = ['/import-control', '/informe-diario']

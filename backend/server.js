@@ -375,6 +375,184 @@ function buildTimelineFromHeader(header, tensionPlegador) {
   return out
 }
 
+const BENNINGER_AML_CEL_MAX_EVENTS = 40
+const BENNINGER_AML_CEL_RELEVANT = /(?:\bAML\b|\bCEL\b|\bS\d{3}\b|grelha\s+aberta|parada|velocidade\s+lenta|rasteje\s+velocidade|fora\s+da\s+toler|fuera\s+de\s+toler|carg\s*a\s*de\s*goma)/i
+
+function normalizeAmlCelTimestamp(raw) {
+  const value = String(raw || '').trim()
+  if (!value) return null
+
+  const parsed = parseBenningerDateTime(value)
+  if (parsed?.sqlTimestamp) return parsed.sqlTimestamp
+
+  const hms = value.match(/\b\d{1,2}:\d{2}(?::\d{2})?\b/)
+  return hms ? hms[0] : null
+}
+
+function classifyAmlCelSeverity(tipo, codigo, detalle) {
+  const t = String(tipo || '').toUpperCase()
+  const c = String(codigo || '').toUpperCase()
+  const d = String(detalle || '').toLowerCase()
+
+  if (c === 'S800' || c === 'S500') return 'critico'
+  if (/critic|fora\s+toler|fuera\s+de\s+toler|desvio\s+alto|desv[ií]o\s+alto/.test(d)) return 'critico'
+  if (/grelha\s+aberta|parada|velocidade\s+lenta|rasteje\s+velocidade|carg\s*a\s*de\s*goma/.test(d)) return 'alto'
+  if (t === 'CEL') return 'alto'
+  return 'medio'
+}
+
+function parseAmlCelLine(rawLine) {
+  const line = String(rawLine || '').replace(/\s+/g, ' ').trim()
+  if (!line || !BENNINGER_AML_CEL_RELEVANT.test(line)) return null
+
+  const tipo = line.match(/\b(AML|CEL)\b/i)?.[1]?.toUpperCase() || null
+  const sCode = line.match(/\bS\d{3}\b/i)?.[0]?.toUpperCase() || null
+  const genericCode = line.match(/-(\d{3,4})\s*:/)?.[1] || null
+  const codigo = sCode || (genericCode ? `E${genericCode}` : null)
+  const tsRaw = line.match(/\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\s+\d{1,2}:\d{2}(?::\d{2})?\b/i)?.[0] || null
+  const timestamp = normalizeAmlCelTimestamp(tsRaw)
+
+  let detalle = line
+  if (tsRaw) detalle = detalle.replace(tsRaw, ' ')
+  if (tipo) detalle = detalle.replace(new RegExp(`\\b${tipo}\\b`, 'i'), ' ')
+  if (sCode) detalle = detalle.replace(new RegExp(`\\b${sCode}\\b`, 'i'), ' ')
+  if (genericCode) detalle = detalle.replace(new RegExp(`-${genericCode}\\s*:`, 'i'), ' ')
+  detalle = detalle.replace(/^[\s\-:;|]+/, '').replace(/\s+/g, ' ').trim()
+  if (!detalle) detalle = line
+
+  return {
+    tipo,
+    codigo,
+    timestamp,
+    detalle,
+    severidad: classifyAmlCelSeverity(tipo, codigo, detalle)
+  }
+}
+
+function normalizeAmlCelObject(entry) {
+  if (!entry || typeof entry !== 'object') return null
+
+  const tipoRaw = entry.tipo ?? entry.type ?? entry.clase ?? entry.category ?? entry.kind ?? null
+  const codigoRaw = entry.codigo ?? entry.code ?? entry.alarmCode ?? entry.ponto ?? entry.point ?? entry.tag ?? null
+  const detalleRaw = entry.detalle ?? entry.detail ?? entry.message ?? entry.msg ?? entry.descricao ?? entry.description ?? entry.text ?? entry.evento ?? null
+  const timestampRaw = entry.timestamp ?? entry.ts ?? entry.datetime ?? entry.dateTime ?? entry.fechaHora ?? entry.hora ?? entry.time ?? null
+
+  const mergedLine = [tipoRaw, codigoRaw, detalleRaw].filter((v) => v !== null && v !== undefined && v !== '').join(' ')
+  const parsed = parseAmlCelLine(mergedLine)
+  if (!parsed) {
+    const fallbackText = String(detalleRaw || '').trim()
+    if (!BENNINGER_AML_CEL_RELEVANT.test(fallbackText)) return null
+    return parseAmlCelLine(fallbackText)
+  }
+
+  const tsNorm = normalizeAmlCelTimestamp(timestampRaw)
+  if (tsNorm) parsed.timestamp = tsNorm
+
+  return parsed
+}
+
+function collectAmlCelEvents(value, output, depth = 0) {
+  if (output.length >= 300 || depth > 6 || value === null || value === undefined) return
+
+  if (typeof value === 'string') {
+    if (!BENNINGER_AML_CEL_RELEVANT.test(value) && !/(?:ALAR|ALARM|EVENT)/i.test(value)) return
+    const lines = value
+      .split(/\r?\n|[|;]+/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+    for (const line of lines) {
+      const parsed = parseAmlCelLine(line)
+      if (parsed) output.push(parsed)
+    }
+    return
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectAmlCelEvents(item, output, depth + 1)
+      if (output.length >= 300) break
+    }
+    return
+  }
+
+  if (typeof value !== 'object') return
+
+  const normalizedEvent = normalizeAmlCelObject(value)
+  if (normalizedEvent) output.push(normalizedEvent)
+
+  for (const [key, item] of Object.entries(value)) {
+    const keyLooksRelevant = /aml|cel|alarm|alert|evento|event|log|hist|warning|alarma|estado|grelha|parada|velocidade/i.test(String(key || ''))
+    if (typeof item === 'string') {
+      if (keyLooksRelevant || BENNINGER_AML_CEL_RELEVANT.test(item) || /(?:ALAR|ALARM|EVENT)/i.test(item)) {
+        collectAmlCelEvents(item, output, depth + 1)
+      }
+      continue
+    }
+
+    if (typeof item === 'object') {
+      if (keyLooksRelevant || depth < 2) {
+        collectAmlCelEvents(item, output, depth + 1)
+      }
+    }
+  }
+}
+
+function summarizeAmlCelEvents(events) {
+  const rows = Array.isArray(events) ? events.filter(Boolean) : []
+  const total = rows.length
+  const aml = rows.filter((e) => String(e.tipo || '').toUpperCase() === 'AML').length
+  const cel = rows.filter((e) => String(e.tipo || '').toUpperCase() === 'CEL').length
+
+  const counts = new Map()
+  for (const event of rows) {
+    const code = String(event.codigo || '').toUpperCase()
+    if (!code) continue
+    counts.set(code, (counts.get(code) || 0) + 1)
+  }
+
+  const recurrentes = [...counts.entries()]
+    .filter(([, count]) => count >= 2)
+    .sort((a, b) => b[1] - a[1])
+    .map(([codigo, count]) => ({ codigo, count }))
+
+  const hasCriticalRecurrence = recurrentes.some((item) => item.codigo === 'S800' || item.codigo === 'S500')
+  const riesgo = hasCriticalRecurrence
+    ? 'critico'
+    : (recurrentes.length > 0 || total >= 6)
+      ? 'alto'
+      : total > 0
+        ? 'medio'
+        : 'bajo'
+
+  return {
+    total,
+    aml,
+    cel,
+    riesgo,
+    codigos: [...counts.keys()],
+    recurrentes,
+    eventos: rows.slice(0, BENNINGER_AML_CEL_MAX_EVENTS)
+  }
+}
+
+function extractAmlCelFromHeader(header) {
+  const out = []
+  collectAmlCelEvents(header, out)
+
+  const unique = new Map()
+  for (const event of out) {
+    const key = [
+      String(event.tipo || '').toUpperCase(),
+      String(event.codigo || '').toUpperCase(),
+      String(event.timestamp || ''),
+      String(event.detalle || '').toLowerCase()
+    ].join('|')
+    if (!unique.has(key)) unique.set(key, event)
+  }
+
+  return summarizeAmlCelEvents([...unique.values()])
+}
+
 function extractLotNumbersFromText(values) {
   const set = new Set()
   for (const value of values) {
@@ -402,16 +580,51 @@ function buildBenningerProcessFromHeader(rawHeader) {
   const gomaReal = pickHeaderNumber(header, ['gomaReal', 'gomaReal1A41', '1A41'])
   const velocidad = pickHeaderNumber(header, ['velocidad', 'velocidad1S102', 'velMMin', '1S102'])
   const presionExprimido = pickHeaderNumber(header, ['presionExprimido', 'presionExprimidoMax', '1S086'])
+  const metrosSalida = pickHeaderNumber(header, ['metrosSalida', 'metros', '1X014'])
+  const duracionSegundos = parseBenningerDurationSeconds(header?.duracao)
+  const amlCel = extractAmlCelFromHeader(header)
+  const velocidadEfectiva = Number.isFinite(metrosSalida) && Number.isFinite(duracionSegundos) && duracionSegundos > 0
+    ? (metrosSalida / duracionSegundos) * 60
+    : null
 
   return {
     stretchAplicado: Number.isFinite(stretchAplicado) ? Number(stretchAplicado.toFixed(3)) : null,
     humedadSalida: Number.isFinite(humedadSalida) ? Number(humedadSalida.toFixed(3)) : null,
     tensionPlegador: Number.isFinite(tensionPlegador) ? Number(tensionPlegador.toFixed(2)) : null,
     gomaReal: Number.isFinite(gomaReal) ? Number(gomaReal.toFixed(3)) : null,
-    velocidad: Number.isFinite(velocidad) ? Number(velocidad.toFixed(3)) : null,
+    velocidad: Number.isFinite(velocidad)
+      ? Number(velocidad.toFixed(3))
+      : (Number.isFinite(velocidadEfectiva) ? Number(velocidadEfectiva.toFixed(3)) : null),
+    metrosSalida: Number.isFinite(metrosSalida) ? Number(metrosSalida.toFixed(3)) : null,
+    duracionSegundos: Number.isFinite(duracionSegundos) ? duracionSegundos : null,
+    velocidadEfectiva: Number.isFinite(velocidadEfectiva) ? Number(velocidadEfectiva.toFixed(3)) : null,
     presionExprimido: Number.isFinite(presionExprimido) ? Number(presionExprimido.toFixed(3)) : null,
+    amlCel,
     tensionTimeline: buildTimelineFromHeader(header, tensionPlegador)
   }
+}
+
+function pickBestMatchCandidate(matchPayload) {
+  const candidates = Array.isArray(matchPayload?.candidates) ? matchPayload.candidates : []
+  if (!candidates.length) return null
+
+  const sorted = [...candidates].sort((a, b) => {
+    const scoreA = Number(a?.score)
+    const scoreB = Number(b?.score)
+    const diffA = Number(a?.startDiffSec)
+    const diffB = Number(b?.startDiffSec)
+
+    if (Number.isFinite(scoreA) && Number.isFinite(scoreB) && scoreA !== scoreB) {
+      return scoreB - scoreA
+    }
+    if (Number.isFinite(diffA) && Number.isFinite(diffB) && diffA !== diffB) {
+      return diffA - diffB
+    }
+    return 0
+  })
+
+  const best = sorted[0]
+  return best && typeof best === 'object' ? best : null
 }
 
 async function ensureBenningerRtfSchema() {
@@ -3267,6 +3480,7 @@ app.get(['/api/benninger-impacto', '/api/benninger-impacto/:sourceFile'], async 
             match_dt_inicio,
             match_hora_inicio,
             raw_header,
+            match_payload,
             updated_at
           FROM tb_benninger_rtf_links
           WHERE (
@@ -3296,6 +3510,7 @@ app.get(['/api/benninger-impacto', '/api/benninger-impacto/:sourceFile'], async 
             match_dt_inicio,
             match_hora_inicio,
             raw_header,
+            match_payload,
             updated_at
           FROM tb_benninger_rtf_links
           WHERE source_file = $1
@@ -3310,6 +3525,7 @@ app.get(['/api/benninger-impacto', '/api/benninger-impacto/:sourceFile'], async 
             match_dt_inicio,
             match_hora_inicio,
             raw_header,
+            match_payload,
             updated_at
           FROM tb_benninger_rtf_links
           WHERE match_partida IS NOT NULL OR match_rolada IS NOT NULL
@@ -3340,6 +3556,45 @@ app.get(['/api/benninger-impacto', '/api/benninger-impacto/:sourceFile'], async 
     const partida = String(link.match_partida || '').trim() || null
     const rolada = String(link.match_rolada || '').trim() || null
     const header = link.raw_header && typeof link.raw_header === 'object' ? link.raw_header : {}
+    const bestCandidate = pickBestMatchCandidate(link.match_payload)
+
+    let backupHeader = null
+    if (link.source_file && await tableExists('tb_benninger_rtf_links_sim_backup')) {
+      const backupResult = await query(
+        `
+          SELECT
+            old_row->'raw_header' AS raw_header
+          FROM tb_benninger_rtf_links_sim_backup
+          WHERE source_file = $1
+          ORDER BY backup_at DESC
+          LIMIT 1
+        `,
+        [link.source_file],
+        'benninger-impacto/backup-raw-header-by-source'
+      )
+      const raw = backupResult.rows?.[0]?.raw_header
+      if (raw && typeof raw === 'object') {
+        backupHeader = raw
+      }
+    }
+
+    const processHeader = {
+      ...header,
+      ...(backupHeader || {})
+    }
+
+    if (!Number.isFinite(parseLooseNumber(processHeader?.velMMin)) && Number.isFinite(Number(bestCandidate?.velocidadeMediaPartida))) {
+      processHeader.velMMin = `${Number(bestCandidate.velocidadeMediaPartida)} m/min`
+    }
+    if (!Number.isFinite(parseLooseNumber(processHeader?.metros)) && Number.isFinite(Number(bestCandidate?.metragemPartida))) {
+      processHeader.metros = `${Number(bestCandidate.metragemPartida)} m`
+    }
+    if (!processHeader?.partidaOrigem && bestCandidate?.partida) {
+      processHeader.partidaOrigem = String(bestCandidate.partida)
+    }
+    if (!processHeader?.roladaOrigem && bestCandidate?.rolada) {
+      processHeader.roladaOrigem = String(bestCandidate.rolada)
+    }
     const partidaNorm = normalizeDigitsKey(partida)
     const roladaNorm = normalizeDigitsKey(rolada)
     const roladaFromPartida = deriveRoladaFromPartida(partida)
@@ -3653,7 +3908,12 @@ app.get(['/api/benninger-impacto', '/api/benninger-impacto/:sourceFile'], async 
       }
     }
 
-    const proceso = buildBenningerProcessFromHeader(header)
+    const proceso = {
+      ...buildBenningerProcessFromHeader(processHeader),
+      origen: backupHeader ? 'source_file+backup_raw_header' : 'source_file_raw_header',
+      partidaOrigem: processHeader.partidaOrigem || null,
+      roladaOrigem: processHeader.roladaOrigem || null
+    }
 
     res.json({
       success: true,
