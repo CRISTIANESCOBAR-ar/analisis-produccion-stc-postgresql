@@ -201,6 +201,14 @@
                 Confirmar vinculo
               </button>
 
+              <button
+                @click="registerNoAptaRow"
+                :disabled="isSaving || selectedRow.saved"
+                class="inline-flex items-center px-3 py-1.5 rounded-md text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50"
+              >
+                Registrar no apta
+              </button>
+
               <span v-if="selectedRow.saved" class="text-xs text-emerald-700 font-semibold">Este archivo ya esta vinculado.</span>
               <span v-else class="text-xs text-slate-500">Usa este boton para resolver casos dudosos manualmente.</span>
             </div>
@@ -233,6 +241,14 @@ const selectedSourceFile = ref('')
 
 const isMatching = ref(false)
 const isSaving = ref(false)
+const RTF_PARSE_VERSION = 'rtf-full-v1'
+const NO_APTA_REASON_OPTIONS = [
+  { value: 'DESPERDICIO', label: 'Desperdicio / descarte' },
+  { value: 'FALLA_MECANICA', label: 'Falla mecanica del proceso' },
+  { value: 'FUERA_PARAMETRO', label: 'Fuera de parametro operativo' },
+  { value: 'SIN_DESTINO_TELAR', label: 'Sin destino a telar' },
+  { value: 'OTRO', label: 'Otro' }
+]
 
 function openDb() {
   return new Promise((resolve, reject) => {
@@ -303,6 +319,24 @@ function rtfToPlainText(raw) {
   return text
 }
 
+async function readRtfFileText(file) {
+  if (!file) return ''
+
+  try {
+    const buffer = await file.arrayBuffer()
+    const bytes = new Uint8Array(buffer)
+
+    const decoded1252 = new TextDecoder('windows-1252').decode(bytes)
+    const decodedUtf8 = new TextDecoder('utf-8').decode(bytes)
+
+    const bad1252 = (decoded1252.match(/[Ã�]/g) || []).length
+    const badUtf8 = (decodedUtf8.match(/[Ã�]/g) || []).length
+    return badUtf8 < bad1252 ? decodedUtf8 : decoded1252
+  } catch {
+    return await file.text()
+  }
+}
+
 function extractField(lines, keyLike) {
   const keyNorm = normalizeLoose(keyLike)
   for (const line of lines) {
@@ -342,13 +376,30 @@ function extractMetricNumber(normalizedText, patterns) {
   return null
 }
 
-function extractCodeNumber(normalizedText, code, customPatterns = []) {
+function findCodeLine(lines, code) {
   const escaped = String(code || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const defaults = [
-    new RegExp(`${escaped}\\s*:\\s*([0-9]+(?:[.,][0-9]+)?)\\b`, 'i'),
-    new RegExp(`${escaped}\\s*:\\s*.{0,120}?([0-9]+(?:[.,][0-9]+)?)\\s*(?:%|n|kn|m\\/min)?\\b`, 'i')
-  ]
-  return extractMetricNumber(normalizedText, [...customPatterns, ...defaults])
+  const re = new RegExp(`^\\s*${escaped}\\s*:`, 'i')
+  return (Array.isArray(lines) ? lines : []).find((line) => re.test(String(line || ''))) || ''
+}
+
+function extractCodeNumber(lines, code) {
+  const codeLine = findCodeLine(lines, code)
+  if (!codeLine) return null
+
+  const rightSide = codeLine.split(':').slice(1).join(':')
+  if (!rightSide) return null
+
+  const matches = [...rightSide.matchAll(/-?[0-9]+(?:[.,][0-9]+)?/g)]
+  if (!matches.length) return null
+
+  // The effective configured value is typically the last numeric token on the line.
+  return toNumberOrNull(matches[matches.length - 1][0])
+}
+
+function formatMetricFromCode(lines, code, unit) {
+  const value = extractCodeNumber(lines, code)
+  if (!Number.isFinite(value)) return ''
+  return `${value} ${unit}`
 }
 
 function parseRtfHeader(rawText) {
@@ -359,7 +410,7 @@ function parseRtfHeader(rawText) {
     .map((line) => line.trim())
     .filter(Boolean)
 
-  const metros = extractMetricValue(
+  const metros = formatMetricFromCode(lines, '1x014', 'm') || extractMetricValue(
     plainNorm,
     [
       /1x014\s*:\s*comprimento\s+de\s+saida\s*([0-9]+(?:[.,][0-9]+)?)\s*m\b/i,
@@ -368,7 +419,7 @@ function parseRtfHeader(rawText) {
     'm'
   )
 
-  const velMMin = extractMetricValue(
+  const velMMin = formatMetricFromCode(lines, '1s102', 'm/min') || extractMetricValue(
     plainNorm,
     [
       /1s102\s*:\s*velo\.?\s*de\s*producao\s*tingindo\s*([0-9]+(?:[.,][0-9]+)?)\s*m\/min\b/i,
@@ -377,11 +428,11 @@ function parseRtfHeader(rawText) {
     'm/min'
   )
 
-  const stretchAplicado = extractCodeNumber(plainNorm, '1s034')
-  const humedadSalida = extractCodeNumber(plainNorm, '1s068')
-  const tensionPlegador = extractCodeNumber(plainNorm, '1s054')
-  const gomaReal = extractCodeNumber(plainNorm, '1a41')
-  const presionExprimido = extractCodeNumber(plainNorm, '1s086')
+  const stretchAplicado = extractCodeNumber(lines, '1s034')
+  const humedadSalida = extractCodeNumber(lines, '1s068')
+  const tensionPlegador = extractCodeNumber(lines, '1s054')
+  const gomaReal = extractCodeNumber(lines, '1a41')
+  const presionExprimido = extractCodeNumber(lines, '1s086')
 
   const timelineCodeMap = [
     { punto: 'M12', code: '1s002' },
@@ -401,7 +452,7 @@ function parseRtfHeader(rawText) {
 
   const tensionTimeline = timelineCodeMap
     .map(({ punto, code }) => {
-      const tensionN = extractCodeNumber(plainNorm, code)
+      const tensionN = extractCodeNumber(lines, code)
       if (!Number.isFinite(tensionN)) return null
       return { punto, tensionN: Number(tensionN.toFixed(3)) }
     })
@@ -553,13 +604,17 @@ async function scanDirectory(dirHandle) {
 
     fileCount += 1
     const file = await handle.getFile()
-    const text = await file.text()
+    const text = await readRtfFileText(file)
+    const plainText = rtfToPlainText(text)
     const header = parseRtfHeader(text)
 
     rows.push({
       sourceFile: name,
       fileName: name,
       header,
+      rawRtfText: text,
+      plainText,
+      parseVersion: RTF_PARSE_VERSION,
       saved: false,
       candidates: [],
       suggested: null,
@@ -590,7 +645,8 @@ async function onFolderInputChange(event) {
 
     for (const file of files) {
       if (!String(file.name || '').toLowerCase().endsWith('.rtf')) continue
-      const text = await file.text()
+      const text = await readRtfFileText(file)
+      const plainText = rtfToPlainText(text)
       const header = parseRtfHeader(text)
       const relative = String(file.webkitRelativePath || file.name || '')
 
@@ -598,6 +654,9 @@ async function onFolderInputChange(event) {
         sourceFile: relative || file.name,
         fileName: file.name,
         header,
+        rawRtfText: text,
+        plainText,
+        parseVersion: RTF_PARSE_VERSION,
         saved: false,
         candidates: [],
         suggested: null,
@@ -656,7 +715,10 @@ async function refreshSavedStatus() {
 async function runAutomaticMatch() {
   const filesToMatch = pendingRows.value.map((row) => ({
     sourceFile: row.sourceFile,
-    header: row.header
+    header: row.header,
+    rawRtfText: row.rawRtfText || null,
+    plainText: row.plainText || null,
+    parseVersion: row.parseVersion || RTF_PARSE_VERSION
   }))
 
   if (!filesToMatch.length) {
@@ -693,6 +755,9 @@ async function applyAutoHighConfidence() {
   const items = highConfidenceRows.value.map((row) => ({
     sourceFile: row.sourceFile,
     header: row.header,
+    rawRtfText: row.rawRtfText || null,
+    plainText: row.plainText || null,
+    parseVersion: row.parseVersion || RTF_PARSE_VERSION,
     selected: row.suggested,
     confidence: row.confidence,
     mode: 'auto',
@@ -746,6 +811,30 @@ function selectCandidate(sourceFile, candidate) {
   })
 }
 
+function resolveRowCandidate(row) {
+  if (!row) return null
+  if (row.selectedCandidate) return row.selectedCandidate
+  if (row.suggested) return row.suggested
+  return null
+}
+
+function inferRoladaForNoApta(row) {
+  const current = resolveRowCandidate(row)
+  if (current?.rolada) return String(current.rolada)
+
+  const partida = String(current?.partida || '').trim()
+  if (!partida) return ''
+
+  const sibling = rtfRows.value.find((candidateRow) => {
+    if (!candidateRow || candidateRow.sourceFile === row.sourceFile) return false
+    const candidate = resolveRowCandidate(candidateRow)
+    if (!candidate?.rolada) return false
+    return String(candidate.partida || '').trim() === partida
+  })
+
+  return sibling ? String(resolveRowCandidate(sibling)?.rolada || '') : ''
+}
+
 async function confirmSelectedRow() {
   const row = selectedRow.value
   if (!row || !row.selectedCandidate || row.saved) return
@@ -759,6 +848,9 @@ async function confirmSelectedRow() {
         items: [{
           sourceFile: row.sourceFile,
           header: row.header,
+          rawRtfText: row.rawRtfText || null,
+          plainText: row.plainText || null,
+          parseVersion: row.parseVersion || RTF_PARSE_VERSION,
           selected: row.selectedCandidate,
           confidence: row.confidence,
           mode: 'manual',
@@ -782,6 +874,123 @@ async function confirmSelectedRow() {
     }
   } catch (err) {
     scanStatus.value = `Error al confirmar vinculo: ${err.message}`
+  } finally {
+    isSaving.value = false
+  }
+}
+
+async function registerNoAptaRow() {
+  const row = selectedRow.value
+  if (!row || row.saved) return
+
+  const baseCandidate = resolveRowCandidate(row)
+  const defaultPartida = String(baseCandidate?.partida || '').trim()
+  const defaultRolada = inferRoladaForNoApta(row)
+
+  const reasonOptionsHtml = NO_APTA_REASON_OPTIONS
+    .map((option) => `<option value="${option.value}">${option.label}</option>`)
+    .join('')
+
+  const result = await Swal.fire({
+    title: 'Registrar lote no apta',
+    html: `
+      <div style="display:flex;flex-direction:column;gap:8px;text-align:left;">
+        <label style="font-size:12px;color:#334155;">Partida (opcional)</label>
+        <input id="no-apta-partida" class="swal2-input" style="margin:0;" placeholder="Ej. 0475714" />
+        <label style="font-size:12px;color:#334155;">Rolada (requerida)</label>
+        <input id="no-apta-rolada" class="swal2-input" style="margin:0;" placeholder="Ej. 2307271457" />
+        <label style="font-size:12px;color:#334155;">Motivo</label>
+        <select id="no-apta-motivo" class="swal2-select" style="margin:0;">${reasonOptionsHtml}</select>
+        <label style="font-size:12px;color:#334155;">Observacion (opcional)</label>
+        <textarea id="no-apta-observacion" class="swal2-textarea" style="margin:0;" placeholder="Detalle operativo para auditoria"></textarea>
+      </div>
+    `,
+    focusConfirm: false,
+    showCancelButton: true,
+    confirmButtonText: 'Guardar no apta',
+    cancelButtonText: 'Cancelar',
+    didOpen: () => {
+      const htmlContainer = Swal.getHtmlContainer()
+      if (!htmlContainer) return
+      const partidaInput = htmlContainer.querySelector('#no-apta-partida')
+      const roladaInput = htmlContainer.querySelector('#no-apta-rolada')
+      const motivoInput = htmlContainer.querySelector('#no-apta-motivo')
+      if (partidaInput) partidaInput.value = defaultPartida
+      if (roladaInput) roladaInput.value = defaultRolada
+      if (motivoInput) motivoInput.value = NO_APTA_REASON_OPTIONS[0]?.value || 'DESPERDICIO'
+    },
+    preConfirm: () => {
+      const htmlContainer = Swal.getHtmlContainer()
+      if (!htmlContainer) return null
+
+      const partida = String(htmlContainer.querySelector('#no-apta-partida')?.value || '').trim()
+      const rolada = String(htmlContainer.querySelector('#no-apta-rolada')?.value || '').trim()
+      const motivo = String(htmlContainer.querySelector('#no-apta-motivo')?.value || '').trim() || 'OTRO'
+      const observacion = String(htmlContainer.querySelector('#no-apta-observacion')?.value || '').trim()
+
+      if (!rolada) {
+        Swal.showValidationMessage('La rolada es requerida para registrar no apta.')
+        return null
+      }
+
+      return { partida, rolada, motivo, observacion }
+    }
+  })
+
+  if (!result.isConfirmed || !result.value) return
+
+  const payload = result.value
+  const selectedNoApta = {
+    partida: payload.partida || null,
+    rolada: payload.rolada || null
+  }
+
+  isSaving.value = true
+  try {
+    const response = await fetch('/api/benninger-rtf/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        items: [{
+          sourceFile: row.sourceFile,
+          header: row.header,
+          rawRtfText: row.rawRtfText || null,
+          plainText: row.plainText || null,
+          parseVersion: row.parseVersion || RTF_PARSE_VERSION,
+          selected: selectedNoApta,
+          confidence: 'none',
+          mode: 'manual_no_apta',
+          reason: `NO_APTA_${payload.motivo}`,
+          noApta: {
+            motivo: payload.motivo,
+            observacion: payload.observacion || null
+          },
+          candidates: row.candidates,
+          scoreGap: row.scoreGap
+        }]
+      })
+    })
+
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const data = await response.json()
+
+    if ((data.savedCount || 0) > 0) {
+      rtfRows.value = rtfRows.value.map((item) => {
+        if (item.sourceFile !== row.sourceFile) return item
+        return {
+          ...item,
+          selectedCandidate: selectedNoApta,
+          confidence: 'none',
+          decision: 'no_apta',
+          saved: true
+        }
+      })
+      scanStatus.value = 'Registro no apta guardado y asociado por rolada.'
+    } else {
+      scanStatus.value = 'No se pudo guardar el registro no apta.'
+    }
+  } catch (err) {
+    scanStatus.value = `Error guardando no apta: ${err.message}`
   } finally {
     isSaving.value = false
   }

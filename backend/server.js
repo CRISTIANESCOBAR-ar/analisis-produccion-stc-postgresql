@@ -5,6 +5,7 @@ import cors from 'cors'
 import pg from 'pg'
 import fs from 'fs'
 import path from 'path'
+import crypto from 'crypto'
 import { fileURLToPath } from 'url'
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getImportStatus, importCSV, importAll, importSpecificTables, importForceAll, renameduplicateHeaders, getTableColumns, compareColumns, addColumnsToTable } from './import-manager.js'
@@ -376,11 +377,302 @@ function buildTimelineFromHeader(header, tensionPlegador) {
 }
 
 const BENNINGER_AML_CEL_MAX_EVENTS = 40
+const BENNINGER_RTF_PARSE_VERSION = 'rtf-full-v1'
 const BENNINGER_AML_CEL_RELEVANT = /(?:\bAML\b|\bCEL\b|\bS\d{3}\b|grelha\s+aberta|parada|velocidade\s+lenta|rasteje\s+velocidade|fora\s+da\s+toler|fuera\s+de\s+toler|carg\s*a\s*de\s*goma)/i
 
-function normalizeAmlCelTimestamp(raw) {
+function normalizeLooseText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function rtfToPlainText(rawText) {
+  let text = String(rawText || '')
+  if (!text) return ''
+
+  // Decode escaped bytes before dropping RTF control words.
+  text = text.replace(/\\'[0-9a-fA-F]{2}/g, (m) => {
+    const code = Number.parseInt(m.slice(2), 16)
+    return Number.isFinite(code) ? String.fromCharCode(code) : ''
+  })
+  text = text.replace(/\\par[d]?/g, '\n')
+  text = text.replace(/\\tab/g, '\t')
+  text = text.replace(/\\[a-zA-Z]+-?\d* ?/g, '')
+  text = text.replace(/[{}]/g, ' ')
+  text = text.replace(/\r/g, '')
+  text = text.replace(/[ \t]+\n/g, '\n')
+  text = text.replace(/\n{3,}/g, '\n\n')
+
+  return text
+}
+
+function detectAmlCelSection(line) {
+  const norm = normalizeLooseText(line)
+  if (!norm) return null
+  if (/^aml\b/.test(norm)) return 'AML'
+  if (/^cel\b/.test(norm)) return 'CEL'
+  return null
+}
+
+function cleanAmlCelLine(line) {
+  return String(line || '')
+    .replace(/\s+/g, ' ')
+    .replace(/^\s*>>\s*/, '')
+    .trim()
+}
+
+function parseSqlTimestampToDate(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return null
+
+  const normalized = raw.replace('T', ' ')
+  const m = normalized.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})(?::(\d{2}))?$/)
+  if (!m) return null
+
+  const yyyy = Number(m[1])
+  const mm = Number(m[2])
+  const dd = Number(m[3])
+  const hh = Number(m[4])
+  const mi = Number(m[5])
+  const ss = Number(m[6] || '0')
+
+  const dt = new Date(yyyy, mm - 1, dd, hh, mi, ss)
+  if (Number.isNaN(dt.getTime())) return null
+  if (
+    dt.getFullYear() !== yyyy ||
+    dt.getMonth() !== mm - 1 ||
+    dt.getDate() !== dd ||
+    dt.getHours() !== hh ||
+    dt.getMinutes() !== mi ||
+    dt.getSeconds() !== ss
+  ) {
+    return null
+  }
+
+  return dt
+}
+
+function buildSqlTimestamp(year, month, day, hour, minute, second) {
+  const yyyy = Number(year)
+  const mm = Number(month)
+  const dd = Number(day)
+  const hh = Number(hour)
+  const mi = Number(minute)
+  const ss = Number(second)
+
+  if (![yyyy, mm, dd, hh, mi, ss].every(Number.isFinite)) return null
+  if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null
+  if (hh < 0 || hh > 23 || mi < 0 || mi > 59 || ss < 0 || ss > 59) return null
+
+  const dt = new Date(yyyy, mm - 1, dd, hh, mi, ss)
+  if (Number.isNaN(dt.getTime())) return null
+  if (
+    dt.getFullYear() !== yyyy ||
+    dt.getMonth() !== mm - 1 ||
+    dt.getDate() !== dd ||
+    dt.getHours() !== hh ||
+    dt.getMinutes() !== mi ||
+    dt.getSeconds() !== ss
+  ) {
+    return null
+  }
+
+  return `${String(yyyy).padStart(4, '0')}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')} ${String(hh).padStart(2, '0')}:${String(mi).padStart(2, '0')}:${String(ss).padStart(2, '0')}`
+}
+
+function normalizeAmlCelYear(value) {
+  const year = Number(value)
+  if (!Number.isFinite(year)) return null
+  if (year >= 100) return year
+  return year + 2000
+}
+
+function resolveAmlCelDateByAnchor(candidates, anchorTimestamp) {
+  if (!Array.isArray(candidates) || candidates.length === 0) return null
+  if (candidates.length === 1) return candidates[0]
+
+  const anchorDate = parseSqlTimestampToDate(anchorTimestamp)
+  if (!anchorDate) return candidates[0]
+
+  let best = candidates[0]
+  let bestDistance = Number.POSITIVE_INFINITY
+
+  for (const candidate of candidates) {
+    const dt = parseSqlTimestampToDate(candidate)
+    if (!dt) continue
+    const distanceMs = Math.abs(dt.getTime() - anchorDate.getTime())
+    if (distanceMs < bestDistance) {
+      bestDistance = distanceMs
+      best = candidate
+    }
+  }
+
+  return best
+}
+
+function resolveAmlCelAnchorTimestamp(header) {
+  const source = header && typeof header === 'object' ? header : {}
+  const candidates = [
+    source.comeco,
+    source.inicio,
+    source.start,
+    source.fim,
+    source.end,
+    source.startTime,
+    source.endTime
+  ]
+
+  for (const value of candidates) {
+    const text = String(value || '').trim()
+    if (!text) continue
+
+    const isoLike = text.match(/\b(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?\b/)
+    if (isoLike) {
+      const ts = buildSqlTimestamp(
+        Number(isoLike[1]),
+        Number(isoLike[2]),
+        Number(isoLike[3]),
+        Number(isoLike[4]),
+        Number(isoLike[5]),
+        Number(isoLike[6] || '0')
+      )
+      if (ts) return ts
+    }
+
+    const parsed = parseBenningerDateTime(text)
+    if (parsed?.sqlTimestamp) return parsed.sqlTimestamp
+  }
+
+  return null
+}
+
+function parseAmlCelEventLineFromText(rawLine, sectionHint, lineNo, context = {}) {
+  const original = String(rawLine || '')
+  const line = cleanAmlCelLine(original)
+  if (!line) return null
+
+  const dateTimeRegex = /((?:\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}|\d{4}[\/-]\d{1,2}[\/-]\d{1,2})\s+\d{1,2}:\d{2}(?::\d{2})?)/g
+  const dtMatches = [...line.matchAll(dateTimeRegex)].map((m) => m[1])
+  const startRaw = dtMatches[0] || null
+  const endRaw = dtMatches[1] || null
+  if (!startRaw) return null
+
+  const parsed = parseAmlCelLine(line, context) || {}
+  const meterPos = Number.parseInt(line.match(/\b(\d+)\s*\[m\]/i)?.[1] || '', 10)
+  const eventCode = line.match(/-(\d{3,4})\s*:/)?.[1] || null
+  const subsystem = line.match(/\bS\d{1,4}(?:-[A-Z]+)?\b/i)?.[0] || null
+  const severityToken = line.match(/\b(INFO|AVISO|SEGURAN[ÇC]A|ESTADO)\b/i)?.[1] || null
+  const machineTag = line.match(/\bM\d{2}[A-Z]\d{2}B\d{3}X\d+\b/i)?.[0] || null
+
+  const inferredTipo = sectionHint || (/set:\s*old\s*:/i.test(line) ? 'CEL' : 'AML')
+  const tipo = String(parsed.tipo || inferredTipo || '').toUpperCase() || null
+  const codigo = String(parsed.codigo || subsystem || (eventCode ? `E${eventCode}` : '')).toUpperCase() || null
+  const detalle = String(parsed.detalle || line).trim()
+  const severidad = String(parsed.severidad || classifyAmlCelSeverity(tipo, codigo, detalle)).toLowerCase()
+  const timestamp = normalizeAmlCelTimestamp(startRaw, context)
+  const timestampEnd = normalizeAmlCelTimestamp(endRaw, context)
+  const eventHash = crypto
+    .createHash('sha1')
+    .update(`${String(sectionHint || '')}|${String(lineNo || 0)}|${line}`)
+    .digest('hex')
+
+  return {
+    lineNo: Number.isFinite(Number(lineNo)) ? Number(lineNo) : null,
+    section: sectionHint || tipo || null,
+    tipo,
+    codigo,
+    severidad,
+    timestamp,
+    timestampEnd,
+    timestampRaw: startRaw,
+    timestampEndRaw: endRaw,
+    meterPos: Number.isFinite(meterPos) ? meterPos : null,
+    eventCode,
+    subsystem: subsystem ? String(subsystem).toUpperCase() : null,
+    machineTag,
+    detalle,
+    rawLine: line,
+    eventHash
+  }
+}
+
+function collectAmlCelEventsFromPlainText(plainText, summaryOutput, detailedOutput, context = {}) {
+  const plain = String(plainText || '')
+  if (!plain) return
+
+  const lines = plain
+    .split(/\r?\n/)
+    .map((l) => String(l || '').trim())
+
+  let section = null
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (!line) continue
+
+    const maybeSection = detectAmlCelSection(line)
+    if (maybeSection) {
+      section = maybeSection
+      continue
+    }
+
+    if (!line.includes('>>')) continue
+
+    const event = parseAmlCelEventLineFromText(line, section, i + 1, context)
+    if (!event) continue
+
+    detailedOutput.push(event)
+    summaryOutput.push({
+      tipo: event.tipo,
+      codigo: event.codigo,
+      timestamp: event.timestamp,
+      detalle: event.detalle,
+      severidad: event.severidad
+    })
+  }
+}
+
+function normalizeAmlCelTimestamp(raw, context = {}) {
   const value = String(raw || '').trim()
   if (!value) return null
+
+  const isoLike = value.match(/\b(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?\b/)
+  if (isoLike) {
+    const directTs = buildSqlTimestamp(
+      Number(isoLike[1]),
+      Number(isoLike[2]),
+      Number(isoLike[3]),
+      Number(isoLike[4]),
+      Number(isoLike[5]),
+      Number(isoLike[6] || '0')
+    )
+    if (directTs) return directTs
+  }
+
+  const dm = value.match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{2,4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/)
+  if (dm) {
+    const a = Number(dm[1])
+    const b = Number(dm[2])
+    const c = Number(dm[3])
+    const hh = Number(dm[4])
+    const mi = Number(dm[5])
+    const ss = Number(dm[6] || '0')
+
+    const candidates = []
+
+    const dmy = buildSqlTimestamp(normalizeAmlCelYear(c), b, a, hh, mi, ss)
+    if (dmy) candidates.push(dmy)
+
+    if (String(dm[1]).length <= 2 && String(dm[3]).length <= 2) {
+      const ymd = buildSqlTimestamp(normalizeAmlCelYear(a), b, c, hh, mi, ss)
+      if (ymd) candidates.push(ymd)
+    }
+
+    const best = resolveAmlCelDateByAnchor(candidates, context?.anchorTimestamp)
+    if (best) return best
+  }
 
   const parsed = parseBenningerDateTime(value)
   if (parsed?.sqlTimestamp) return parsed.sqlTimestamp
@@ -401,7 +693,7 @@ function classifyAmlCelSeverity(tipo, codigo, detalle) {
   return 'medio'
 }
 
-function parseAmlCelLine(rawLine) {
+function parseAmlCelLine(rawLine, context = {}) {
   const line = String(rawLine || '').replace(/\s+/g, ' ').trim()
   if (!line || !BENNINGER_AML_CEL_RELEVANT.test(line)) return null
 
@@ -409,8 +701,8 @@ function parseAmlCelLine(rawLine) {
   const sCode = line.match(/\bS\d{3}\b/i)?.[0]?.toUpperCase() || null
   const genericCode = line.match(/-(\d{3,4})\s*:/)?.[1] || null
   const codigo = sCode || (genericCode ? `E${genericCode}` : null)
-  const tsRaw = line.match(/\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\s+\d{1,2}:\d{2}(?::\d{2})?\b/i)?.[0] || null
-  const timestamp = normalizeAmlCelTimestamp(tsRaw)
+  const tsRaw = line.match(/\b(?:\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}|\d{4}[\/-]\d{1,2}[\/-]\d{1,2})\s+\d{1,2}:\d{2}(?::\d{2})?\b/i)?.[0] || null
+  const timestamp = normalizeAmlCelTimestamp(tsRaw, context)
 
   let detalle = line
   if (tsRaw) detalle = detalle.replace(tsRaw, ' ')
@@ -429,7 +721,7 @@ function parseAmlCelLine(rawLine) {
   }
 }
 
-function normalizeAmlCelObject(entry) {
+function normalizeAmlCelObject(entry, context = {}) {
   if (!entry || typeof entry !== 'object') return null
 
   const tipoRaw = entry.tipo ?? entry.type ?? entry.clase ?? entry.category ?? entry.kind ?? null
@@ -438,20 +730,20 @@ function normalizeAmlCelObject(entry) {
   const timestampRaw = entry.timestamp ?? entry.ts ?? entry.datetime ?? entry.dateTime ?? entry.fechaHora ?? entry.hora ?? entry.time ?? null
 
   const mergedLine = [tipoRaw, codigoRaw, detalleRaw].filter((v) => v !== null && v !== undefined && v !== '').join(' ')
-  const parsed = parseAmlCelLine(mergedLine)
+  const parsed = parseAmlCelLine(mergedLine, context)
   if (!parsed) {
     const fallbackText = String(detalleRaw || '').trim()
     if (!BENNINGER_AML_CEL_RELEVANT.test(fallbackText)) return null
-    return parseAmlCelLine(fallbackText)
+    return parseAmlCelLine(fallbackText, context)
   }
 
-  const tsNorm = normalizeAmlCelTimestamp(timestampRaw)
+  const tsNorm = normalizeAmlCelTimestamp(timestampRaw, context)
   if (tsNorm) parsed.timestamp = tsNorm
 
   return parsed
 }
 
-function collectAmlCelEvents(value, output, depth = 0) {
+function collectAmlCelEvents(value, output, depth = 0, context = {}) {
   if (output.length >= 300 || depth > 6 || value === null || value === undefined) return
 
   if (typeof value === 'string') {
@@ -461,7 +753,7 @@ function collectAmlCelEvents(value, output, depth = 0) {
       .map((line) => line.trim())
       .filter(Boolean)
     for (const line of lines) {
-      const parsed = parseAmlCelLine(line)
+      const parsed = parseAmlCelLine(line, context)
       if (parsed) output.push(parsed)
     }
     return
@@ -469,7 +761,7 @@ function collectAmlCelEvents(value, output, depth = 0) {
 
   if (Array.isArray(value)) {
     for (const item of value) {
-      collectAmlCelEvents(item, output, depth + 1)
+      collectAmlCelEvents(item, output, depth + 1, context)
       if (output.length >= 300) break
     }
     return
@@ -477,24 +769,159 @@ function collectAmlCelEvents(value, output, depth = 0) {
 
   if (typeof value !== 'object') return
 
-  const normalizedEvent = normalizeAmlCelObject(value)
+  const normalizedEvent = normalizeAmlCelObject(value, context)
   if (normalizedEvent) output.push(normalizedEvent)
 
   for (const [key, item] of Object.entries(value)) {
     const keyLooksRelevant = /aml|cel|alarm|alert|evento|event|log|hist|warning|alarma|estado|grelha|parada|velocidade/i.test(String(key || ''))
     if (typeof item === 'string') {
       if (keyLooksRelevant || BENNINGER_AML_CEL_RELEVANT.test(item) || /(?:ALAR|ALARM|EVENT)/i.test(item)) {
-        collectAmlCelEvents(item, output, depth + 1)
+        collectAmlCelEvents(item, output, depth + 1, context)
       }
       continue
     }
 
     if (typeof item === 'object') {
       if (keyLooksRelevant || depth < 2) {
-        collectAmlCelEvents(item, output, depth + 1)
+        collectAmlCelEvents(item, output, depth + 1, context)
       }
     }
   }
+}
+
+function isAmlCelPlaceholderDetail(detailNorm, code) {
+  const compact = String(detailNorm || '').replace(/\s+/g, ' ').trim()
+  if (!compact) return true
+
+  const codeNorm = String(code || '').toLowerCase().trim()
+  if (codeNorm && compact === codeNorm) return true
+
+  if (/^(aml|cel)$/.test(compact)) return true
+  if (/^(s|e)\d{3,4}$/.test(compact)) return true
+
+  return false
+}
+
+function normalizeAmlCelDetailKey(detalle) {
+  let text = normalizeLooseText(detalle)
+  if (!text) return ''
+
+  text = text.replace(/\b\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}\b/g, ' ')
+  text = text.replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, ' ')
+  text = text.replace(/\b\d+\s*\[m\]\b/g, ' ')
+  text = text.replace(/\bM\d{2}[A-Z]\d{2}B\d{3}X\d+\b/g, ' ')
+  text = text.replace(/\s+/g, ' ').trim()
+
+  return text
+}
+
+function extractAmlCelTimeKey(event) {
+  const fromTs = String(event?.timestamp || '').match(/\b\d{1,2}:\d{2}(?::\d{2})?\b/)
+  if (fromTs?.[0]) return fromTs[0].slice(0, 5)
+
+  const fromDetail = String(event?.detalle || '').match(/\b\d{1,2}:\d{2}(?::\d{2})?\b/)
+  if (fromDetail?.[0]) return fromDetail[0].slice(0, 5)
+
+  return ''
+}
+
+function isAmlCelRelevantEvent(event) {
+  const sev = String(event?.severidad || '').toLowerCase()
+  const code = String(event?.codigo || '').toUpperCase()
+  const detailNorm = normalizeLooseText(event?.detalle)
+  if (isAmlCelPlaceholderDetail(detailNorm, code)) return false
+
+  if (sev === 'critico' || sev === 'alto') return true
+  if (/^S(800|500)$/.test(code)) return true
+  if (/^E(3030|3031|3032|1010|1011|1012)$/.test(code)) return true
+  if (/grelha\s+aberta|parada|velocidade\s+lenta|rasteje\s+velocidade|carg\s*a\s*de\s*goma/.test(detailNorm)) return true
+
+  return false
+}
+
+function scoreAmlCelEvent(event) {
+  let score = 0
+  const sev = String(event?.severidad || '').toLowerCase()
+  const code = String(event?.codigo || '').toUpperCase()
+  const detailNorm = normalizeLooseText(event?.detalle)
+
+  if (isAmlCelPlaceholderDetail(detailNorm, code)) return 0
+
+  if (sev === 'critico') score += 6
+  else if (sev === 'alto') score += 4
+  else score += 1
+
+  if (/^S(800|500)$/.test(code)) score += 5
+  if (/^E(3030|3031|3032|1010|1011|1012)$/.test(code)) score += 3
+  if (/grelha\s+aberta/.test(detailNorm)) score += 3
+  if (/parada/.test(detailNorm)) score += 3
+  if (/velocidade\s+lenta|rasteje\s+velocidade/.test(detailNorm)) score += 2
+  if (/carg\s*a\s*de\s*goma/.test(detailNorm)) score += 3
+
+  return score
+}
+
+function buildAmlCelIndicadores(rows) {
+  const stats = {
+    paradas: 0,
+    velocidadLenta: 0,
+    rasteje: 0,
+    grelhaAbierta: 0,
+    gomaFueraTolerancia: 0,
+    criticos: 0
+  }
+
+  for (const row of rows) {
+    const detailNorm = normalizeLooseText(row?.detalle)
+    const code = String(row?.codigo || '').toUpperCase()
+    const sev = String(row?.severidad || '').toLowerCase()
+
+    if (sev === 'critico') stats.criticos += 1
+    if (/\bparada\b/.test(detailNorm) || code === 'E3030' || code === 'E1010') stats.paradas += 1
+    if (/velocidade\s+lenta/.test(detailNorm) || code === 'E3032' || code === 'E1012') stats.velocidadLenta += 1
+    if (/rasteje\s+velocidade/.test(detailNorm) || code === 'E3031' || code === 'E1011') stats.rasteje += 1
+    if (/grelha\s+aberta|grelha\s+protet/.test(detailNorm)) stats.grelhaAbierta += 1
+    if (/carg\s*a\s*de\s*goma/.test(detailNorm) || code === 'S500' || code === '1485') stats.gomaFueraTolerancia += 1
+  }
+
+  return stats
+}
+
+function amlCelEventFamily(event) {
+  const code = String(event?.codigo || '').toUpperCase()
+  const detailNorm = normalizeLooseText(event?.detalle)
+
+  if (/carg\s*a\s*de\s*goma/.test(detailNorm) || code === 'S500' || code === '1485') return 'goma'
+  if (/grelha\s+aberta|grelha\s+protet/.test(detailNorm)) return 'grelha'
+  if (/\bparada\b/.test(detailNorm) || code === 'E3030' || code === 'E1010') return 'parada'
+  if (/velocidade\s+lenta/.test(detailNorm) || code === 'E3032' || code === 'E1012') return 'velocidad_lenta'
+  if (/rasteje\s+velocidade/.test(detailNorm) || code === 'E3031' || code === 'E1011') return 'rasteje'
+  if (code === 'S800') return 's800'
+
+  return code || 'otros'
+}
+
+function buildAmlCelResumenTexto({ riesgo, total, indicadores, recurrentes }) {
+  if (!total) return 'Sin eventos AML/CEL relevantes en la corrida auditada.'
+
+  const bloques = []
+  if (indicadores.paradas > 0) bloques.push(`${indicadores.paradas} paradas`)
+  if (indicadores.velocidadLenta > 0) bloques.push(`${indicadores.velocidadLenta} ciclos de velocidad lenta`)
+  if (indicadores.rasteje > 0) bloques.push(`${indicadores.rasteje} eventos de rasteje`) 
+  if (indicadores.grelhaAbierta > 0) bloques.push(`${indicadores.grelhaAbierta} aperturas de grelha`) 
+  if (indicadores.gomaFueraTolerancia > 0) bloques.push(`${indicadores.gomaFueraTolerancia} alertas de goma`)
+
+  const recurrentesTxt = recurrentes
+    .slice(0, 3)
+    .map((item) => `${item.codigo}x${item.count}`)
+    .join(', ')
+
+  const base = bloques.length
+    ? `Secuencia operativa inestable: ${bloques.join(', ')}.`
+    : `Se detectaron ${total} eventos AML/CEL en la corrida.`
+
+  const recurrentesPart = recurrentesTxt ? ` Codigos recurrentes: ${recurrentesTxt}.` : ''
+  return `${base} Riesgo ${String(riesgo || '').toUpperCase() || 'MEDIO'}.${recurrentesPart}`
 }
 
 function summarizeAmlCelEvents(events) {
@@ -524,33 +951,95 @@ function summarizeAmlCelEvents(events) {
         ? 'medio'
         : 'bajo'
 
+  const indicadores = buildAmlCelIndicadores(rows)
+
+  const relevantMap = new Map()
+  for (const event of rows) {
+    if (!isAmlCelRelevantEvent(event)) continue
+
+    const key = [
+      String(event?.codigo || '').toUpperCase(),
+      extractAmlCelTimeKey(event),
+      normalizeAmlCelDetailKey(event?.detalle)
+    ].join('|')
+
+    const prev = relevantMap.get(key)
+    if (!prev || scoreAmlCelEvent(event) > scoreAmlCelEvent(prev)) {
+      relevantMap.set(key, event)
+    }
+  }
+
+  const relevantSorted = [...relevantMap.values()]
+    .sort((a, b) => {
+      const scoreDiff = scoreAmlCelEvent(b) - scoreAmlCelEvent(a)
+      if (scoreDiff !== 0) return scoreDiff
+      return String(a?.timestamp || '').localeCompare(String(b?.timestamp || ''))
+    })
+
+  const familyCap = new Map()
+  const eventosRelevantes = []
+  for (const event of relevantSorted) {
+    const family = amlCelEventFamily(event)
+    const used = Number(familyCap.get(family) || 0)
+    if (used >= 3) continue
+
+    familyCap.set(family, used + 1)
+    eventosRelevantes.push(event)
+    if (eventosRelevantes.length >= 12) break
+  }
+
+  const resumen = buildAmlCelResumenTexto({
+    riesgo,
+    total,
+    indicadores,
+    recurrentes
+  })
+
   return {
     total,
     aml,
     cel,
     riesgo,
+    resumen,
+    indicadores,
     codigos: [...counts.keys()],
     recurrentes,
+    eventosRelevantes,
     eventos: rows.slice(0, BENNINGER_AML_CEL_MAX_EVENTS)
   }
 }
 
-function extractAmlCelFromHeader(header) {
+function buildAmlCelBundle({ header, plainText, rawRtfText }) {
+  const amlCelContext = {
+    anchorTimestamp: resolveAmlCelAnchorTimestamp(header)
+  }
+
   const out = []
-  collectAmlCelEvents(header, out)
+  const detailedEvents = []
+
+  collectAmlCelEvents(header, out, 0, amlCelContext)
+
+  const plain = String(plainText || '').trim() || (rawRtfText ? rtfToPlainText(rawRtfText) : '')
+  if (plain) {
+    collectAmlCelEventsFromPlainText(plain, out, detailedEvents, amlCelContext)
+  }
 
   const unique = new Map()
   for (const event of out) {
     const key = [
       String(event.tipo || '').toUpperCase(),
       String(event.codigo || '').toUpperCase(),
-      String(event.timestamp || ''),
-      String(event.detalle || '').toLowerCase()
+      extractAmlCelTimeKey(event),
+      normalizeAmlCelDetailKey(event.detalle)
     ].join('|')
     if (!unique.has(key)) unique.set(key, event)
   }
 
-  return summarizeAmlCelEvents([...unique.values()])
+  return {
+    summary: summarizeAmlCelEvents([...unique.values()]),
+    detailedEvents,
+    plainText: plain
+  }
 }
 
 function extractLotNumbersFromText(values) {
@@ -571,7 +1060,7 @@ function extractLotNumbersFromText(values) {
   return [...set]
 }
 
-function buildBenningerProcessFromHeader(rawHeader) {
+function buildBenningerProcessFromHeader(rawHeader, options = {}) {
   const header = rawHeader && typeof rawHeader === 'object' ? rawHeader : {}
 
   const stretchAplicado = pickHeaderNumber(header, ['stretchFinal', 'stretchAplicado', 'stretch1S034', '1S034'])
@@ -582,7 +1071,12 @@ function buildBenningerProcessFromHeader(rawHeader) {
   const presionExprimido = pickHeaderNumber(header, ['presionExprimido', 'presionExprimidoMax', '1S086'])
   const metrosSalida = pickHeaderNumber(header, ['metrosSalida', 'metros', '1X014'])
   const duracionSegundos = parseBenningerDurationSeconds(header?.duracao)
-  const amlCel = extractAmlCelFromHeader(header)
+  const amlCelBundle = buildAmlCelBundle({
+    header,
+    plainText: options?.plainText,
+    rawRtfText: options?.rawRtfText
+  })
+  const amlCel = amlCelBundle.summary
   const velocidadEfectiva = Number.isFinite(metrosSalida) && Number.isFinite(duracionSegundos) && duracionSegundos > 0
     ? (metrosSalida / duracionSegundos) * 60
     : null
@@ -650,21 +1144,121 @@ async function ensureBenningerRtfSchema() {
       match_mode TEXT,
       match_reason TEXT,
       raw_header JSONB,
+      raw_rtf_text TEXT,
+      plain_text TEXT,
+      rtf_hash TEXT,
+      parse_version TEXT,
       match_payload JSONB,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `)
 
+  await query('ALTER TABLE tb_benninger_rtf_links ADD COLUMN IF NOT EXISTS raw_rtf_text TEXT')
+  await query('ALTER TABLE tb_benninger_rtf_links ADD COLUMN IF NOT EXISTS plain_text TEXT')
+  await query('ALTER TABLE tb_benninger_rtf_links ADD COLUMN IF NOT EXISTS rtf_hash TEXT')
+  await query('ALTER TABLE tb_benninger_rtf_links ADD COLUMN IF NOT EXISTS parse_version TEXT')
+
   await query('CREATE INDEX IF NOT EXISTS idx_benninger_rtf_comeco_ts ON tb_benninger_rtf_links (comeco_ts)')
   await query('CREATE INDEX IF NOT EXISTS idx_benninger_rtf_partida ON tb_benninger_rtf_links (match_partida)')
   await query('CREATE INDEX IF NOT EXISTS idx_benninger_rtf_rolada ON tb_benninger_rtf_links (match_rolada)')
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS tb_benninger_rtf_eventos (
+      id BIGSERIAL PRIMARY KEY,
+      source_file TEXT NOT NULL REFERENCES tb_benninger_rtf_links(source_file) ON DELETE CASCADE,
+      line_no INTEGER,
+      section TEXT,
+      tipo TEXT,
+      codigo TEXT,
+      severidad TEXT,
+      timestamp_raw TEXT,
+      timestamp_ts TIMESTAMPTZ,
+      timestamp_end_raw TEXT,
+      timestamp_end_ts TIMESTAMPTZ,
+      meter_pos INTEGER,
+      event_code TEXT,
+      subsystem TEXT,
+      machine_tag TEXT,
+      mensaje TEXT,
+      raw_line TEXT NOT NULL,
+      event_hash TEXT NOT NULL,
+      parsed_json JSONB,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (source_file, event_hash)
+    )
+  `)
+
+  await query('CREATE INDEX IF NOT EXISTS idx_benninger_rtf_eventos_source ON tb_benninger_rtf_eventos (source_file)')
+  await query('CREATE INDEX IF NOT EXISTS idx_benninger_rtf_eventos_ts ON tb_benninger_rtf_eventos (timestamp_ts)')
+  await query('CREATE INDEX IF NOT EXISTS idx_benninger_rtf_eventos_codigo ON tb_benninger_rtf_eventos (codigo)')
+  await query('CREATE INDEX IF NOT EXISTS idx_benninger_rtf_eventos_section ON tb_benninger_rtf_eventos (section)')
+}
+
+async function replaceBenningerRtfEvents(sourceFile, events) {
+  const rows = Array.isArray(events) ? events.filter(Boolean) : []
+  await query('DELETE FROM tb_benninger_rtf_eventos WHERE source_file = $1', [sourceFile], 'benninger-rtf/clear-events')
+  if (!rows.length) return
+
+  for (const row of rows) {
+    await query(
+      `
+        INSERT INTO tb_benninger_rtf_eventos (
+          source_file,
+          line_no,
+          section,
+          tipo,
+          codigo,
+          severidad,
+          timestamp_raw,
+          timestamp_ts,
+          timestamp_end_raw,
+          timestamp_end_ts,
+          meter_pos,
+          event_code,
+          subsystem,
+          machine_tag,
+          mensaje,
+          raw_line,
+          event_hash,
+          parsed_json
+        ) VALUES (
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18
+        )
+        ON CONFLICT (source_file, event_hash) DO NOTHING
+      `,
+      [
+        sourceFile,
+        Number.isFinite(Number(row.lineNo)) ? Number(row.lineNo) : null,
+        row.section || null,
+        row.tipo || null,
+        row.codigo || null,
+        row.severidad || null,
+        row.timestampRaw || null,
+        row.timestamp || null,
+        row.timestampEndRaw || null,
+        row.timestampEnd || null,
+        Number.isFinite(Number(row.meterPos)) ? Number(row.meterPos) : null,
+        row.eventCode || null,
+        row.subsystem || null,
+        row.machineTag || null,
+        row.detalle || null,
+        row.rawLine || null,
+        row.eventHash || null,
+        JSON.stringify(row)
+      ],
+      'benninger-rtf/insert-event'
+    )
+  }
 }
 
 async function upsertBenningerRtfLink(payload) {
   const {
     sourceFile,
     header,
+    rawRtfText,
+    plainText,
+    parseVersion,
     comecoParsed,
     fimParsed,
     selected,
@@ -673,6 +1267,25 @@ async function upsertBenningerRtfLink(payload) {
     reason,
     matchPayload
   } = payload
+
+  const safeHeader = header && typeof header === 'object' ? header : {}
+  const safeRawRtf = typeof rawRtfText === 'string' && rawRtfText.trim() ? rawRtfText : null
+  const normalizedPlain = typeof plainText === 'string' && plainText.trim()
+    ? plainText
+    : (safeRawRtf ? rtfToPlainText(safeRawRtf) : null)
+  const parseVersionFinal = String(parseVersion || BENNINGER_RTF_PARSE_VERSION).trim() || BENNINGER_RTF_PARSE_VERSION
+  const amlCelBundle = buildAmlCelBundle({
+    header: safeHeader,
+    plainText: normalizedPlain,
+    rawRtfText: safeRawRtf
+  })
+  const headerToStore = {
+    ...safeHeader,
+    amlCel: amlCelBundle.summary
+  }
+  const rtfHash = safeRawRtf || normalizedPlain
+    ? crypto.createHash('sha1').update(String(safeRawRtf || normalizedPlain)).digest('hex')
+    : null
 
   await query(
     `
@@ -697,11 +1310,15 @@ async function upsertBenningerRtfLink(payload) {
         match_mode,
         match_reason,
         raw_header,
+        raw_rtf_text,
+        plain_text,
+        rtf_hash,
+        parse_version,
         match_payload,
         updated_at
       ) VALUES (
         $1,$2,$3,$4,$5,$6,$7,$8,$9,
-        $10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
+        $10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,
         NOW()
       )
       ON CONFLICT (source_file) DO UPDATE SET
@@ -724,19 +1341,23 @@ async function upsertBenningerRtfLink(payload) {
         match_mode = EXCLUDED.match_mode,
         match_reason = EXCLUDED.match_reason,
         raw_header = EXCLUDED.raw_header,
+        raw_rtf_text = EXCLUDED.raw_rtf_text,
+        plain_text = EXCLUDED.plain_text,
+        rtf_hash = EXCLUDED.rtf_hash,
+        parse_version = EXCLUDED.parse_version,
         match_payload = EXCLUDED.match_payload,
         updated_at = NOW()
     `,
     [
       sourceFile,
-      header?.idRolo || null,
-      header?.indicativo || null,
-      header?.receita || null,
-      header?.comeco || null,
+      safeHeader?.idRolo || null,
+      safeHeader?.indicativo || null,
+      safeHeader?.receita || null,
+      safeHeader?.comeco || null,
       comecoParsed ? comecoParsed.sqlTimestamp : null,
-      header?.fim || null,
+      safeHeader?.fim || null,
       fimParsed ? fimParsed.sqlTimestamp : null,
-      header?.duracao || null,
+      safeHeader?.duracao || null,
       selected?.partida || null,
       selected?.rolada || null,
       selected?.dtInicio || null,
@@ -747,11 +1368,17 @@ async function upsertBenningerRtfLink(payload) {
       confidence || null,
       mode || null,
       reason || null,
-      JSON.stringify(header || {}),
+      JSON.stringify(headerToStore),
+      safeRawRtf,
+      normalizedPlain,
+      rtfHash,
+      parseVersionFinal,
       JSON.stringify(matchPayload || {})
     ],
     'benninger-rtf/upsert-link'
   )
+
+  await replaceBenningerRtfEvents(sourceFile, amlCelBundle.detailedEvents)
 }
 
 function quoteIdent(name) {
@@ -3115,7 +3742,11 @@ app.post('/api/benninger-rtf/match', async (req, res) => {
     for (const item of files) {
       const sourceFile = String(item?.sourceFile || item?.fileName || '').trim()
       const headerIn = item?.header || item || {}
+      const rawRtfText = typeof item?.rawRtfText === 'string' ? item.rawRtfText : null
+      const plainText = typeof item?.plainText === 'string' ? item.plainText : null
+      const parseVersion = String(item?.parseVersion || BENNINGER_RTF_PARSE_VERSION)
       const header = {
+        ...(headerIn && typeof headerIn === 'object' ? headerIn : {}),
         idRolo: String(headerIn.idRolo || headerIn.id_rolo || headerIn.ID_ROLO || '').trim(),
         indicativo: String(headerIn.indicativo || headerIn.INDICATIVO || '').trim(),
         receita: String(headerIn.receita || headerIn.RECEITA || '').trim(),
@@ -3355,6 +3986,9 @@ app.post('/api/benninger-rtf/match', async (req, res) => {
         await upsertBenningerRtfLink({
           sourceFile,
           header,
+          rawRtfText,
+          plainText,
+          parseVersion,
           comecoParsed,
           fimParsed,
           selected: suggested,
@@ -3430,6 +4064,9 @@ app.post('/api/benninger-rtf/confirm', async (req, res) => {
       await upsertBenningerRtfLink({
         sourceFile,
         header,
+        rawRtfText: typeof item?.rawRtfText === 'string' ? item.rawRtfText : null,
+        plainText: typeof item?.plainText === 'string' ? item.plainText : null,
+        parseVersion: String(item?.parseVersion || BENNINGER_RTF_PARSE_VERSION),
         comecoParsed,
         fimParsed,
         selected,
@@ -3438,7 +4075,13 @@ app.post('/api/benninger-rtf/confirm', async (req, res) => {
         reason: String(item?.reason || 'USER_VALIDATED').trim() || 'USER_VALIDATED',
         matchPayload: {
           candidates: Array.isArray(item?.candidates) ? item.candidates.slice(0, 5) : [],
-          scoreGap: Number(item?.scoreGap || 0)
+          scoreGap: Number(item?.scoreGap || 0),
+          noApta: item?.noApta && typeof item.noApta === 'object'
+            ? {
+                motivo: String(item.noApta.motivo || '').trim() || null,
+                observacion: String(item.noApta.observacion || '').trim() || null
+              }
+            : null
         }
       })
 
@@ -3463,6 +4106,171 @@ app.post('/api/benninger-rtf/confirm', async (req, res) => {
   }
 })
 
+app.get('/api/benninger-rtf/logs', async (req, res) => {
+  try {
+    await ensureBenningerRtfSchema()
+
+    const sourceFile = String(req.query?.sourceFile || '').trim() || null
+    const partida = String(req.query?.partida || '').trim() || null
+    const rolada = String(req.query?.rolada || '').trim() || null
+    const section = String(req.query?.section || '').trim().toUpperCase() || null
+    const tipo = String(req.query?.tipo || '').trim().toUpperCase() || null
+    const codigo = String(req.query?.codigo || '').trim().toUpperCase() || null
+    const severidad = String(req.query?.severidad || '').trim().toLowerCase() || null
+    const limitRaw = Number(req.query?.limit)
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(5000, Math.trunc(limitRaw))) : 500
+
+    const sql = `
+      SELECT
+        e.source_file,
+        l.match_partida,
+        l.match_rolada,
+        e.line_no,
+        e.section,
+        e.tipo,
+        e.codigo,
+        e.severidad,
+        e.timestamp_raw,
+        e.timestamp_ts,
+        e.timestamp_end_raw,
+        e.timestamp_end_ts,
+        e.meter_pos,
+        e.event_code,
+        e.subsystem,
+        e.machine_tag,
+        e.mensaje,
+        e.raw_line,
+        e.parsed_json
+      FROM tb_benninger_rtf_eventos e
+      INNER JOIN tb_benninger_rtf_links l ON l.source_file = e.source_file
+      WHERE ($1::text IS NULL OR e.source_file = $1)
+        AND ($2::text IS NULL OR upper(btrim(COALESCE(l.match_partida, ''))) = upper(btrim($2)))
+        AND ($3::text IS NULL OR upper(btrim(COALESCE(l.match_rolada, ''))) = upper(btrim($3)))
+        AND ($4::text IS NULL OR upper(COALESCE(e.section, '')) = $4)
+        AND ($5::text IS NULL OR upper(COALESCE(e.tipo, '')) = $5)
+        AND ($6::text IS NULL OR upper(COALESCE(e.codigo, '')) = $6)
+        AND ($7::text IS NULL OR lower(COALESCE(e.severidad, '')) = $7)
+      ORDER BY e.timestamp_ts ASC NULLS LAST, e.line_no ASC NULLS LAST, e.id ASC
+      LIMIT $8
+    `
+
+    const result = await query(
+      sql,
+      [sourceFile, partida, rolada, section, tipo, codigo, severidad, limit],
+      'benninger-rtf/logs'
+    )
+
+    const rows = result.rows || []
+    const byTipo = rows.reduce((acc, row) => {
+      const key = String(row.tipo || 'N/A').toUpperCase()
+      acc[key] = (acc[key] || 0) + 1
+      return acc
+    }, {})
+    const bySeveridad = rows.reduce((acc, row) => {
+      const key = String(row.severidad || 'n/a').toLowerCase()
+      acc[key] = (acc[key] || 0) + 1
+      return acc
+    }, {})
+
+    res.json({
+      success: true,
+      total: rows.length,
+      filters: { sourceFile, partida, rolada, section, tipo, codigo, severidad, limit },
+      summary: { byTipo, bySeveridad },
+      rows
+    })
+  } catch (err) {
+    console.error('Error en /api/benninger-rtf/logs:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.post('/api/benninger-rtf/reprocess-logs', async (req, res) => {
+  try {
+    await ensureBenningerRtfSchema()
+
+    const sourceFilesIn = Array.isArray(req.body?.sourceFiles)
+      ? req.body.sourceFiles.map((v) => String(v || '').trim()).filter(Boolean)
+      : []
+    const sourceFiles = [...new Set(sourceFilesIn)]
+    const applyFilter = sourceFiles.length > 0
+
+    const linksResult = await query(
+      `
+        SELECT
+          source_file,
+          raw_header,
+          raw_rtf_text,
+          plain_text,
+          parse_version
+        FROM tb_benninger_rtf_links
+        WHERE ($1::boolean = FALSE OR source_file = ANY($2::text[]))
+        ORDER BY updated_at DESC
+      `,
+      [applyFilter, sourceFiles],
+      'benninger-rtf/reprocess-select-links'
+    )
+
+    const links = linksResult.rows || []
+    let totalEvents = 0
+    let withEvents = 0
+
+    for (const link of links) {
+      const sourceFile = String(link.source_file || '').trim()
+      if (!sourceFile) continue
+
+      const safeHeader = link.raw_header && typeof link.raw_header === 'object' ? link.raw_header : {}
+      const safePlain = typeof link.plain_text === 'string' ? link.plain_text : null
+      const safeRawRtf = typeof link.raw_rtf_text === 'string' ? link.raw_rtf_text : null
+      const bundle = buildAmlCelBundle({
+        header: safeHeader,
+        plainText: safePlain,
+        rawRtfText: safeRawRtf
+      })
+
+      const nextHeader = {
+        ...safeHeader,
+        amlCel: bundle.summary
+      }
+      const nextPlain = String(bundle.plainText || '').trim() || null
+      const nextHash = safeRawRtf || nextPlain
+        ? crypto.createHash('sha1').update(String(safeRawRtf || nextPlain)).digest('hex')
+        : null
+      const nextParseVersion = String(link.parse_version || BENNINGER_RTF_PARSE_VERSION).trim() || BENNINGER_RTF_PARSE_VERSION
+
+      await query(
+        `
+          UPDATE tb_benninger_rtf_links
+          SET
+            raw_header = $2,
+            plain_text = $3,
+            rtf_hash = $4,
+            parse_version = $5,
+            updated_at = NOW()
+          WHERE source_file = $1
+        `,
+        [sourceFile, JSON.stringify(nextHeader), nextPlain, nextHash, nextParseVersion],
+        'benninger-rtf/reprocess-update-link'
+      )
+
+      await replaceBenningerRtfEvents(sourceFile, bundle.detailedEvents)
+
+      totalEvents += bundle.detailedEvents.length
+      if (bundle.detailedEvents.length > 0) withEvents += 1
+    }
+
+    res.json({
+      success: true,
+      processed: links.length,
+      withEvents,
+      totalEvents
+    })
+  } catch (err) {
+    console.error('Error en /api/benninger-rtf/reprocess-logs:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 app.get(['/api/benninger-impacto', '/api/benninger-impacto/:sourceFile'], async (req, res) => {
   try {
     await ensureBenningerRtfSchema()
@@ -3480,6 +4288,9 @@ app.get(['/api/benninger-impacto', '/api/benninger-impacto/:sourceFile'], async 
             match_dt_inicio,
             match_hora_inicio,
             raw_header,
+            raw_rtf_text,
+            plain_text,
+            parse_version,
             match_payload,
             updated_at
           FROM tb_benninger_rtf_links
@@ -3510,6 +4321,9 @@ app.get(['/api/benninger-impacto', '/api/benninger-impacto/:sourceFile'], async 
             match_dt_inicio,
             match_hora_inicio,
             raw_header,
+            raw_rtf_text,
+            plain_text,
+            parse_version,
             match_payload,
             updated_at
           FROM tb_benninger_rtf_links
@@ -3525,6 +4339,9 @@ app.get(['/api/benninger-impacto', '/api/benninger-impacto/:sourceFile'], async 
             match_dt_inicio,
             match_hora_inicio,
             raw_header,
+            raw_rtf_text,
+            plain_text,
+            parse_version,
             match_payload,
             updated_at
           FROM tb_benninger_rtf_links
@@ -3909,8 +4726,12 @@ app.get(['/api/benninger-impacto', '/api/benninger-impacto/:sourceFile'], async 
     }
 
     const proceso = {
-      ...buildBenningerProcessFromHeader(processHeader),
+      ...buildBenningerProcessFromHeader(processHeader, {
+        plainText: link.plain_text,
+        rawRtfText: link.raw_rtf_text
+      }),
       origen: backupHeader ? 'source_file+backup_raw_header' : 'source_file_raw_header',
+      parseVersion: link.parse_version || BENNINGER_RTF_PARSE_VERSION,
       partidaOrigem: processHeader.partidaOrigem || null,
       roladaOrigem: processHeader.roladaOrigem || null
     }

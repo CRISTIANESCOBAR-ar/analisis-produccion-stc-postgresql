@@ -12,37 +12,122 @@
     </div>
 
     <div class="report-body mt-4">
-      <p class="report-line" :class="globalTextClass">
-        <strong>🧭 Estatus Global:</strong>
-        <span class="tab-indent"></span>
-        <span v-html="narrativaGlobal"></span>
-      </p>
+      <section class="sip-block">
+        <h4 class="sip-title">1. Resumen Ejecutivo (Dashboard)</h4>
+        <div class="sip-grid">
+          <article class="sip-card">
+            <p class="sip-label">Estado de la Partida</p>
+            <p class="sip-value" :class="globalTextClass">{{ globalStatusLabel }}</p>
+            <p class="sip-note" v-html="narrativaGlobal"></p>
+          </article>
 
-      <p class="report-line" :class="amlCelTextClass">
-        <strong>🚨 Fallas Operativas (AML/CEL):</strong>
-        <span class="tab-indent"></span>
-        <span v-html="narrativaAmlCel"></span>
-      </p>
+          <article class="sip-card">
+            <p class="sip-label">Eficiencia Operativa</p>
+            <p class="sip-value" :class="eficienciaOperativa.className">
+              Marcha {{ formatNumber(eficienciaOperativa.marchaPct, 1) }}% | Parado/Lento {{ formatNumber(eficienciaOperativa.paradaPct, 1) }}%
+            </p>
+            <p class="sip-note">
+              {{ operParadasCount }} paradas, {{ operSlowCount }} ciclos de velocidad lenta, {{ gomaLoadAlerts }} alertas de goma.
+            </p>
+          </article>
 
-      <p class="report-line" :class="tinturaTextClass">
-        <strong>🎨 Analisis de Teñibilidad:</strong>
-        <span class="tab-indent"></span>
-        <span v-html="narrativaColor"></span>
-      </p>
+          <article class="sip-card">
+            <p class="sip-label">KPI de Calidad</p>
+            <p class="sip-value" :class="micPresionCompatibilidad.className">
+              MIC {{ formatNumber(micValue, 2) }} vs Presion {{ formatNumber(presionValue, 1) }} kN
+            </p>
+            <p class="sip-note">{{ micPresionCompatibilidad.message }}</p>
+          </article>
+        </div>
 
-      <p class="report-line" :class="mecanicaTextClass">
-        <strong>🛠️ Comportamiento Mecanico:</strong>
-        <span class="tab-indent"></span>
-        <span v-html="narrativaMecanica"></span>
-      </p>
+        <p v-if="amlCelResumen" class="report-line text-slate-700 mt-3">
+          <strong>Resumen AML/CEL:</strong>
+          <span class="tab-indent"></span>
+          {{ amlCelResumen }}
+        </p>
+      </section>
 
-      <p class="report-line" :class="resilienciaTextClass">
-        <strong>🧵 Balance de Resiliencia:</strong>
-        <span class="tab-indent"></span>
-        <span v-html="narrativaResiliencia"></span>
-      </p>
+      <section class="sip-block">
+        <h4 class="sip-title">2. Analisis Tecnico de la Condicion (S.I.P. - Situacion e Impacto)</h4>
+        <p class="report-line" :class="tinturaTextClass">
+          <strong>Interaccion Fibra-Colorante:</strong>
+          <span class="tab-indent"></span>
+          <span v-html="sipInteraccionFibra"></span>
+        </p>
 
-      <p class="report-line text-slate-700" v-html="narrativaAcciones"></p>
+        <p class="report-line" :class="mecanicaTextClass">
+          <strong>Dinamica Mecanica:</strong>
+          <span class="tab-indent"></span>
+          <span v-html="sipDinamicaMecanica"></span>
+        </p>
+      </section>
+
+      <section class="sip-block">
+        <h4 class="sip-title">3. Hallazgos de Desviacion (Datos brutos procesados)</h4>
+
+        <div class="overflow-x-auto rounded-xl border border-slate-200">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-100 text-slate-700">
+              <tr>
+                <th class="px-3 py-2 text-left">Hora</th>
+                <th class="px-3 py-2 text-left">Tipo</th>
+                <th class="px-3 py-2 text-left">Codigo</th>
+                <th class="px-3 py-2 text-left">Detalle</th>
+                <th class="px-3 py-2 text-left">Severidad</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="event in criticalEvents" :key="event.key" class="border-t border-slate-200">
+                <td class="px-3 py-2 font-medium text-slate-700">{{ event.hora }}</td>
+                <td class="px-3 py-2 text-slate-700">{{ event.tipo }}</td>
+                <td class="px-3 py-2 text-slate-700">{{ event.codigo }}</td>
+                <td class="px-3 py-2 text-slate-700">{{ event.detalle }}</td>
+                <td class="px-3 py-2" :class="event.severityClass">{{ event.severidad }}</td>
+              </tr>
+              <tr v-if="!criticalEvents.length">
+                <td colspan="5" class="px-3 py-3 text-slate-500">Sin eventos criticos para la corrida auditada.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-100 text-slate-700">
+              <tr>
+                <th class="px-3 py-2 text-left">Setpoint</th>
+                <th class="px-3 py-2 text-left">Objetivo</th>
+                <th class="px-3 py-2 text-left">Actual</th>
+                <th class="px-3 py-2 text-left">Desviacion</th>
+                <th class="px-3 py-2 text-left">Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in setpointRows" :key="row.name" class="border-t border-slate-200">
+                <td class="px-3 py-2 font-medium text-slate-700">{{ row.name }}</td>
+                <td class="px-3 py-2 text-slate-700">{{ row.target }}</td>
+                <td class="px-3 py-2 text-slate-700">{{ row.actual }}</td>
+                <td class="px-3 py-2 text-slate-700">{{ row.deviation }}</td>
+                <td class="px-3 py-2" :class="row.stateClass">{{ row.state }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="sip-block">
+        <h4 class="sip-title">4. Plan de Accion Correctiva (S.I.P. - Propuesta)</h4>
+
+        <p class="sip-subtitle">Acciones inmediatas sobre la maquina</p>
+        <ol class="action-list">
+          <li v-for="(accion, idx) in machineActions" :key="`maquina-${idx}`">{{ accion }}</li>
+        </ol>
+
+        <p class="sip-subtitle mt-4">Acciones sobre el producto</p>
+        <ol class="action-list">
+          <li v-for="(accion, idx) in productActions" :key="`producto-${idx}`">{{ accion }}</li>
+        </ol>
+      </section>
     </div>
   </section>
 </template>
@@ -139,6 +224,7 @@ const residualValue = computed(() => Number(props.elongacionResidual || 0))
 const humedadValue = computed(() => parseNumber(props.humedadSalida))
 const plegadorValue = computed(() => parseNumber(props.tensionPlegador))
 const amlCelValue = computed(() => (props.amlCel && typeof props.amlCel === 'object' ? props.amlCel : {}))
+const amlCelResumen = computed(() => String(amlCelValue.value?.resumen || '').trim())
 
 const timeline = computed(() => {
   if (!Array.isArray(props.tensionTimeline)) return []
@@ -161,7 +247,9 @@ const tensionBase = computed(() => {
 const partidaLabel = computed(() => String(props.partida || '').trim() || 'N/D')
 
 const amlCelEvents = computed(() => {
-  const source = Array.isArray(amlCelValue.value?.eventos) ? amlCelValue.value.eventos : []
+  const source = Array.isArray(amlCelValue.value?.eventosRelevantes)
+    ? amlCelValue.value.eventosRelevantes
+    : (Array.isArray(amlCelValue.value?.eventos) ? amlCelValue.value.eventos : [])
   return source
     .map((event) => {
       if (!event || typeof event !== 'object') return null
@@ -424,6 +512,219 @@ const accionesSugeridas = computed(() => {
   return acciones
 })
 
+const micPressureTarget = computed(() => {
+  if (!Number.isFinite(micValue.value)) return null
+  if (micValue.value <= 4.2) return 58
+  if (micValue.value <= 4.8) return 60
+  return 62
+})
+
+const pressureDelta = computed(() => {
+  if (!Number.isFinite(micPressureTarget.value) || !Number.isFinite(presionValue.value)) return null
+  return Number((presionValue.value - micPressureTarget.value).toFixed(1))
+})
+
+const micPresionCompatibilidad = computed(() => {
+  if (!Number.isFinite(micValue.value) || !Number.isFinite(presionValue.value)) {
+    return {
+      className: 'text-slate-700',
+      message: 'Sin datos suficientes para evaluar compatibilidad MIC-Presion.'
+    }
+  }
+
+  if (Math.abs(Number(pressureDelta.value)) <= 1.5) {
+    return {
+      className: 'text-emerald-700',
+      message: `Condicion compatible: presion dentro de banda para MIC ${formatNumber(micValue.value, 2)}.`
+    }
+  }
+
+  if (Number(pressureDelta.value) > 1.5) {
+    return {
+      className: 'text-rose-700',
+      message: `Presion alta para esta fibra. Objetivo local sugerido: ${formatNumber(micPressureTarget.value, 1)} kN.`
+    }
+  }
+
+  return {
+    className: 'text-amber-700',
+    message: `Presion por debajo del objetivo local (${formatNumber(micPressureTarget.value, 1)} kN). Revisar pickup real.`
+  }
+})
+
+const eficienciaOperativa = computed(() => {
+  const penalizacion = (operParadasCount.value * 12) + (operSlowCount.value * 5) + (gomaLoadAlerts.value * 2)
+  const paradaPct = Math.min(95, Math.max(0, penalizacion))
+  const marchaPct = Math.max(5, 100 - paradaPct)
+
+  if (marchaPct < 65) {
+    return { marchaPct, paradaPct, className: 'text-rose-700' }
+  }
+  if (marchaPct < 80) {
+    return { marchaPct, paradaPct, className: 'text-amber-700' }
+  }
+  return { marchaPct, paradaPct, className: 'text-emerald-700' }
+})
+
+const sipInteraccionFibra = computed(() => {
+  const mic = techValue(micValue.value, 2)
+  const presion = techValue(presionValue.value, 1, 'kN')
+  const objetivo = Number.isFinite(micPressureTarget.value)
+    ? techValue(micPressureTarget.value, 1, 'kN')
+    : '<strong class="tech-value">N/D</strong>'
+
+  if (Number(pressureDelta.value) > 1.5) {
+    return `La presion de exprimido ${presion} es superior al objetivo local ${objetivo} para MIC ${mic}. Esta condicion aumenta migracion superficial y riesgo de Ring Dyeing.`
+  }
+  if (Number(pressureDelta.value) < -1.5) {
+    return `La presion de exprimido ${presion} esta por debajo del objetivo local ${objetivo} para MIC ${mic}. Puede comprometer fijacion y tono final si no se compensa con control de pickup.`
+  }
+  return `Relacion MIC-Presion en zona compatible (MIC ${mic}, Presion ${presion}), con menor riesgo de desviacion de teñido por exprimido.`
+})
+
+const acumuladorAlerts = computed(() => (
+  amlCelEvents.value.filter((event) => /acumulador/.test(event.detalleNorm)).length
+))
+
+const sipDinamicaMecanica = computed(() => {
+  const salto = techValue(tensionJumpPct.value, 1, '%')
+  const base = techValue(tensionBase.value, 0, 'N')
+  const plegador = techValue(plegadorValue.value, 0, 'N')
+  const acumulador = techValue(acumuladorAlerts.value, 0)
+
+  if (tensionJumpPct.value > 40 || operParadasCount.value > 0 || operSlowCount.value > 0) {
+    return `Se observa dinamica mecanica inestable: salto de tension ${salto} (${base} -> ${plegador}), ${techValue(operParadasCount.value, 0)} paradas y ${techValue(operSlowCount.value, 0)} ciclos lentos. Registros vinculados a acumulador: ${acumulador}.`
+  }
+  return `Dinamica mecanica estable: salto de tension ${salto} (${base} -> ${plegador}) y sin evidencia de uso critico del acumulador.`
+})
+
+const criticalEvents = computed(() => {
+  return amlCelEvents.value
+    .filter((event) => {
+      if (!event.timestamp || !event.codigo || !event.detalle) return false
+      if (event.severidad === 'critical' || event.severidad === 'alto') return true
+      if (event.codigo === 'S800' || event.codigo === 'S500' || event.codigo === '1485') return true
+      return /grelha\s+aberta|\bparada\b|velocidade\s+lenta|carg\s*a\s*de\s*goma/.test(event.detalleNorm)
+    })
+    .slice(0, 12)
+    .map((event, idx) => {
+      const severityNorm = String(event.severidad || '').toLowerCase()
+      const severityClass = severityNorm === 'critical' || severityNorm === 'alto'
+        ? 'text-rose-700 font-semibold'
+        : (severityNorm === 'medio' ? 'text-amber-700 font-medium' : 'text-slate-700')
+
+      return {
+        key: `${event.codigo}-${event.timestamp}-${idx}`,
+        hora: extractHour(event.timestamp) || event.timestamp,
+        tipo: event.tipo,
+        codigo: event.codigo,
+        detalle: event.detalle,
+        severidad: severityNorm || 'medio',
+        severityClass
+      }
+    })
+})
+
+const setpointRows = computed(() => {
+  const humedadObj = 7
+  const humedadNow = Number.isFinite(humedadValue.value) ? humedadValue.value : null
+  const humedadDev = Number.isFinite(humedadNow) ? Number((humedadNow - humedadObj).toFixed(2)) : null
+
+  const gomaState = gomaLoadAlerts.value === 0 ? 'OK' : 'Desviado'
+  const gomaClass = gomaLoadAlerts.value === 0 ? 'text-emerald-700' : 'text-rose-700 font-semibold'
+
+  const humedadState = !Number.isFinite(humedadNow)
+    ? 'Sin dato'
+    : (Math.abs(humedadDev) <= 0.4 ? 'OK' : 'Desviado')
+  const humedadClass = !Number.isFinite(humedadNow)
+    ? 'text-slate-600'
+    : (Math.abs(humedadDev) <= 0.4 ? 'text-emerald-700' : 'text-rose-700 font-semibold')
+
+  const presionState = !Number.isFinite(pressureDelta.value)
+    ? 'Sin dato'
+    : (Math.abs(pressureDelta.value) <= 1.5 ? 'OK' : 'Desviado')
+  const presionClass = !Number.isFinite(pressureDelta.value)
+    ? 'text-slate-600'
+    : (Math.abs(pressureDelta.value) <= 1.5 ? 'text-emerald-700' : 'text-rose-700 font-semibold')
+
+  return [
+    {
+      name: 'Goma',
+      target: '0 alertas S500/1485',
+      actual: `${formatNumber(gomaLoadAlerts.value, 0)} alertas`,
+      deviation: `${formatNumber(gomaLoadAlerts.value, 0)} eventos`,
+      state: gomaState,
+      stateClass: gomaClass
+    },
+    {
+      name: 'Humedad',
+      target: '7.0 %',
+      actual: Number.isFinite(humedadNow) ? `${formatNumber(humedadNow, 2)} %` : 'Sin dato',
+      deviation: Number.isFinite(humedadDev)
+        ? `${humedadDev > 0 ? '+' : ''}${formatNumber(humedadDev, 2)} %`
+        : 'Sin dato',
+      state: humedadState,
+      stateClass: humedadClass
+    },
+    {
+      name: 'Presion de exprimido',
+      target: Number.isFinite(micPressureTarget.value)
+        ? `${formatNumber(micPressureTarget.value, 1)} kN`
+        : 'Sin dato',
+      actual: Number.isFinite(presionValue.value) ? `${formatNumber(presionValue.value, 1)} kN` : 'Sin dato',
+      deviation: Number.isFinite(pressureDelta.value)
+        ? `${pressureDelta.value > 0 ? '+' : ''}${formatNumber(pressureDelta.value, 1)} kN`
+        : 'Sin dato',
+      state: presionState,
+      stateClass: presionClass
+    }
+  ]
+})
+
+const machineActions = computed(() => {
+  const actions = []
+
+  if (Number(pressureDelta.value) > 1.5 && Number.isFinite(micPressureTarget.value)) {
+    actions.push(`Ajustar presion de foulard a ${formatNumber(micPressureTarget.value, 1)} kN para alinear MIC y exprimido.`)
+  }
+  if (operParadasCount.value > 0 || operSlowCount.value > 0) {
+    actions.push('Implementar rampa de aceleracion suave post-parada en S800 para reducir picos de tension.')
+  }
+  if (tensionJumpPct.value > 40) {
+    actions.push(`Reducir salto de tension de plegador: actual ${formatNumber(tensionJumpPct.value, 1)}%, objetivo <= 40%.`)
+  }
+  if (gomaLoadAlerts.value > 0) {
+    actions.push('Recalibrar lazo de carga de goma y verificar viscosidad/temperatura antes de reinicio.')
+  }
+  if (humedadCritica.value) {
+    actions.push('Subir setpoint de humedad de salida hacia 7.0% para evitar fragilidad y cristalizacion del hilo.')
+  }
+  if (!actions.length) {
+    actions.push('Mantener setpoints actuales y continuar monitoreo por turno.')
+  }
+
+  return actions
+})
+
+const productActions = computed(() => {
+  const actions = []
+
+  if (tinturaRisk.value || Number(pressureDelta.value) > 1.5) {
+    actions.push('Retener lote para verificacion de ring dyeing y solidez al lavado antes de liberar.')
+    actions.push('Evaluar correccion de tono o re-teñido segun resultado de laboratorio de acabado.')
+  }
+
+  if (resilienceExtremeRisk.value || tensionJumpPct.value > 60) {
+    actions.push('Restringir uso en tejeduria continua hasta recuperar margen mecanico de hilo.')
+  }
+
+  if (!actions.length) {
+    actions.push('Liberar con seguimiento reforzado de primera corrida en tejeduria.')
+  }
+
+  return actions
+})
+
 const narrativaAcciones = computed(() => {
   const lineas = accionesSugeridas.value.map((item) => `\t🔧 ${item}`).join('<br />')
   return `<strong>📌 Accion Sugerida por Ingenieria:</strong><span class="tab-indent"></span>${lineas}`
@@ -490,7 +791,76 @@ const globalStatusClass = computed(() => {
 
 .report-body {
   display: grid;
-  gap: 0.55rem;
+  gap: 1rem;
+}
+
+.sip-block {
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 0.75rem;
+  padding: 0.8rem;
+  background: rgba(248, 250, 252, 0.7);
+}
+
+.sip-title {
+  margin: 0;
+  color: #0f172a;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.sip-grid {
+  margin-top: 0.7rem;
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.sip-card {
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 0.7rem;
+  padding: 0.65rem;
+  background: #ffffff;
+}
+
+.sip-label {
+  margin: 0;
+  color: #475569;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.sip-value {
+  margin: 0.25rem 0 0;
+  color: #0f172a;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.sip-note {
+  margin: 0.25rem 0 0;
+  color: #334155;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.sip-subtitle {
+  margin: 0;
+  color: #334155;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.action-list {
+  margin: 0.45rem 0 0;
+  padding-left: 1rem;
+  color: #1e293b;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.86rem;
 }
 
 .report-line {
@@ -505,6 +875,12 @@ const globalStatusClass = computed(() => {
 .tab-indent {
   display: inline-block;
   width: 1.2rem;
+}
+
+@media (min-width: 920px) {
+  .sip-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 :deep(.tech-value) {
