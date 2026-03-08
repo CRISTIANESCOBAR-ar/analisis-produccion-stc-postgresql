@@ -424,6 +424,42 @@ function cleanAmlCelLine(line) {
     .trim()
 }
 
+function cleanAmlCelDescription(text) {
+  return String(text || '')
+    .replace(/\s*\.{5,}\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function parseCelSetChange(line) {
+  const text = String(line || '')
+  if (!text) return null
+
+  const setMatchParen = text.match(/\bset\s*:\s*old:\s*\(\s*([^\)]+?)\s*\)\s*new:\s*\(\s*([^\)]+?)\s*\)/i)
+  const setMatchLoose = text.match(/\bset\s*:\s*old:\s*([^\s]+)\s*new:\s*([^\s]+)/i)
+  const setMatch = setMatchParen || setMatchLoose
+  if (!setMatch) return null
+
+  const oldRaw = String(setMatch[1] || '').trim()
+  const newRaw = String(setMatch[2] || '').trim()
+  const oldNum = parseLooseNumber(oldRaw)
+  const newNum = parseLooseNumber(newRaw)
+
+  const setpointMatch = text.match(/\b((?:\d{1,2})?S\d{3,4})\s*:\s*([^<]+)$/i)
+  const setpointCode = setpointMatch?.[1] ? String(setpointMatch[1]).toUpperCase() : null
+  const setpointDescription = cleanAmlCelDescription(setpointMatch?.[2] || '') || null
+
+  return {
+    oldRaw: oldRaw || null,
+    newRaw: newRaw || null,
+    oldValue: Number.isFinite(oldNum) ? oldNum : null,
+    newValue: Number.isFinite(newNum) ? newNum : null,
+    deltaValue: Number.isFinite(oldNum) && Number.isFinite(newNum) ? Number((newNum - oldNum).toFixed(6)) : null,
+    setpointCode,
+    setpointDescription
+  }
+}
+
 function parseSqlTimestampToDate(value) {
   const raw = String(value || '').trim()
   if (!raw) return null
@@ -563,14 +599,25 @@ function parseAmlCelEventLineFromText(rawLine, sectionHint, lineNo, context = {}
   const parsed = parseAmlCelLine(line, context) || {}
   const meterPos = Number.parseInt(line.match(/\b(\d+)\s*\[m\]/i)?.[1] || '', 10)
   const eventCode = line.match(/-(\d{3,4})\s*:/)?.[1] || null
-  const subsystem = line.match(/\bS\d{1,4}(?:-[A-Z]+)?\b/i)?.[0] || null
+  const subsystem = line.match(/\b(?:\d{1,2})?S\d{1,4}(?:-[A-Z]+)?\b/i)?.[0] || null
   const severityToken = line.match(/\b(INFO|AVISO|SEGURAN[ÇC]A|ESTADO)\b/i)?.[1] || null
   const machineTag = line.match(/\bM\d{2}[A-Z]\d{2}B\d{3}X\d+\b/i)?.[0] || null
+  const celSet = parseCelSetChange(line)
+
+  let descriptionRaw = null
+  const codePrefix = line.match(/-\s*\d{3,4}\s*:\s*/)
+  if (codePrefix) {
+    let tail = line.slice((codePrefix.index || 0) + codePrefix[0].length)
+    tail = tail.replace(/\s*<<\s*(?:\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}|\d{4}[\/-]\d{1,2}[\/-]\d{1,2})\s+\d{1,2}:\d{2}(?::\d{2})?\s*/i, ' ')
+    tail = tail.replace(/\bM\d{2}[A-Z]\d{2}B\d{3}X\d+\b/i, ' ')
+    descriptionRaw = tail
+  }
+  const descripcionParada = cleanAmlCelDescription(celSet?.setpointDescription || descriptionRaw || parsed.detalle || line)
 
   const inferredTipo = sectionHint || (/set:\s*old\s*:/i.test(line) ? 'CEL' : 'AML')
   const tipo = String(parsed.tipo || inferredTipo || '').toUpperCase() || null
-  const codigo = String(parsed.codigo || subsystem || (eventCode ? `E${eventCode}` : '')).toUpperCase() || null
-  const detalle = String(parsed.detalle || line).trim()
+  const codigo = String(parsed.codigo || celSet?.setpointCode || subsystem || (eventCode ? `E${eventCode}` : '')).toUpperCase() || null
+  const detalle = String(descripcionParada || parsed.detalle || line).trim()
   const severidad = String(parsed.severidad || classifyAmlCelSeverity(tipo, codigo, detalle)).toLowerCase()
   const timestamp = normalizeAmlCelTimestamp(startRaw, context)
   const timestampEnd = normalizeAmlCelTimestamp(endRaw, context)
@@ -589,10 +636,23 @@ function parseAmlCelEventLineFromText(rawLine, sectionHint, lineNo, context = {}
     timestampEnd,
     timestampRaw: startRaw,
     timestampEndRaw: endRaw,
+    fechaHoraInicialRaw: startRaw,
+    fechaHoraFinalRaw: endRaw,
     meterPos: Number.isFinite(meterPos) ? meterPos : null,
+    metros: Number.isFinite(meterPos) ? meterPos : null,
     eventCode,
+    codigoParada: eventCode || celSet?.setpointCode || null,
+    descripcionParada,
+    setOldRaw: celSet?.oldRaw || null,
+    setNewRaw: celSet?.newRaw || null,
+    setOldValue: Number.isFinite(celSet?.oldValue) ? celSet.oldValue : null,
+    setNewValue: Number.isFinite(celSet?.newValue) ? celSet.newValue : null,
+    setDeltaValue: Number.isFinite(celSet?.deltaValue) ? celSet.deltaValue : null,
+    setpointCode: celSet?.setpointCode || null,
+    setpointDescription: celSet?.setpointDescription || null,
     subsystem: subsystem ? String(subsystem).toUpperCase() : null,
     machineTag,
+    codigoAlfanumerico: machineTag,
     detalle,
     rawLine: line,
     eventHash
@@ -698,7 +758,7 @@ function parseAmlCelLine(rawLine, context = {}) {
   if (!line || !BENNINGER_AML_CEL_RELEVANT.test(line)) return null
 
   const tipo = line.match(/\b(AML|CEL)\b/i)?.[1]?.toUpperCase() || null
-  const sCode = line.match(/\bS\d{3}\b/i)?.[0]?.toUpperCase() || null
+  const sCode = line.match(/\b(?:\d{1,2})?S\d{3,4}\b/i)?.[0]?.toUpperCase() || null
   const genericCode = line.match(/-(\d{3,4})\s*:/)?.[1] || null
   const codigo = sCode || (genericCode ? `E${genericCode}` : null)
   const tsRaw = line.match(/\b(?:\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}|\d{4}[\/-]\d{1,2}[\/-]\d{1,2})\s+\d{1,2}:\d{2}(?::\d{2})?\b/i)?.[0] || null
@@ -4140,7 +4200,20 @@ app.get('/api/benninger-rtf/logs', async (req, res) => {
         e.machine_tag,
         e.mensaje,
         e.raw_line,
-        e.parsed_json
+        e.parsed_json,
+        COALESCE(e.parsed_json ->> 'fechaHoraInicialRaw', e.timestamp_raw) AS fecha_hora_inicial,
+        COALESCE(e.parsed_json ->> 'fechaHoraFinalRaw', e.timestamp_end_raw) AS fecha_hora_final,
+        COALESCE((e.parsed_json ->> 'metros')::int, e.meter_pos) AS metros,
+        COALESCE(e.parsed_json ->> 'codigoParada', e.event_code) AS codigo_parada,
+        COALESCE(e.parsed_json ->> 'descripcionParada', e.mensaje) AS descripcion_parada,
+        COALESCE(e.parsed_json ->> 'codigoAlfanumerico', e.machine_tag) AS codigo_alfanumerico,
+        COALESCE(e.parsed_json ->> 'setOldRaw', NULL) AS valor_old,
+        COALESCE(e.parsed_json ->> 'setNewRaw', NULL) AS valor_new,
+        COALESCE((e.parsed_json ->> 'setOldValue')::numeric, NULL) AS valor_old_num,
+        COALESCE((e.parsed_json ->> 'setNewValue')::numeric, NULL) AS valor_new_num,
+        COALESCE((e.parsed_json ->> 'setDeltaValue')::numeric, NULL) AS valor_delta,
+        COALESCE(e.parsed_json ->> 'setpointCode', NULL) AS codigo_setpoint,
+        COALESCE(e.parsed_json ->> 'setpointDescription', NULL) AS descripcion_setpoint
       FROM tb_benninger_rtf_eventos e
       INNER JOIN tb_benninger_rtf_links l ON l.source_file = e.source_file
       WHERE ($1::text IS NULL OR e.source_file = $1)
