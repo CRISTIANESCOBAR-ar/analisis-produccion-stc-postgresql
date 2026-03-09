@@ -75,6 +75,8 @@
             :tension-timeline="proceso.tensionTimeline"
             :aml-cel="proceso.amlCel"
             :aml-detail-events="amlDetailEvents"
+            :source-file="loadedSourceFile"
+            :raw-rtf-text="loadedRawRtfText"
           />
         </div>
 
@@ -270,7 +272,17 @@
             <span class="text-xl">{{ dictamenGlobal.emoji }}</span>
             <div>
               <p class="text-sm font-bold" :class="dictamenTextClass">{{ dictamenGlobal.estado }}</p>
-              <p class="text-xs text-slate-400">Partida: {{ matchInfo?.partida || '-' }}</p>
+              <p class="text-xs text-slate-400">
+                Partida: {{ matchInfo?.partida || '-' }}
+                <template v-if="loadedSourceFile && loadedRawRtfText">
+                  &nbsp;·&nbsp;
+                  <button
+                    @click="openRtfFromDashboard"
+                    class="text-cyan-400 hover:text-cyan-200 hover:underline font-medium"
+                    :title="'Abrir ' + loadedSourceFile"
+                  >📄 {{ loadedSourceFile }}</button>
+                </template>
+              </p>
             </div>
           </div>
         </div>
@@ -470,6 +482,7 @@ const dataModel = ref(cloneDefaultDataModel())
 const loading = ref(false)
 const errorMessage = ref('')
 const loadedSourceFile = ref('')
+const loadedRawRtfText = ref('')
 const partidaInput = ref('')
 const matchInfo = ref(null)
 const referencias = ref(null)
@@ -817,6 +830,11 @@ function getRoutePartida() {
   return String(raw || '').trim()
 }
 
+function openRtfFromDashboard() {
+  if (!loadedSourceFile.value) return
+  window.open(`/api/benninger-rtf/file?sourceFile=${encodeURIComponent(loadedSourceFile.value)}`, '_blank')
+}
+
 async function fetchImpactData(partida) {
   loading.value = true
   errorMessage.value = ''
@@ -834,12 +852,14 @@ async function fetchImpactData(partida) {
 
     dataModel.value = normalizeApiPayload(payload)
     loadedSourceFile.value = String(payload?.sourceFile || '')
+    loadedRawRtfText.value = String(payload?.rawRtfText || '')
     matchInfo.value = payload?.match || null
     referencias.value = payload?.referencias || null
     fetchAmlDetailLogs(partida)
   } catch (err) {
     dataModel.value = cloneDefaultDataModel()
     loadedSourceFile.value = ''
+    loadedRawRtfText.value = ''
     matchInfo.value = null
     referencias.value = null
     errorMessage.value = `No se pudo cargar analisis Benninger: ${err.message}`

@@ -133,7 +133,16 @@
             <div class="text-sm font-semibold text-slate-800 mb-2">Detalle del RTF</div>
 
             <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs mb-3">
-              <div><span class="text-slate-500">Archivo:</span> {{ selectedRow.fileName }}</div>
+              <div>
+                <span class="text-slate-500">Archivo:</span>
+                <button
+                  v-if="selectedRow.rawRtfText"
+                  @click="openFileInApp(selectedRow)"
+                  class="ml-1 text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                  :title="'Abrir ' + selectedRow.fileName"
+                >{{ selectedRow.fileName }}</button>
+                <span v-else class="ml-1">{{ selectedRow.fileName }}</span>
+              </div>
               <div><span class="text-slate-500">#ID Rolo:</span> {{ selectedRow.header.idRolo || '-' }}</div>
               <div><span class="text-slate-500">Indicativo:</span> {{ selectedRow.header.indicativo || '-' }}</div>
               <div><span class="text-slate-500">Receita:</span> {{ selectedRow.header.receita || '-' }}</div>
@@ -157,7 +166,7 @@
                     <th class="px-2 py-1 text-left">DT/Hora Inicio</th>
                     <th class="px-2 py-1 text-left">Metragem</th>
                     <th class="px-2 py-1 text-left">Velocidade</th>
-                    <th class="px-2 py-1 text-left">Fibra</th>
+                    <th class="px-2 py-1 text-left">Base</th>
                     <th class="px-2 py-1 text-left">Diff Inicio</th>
                     <th class="px-2 py-1 text-left">Score</th>
                   </tr>
@@ -181,7 +190,7 @@
                     <td class="px-2 py-1">{{ cand.dtInicio || '-' }} {{ cand.horaInicio || '' }}</td>
                     <td class="px-2 py-1">{{ formatMetric(cand.metragemPartida, 'm', 0) }}</td>
                     <td class="px-2 py-1">{{ formatMetric(cand.velocidadeMediaPartida, 'm/min', 1) }}</td>
-                    <td class="px-2 py-1">{{ formatFibraQuality(cand.fibraQuality) }}</td>
+                    <td class="px-2 py-1">{{ cand.baseUrdume || '-' }}</td>
                     <td class="px-2 py-1">{{ formatSeconds(cand.startDiffSec) }}</td>
                     <td class="px-2 py-1 font-semibold">{{ cand.score }}</td>
                   </tr>
@@ -726,24 +735,39 @@ async function runAutomaticMatch() {
     return
   }
 
+  const BATCH_SIZE = 30
+  const totalBatches = Math.ceil(filesToMatch.length / BATCH_SIZE)
+
   isMatching.value = true
-  scanStatus.value = 'Ejecutando matcheo automatico...'
+  scanStatus.value = `Ejecutando matcheo automatico (0/${totalBatches} lotes)...`
+
+  const accSummary = { high: 0, medium: 0, low: 0, none: 0 }
 
   try {
-    const response = await fetch('/api/benninger-rtf/match', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ files: filesToMatch, autoConfirmHighConfidence: false })
-    })
+    for (let i = 0; i < filesToMatch.length; i += BATCH_SIZE) {
+      const batch = filesToMatch.slice(i, i + BATCH_SIZE)
+      const batchNum = Math.floor(i / BATCH_SIZE) + 1
+      scanStatus.value = `Matcheo automatico: lote ${batchNum}/${totalBatches}...`
 
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const response = await fetch('/api/benninger-rtf/match', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: batch, autoConfirmHighConfidence: false })
+      })
 
-    const data = await response.json()
-    mergeRows(data.rows || [])
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
-    const high = data.summary?.high || 0
-    const doubt = (data.summary?.medium || 0) + (data.summary?.low || 0)
-    scanStatus.value = `Matcheo completado. Alta confianza: ${high}. Casos dudosos: ${doubt}.`
+      const data = await response.json()
+      mergeRows(data.rows || [])
+
+      accSummary.high += data.summary?.high || 0
+      accSummary.medium += data.summary?.medium || 0
+      accSummary.low += data.summary?.low || 0
+      accSummary.none += data.summary?.none || 0
+    }
+
+    const doubt = accSummary.medium + accSummary.low
+    scanStatus.value = `Matcheo completado. Alta confianza: ${accSummary.high}. Casos dudosos: ${doubt}.`
   } catch (err) {
     scanStatus.value = `Error en matcheo automatico: ${err.message}`
   } finally {
@@ -811,6 +835,27 @@ function selectCandidate(sourceFile, candidate) {
   })
 }
 
+function openFileInApp(row) {
+  if (!row?.rawRtfText) return
+  const blob = new Blob([row.rawRtfText], { type: 'application/rtf' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = row.fileName
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(url), 10000)
+}
+
+function advanceToNextRow() {
+  const rows = displayRows.value
+  const idx = rows.findIndex((r) => r.sourceFile === selectedSourceFile.value)
+  if (idx === -1 || rows.length <= 1) return
+  const next = rows[idx + 1] ?? rows[idx - 1] ?? null
+  if (next) selectedSourceFile.value = next.sourceFile
+}
+
 function resolveRowCandidate(row) {
   if (!row) return null
   if (row.selectedCandidate) return row.selectedCandidate
@@ -865,6 +910,7 @@ async function confirmSelectedRow() {
     const data = await response.json()
 
     if ((data.savedCount || 0) > 0) {
+      advanceToNextRow()
       rtfRows.value = rtfRows.value.map((item) =>
         item.sourceFile === row.sourceFile ? { ...item, saved: true } : item
       )
@@ -975,6 +1021,7 @@ async function registerNoAptaRow() {
     const data = await response.json()
 
     if ((data.savedCount || 0) > 0) {
+      advanceToNextRow()
       rtfRows.value = rtfRows.value.map((item) => {
         if (item.sourceFile !== row.sourceFile) return item
         return {

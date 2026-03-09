@@ -600,7 +600,13 @@ function parseAmlCelEventLineFromText(rawLine, sectionHint, lineNo, context = {}
 
   const parsed = parseAmlCelLine(line, context) || {}
   const meterPos = Number.parseInt(line.match(/\b(\d+)\s*\[m\]/i)?.[1] || '', 10)
-  const eventCode = line.match(/-(\d{3,4})\s*:/)?.[1] || null
+  // Formato 1: "NNN[m]-CCCC: SEVERITY:" (con posición métrica)
+  // Formato 2: "CCCC: SEVERITY:"         (sin posición métrica, sin guion previo)
+  const eventCode = (
+    line.match(/(?<!\d)(\d{3,4})\s*:\s*(?:INFO|AVISO|SEGURAN[ÇC]A|ESTADO)\b/i)?.[1] ??
+    line.match(/-(\d{3,4})\s*:/)?.[1] ??
+    null
+  )
   const subsystem = line.match(/\b(?:\d{1,2})?S\d{1,4}(?:-[A-Z]+)?\b/i)?.[0] || null
   const severityToken = line.match(/\b(INFO|AVISO|SEGURAN[ÇC]A|ESTADO)\b/i)?.[1] || null
   const machineTag = line.match(/\bM\d{2}[A-Z]\d{2}B\d{3}X\d+\b/i)?.[0] || null
@@ -3858,7 +3864,8 @@ app.post('/api/benninger-rtf/match', async (req, res) => {
               p."HORA_FINAL" AS hora_final,
               ${sqlParseNumberIntl('p."METRAGEM"')} AS metragem_num,
               COALESCE(${sqlParseNumberIntl('p."VELOC"')}, ${sqlParseNumberIntl('p."VELOC CALC"')}) AS velocidade_num,
-              ${startExpr} AS start_ts
+              ${startExpr} AS start_ts,
+              p."BASE URDUME" AS base_urdume
             FROM tb_produccion p
             WHERE upper(btrim(COALESCE(p."SELETOR"::text, ''))) LIKE 'INDIGO%'
               ${filialClause}
@@ -3899,7 +3906,8 @@ app.post('/api/benninger-rtf/match', async (req, res) => {
             r.start_ts,
             r.partida_metragem,
             r.partida_velocidade,
-            r.start_diff_sec
+            r.start_diff_sec,
+            r.base_urdume
           FROM ranked r
           WHERE r.rn_partida = 1
           ORDER BY r.start_diff_sec ASC, r.partida DESC NULLS LAST
@@ -4032,6 +4040,7 @@ app.post('/api/benninger-rtf/match', async (req, res) => {
           horaFinal: row.hora_final,
           metragemPartida: row.partida_metragem == null ? null : Number(row.partida_metragem),
           velocidadeMediaPartida: row.partida_velocidade == null ? null : Number(row.partida_velocidade),
+          baseUrdume: row.base_urdume || null,
           fibraQuality,
           startDiffSec,
           endDiffSec: null,
@@ -4228,7 +4237,15 @@ app.get('/api/benninger-rtf/logs', async (req, res) => {
       FROM tb_benninger_rtf_eventos e
       INNER JOIN tb_benninger_rtf_links l ON l.source_file = e.source_file
       WHERE ($1::text IS NULL OR e.source_file = $1)
-        AND ($2::text IS NULL OR upper(btrim(COALESCE(l.match_partida, ''))) = upper(btrim($2)))
+        AND ($2::text IS NULL OR (
+          upper(btrim(COALESCE(l.match_partida, ''))) = upper(btrim($2))
+          OR (
+            regexp_replace(COALESCE(l.match_partida, ''), '\D', '', 'g') <> ''
+            AND regexp_replace($2, '\D', '', 'g') <> ''
+            AND COALESCE(NULLIF(ltrim(regexp_replace(COALESCE(l.match_partida, ''), '\D', '', 'g'), '0'), ''), '0')
+              = COALESCE(NULLIF(ltrim(regexp_replace($2, '\D', '', 'g'), '0'), ''), '0')
+          )
+        ))
         AND ($3::text IS NULL OR upper(btrim(COALESCE(l.match_rolada, ''))) = upper(btrim($3)))
         AND ($4::text IS NULL OR upper(COALESCE(e.section, '')) = $4)
         AND ($5::text IS NULL OR upper(COALESCE(e.tipo, '')) = $5)
@@ -4265,6 +4282,25 @@ app.get('/api/benninger-rtf/logs', async (req, res) => {
     })
   } catch (err) {
     console.error('Error en /api/benninger-rtf/logs:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/benninger-rtf/file', async (req, res) => {
+  const sourceFile = String(req.query?.sourceFile || '').trim()
+  if (!sourceFile) return res.status(400).json({ error: 'sourceFile required' })
+  try {
+    const r = await query(
+      'SELECT raw_rtf_text FROM tb_benninger_rtf_links WHERE source_file = $1',
+      [sourceFile], 'benninger-rtf/file'
+    )
+    const rtfText = r.rows?.[0]?.raw_rtf_text
+    if (!rtfText) return res.status(404).json({ error: 'RTF not found' })
+    res.setHeader('Content-Type', 'application/rtf')
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(sourceFile)}"`)
+    res.send(rtfText)
+  } catch (err) {
+    console.error('Error en /api/benninger-rtf/file:', err)
     res.status(500).json({ error: err.message })
   }
 })
@@ -4823,6 +4859,7 @@ app.get(['/api/benninger-impacto', '/api/benninger-impacto/:sourceFile'], async 
     res.json({
       success: true,
       sourceFile: link.source_file,
+      rawRtfText: link.raw_rtf_text || null,
       match: {
         partida,
         rolada,

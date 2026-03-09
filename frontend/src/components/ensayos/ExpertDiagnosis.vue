@@ -7,7 +7,17 @@
           Dictamen Tecnico | Partida
           <strong class="tech-value">{{ partidaLabel }}</strong>
         </h3>
-        <p class="mt-1 text-xs text-slate-400">Analisis post-proceso Benninger — proyeccion de impacto en tejeduria</p>
+        <p class="mt-1 text-xs text-slate-400">
+          Analisis post-proceso Benninger — proyeccion de impacto en tejeduria
+          <template v-if="sourceFile">
+            &nbsp;&middot;&nbsp;
+            <button
+              @click="openRtfFile"
+              class="text-cyan-600 hover:text-cyan-800 hover:underline font-medium"
+              :title="'Abrir ' + sourceFile"
+            >&#128196; {{ sourceFile }}</button>
+          </template>
+        </p>
       </div>
       <span class="status-pill" :class="globalStatusClass">{{ globalStatusLabel }}</span>
     </div>
@@ -173,6 +183,7 @@
                 <th class="px-3 py-2 text-center">Riesgo</th>
                 <th class="px-3 py-2 text-center">Paradas</th>
                 <th class="px-3 py-2 text-center">Goma</th>
+                <th class="px-3 py-2 text-center">Eventos</th>
                 <th class="px-3 py-2 text-left">Causa Raiz</th>
                 <th class="px-3 py-2 text-left">Recomendacion</th>
               </tr>
@@ -191,6 +202,12 @@
                 </td>
                 <td class="px-3 py-2 text-center font-bold text-sm" :class="z.paradas > 0 ? 'text-rose-700' : 'text-slate-400'">{{ z.paradas || '—' }}</td>
                 <td class="px-3 py-2 text-center font-bold text-sm" :class="z.goma > 0 ? 'text-amber-700' : 'text-slate-400'">{{ z.goma || '—' }}</td>
+                <td class="px-3 py-2 text-center">
+                  <span
+                    v-tippy="{ content: bucketTooltipHtml(z), allowHTML: true, delay: 0, maxWidth: 520, placement: 'left', theme: 'light', interactive: true }"
+                    class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold cursor-help bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+                  >{{ z.total }} <span class="text-slate-400">ⓘ</span></span>
+                </td>
                 <td class="px-3 py-2 text-xs text-slate-700">{{ z.causaRaiz }}</td>
                 <td class="px-3 py-2 text-xs" :class="recoClass(z.riesgo)">{{ z.recomendacion }}</td>
               </tr>
@@ -250,8 +267,15 @@ const props = defineProps({
     default: () => ({ total: 0, aml: 0, cel: 0, riesgo: 'bajo', codigos: [], recurrentes: [], eventos: [] })
   },
   // Eventos AML detallados con meter_pos real (de tb_benninger_rtf_eventos)
-  amlDetailEvents: { type: Array, default: () => [] }
+  amlDetailEvents: { type: Array, default: () => [] },
+  sourceFile: { type: String, default: '' },
+  rawRtfText: { type: String, default: '' }
 })
+
+function openRtfFile() {
+  if (!props.sourceFile) return
+  window.open(`/api/benninger-rtf/file?sourceFile=${encodeURIComponent(props.sourceFile)}`, '_blank')
+}
 
 // ── Utilidades ──────────────────────────────────────────────────────────────
 function parseN(v) {
@@ -580,6 +604,7 @@ const meterZonesTelar = computed(() => {
     const goma     = inBucket.filter(e => String(e.codigo || '').toUpperCase() === 'S500' || String(e.event_code || '') === '1485').length
     const criticos = inBucket.filter(e => e.severidad === 'critico').length
     const lentos   = inBucket.filter(e => ['E1011', 'E3031', 'E1012', 'E3032'].includes(String(e.codigo || '').toUpperCase())).length
+    const eventos  = [...inBucket].sort((a, b) => (Number(a.meter_pos) || 0) - (Number(b.meter_pos) || 0))
 
     const riesgo = paradas >= 1 || (goma >= 2 && criticos >= 3) ? 'muy_alto'
       : goma >= 2 || criticos >= 3 ? 'alto'
@@ -597,12 +622,46 @@ const meterZonesTelar = computed(() => {
       : riesgo === 'medio'    ? '👁️ Seguimiento cercano — anotar cortes'
       : '✅ Proceder normal'
 
-    buckets.push({ lo, hi, total: inBucket.length, paradas, goma, criticos, lentos, riesgo, causaRaiz, recomendacion })
+    buckets.push({ lo, hi, total: inBucket.length, paradas, goma, criticos, lentos, riesgo, causaRaiz, recomendacion, eventos })
   }
 
   return buckets.sort((a, b) => a.lo - b.lo)
 })
-
+function bucketTooltipHtml(z) {
+  const severityIcon = (e) => {
+    const cod = String(e.codigo || '').toUpperCase()
+    if (['E3030','E1010'].includes(cod)) return '🔴'
+    if (cod === 'S500' || String(e.event_code||'') === '1485') return '🟠'
+    if (['E1011','E3031','E1012','E3032'].includes(cod)) return '🟡'
+    if (e.severidad === 'critico') return '🔴'
+    return '⚪'
+  }
+  const rows = z.eventos.slice(0, 25).map(e => {
+    const m   = Math.round(Number(e.meter_pos) || 0)
+    const cod = String(e.codigo || e.event_code || '—').toUpperCase()
+    const sub = String(e.subsistema || e.subsystem || '').slice(0,6)
+    const msg = String(e.mensaje || e.descripcion_parada || '').slice(0, 48)
+    return `<tr style="border-top:1px solid #e2e8f0">
+      <td style="padding:2px 6px;font-weight:600;white-space:nowrap">${severityIcon(e)} T.${m}m</td>
+      <td style="padding:2px 6px;font-family:monospace;white-space:nowrap">${cod}</td>
+      <td style="padding:2px 6px;color:#64748b;white-space:nowrap">${sub}</td>
+      <td style="padding:2px 6px;color:#374151;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${msg}">${msg || '—'}</td>
+    </tr>`
+  }).join('')
+  const extra = z.eventos.length > 25 ? `<tr><td colspan="4" style="padding:4px 6px;color:#94a3b8;font-style:italic">… y ${z.eventos.length - 25} eventos más</td></tr>` : ''
+  return `<div style="font-size:12px;min-width:380px">
+    <div style="font-weight:700;margin-bottom:6px;color:#1e293b">📍 T.${z.lo}–T.${z.hi}m &nbsp;·&nbsp; ${z.total} evento(s)</div>
+    <table style="border-collapse:collapse;width:100%">
+      <thead><tr style="background:#f1f5f9;color:#475569">
+        <th style="padding:3px 6px;text-align:left">Metro</th>
+        <th style="padding:3px 6px;text-align:left">Código</th>
+        <th style="padding:3px 6px;text-align:left">Sub.</th>
+        <th style="padding:3px 6px;text-align:left">Mensaje</th>
+      </tr></thead>
+      <tbody>${rows}${extra}</tbody>
+    </table>
+  </div>`
+}
 // ── Acciones ────────────────────────────────────────────────────────────────
 const machineActions = computed(() => {
   const a = []
