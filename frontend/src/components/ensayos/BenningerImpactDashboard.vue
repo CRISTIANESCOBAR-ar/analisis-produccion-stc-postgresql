@@ -74,6 +74,7 @@
             :tension-plegador="proceso.tensionPlegador"
             :tension-timeline="proceso.tensionTimeline"
             :aml-cel="proceso.amlCel"
+            :aml-detail-events="amlDetailEvents"
           />
         </div>
 
@@ -260,6 +261,151 @@
           </div>
         </article>
       </section>
+
+      <!-- DICTAMEN DE INGENIERIA -->
+      <section class="rounded-2xl border border-slate-700/80 bg-slate-900/80 p-5 shadow-lg">
+        <div class="flex items-center justify-between flex-wrap gap-3">
+          <h2 class="text-lg font-semibold text-slate-100">4. Dictamen de Ingenieria</h2>
+          <div class="flex items-center gap-3 rounded-xl border px-4 py-2" :class="dictamenBannerClass">
+            <span class="text-xl">{{ dictamenGlobal.emoji }}</span>
+            <div>
+              <p class="text-sm font-bold" :class="dictamenTextClass">{{ dictamenGlobal.estado }}</p>
+              <p class="text-xs text-slate-400">Partida: {{ matchInfo?.partida || '-' }}</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-5 grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <!-- Pilar Integridad -->
+          <div class="rounded-xl border p-4" :class="pillarBorderClass(failurePillars.integridad.riesgo)">
+            <div class="flex items-center gap-2">
+              <span class="text-lg">🧵</span>
+              <h3 class="text-sm font-semibold text-slate-100">Falla de Integridad</h3>
+              <span class="ml-auto text-xs px-2 py-0.5 rounded-full font-semibold" :class="zoneRiskClass(failurePillars.integridad.riesgo)">
+                {{ riesgoLabel(failurePillars.integridad.riesgo) }}
+              </span>
+            </div>
+            <div class="mt-3 space-y-1.5 text-xs text-slate-300">
+              <p><span class="text-slate-400">Paradas registradas:</span> <strong :class="failurePillars.integridad.paradas > 0 ? 'text-rose-300' : 'text-slate-100'">{{ failurePillars.integridad.paradas }}</strong></p>
+              <p><span class="text-slate-400">Ciclos vel. lenta:</span> <strong class="text-slate-100">{{ failurePillars.integridad.velocidadLenta }}x</strong></p>
+              <p><span class="text-slate-400">Tension maxima:</span> <strong :class="failurePillars.integridad.maxTension > 3200 ? 'text-rose-300' : 'text-slate-100'">{{ formatNumber(failurePillars.integridad.maxTension, 0) }} N</strong></p>
+              <p><span class="text-slate-400">Elongacion residual:</span> <strong :class="residualTextClass">{{ formatNumber(elongacionResidual, 2) }}%</strong></p>
+            </div>
+            <div class="mt-3 rounded-lg bg-slate-950/70 px-3 py-2">
+              <p class="text-xs" :class="pillarTextClass(failurePillars.integridad.riesgo)">{{ failurePillars.integridad.impacto }}</p>
+            </div>
+          </div>
+
+          <!-- Pilar Proteccion -->
+          <div class="rounded-xl border p-4" :class="pillarBorderClass(failurePillars.proteccion.riesgo)">
+            <div class="flex items-center gap-2">
+              <span class="text-lg">🛡️</span>
+              <h3 class="text-sm font-semibold text-slate-100">Falla de Proteccion</h3>
+              <span class="ml-auto text-xs px-2 py-0.5 rounded-full font-semibold" :class="zoneRiskClass(failurePillars.proteccion.riesgo)">
+                {{ riesgoLabel(failurePillars.proteccion.riesgo) }}
+              </span>
+            </div>
+            <div class="mt-3 space-y-1.5 text-xs text-slate-300">
+              <p><span class="text-slate-400">Alertas S500 goma:</span> <strong :class="failurePillars.proteccion.gomaCount > 0 ? 'text-amber-300' : 'text-slate-100'">{{ failurePillars.proteccion.gomaCount }}</strong></p>
+              <p><span class="text-slate-400">Eventos S800:</span> <strong class="text-slate-100">{{ failurePillars.proteccion.s800Count }}</strong></p>
+              <p><span class="text-slate-400">Goma aplicada real:</span> <strong class="text-slate-100">{{ formatNumber(proceso.gomaReal, 2) }}%</strong></p>
+              <p><span class="text-slate-400">Goma objetivo:</span> <strong class="text-slate-100">{{ formatNumber(proceso.gomaObjetivo, 2) }}%</strong></p>
+            </div>
+            <div class="mt-3 rounded-lg bg-slate-950/70 px-3 py-2">
+              <p class="text-xs" :class="pillarTextClass(failurePillars.proteccion.riesgo)">{{ failurePillars.proteccion.impacto }}</p>
+            </div>
+          </div>
+
+          <!-- Pilar Estetica -->
+          <div class="rounded-xl border p-4" :class="pillarBorderClass(failurePillars.estetica.riesgo)">
+            <div class="flex items-center gap-2">
+              <span class="text-lg">🎨</span>
+              <h3 class="text-sm font-semibold text-slate-100">Falla Estetica</h3>
+              <span class="ml-auto text-xs px-2 py-0.5 rounded-full font-semibold" :class="zoneRiskClass(failurePillars.estetica.riesgo)">
+                {{ riesgoLabel(failurePillars.estetica.riesgo) }}
+              </span>
+            </div>
+            <div class="mt-3 space-y-1.5 text-xs text-slate-300">
+              <p><span class="text-slate-400">Humedad salida:</span> <strong :class="isHumedadCritica ? 'text-rose-300' : 'text-slate-100'">{{ formatNumber(proceso.humedadSalida, 1) }}%</strong></p>
+              <p><span class="text-slate-400">Presion exprimido:</span> <strong :class="proceso.presionExprimido > 90 ? 'text-amber-300' : 'text-slate-100'">{{ formatNumber(proceso.presionExprimido, 1) }} kN</strong></p>
+              <p><span class="text-slate-400">MIC fibra:</span> <strong class="text-slate-100">{{ formatNumber(laboratorio.mic, 2) }}</strong></p>
+              <p><span class="text-slate-400">Estiraje aplicado:</span> <strong class="text-slate-100">{{ formatNumber(proceso.stretchAplicado, 2) }}%</strong></p>
+            </div>
+            <div class="mt-3 rounded-lg bg-slate-950/70 px-3 py-2">
+              <p class="text-xs" :class="pillarTextClass(failurePillars.estetica.riesgo)">{{ failurePillars.estetica.impacto }}</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- MAPA DE METROS CRITICOS -->
+      <section class="rounded-2xl border border-slate-700/80 bg-slate-900/80 p-5 shadow-lg">
+        <div class="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h2 class="text-lg font-semibold text-slate-100">5. Mapa de Metros Criticos</h2>
+            <p class="mt-1 text-xs text-slate-300">Distribucion de eventos AML por segmento — eje del analisis de riesgo en telar</p>
+          </div>
+          <span v-if="loadingAml" class="text-xs text-slate-400 animate-pulse">Cargando eventos...</span>
+          <span v-else-if="amlDetailEvents.length" class="text-xs text-slate-400">{{ amlDetailEvents.length }} eventos AML</span>
+        </div>
+
+        <div v-if="meterZones.length" class="mt-5 overflow-x-auto rounded-xl border border-slate-700">
+          <table class="w-full min-w-[640px] text-sm">
+            <thead class="bg-slate-800/80 text-slate-200">
+              <tr>
+                <th class="px-3 py-2.5 text-left font-semibold">Zona (m restantes)</th>
+                <th class="px-3 py-2.5 text-center font-semibold">Riesgo en Telar</th>
+                <th class="px-3 py-2.5 text-center font-semibold">Paradas</th>
+                <th class="px-3 py-2.5 text-center font-semibold">Goma (S500)</th>
+                <th class="px-3 py-2.5 text-center font-semibold">Eventos</th>
+                <th class="px-3 py-2.5 text-left font-semibold">Causa Raiz</th>
+                <th class="px-3 py-2.5 text-left font-semibold">Recomendacion Operativa</th>
+              </tr>
+            </thead>
+            <tbody class="bg-slate-950/60 divide-y divide-slate-800">
+              <tr
+                v-for="z in meterZones"
+                :key="`${z.lo}-${z.hi}`"
+                :class="z.riesgo === 'muy_alto' ? 'bg-rose-950/20' : z.riesgo === 'alto' ? 'bg-amber-950/10' : ''"
+              >
+                <td class="px-3 py-2.5 font-mono text-sm text-slate-200 whitespace-nowrap">{{ z.lo }} – {{ z.hi }} m</td>
+                <td class="px-3 py-2.5 text-center">
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap" :class="zoneRiskClass(z.riesgo)">
+                    {{ riesgoEmoji(z.riesgo) }} {{ riesgoLabel(z.riesgo) }}
+                  </span>
+                </td>
+                <td class="px-3 py-2.5 text-center font-bold" :class="z.paradas > 0 ? 'text-rose-300' : 'text-slate-600'">{{ z.paradas || '—' }}</td>
+                <td class="px-3 py-2.5 text-center font-bold" :class="z.goma > 0 ? 'text-amber-300' : 'text-slate-600'">{{ z.goma || '—' }}</td>
+                <td class="px-3 py-2.5 text-center text-slate-400 text-xs">{{ z.total }}</td>
+                <td class="px-3 py-2.5 text-xs text-cyan-300/80">{{ z.causaRaiz }}</td>
+                <td class="px-3 py-2.5 text-xs" :class="zoneRecoClass(z.riesgo)">{{ z.recomendacion }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p v-else-if="!loadingAml && partidaInput" class="mt-4 text-sm text-slate-400">Sin eventos AML detallados para esta partida.</p>
+        <p v-else-if="!loadingAml" class="mt-4 text-sm text-slate-500">Ingrese una partida para cargar el mapa de metros.</p>
+
+        <!-- Visual bar strip -->
+        <div v-if="meterZones.length" class="mt-5">
+          <p class="text-xs text-slate-400 mb-2">Vista rapida — barra de riesgo por metro</p>
+          <div class="flex h-6 w-full rounded-full overflow-hidden border border-slate-700 gap-px">
+            <div
+              v-for="z in meterZones"
+              :key="`bar-${z.lo}`"
+              :title="`${z.lo}-${z.hi}m: ${riesgoLabel(z.riesgo)} (${z.total} eventos)`"
+              :style="{ flex: String(z.hi - z.lo) }"
+              :class="zoneBarClass(z.riesgo)"
+            ></div>
+          </div>
+          <div class="mt-1.5 flex justify-between text-xs text-slate-500">
+            <span>0 m</span>
+            <span class="text-slate-400 text-[10px] tracking-wide">← metros restantes →</span>
+            <span>{{ meterZones[meterZones.length - 1]?.hi || '' }} m</span>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 </template>
@@ -328,6 +474,8 @@ const partidaInput = ref('')
 const matchInfo = ref(null)
 const referencias = ref(null)
 const showTechnicalDetails = ref(false)
+const amlDetailEvents = ref([])
+const loadingAml = ref(false)
 
 const laboratorio = computed(() => dataModel.value.laboratorio)
 const proceso = computed(() => dataModel.value.proceso)
@@ -688,6 +836,7 @@ async function fetchImpactData(partida) {
     loadedSourceFile.value = String(payload?.sourceFile || '')
     matchInfo.value = payload?.match || null
     referencias.value = payload?.referencias || null
+    fetchAmlDetailLogs(partida)
   } catch (err) {
     dataModel.value = cloneDefaultDataModel()
     loadedSourceFile.value = ''
@@ -696,6 +845,208 @@ async function fetchImpactData(partida) {
     errorMessage.value = `No se pudo cargar analisis Benninger: ${err.message}`
   } finally {
     loading.value = false
+  }
+}
+
+// ── Failure pillars ────────────────────────────────────────────────────────
+const failurePillars = computed(() => {
+  const aml = proceso.value.amlCel
+  const recurrentes = Array.isArray(aml.recurrentes) ? aml.recurrentes : []
+
+  function countCode(code) {
+    return recurrentes.find((r) => r.codigo === code)?.count || 0
+  }
+
+  const paradasCount = countCode('E3030') + countCode('E1010')
+  const velocidadLentaCount = countCode('E1012') + countCode('E3032')
+  const gomaCount = countCode('S500') + countCode('1485')
+  const s800Count = countCode('S800')
+  const maxTension = Math.max(0, ...(proceso.value.tensionTimeline || []).map((t) => Number(t.tensionN) || 0))
+
+  const integridadRiesgo = paradasCount >= 3 || maxTension > 3200 ? 'muy_alto'
+    : paradasCount >= 1 || maxTension > 3000 ? 'alto'
+    : velocidadLentaCount >= 5 ? 'medio'
+    : 'bajo'
+
+  const proteccionRiesgo = gomaCount >= 8 ? 'muy_alto'
+    : gomaCount >= 4 ? 'alto'
+    : gomaCount >= 1 ? 'medio'
+    : 'bajo'
+
+  const esteticaRiesgo = isHumedadCritica.value && Number(proceso.value.presionExprimido || 0) > 90 ? 'alto'
+    : isHumedadCritica.value ? 'medio'
+    : 'bajo'
+
+  return {
+    integridad: {
+      riesgo: integridadRiesgo,
+      paradas: paradasCount,
+      velocidadLenta: velocidadLentaCount,
+      maxTension,
+      impacto: paradasCount >= 2
+        ? `${paradasCount} paradas con ciclos termicos repetidos. Hilo pierde elongacion en zonas de paro \u2014 alta probabilidad de rotura al subir velocidad en telar.`
+        : paradasCount === 1
+        ? 'Una parada registrada. Monitorear el tramo afectado en telar.'
+        : 'Sin paradas. Integridad mecanica controlada.'
+    },
+    proteccion: {
+      riesgo: proteccionRiesgo,
+      gomaCount,
+      s800Count,
+      impacto: gomaCount >= 4
+        ? `${gomaCount} alertas de carga de goma (S500). Tramos sin pelicula protectora adecuada \u2014 riesgo de pelusa y cortes por friccion en telar.`
+        : gomaCount >= 1
+        ? `${gomaCount} alerta(s) de goma. Monitorear deposicion en puntos de reinicio.`
+        : 'Proteccion quimica dentro del rango operativo.'
+    },
+    estetica: {
+      riesgo: esteticaRiesgo,
+      impacto: isHumedadCritica.value
+        ? `Hilo seco (${proceso.value.humedadSalida}%). Riesgo de barre de color y rigidez tactil. El hilo "chato" puede presentar tonalidad desigual.`
+        : 'Aspecto estetico dentro del rango operativo. Humedad adecuada.'
+    }
+  }
+})
+
+const dictamenGlobal = computed(() => {
+  const scoreMap = { bajo: 0, medio: 1, alto: 2, muy_alto: 3 }
+  const p = failurePillars.value
+  const maxScore = Math.max(
+    scoreMap[p.integridad.riesgo] || 0,
+    scoreMap[p.proteccion.riesgo] || 0,
+    scoreMap[p.estetica.riesgo] || 0
+  )
+  if (maxScore >= 3) return { estado: 'RECHAZO TECNICO', color: 'rose', emoji: '🔴' }
+  if (maxScore === 2) return { estado: 'USO RESTRINGIDO', color: 'rose', emoji: '🔴' }
+  if (maxScore === 1) return { estado: 'USO CONDICIONADO', color: 'amber', emoji: '🟡' }
+  return { estado: 'PROCESO APTO', color: 'emerald', emoji: '🟢' }
+})
+
+const dictamenBannerClass = computed(() => {
+  const c = dictamenGlobal.value.color
+  if (c === 'rose') return 'border-rose-500/40 bg-rose-500/10'
+  if (c === 'amber') return 'border-amber-400/40 bg-amber-500/10'
+  return 'border-emerald-500/40 bg-emerald-500/10'
+})
+
+const dictamenTextClass = computed(() => {
+  const c = dictamenGlobal.value.color
+  if (c === 'rose') return 'text-rose-300'
+  if (c === 'amber') return 'text-amber-300'
+  return 'text-emerald-300'
+})
+
+// ── Meter zone map ──────────────────────────────────────────────────────────
+const meterZones = computed(() => {
+  const events = amlDetailEvents.value
+  if (!events.length) return []
+
+  const maxMeter = Math.max(...events.map((e) => Number(e.meter_pos) || 0))
+  if (maxMeter <= 0) return []
+
+  const BUCKET = maxMeter <= 1000 ? 100 : maxMeter <= 3000 ? 200 : 500
+  const buckets = []
+
+  for (let lo = 0; lo < maxMeter; lo += BUCKET) {
+    const hi = Math.min(lo + BUCKET, maxMeter + 1)
+    const inBucket = events.filter((e) => {
+      const m = Number(e.meter_pos) || 0
+      return m >= lo && m < hi
+    })
+    if (!inBucket.length) continue
+
+    const paradas = inBucket.filter((e) =>
+      ['3030', '1010'].includes(String(e.event_code || '')) ||
+      String(e.mensaje || '').toLowerCase().includes('parada')
+    ).length
+
+    const goma = inBucket.filter((e) =>
+      String(e.codigo || '').toUpperCase() === 'S500' ||
+      String(e.event_code || '') === '1485'
+    ).length
+
+    const criticos = inBucket.filter((e) => e.severidad === 'critico').length
+    const altos = inBucket.filter((e) => e.severidad === 'alto').length
+    const topCodes = [...new Set(inBucket.map((e) => e.codigo).filter(Boolean))].slice(0, 3)
+
+    const riesgo = paradas >= 2 || criticos >= 6 ? 'muy_alto'
+      : paradas === 1 || criticos >= 3 || goma >= 3 ? 'alto'
+      : criticos >= 1 || altos >= 3 || goma >= 1 ? 'medio'
+      : 'bajo'
+
+    const causaRaiz = [
+      paradas > 0 ? `${paradas} parada(s)` : '',
+      goma > 0 ? `${goma} alerta(s) S500` : '',
+      criticos > 0 && paradas === 0 && goma === 0 ? `${criticos} eventos criticos` : ''
+    ].filter(Boolean).join(' + ') || topCodes.join(', ') || 'Eventos menores'
+
+    const recomendacion = riesgo === 'muy_alto'
+      ? '\ud83d\udea8 Reducir velocidad telar 50% \u2014 inspeccionar hilo antes de ingresar'
+      : riesgo === 'alto'
+      ? '\u26a0\ufe0f Monitorear pelusa y cortes \u2014 ajustar tension preventivamente'
+      : riesgo === 'medio'
+      ? '\ud83d\udc41\ufe0f Seguimiento cercano \u2014 anotar comportamiento en telar'
+      : '\u2705 Proceder normal'
+
+    buckets.push({ lo, hi, total: inBucket.length, paradas, goma, criticos, altos, topCodes, riesgo, causaRaiz, recomendacion })
+  }
+
+  return buckets.sort((a, b) => a.lo - b.lo)
+})
+
+// ── Style helpers ───────────────────────────────────────────────────────────
+function riesgoLabel(r) {
+  return { muy_alto: 'MUY ALTO', alto: 'ALTO', medio: 'MEDIO', bajo: 'BAJO' }[r] || r
+}
+
+function riesgoEmoji(r) {
+  return { muy_alto: '🔴', alto: '🟠', medio: '🟡', bajo: '🟢' }[r] || ''
+}
+
+function zoneRiskClass(r) {
+  if (r === 'muy_alto') return 'bg-rose-500/20 text-rose-200'
+  if (r === 'alto') return 'bg-orange-500/20 text-orange-200'
+  if (r === 'medio') return 'bg-amber-500/20 text-amber-200'
+  return 'bg-emerald-500/15 text-emerald-300'
+}
+
+function zoneBarClass(r) {
+  if (r === 'muy_alto') return 'bg-rose-600'
+  if (r === 'alto') return 'bg-orange-500'
+  if (r === 'medio') return 'bg-amber-400'
+  return 'bg-emerald-600'
+}
+
+function zoneRecoClass(r) {
+  if (r === 'muy_alto') return 'text-rose-300'
+  if (r === 'alto') return 'text-orange-300'
+  if (r === 'medio') return 'text-amber-300'
+  return 'text-emerald-400'
+}
+
+function pillarBorderClass(r) {
+  if (r === 'muy_alto' || r === 'alto') return 'border-rose-500/40 bg-rose-500/5'
+  if (r === 'medio') return 'border-amber-400/40 bg-amber-500/5'
+  return 'border-slate-700'
+}
+
+function pillarTextClass(r) {
+  if (r === 'muy_alto' || r === 'alto') return 'text-rose-300'
+  if (r === 'medio') return 'text-amber-300'
+  return 'text-emerald-400'
+}
+
+async function fetchAmlDetailLogs(partida) {
+  if (!partida) { amlDetailEvents.value = []; return }
+  loadingAml.value = true
+  try {
+    const res = await fetch(`/api/benninger-rtf/logs?partida=${encodeURIComponent(partida)}&section=AML&limit=2000`)
+    const data = await res.json().catch(() => ({}))
+    amlDetailEvents.value = Array.isArray(data.rows) ? data.rows : []
+  } catch {
+    amlDetailEvents.value = []
+  } finally {
+    loadingAml.value = false
   }
 }
 
