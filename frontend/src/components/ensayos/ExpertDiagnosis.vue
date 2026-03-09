@@ -30,10 +30,14 @@
             </p>
             <p class="sip-note">
               <template v-if="paradasReales.length">
-                {{ paradasReales.length }} parada(s); duracion total {{ totalParadaSeg }}s.
+                {{ paradasReales.length }} parada(s) — {{ totalParadaSeg }}s detenida.
               </template>
-              <template v-else>Sin paradas detectadas.</template>
-              {{ gomaLoadAlerts }} alerta(s) S500 de goma.
+              <template v-else>Sin paradas operativas detectadas.</template>
+              <template v-if="operSlowCount"> {{ operSlowCount }} ciclo(s) vel. lenta.</template>
+              <template v-if="gomaLoadAlerts"> {{ gomaLoadAlerts }} alerta(s) goma.</template>
+              <template v-if="!paradasReales.length &amp;&amp; !operSlowCount &amp;&amp; !gomaLoadAlerts &amp;&amp; allValidEvents.length">
+                {{ allValidEvents.length }} eventos AML procesados.
+              </template>
             </p>
           </article>
           <article class="sip-card">
@@ -87,7 +91,7 @@
                   <td class="px-2 py-1.5 font-mono text-slate-700">{{ p.horaInicio }}</td>
                   <td class="px-2 py-1.5 font-mono text-slate-700">{{ p.horaFin }}</td>
                   <td class="px-2 py-1.5 text-right font-bold" :class="Number(p.durSeg) > 60 ? 'text-rose-700' : 'text-amber-700'">{{ p.durSeg }}</td>
-                  <td class="px-2 py-1.5 text-right font-mono font-bold text-slate-800">T.{{ p.metroTelar }}m</td>
+                  <td class="px-2 py-1.5 text-right font-mono font-bold text-slate-800">{{ p.metroTelar !== null ? 'T.' + p.metroTelar + 'm' : '—' }}</td>
                   <td class="px-2 py-1.5 text-slate-600">{{ p.tipo }}</td>
                 </tr>
               </tbody>
@@ -124,7 +128,7 @@
               <tbody>
                 <tr v-for="g in gomaEventosTelar.slice(0, 8)" :key="g.key" class="border-t border-slate-200">
                   <td class="px-2 py-1.5 font-mono text-slate-700">{{ g.hora }}</td>
-                  <td class="px-2 py-1.5 text-right font-mono font-bold text-amber-700">T.{{ g.metroTelar }}m</td>
+                  <td class="px-2 py-1.5 text-right font-mono font-bold text-amber-700">{{ g.metroTelar !== null ? 'T.' + g.metroTelar + 'm' : '—' }}</td>
                   <td class="px-2 py-1.5 text-slate-600">{{ g.detalle }}</td>
                 </tr>
                 <tr v-if="gomaEventosTelar.length > 8" class="border-t border-slate-100">
@@ -302,39 +306,53 @@ const tensionJumpPct = computed(() => {
 // ── Eventos AML detallados ──────────────────────────────────────────────────
 // meter_pos = metros restantes en el plegador (countdown: ~2149→0)
 // meter_pos=0 es exterior de la bobina = primero que entra al telar (T.0)
-// Los valores 800/801/802 al inicio del archivo son pre-producción (arranque de máquina)
-const rawDetailEvents = computed(() =>
-  (props.amlDetailEvents || []).filter(e => e && parseN(e.meter_pos) !== null && parseN(e.meter_pos) >= 0)
+
+// Todos los eventos válidos — sin filtro de meter_pos (para conteos)
+const allValidEvents = computed(() =>
+  (props.amlDetailEvents || []).filter(e => e != null)
 )
+
+// Solo eventos con metro conocido — para tablas y mapa de metros
+const rawDetailEvents = computed(() =>
+  allValidEvents.value.filter(e => parseN(e.meter_pos) !== null && parseN(e.meter_pos) >= 0)
+)
+
+// Normaliza mensaje para comparación (elimina tildes, minúsculas)
+function normMsg(e) {
+  return String(e.mensaje || e.descripcion_parada || '')
+    .toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+}
 
 // metro en telar = meter_pos (ya está orientado: 0=exterior=primero en telar)
 function metroTelar(meterPos) { return Math.round(Number(meterPos) || 0) }
 
 // ── Paradas reales con duración ─────────────────────────────────────────────
+// Detección por patrón en mensaje (Benninger usa portugués: "parada", "grelha aberta")
 const paradasReales = computed(() => {
   const raw = []
-  for (const e of rawDetailEvents.value) {
-    const cod = String(e.codigo || '').toUpperCase()
-    const msg = String(e.mensaje || '').toLowerCase()
-    if (!(['E3030', 'E1010'].includes(cod) || (msg.includes('parada') && !msg.includes('produção')))) continue
+  for (const e of allValidEvents.value) {
+    const msg = normMsg(e)
+    // Parada = contiene "parada" o "grelha aberta", pero NO es un evento de producción
+    const esParada = (/parada|grelha\s*aberta/.test(msg)) &&
+                     !(/producao|producção|produccion/.test(msg))
+    if (!esParada) continue
     const mPos = parseN(e.meter_pos)
-    if (mPos === null) continue
     raw.push({
-      key: `${cod}-${e.timestamp_ts}`,
+      key: `${e.codigo}-${e.timestamp_ts}-${e.line_no}`,
       horaInicio: hhmm(e.timestamp_ts) || '—',
       horaFin: hhmm(e.timestamp_end_ts) || '—',
       durSeg: diffSec(e.timestamp_ts, e.timestamp_end_ts) ?? '—',
-      metroTelar: metroTelar(mPos),
-      tipo: cod === 'E3030' ? 'S3 Parada' : cod === 'E1010' ? 'S1 Parada' : 'Parada',
+      metroTelar: mPos !== null ? metroTelar(mPos) : null,
+      tipo: String(e.codigo || 'Parada'),
       meterPos: mPos
     })
   }
-  // Dedup: misma parada reportada en S1 y S3 (mismo metro ±3m, misma hora)
+  // Dedup: misma hora + mismo tipo (S1 y S3 pueden reportar la misma parada)
   const unique = []
   for (const p of raw) {
-    if (!unique.find(u => Math.abs(u.metroTelar - p.metroTelar) <= 3 && u.horaInicio === p.horaInicio)) unique.push(p)
+    if (!unique.find(u => u.horaInicio === p.horaInicio && u.tipo === p.tipo)) unique.push(p)
   }
-  return unique.sort((a, b) => a.metroTelar - b.metroTelar)
+  return unique.sort((a, b) => (a.meterPos ?? Infinity) - (b.meterPos ?? Infinity))
 })
 
 const totalParadaSeg = computed(() =>
@@ -343,24 +361,23 @@ const totalParadaSeg = computed(() =>
 
 // ── Alertas de goma ─────────────────────────────────────────────────────────
 const gomaEventosTelar = computed(() =>
-  rawDetailEvents.value
+  allValidEvents.value
     .filter(e => {
-      const cod = String(e.codigo || '').toUpperCase()
-      const msg = String(e.mensaje || '').toLowerCase()
-      return cod === 'S500' || String(e.event_code || '') === '1485' || (msg.includes('carg') && msg.includes('goma'))
+      const msg = normMsg(e)
+      return /carga\s*de\s*goma|s\s*500/.test(msg) || String(e.event_code || '') === '1485'
     })
     .map((e, idx) => ({
       key: `goma-${idx}`,
       hora: hhmm(e.timestamp_ts) || '—',
-      metroTelar: metroTelar(e.meter_pos),
+      metroTelar: parseN(e.meter_pos) !== null ? metroTelar(e.meter_pos) : null,
       detalle: String(e.mensaje || '').slice(0, 50)
     }))
-    .sort((a, b) => a.metroTelar - b.metroTelar)
+    .sort((a, b) => (a.metroTelar ?? Infinity) - (b.metroTelar ?? Infinity))
 )
 const gomaLoadAlerts = computed(() => gomaEventosTelar.value.length)
 
 const operSlowCount = computed(() =>
-  rawDetailEvents.value.filter(e => ['E1012', 'E3032', 'E1011', 'E3031'].includes(String(e.codigo || '').toUpperCase())).length
+  allValidEvents.value.filter(e => /velocidade\s*lenta|rasteje/.test(normMsg(e))).length
 )
 
 // ── Flags de riesgo ─────────────────────────────────────────────────────────
@@ -410,13 +427,25 @@ const narrativaGlobal = computed(() => {
   const nP = tv(paradasReales.value.length, 0)
   const nG = tv(gomaLoadAlerts.value, 0)
   const tSeg = tv(totalParadaSeg.value, 0, 's')
+  const hayEventosAml = allValidEvents.value.length > 0
+
   if (globalStatus.value === 'Critico') {
     if (paradasReales.value.length >= 1)
       return `Durante la corrida se registraron ${nP} parada(s) con ${tSeg} de maquina detenida y ${nG} alertas de goma. Al reiniciar, la tension de plegador genera picos mecanicos que fragilizaron los tramos de reinicio. El hilo llega al telar con zonas criticas desde los primeros metros.`
     return `El hilo presenta condicion mecanica comprometida: reserva elastica insuficiente y humedad critica. Riesgo alto de corte en telar al alcanzar velocidad nominal.`
   }
-  if (globalStatus.value === 'Riesgo')
-    return `Se registraron ${nP} parada(s), ${tv(operSlowCount.value, 0)} ciclos lentos y ${nG} alertas de goma. La corrida fue recuperable pero los tramos de reinicio quedaron con menor proteccion. Monitoreo cercano en tejeduria.`
+  if (globalStatus.value === 'Riesgo') {
+    // Riesgo por paradas/goma operativas
+    if (paradasReales.value.length >= 1 || gomaLoadAlerts.value >= 2)
+      return `Se registraron ${nP} parada(s) y ${nG} alertas de goma. Los tramos de reinicio quedaron con menor proteccion quimica. Monitoreo cercano en tejeduria.`
+    // Riesgo por tintura (MIC vs presion)
+    if (tinturaRisk.value)
+      return `MIC ${tv(micValue.value, 2)} con presion ${tv(presionValue.value, 1, 'kN')} supera el objetivo local para esta finura. Riesgo de Ring Dyeing y penetracion irregular de indigo. Sin paradas operativas detectadas${hayEventosAml ? '' : ' (sin log AML disponible)'}.`
+    // Riesgo por tension mecanica
+    if (tensionRisk.value)
+      return `Salto de tension de ${tv(tensionJumpPct.value, 1, '%')} sobre la linea base. La rampa agresiva puede generar fatiga de urdimbre en telar aunque no hubo paradas operativas.`
+    return `Condicion de riesgo detectada en los parametros de proceso. Verificar setpoints antes de liberar a tejeduria.`
+  }
   return `Corrida estable: sin paradas criticas, sin alertas de goma significativas. El hilo llega al telar en condicion apta para produccion continua.`
 })
 
@@ -523,6 +552,7 @@ const pilarEstetica = computed(() => {
 // ── Mapa de metros en telar ─────────────────────────────────────────────────
 // meter_pos=0 es exterior bobina = T.0 (primer metro en telar)
 const meterZonesTelar = computed(() => {
+  // Para el mapa de metros solo usamos eventos CON metro conocido
   const events = rawDetailEvents.value
   if (!events.length) return []
   const validMeters = events.map(e => Number(e.meter_pos) || 0).filter(m => m >= 0)
