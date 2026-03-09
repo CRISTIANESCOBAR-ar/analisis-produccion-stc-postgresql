@@ -402,7 +402,8 @@ const micPresionCompatibilidad = computed(() => {
 })
 
 const humedadCritica = computed(() => Number.isFinite(humedadValue.value) && humedadValue.value <= 6)
-const tinturaRisk    = computed(() => Number(micValue.value) > 4.5 && Number(presionValue.value) > 60)
+// tinturaRisk: la presion supera en mas de 15 kN el objetivo local para este MIC (cualquier finura)
+const tinturaRisk    = computed(() => Number.isFinite(pressureDelta.value) && pressureDelta.value > 15)
 const tensionRisk    = computed(() => tensionJumpPct.value > 60)
 const resilienceRisk = computed(() => Number.isFinite(tenacidadValue.value) && tenacidadValue.value < 15.5 && residualValue.value < 5)
 
@@ -411,6 +412,7 @@ const globalStatus = computed(() => {
   if (paradasReales.value.length >= 2 || (paradasReales.value.length >= 1 && gomaLoadAlerts.value >= 4)) return 'Critico'
   if (resilienceRisk.value) return 'Critico'
   if (humedadCritica.value && (paradasReales.value.length >= 1 || tensionRisk.value)) return 'Critico'
+  if (humedadCritica.value && tinturaRisk.value) return 'Critico'
   if (paradasReales.value.length >= 1 || gomaLoadAlerts.value >= 4 || tinturaRisk.value || tensionRisk.value) return 'Riesgo'
   return 'Apto'
 })
@@ -481,6 +483,13 @@ const pilarIntegridad = computed(() => {
       nivel: 'medio',
       dato: `Sin paradas. Salto de tension ${tv(tensionJumpPct.value, 1, '%')} (base ${tv(tensionBase.value, 0, 'N')} → plegador ${tv(plegadorValue.value, 0, 'N')}).`,
       impacto: `La rampa de tension es agresiva. Sin paradas que agraven la fatiga, el riesgo de corte es moderado pero presente en velocidades altas.`
+    }
+  }
+  if (humedadCritica.value) {
+    return {
+      nivel: 'medio',
+      dato: `Sin paradas. Humedad salida ${tv(humedadValue.value, 1, '%')} — hilo en limite de sobre-secado.`,
+      impacto: `El exceso de secado reduce la plasticidad y aumenta la fragilidad de la fibra. En telar, mayor tendencia a corte en tramos de alta tension y en cruces de laminas.`
     }
   }
   return {
@@ -621,6 +630,8 @@ const productActions = computed(() => {
       a.push('Retener muestra para evaluacion de ring dyeing y solidez al lavado antes de liberar a acabado.')
   } else if (globalStatus.value === 'Riesgo') {
     a.push('Liberar con nota de seguimiento: anotar cortes y pelusa durante el tejido.')
+    if (tinturaRisk.value)
+      a.push('Retener muestra para evaluacion de ring dyeing y solidez al lavado antes de liberar a acabado.')
     if (gomaLoadAlerts.value > 0)
       a.push('Inspeccionar guias de urdimbre en telar al inicio — riesgo de acumulacion de pelusa.')
   } else {

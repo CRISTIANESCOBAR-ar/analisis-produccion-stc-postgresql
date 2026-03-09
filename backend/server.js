@@ -364,8 +364,10 @@ function buildTimelineFromHeader(header, tensionPlegador) {
 
   const out = []
   for (const [punto, keys] of map) {
-    const n = pickHeaderNumber(header, keys)
-    if (!Number.isFinite(n)) continue
+    const nRaw = pickHeaderNumber(header, keys)
+    if (!Number.isFinite(nRaw)) continue
+    // Same unit normalization as humedadSalida/tensionPlegador: raw < 500 → ×100 (hectonewton → N)
+    const n = nRaw > 0 && nRaw < 500 ? nRaw * 100 : nRaw
     out.push({ punto, tensionN: Number(n.toFixed(2)) })
   }
 
@@ -1124,8 +1126,8 @@ function buildBenningerProcessFromHeader(rawHeader, options = {}) {
   const header = rawHeader && typeof rawHeader === 'object' ? rawHeader : {}
 
   const stretchAplicado = pickHeaderNumber(header, ['stretchFinal', 'stretchAplicado', 'stretch1S034', '1S034'])
-  const humedadSalida = pickHeaderNumber(header, ['humedadSalida', 'humedad1S068', '1S068'])
-  const tensionPlegador = pickHeaderNumber(header, ['tensionPlegador', 'tension1S054', '1S054'])
+  const humedadRaw = pickHeaderNumber(header, ['humedadSalida', 'humedad1S068', '1S068'])
+  const tensionRaw = pickHeaderNumber(header, ['tensionPlegador', 'tension1S054', '1S054'])
   const gomaReal = pickHeaderNumber(header, ['gomaReal', 'gomaReal1A41', '1A41'])
   const velocidad = pickHeaderNumber(header, ['velocidad', 'velocidad1S102', 'velMMin', '1S102'])
   const presionExprimido = pickHeaderNumber(header, ['presionExprimido', 'presionExprimidoMax', '1S086'])
@@ -1140,6 +1142,15 @@ function buildBenningerProcessFromHeader(rawHeader, options = {}) {
   const velocidadEfectiva = Number.isFinite(metrosSalida) && Number.isFinite(duracionSegundos) && duracionSegundos > 0
     ? (metrosSalida / duracionSegundos) * 60
     : null
+
+  // Benninger stores humidity as centipercent integers (600 = 6.00 %)
+  // and tension as hectonewton units (35 = 3500 N). Normalize to physical units.
+  const humedadSalida = Number.isFinite(humedadRaw) && humedadRaw > 15
+    ? humedadRaw / 100
+    : humedadRaw
+  const tensionPlegador = Number.isFinite(tensionRaw) && tensionRaw > 0 && tensionRaw < 500
+    ? tensionRaw * 100
+    : tensionRaw
 
   return {
     stretchAplicado: Number.isFinite(stretchAplicado) ? Number(stretchAplicado.toFixed(3)) : null,
