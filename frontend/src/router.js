@@ -147,6 +147,11 @@ const routes = [
     meta: { title: 'Verificación Partidas por Rolada' }
   },
   {
+    path: '/auditoria-rtf-secuencia',
+    component: () => import('./components/AuditoriaRTFSecuencia.vue'),
+    meta: { title: 'Auditoría RTF — Secuencia Benninger' }
+  },
+  {
     path: '/seguimiento-roladas',
     component: () => import('./components/SeguimientoRoladas.vue'),
     meta: { title: 'Seguimiento de Roladas' }

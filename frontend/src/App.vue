@@ -350,6 +350,13 @@
             >
               <span>🔬</span> Verificación Partidas Rolada
             </router-link>
+            <router-link
+              to="/auditoria-rtf-secuencia"
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm"
+              :class="{ 'bg-blue-600': $route.path === '/auditoria-rtf-secuencia' }"
+            >
+              <span>🔢</span> Auditoría RTF Secuencia
+            </router-link>
             <router-link 
               to="/seguimiento-roladas" 
               class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
@@ -500,6 +507,7 @@ const indigoRoutes = [
   '/consulta-rolada-indigo',
   '/informe-produccion-indigo',
   '/verificacion-partidas-rolada',
+  '/auditoria-rtf-secuencia',
   '/seguimiento-roladas',
   '/seguimiento-roladas-fibra',
   '/grafico-metricas-diarias'

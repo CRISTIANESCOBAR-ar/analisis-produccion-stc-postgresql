@@ -4249,6 +4249,44 @@ app.get('/api/benninger-rtf/sin-match', async (req, res) => {
   }
 })
 
+// Auditoría completa de la secuencia de archivos RTF Benninger.
+// Devuelve todos los registros ordenados por el contador (NNN) del nombre de archivo.
+// El registro sin sufijo numérico (el original) recibe seq_num = -1 para quedar primero.
+app.get('/api/benninger-rtf/audit', async (req, res) => {
+  try {
+    await ensureBenningerRtfSchema()
+
+    const result = await query(`
+      SELECT
+        source_file,
+        COALESCE(
+          (regexp_match(source_file, '\\((\\d+)\\)'))[1]::int,
+          -1
+        ) AS seq_num,
+        receita,
+        comeco_raw,
+        to_char(comeco_ts, 'DD/MM/YY HH24:MI') AS comeco_fmt,
+        comeco_ts,
+        match_partida,
+        match_rolada,
+        match_score,
+        match_confidence,
+        match_mode,
+        match_reason,
+        raw_header->>'metros' AS metros_raw
+      FROM tb_benninger_rtf_links
+      ORDER BY
+        COALESCE((regexp_match(source_file, '\\((\\d+)\\)'))[1]::int, -1) ASC,
+        source_file ASC
+    `, [], 'benninger-rtf/audit')
+
+    res.json({ rows: result.rows, total: result.rows.length })
+  } catch (err) {
+    console.error('Error en /api/benninger-rtf/audit:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // Actualiza SOLO los campos de match de un registro ya existente en tb_benninger_rtf_links
 // sin tocar raw_rtf_text, plain_text ni otros datos del archivo ya guardado.
 app.patch('/api/benninger-rtf/relink', async (req, res) => {
@@ -4266,9 +4304,12 @@ app.patch('/api/benninger-rtf/relink', async (req, res) => {
       const partida    = String(item?.partida    || '').trim() || null
       const rolada     = String(item?.rolada     || '').trim() || null
       const reason     = String(item?.reason     || 'USER_MANUAL_RELINK').trim()
+      const mode       = String(item?.mode       || 'manual').trim() || 'manual'
+      const esNoApta   = mode.includes('no_apta')
 
       if (!sourceFile) { errors.push({ sourceFile: null, error: 'sourceFile requerido' }); continue }
-      if (!partida && !rolada) { errors.push({ sourceFile, error: 'Se requiere partida o rolada' }); continue }
+      // Para no_apta no se exige partida/rolada (el RTF se descarta)
+      if (!esNoApta && !partida && !rolada) { errors.push({ sourceFile, error: 'Se requiere partida o rolada' }); continue }
 
       // Verificar que el registro existe
       const exists = await query(
@@ -4284,13 +4325,13 @@ app.patch('/api/benninger-rtf/relink', async (req, res) => {
           match_rolada     = $3,
           match_score      = $4,
           match_confidence = 'manual',
-          match_mode       = 'manual',
-          match_reason     = $5,
+          match_mode       = $5,
+          match_reason     = $6,
           updated_at       = NOW()
         WHERE source_file = $1
-      `, [sourceFile, partida, rolada, 100, reason], 'benninger-rtf/relink-update')
+      `, [sourceFile, partida, rolada, 100, mode, reason], 'benninger-rtf/relink-update')
 
-      saved.push({ sourceFile, partida, rolada })
+      saved.push({ sourceFile, partida, rolada, mode })
     }
 
     res.json({ success: true, savedCount: saved.length, errorCount: errors.length, saved, errors })
