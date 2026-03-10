@@ -142,6 +142,11 @@ const routes = [
     meta: { title: 'ROLADAS del Mes' }
   },
   {
+    path: '/verificacion-partidas-rolada',
+    component: () => import('./components/VerificacionPartidasRolada.vue'),
+    meta: { title: 'Verificación Partidas por Rolada' }
+  },
+  {
     path: '/seguimiento-roladas',
     component: () => import('./components/SeguimientoRoladas.vue'),
     meta: { title: 'Seguimiento de Roladas' }

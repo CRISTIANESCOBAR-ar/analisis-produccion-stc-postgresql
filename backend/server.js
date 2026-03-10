@@ -3789,12 +3789,29 @@ app.post('/api/benninger-rtf/status', async (req, res) => {
     if (!fileNames.length) return res.json({ existing: [] })
 
     const result = await query(
-      'SELECT source_file FROM tb_benninger_rtf_links WHERE source_file = ANY($1::text[])',
+      `SELECT source_file, match_partida, match_confidence, match_mode
+       FROM tb_benninger_rtf_links
+       WHERE source_file = ANY($1::text[])`,
       [fileNames],
       'benninger-rtf/status'
     )
 
-    res.json({ existing: (result.rows || []).map((r) => r.source_file) })
+    // Un registro está "terminado" (saved) si tiene match_partida poblado (vinculado,
+    // sin importar el score/confianza) O si fue marcado como no_apta.
+    // Solo los que NO tienen partida y NO son no_apta siguen siendo pendientes.
+    const existing  = []
+    const noMatch   = []
+    for (const r of result.rows || []) {
+      const isNoApta  = String(r.match_mode || '').includes('no_apta')
+      const hasPartida = r.match_partida && String(r.match_partida).trim() !== ''
+      if (hasPartida || isNoApta) {
+        existing.push(r.source_file)
+      } else {
+        noMatch.push(r.source_file)
+      }
+    }
+
+    res.json({ existing, noMatch })
   } catch (err) {
     console.error('Error en /api/benninger-rtf/status:', err)
     res.status(500).json({ error: err.message })
@@ -4182,6 +4199,103 @@ app.post('/api/benninger-rtf/confirm', async (req, res) => {
     })
   } catch (err) {
     console.error('Error en /api/benninger-rtf/confirm:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/benninger-rtf/sin-match', async (req, res) => {
+  try {
+    await ensureBenningerRtfSchema()
+
+    const limit  = Math.min(500, Math.max(1, parseInt(req.query.limit  || '500', 10)))
+    const offset = Math.max(0, parseInt(req.query.offset || '0', 10))
+
+    const result = await query(`
+      SELECT
+        source_file,
+        id_rolo,
+        indicativo,
+        receita,
+        comeco_raw,
+        to_char(comeco_ts, 'DD/MM/YY HH24:MI') AS comeco_fmt,
+        fim_raw,
+        to_char(fim_ts, 'DD/MM/YY HH24:MI')    AS fim_fmt,
+        duracao_raw,
+        match_partida,
+        match_rolada,
+        match_score,
+        match_confidence,
+        match_mode,
+        match_reason,
+        updated_at
+      FROM tb_benninger_rtf_links
+      WHERE (match_partida IS NULL OR TRIM(match_partida) = '')
+        AND (match_mode IS NULL OR match_mode NOT LIKE '%no_apta%')
+      ORDER BY comeco_ts ASC NULLS LAST, source_file ASC
+      LIMIT $1 OFFSET $2
+    `, [limit, offset], 'benninger-rtf/sin-match')
+
+    const countResult = await query(
+      `SELECT COUNT(*)::int AS total FROM tb_benninger_rtf_links
+       WHERE (match_partida IS NULL OR TRIM(match_partida) = '')
+         AND (match_mode IS NULL OR match_mode NOT LIKE '%no_apta%')`,
+      [], 'benninger-rtf/sin-match-count'
+    )
+
+    res.json({ rows: result.rows, total: countResult.rows[0].total, limit, offset })
+  } catch (err) {
+    console.error('Error en /api/benninger-rtf/sin-match:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Actualiza SOLO los campos de match de un registro ya existente en tb_benninger_rtf_links
+// sin tocar raw_rtf_text, plain_text ni otros datos del archivo ya guardado.
+app.patch('/api/benninger-rtf/relink', async (req, res) => {
+  try {
+    await ensureBenningerRtfSchema()
+
+    const items = Array.isArray(req.body?.items) ? req.body.items : []
+    if (!items.length) return res.status(400).json({ error: 'items requerido' })
+
+    const saved  = []
+    const errors = []
+
+    for (const item of items) {
+      const sourceFile = String(item?.sourceFile || '').trim()
+      const partida    = String(item?.partida    || '').trim() || null
+      const rolada     = String(item?.rolada     || '').trim() || null
+      const reason     = String(item?.reason     || 'USER_MANUAL_RELINK').trim()
+
+      if (!sourceFile) { errors.push({ sourceFile: null, error: 'sourceFile requerido' }); continue }
+      if (!partida && !rolada) { errors.push({ sourceFile, error: 'Se requiere partida o rolada' }); continue }
+
+      // Verificar que el registro existe
+      const exists = await query(
+        'SELECT 1 FROM tb_benninger_rtf_links WHERE source_file = $1',
+        [sourceFile], 'benninger-rtf/relink-check'
+      )
+      if (!exists.rows.length) { errors.push({ sourceFile, error: 'Registro no encontrado en BD' }); continue }
+
+      await query(`
+        UPDATE tb_benninger_rtf_links
+        SET
+          match_partida    = $2,
+          match_rolada     = $3,
+          match_score      = $4,
+          match_confidence = 'manual',
+          match_mode       = 'manual',
+          match_reason     = $5,
+          updated_at       = NOW()
+        WHERE source_file = $1
+      `, [sourceFile, partida, rolada, 100, reason], 'benninger-rtf/relink-update')
+
+      saved.push({ sourceFile, partida, rolada })
+    }
+
+    res.json({ success: true, savedCount: saved.length, errorCount: errors.length, saved, errors })
+  } catch (err) {
+    console.error('Error en /api/benninger-rtf/relink:', err)
     res.status(500).json({ error: err.message })
   }
 })
@@ -9755,6 +9869,134 @@ app.get('/api/informe-diario', async (req, res) => {
     res.json({ fecha, year, month, daysInMonth, days })
   } catch (err) {
     console.error('Error en /api/informe-diario:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// =====================================================
+// VERIFICACIÓN PARTIDAS POR ROLADA (ÍNDIGO)
+// =====================================================
+app.get('/api/produccion/partidas-por-rolada', async (req, res) => {
+  try {
+    const rolada = String(req.query.rolada || '').trim()
+    if (!rolada) return res.status(400).json({ error: 'rolada requerida' })
+
+    const tsInicio = sqlBuildTimestamp('"DT_INICIO"', '"HORA_INICIO"')
+    const tsFinal  = sqlBuildTimestamp('"DT_FINAL"',  '"HORA_FINAL"')
+    const metragem = sqlParseNumberIntl('"METRAGEM"')
+    const veloc    = sqlParseNumberIntl('"VELOC"')
+
+    const sql = `
+      SELECT
+        "PARTIDA"                                                     AS "PARTIDA",
+        MAX("BASE URDUME")                                            AS "BASE_URDUME",
+        to_char(MIN(${tsInicio}), 'DD/MM/YY HH24:MI')                AS "HORA_INICIAL",
+        to_char(MAX(${tsFinal}),  'DD/MM/YY HH24:MI')                AS "HORA_FINAL",
+        ROUND(SUM(${metragem}), 0)                                    AS "METROS",
+        ROUND(AVG(${veloc}),    1)                                    AS "VELOC"
+      FROM tb_produccion
+      WHERE "SELETOR" = 'INDIGO'
+        AND "FILIAL"  = '05'
+        AND (LTRIM(TRIM("ROLADA"), '0') = LTRIM(TRIM($1), '0'))
+        AND "PARTIDA" IS NOT NULL AND "PARTIDA" <> ''
+      GROUP BY "PARTIDA"
+      ORDER BY MIN(${tsInicio}) ASC NULLS LAST, "PARTIDA" ASC
+    `
+    const result = await query(sql, [rolada], 'partidas-por-rolada')
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en /api/produccion/partidas-por-rolada:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// =====================================================
+// VERIFICACIÓN PARTIDAS + COBERTURA RTF POR ROLADA
+// FULL OUTER JOIN: muestra partidas sin RTF (unmatched),
+// partidas con RTF (matched, N filas si N archivos) y
+// RTFs cuyo match_partida no existe en producción (rtf_orphan)
+// =====================================================
+app.get('/api/produccion/partidas-rtf-por-rolada', async (req, res) => {
+  try {
+    const rolada = String(req.query.rolada || '').trim()
+    if (!rolada) return res.status(400).json({ error: 'rolada requerida' })
+
+    const tsInicio = sqlBuildTimestamp('"DT_INICIO"', '"HORA_INICIO"')
+    const tsFinal  = sqlBuildTimestamp('"DT_FINAL"',  '"HORA_FINAL"')
+    const metragem = sqlParseNumberIntl('"METRAGEM"')
+    const veloc    = sqlParseNumberIntl('"VELOC"')
+
+    const sql = `
+      WITH prod AS (
+        SELECT
+          "PARTIDA",
+          MAX("BASE URDUME")                                          AS base_urdume,
+          to_char(MIN(${tsInicio}), 'DD/MM/YY HH24:MI')              AS hora_inicial,
+          to_char(MAX(${tsFinal}),  'DD/MM/YY HH24:MI')              AS hora_final,
+          MIN(${tsInicio})                                            AS ts_sort,
+          ROUND(SUM(${metragem}), 0)                                  AS metros,
+          ROUND(AVG(${veloc}), 1)                                     AS veloc
+        FROM tb_produccion
+        WHERE "SELETOR" = 'INDIGO'
+          AND "FILIAL" = '05'
+          AND (LTRIM(TRIM("ROLADA"), '0') = LTRIM(TRIM($1), '0'))
+          AND "PARTIDA" IS NOT NULL AND "PARTIDA" <> ''
+        GROUP BY "PARTIDA"
+      ),
+      rtf AS (
+        SELECT
+          source_file,
+          receita,
+          comeco_raw,
+          to_char(comeco_ts, 'DD/MM/YY HH24:MI')   AS comeco_fmt,
+          comeco_ts,
+          fim_raw,
+          to_char(fim_ts,    'DD/MM/YY HH24:MI')   AS fim_fmt,
+          fim_ts,
+          match_partida,
+          match_rolada,
+          match_score,
+          match_confidence,
+          match_mode
+        FROM tb_benninger_rtf_links
+        WHERE LTRIM(TRIM(COALESCE(match_rolada, '')), '0') = LTRIM(TRIM($1), '0')
+      )
+      SELECT
+        COALESCE(p."PARTIDA", r.match_partida)      AS "PARTIDA",
+        p.base_urdume                                AS "BASE_URDUME",
+        p.hora_inicial                               AS "HORA_INICIAL",
+        p.hora_final                                 AS "HORA_FINAL",
+        p.metros                                     AS "METROS",
+        p.veloc                                      AS "VELOC",
+        r.source_file                                AS "SOURCE_FILE",
+        r.receita                                    AS "RECEITA",
+        r.comeco_raw                                 AS "COMECO_RAW",
+        r.comeco_fmt                                 AS "COMECO_FMT",
+        r.fim_raw                                    AS "FIM_RAW",
+        r.fim_fmt                                    AS "FIM_FMT",
+        r.match_partida                              AS "MATCH_PARTIDA",
+        r.match_rolada                               AS "MATCH_ROLADA",
+        r.match_score                                AS "MATCH_SCORE",
+        r.match_confidence                           AS "MATCH_CONFIDENCE",
+        r.match_mode                                 AS "MATCH_MODE",
+        CASE
+          WHEN p."PARTIDA" IS NULL THEN 'rtf_orphan'
+          WHEN r.source_file IS NULL THEN 'unmatched'
+          ELSE 'matched'
+        END                                          AS "ROW_TYPE",
+        COALESCE(p.ts_sort, r.comeco_ts)            AS _sort_ts
+      FROM prod p
+      FULL OUTER JOIN rtf r
+        ON LTRIM(TRIM(COALESCE(r.match_partida, '')), '0') = LTRIM(TRIM(p."PARTIDA"), '0')
+      ORDER BY
+        COALESCE(p.ts_sort, r.comeco_ts) ASC NULLS LAST,
+        COALESCE(p."PARTIDA", r.match_partida) ASC NULLS LAST,
+        r.source_file ASC NULLS LAST
+    `
+    const result = await query(sql, [rolada], 'partidas-rtf-por-rolada')
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Error en /api/produccion/partidas-rtf-por-rolada:', err)
     res.status(500).json({ error: err.message })
   }
 })

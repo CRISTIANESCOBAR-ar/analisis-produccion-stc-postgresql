@@ -343,6 +343,13 @@
             >
               <span>📅</span> ROLADAS del Mes
             </router-link>
+            <router-link
+              to="/verificacion-partidas-rolada"
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm"
+              :class="{ 'bg-blue-600': $route.path === '/verificacion-partidas-rolada' }"
+            >
+              <span>🔬</span> Verificación Partidas Rolada
+            </router-link>
             <router-link 
               to="/seguimiento-roladas" 
               class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
@@ -492,6 +499,7 @@ const indigoRoutes = [
   '/analisis-residuos-indigo',
   '/consulta-rolada-indigo',
   '/informe-produccion-indigo',
+  '/verificacion-partidas-rolada',
   '/seguimiento-roladas',
   '/seguimiento-roladas-fibra',
   '/grafico-metricas-diarias'

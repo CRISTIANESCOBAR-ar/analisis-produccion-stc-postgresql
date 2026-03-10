@@ -66,6 +66,85 @@
         </div>
       </div>
 
+      <!-- Panel: Archivos sin match en BD -->
+      <div class="shrink-0 mb-2 border border-amber-200 rounded-lg bg-amber-50 overflow-hidden">
+        <button
+          @click="toggleSinMatch"
+          class="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-100 transition-colors"
+        >
+          <span class="flex items-center gap-2">
+            <span>⚠️</span>
+            Archivos sin match en BD
+            <span
+              v-if="sinMatchTotal !== null"
+              class="px-1.5 py-0.5 rounded-full bg-amber-200 text-amber-900 font-bold"
+            >{{ sinMatchTotal }}</span>
+            <span v-if="sinMatchLoading" class="text-amber-600 font-normal">cargando...</span>
+          </span>
+          <svg
+            class="w-3.5 h-3.5 transition-transform duration-200"
+            :class="{ 'rotate-180': sinMatchOpen }"
+            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        <div v-if="sinMatchOpen" class="border-t border-amber-200">
+          <div v-if="sinMatchRows.length === 0 && !sinMatchLoading" class="px-3 py-3 text-xs text-amber-700">
+            No hay archivos sin match.
+          </div>
+          <div v-else class="overflow-auto max-h-52">
+            <table class="min-w-full text-xs">
+              <thead class="bg-amber-100 sticky top-0">
+                <tr>
+                  <th class="px-2 py-1.5 text-left font-semibold text-amber-900">Archivo</th>
+                  <th class="px-2 py-1.5 text-left font-semibold text-amber-900">Rolada</th>
+                  <th class="px-2 py-1.5 text-left font-semibold text-amber-900">Receita</th>
+                  <th class="px-2 py-1.5 text-left font-semibold text-amber-900">Comeco</th>
+                  <th class="px-2 py-1.5 text-left font-semibold text-amber-900">Fim</th>
+                  <th class="px-2 py-1.5 text-left font-semibold text-amber-900">Razón</th>
+                  <th class="px-2 py-1.5 text-center font-semibold text-amber-900">Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="row in sinMatchRows"
+                  :key="row.source_file"
+                  :class="sinMatchLinked.has(row.source_file) ? 'bg-green-50 line-through opacity-60' : 'bg-white hover:bg-amber-50'"
+                  class="border-b border-amber-100 transition-colors"
+                >
+                  <td class="px-2 py-1.5 font-medium text-slate-800 max-w-[200px] truncate" :title="row.source_file">
+                    {{ row.source_file.split(/[\\/]/).pop() }}
+                  </td>
+                  <td class="px-2 py-1.5 font-mono text-slate-700">{{ row.match_rolada || '–' }}</td>
+                  <td class="px-2 py-1.5 text-slate-600">{{ row.receita || '–' }}</td>
+                  <td class="px-2 py-1.5 font-mono text-slate-600" :title="row.comeco_raw || ''">{{ row.comeco_fmt || '–' }}</td>
+                  <td class="px-2 py-1.5 font-mono text-slate-600" :title="row.fim_raw || ''">{{ row.fim_fmt || '–' }}</td>
+                  <td class="px-2 py-1.5 text-slate-500 max-w-[180px] truncate" :title="row.match_reason || ''">
+                    {{ row.match_reason || '–' }}
+                  </td>
+                  <td class="px-2 py-1.5 text-center">
+                    <button
+                      v-if="!sinMatchLinked.has(row.source_file)"
+                      @click="abrirRelinkModal(row)"
+                      class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                      title="Vincular manualmente a una partida/rolada"
+                    >
+                      🔗 Vincular
+                    </button>
+                    <span v-else class="text-green-700 font-semibold text-[11px]">✓ Vinculado</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-if="sinMatchTotal > sinMatchRows.length" class="px-3 py-1.5 text-[11px] text-amber-700 border-t border-amber-200">
+            Mostrando {{ sinMatchRows.length }} de {{ sinMatchTotal }}. Exporta desde la sección Verificación Partidas Rolada para ver todos.
+          </div>
+        </div>
+      </div>
+
       <div class="shrink-0 mb-2 text-sm text-slate-600 min-h-[20px]">
         {{ scanStatus }}
       </div>
@@ -247,6 +326,114 @@ const scanStatus = ref('')
 const rtfRows = ref([])
 const showOnlyPending = ref(true)
 const selectedSourceFile = ref('')
+
+// Sin-match panel
+const sinMatchOpen    = ref(false)
+const sinMatchLoading = ref(false)
+const sinMatchRows    = ref([])
+const sinMatchTotal   = ref(null)
+const sinMatchLinked  = ref(new Set()) // source_files vinculados en esta sesión
+
+async function toggleSinMatch() {
+  sinMatchOpen.value = !sinMatchOpen.value
+  if (sinMatchOpen.value && sinMatchRows.value.length === 0) {
+    await loadSinMatch()
+  }
+}
+
+async function loadSinMatch() {
+  sinMatchLoading.value = true
+  try {
+    const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
+    const API_URL  = API_BASE ? `${API_BASE}/api` : '/api'
+    const res  = await fetch(`${API_URL}/benninger-rtf/sin-match?limit=500`)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    sinMatchRows.value  = data.rows  || []
+    sinMatchTotal.value = data.total ?? sinMatchRows.value.length
+  } catch (e) {
+    console.error('Error cargando sin-match:', e)
+  } finally {
+    sinMatchLoading.value = false
+  }
+}
+
+async function abrirRelinkModal(row) {
+  const fileName = row.source_file.split(/[\\/]/).pop()
+  const rolada   = row.match_rolada || ''
+
+  const { value: formValues, isConfirmed } = await Swal.fire({
+    title: 'Vincular manualmente',
+    html: `
+      <div style="font-size:12px;color:#475569;margin-bottom:12px;word-break:break-all;">${fileName}</div>
+      <div style="display:flex;flex-direction:column;gap:8px;text-align:left;">
+        <label style="font-size:12px;font-weight:600;color:#334155;">Rolada <span style="color:#ef4444">*</span></label>
+        <input id="rl-rolada" class="swal2-input" style="margin:0;" placeholder="Ej. 5421" value="${rolada}" />
+        <label style="font-size:12px;font-weight:600;color:#334155;">Partida <span style="color:#ef4444">*</span></label>
+        <input id="rl-partida" class="swal2-input" style="margin:0;" placeholder="Ej. 0542106" />
+        <label style="font-size:12px;color:#64748b;">Observación (opcional)</label>
+        <input id="rl-obs" class="swal2-input" style="margin:0;" placeholder="Ej. sin archivo para turno 1" />
+      </div>
+    `,
+    focusConfirm: false,
+    showCancelButton: true,
+    confirmButtonText: '🔗 Vincular',
+    cancelButtonText: 'Cancelar',
+    preConfirm: () => {
+      const html = Swal.getHtmlContainer()
+      const roladaVal  = html.querySelector('#rl-rolada')?.value?.trim()
+      const partidaVal = html.querySelector('#rl-partida')?.value?.trim()
+      const obsVal     = html.querySelector('#rl-obs')?.value?.trim()
+      if (!roladaVal && !partidaVal) {
+        Swal.showValidationMessage('Ingrese al menos Rolada o Partida')
+        return false
+      }
+      return { rolada: roladaVal, partida: partidaVal, observacion: obsVal }
+    }
+  })
+
+  if (!isConfirmed || !formValues) return
+
+  try {
+    const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
+    const API_URL  = API_BASE ? `${API_BASE}/api` : '/api'
+
+    const res = await fetch(`${API_URL}/benninger-rtf/relink`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        items: [{
+          sourceFile:  row.source_file,
+          rolada:      formValues.rolada  || null,
+          partida:     formValues.partida || null,
+          reason:      formValues.observacion
+            ? `USER_MANUAL_RELINK: ${formValues.observacion}`
+            : 'USER_MANUAL_RELINK'
+        }]
+      })
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+
+    if ((data.savedCount || 0) > 0) {
+      // Marcar como vinculado en UI sin recargar toda la lista
+      sinMatchLinked.value = new Set([...sinMatchLinked.value, row.source_file])
+      sinMatchTotal.value  = Math.max(0, (sinMatchTotal.value || 0) - 1)
+      Swal.fire({
+        icon: 'success', title: 'Vinculado',
+        text: `${fileName} → Rolada ${formValues.rolada || '–'} / Partida ${formValues.partida || '–'}`,
+        toast: true, position: 'top-end',
+        showConfirmButton: false, timer: 3000, timerProgressBar: true
+      })
+    } else {
+      const errMsg = (data.errors || [])[0]?.error || 'Error desconocido'
+      Swal.fire({ icon: 'error', title: 'Error al vincular', text: errMsg })
+    }
+  } catch (e) {
+    console.error('Error en relink:', e)
+    Swal.fire({ icon: 'error', title: 'Error de conexión', text: e.message })
+  }
+}
 
 const isMatching = ref(false)
 const isSaving = ref(false)
@@ -711,10 +898,12 @@ async function refreshSavedStatus() {
 
     const data = await response.json()
     const existing = new Set((data.existing || []).map((v) => String(v)))
+    // noMatch: están en la BD pero sin match válido → tratar como pendientes
+    const noMatch   = new Set((data.noMatch  || []).map((v) => String(v)))
 
     rtfRows.value = rtfRows.value.map((row) => ({
       ...row,
-      saved: existing.has(row.sourceFile)
+      saved: existing.has(row.sourceFile) && !noMatch.has(row.sourceFile)
     }))
   } catch (err) {
     console.warn('refreshSavedStatus error:', err)
