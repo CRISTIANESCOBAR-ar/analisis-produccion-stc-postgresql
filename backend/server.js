@@ -8892,7 +8892,7 @@ app.post('/api/correlacion/narrativa', async (req, res) => {
       return res.status(500).json({ success: false, error: 'GOOGLE_API_KEY no configurada' });
     }
 
-    const modelName = modelReq || 'gemini-2.0-flash';
+    const modelName = modelReq || 'gemini-2.5-flash';
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: modelName });
 
@@ -8946,10 +8946,52 @@ REGLAS:
 - Usá terminología textil correcta.
 - Formato Markdown.`;
 
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-
-    res.json({ success: true, narrativa: text });
+    try {
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+      return res.json({ success: true, narrativa: text, fuente: 'gemini' });
+    } catch (geminiErr) {
+      console.warn('Gemini no disponible en correlacion/narrativa, generando local:', geminiErr.message?.slice(0, 120));
+      // Fallback local: redactar análisis determinista desde las correlaciones
+      const top = correlaciones
+        .filter(c => Math.abs(c.r) >= 0.3)
+        .sort((a, b) => Math.abs(b.r) - Math.abs(a.r))
+        .slice(0, 8);
+      const etiquetasLocal = {
+        str: 'STR', sci: 'SCI', mic: 'MIC', uhml: 'UHML',
+        cvm: 'CVm%', vellosidad: 'Vellosidad H', neps_200: 'Neps +200%',
+        thin_50: 'Delgados -50%', thick_50: 'Gruesos +50%',
+        tenacidad: 'Tenacidad', elongacion: 'Elongación'
+      };
+      const periodoStr = `${fecha_inicio} – ${fecha_fin}${ne_titulo ? ` | Ne ${ne_titulo}` : ''}`;
+      const lineas = [
+        `## 1. Relaciones Causa-Efecto Confirmadas`,
+        `Período analizado: ${periodoStr} (${n} ensayos).`,
+        '',
+        ...top.map(c => {
+          const dir = c.slope >= 0 ? '↑ sube' : '↓ baja';
+          const fuerza = Math.abs(c.r) >= 0.7 ? 'Correlación fuerte' : Math.abs(c.r) >= 0.5 ? 'Correlación moderada' : 'Correlación débil';
+          return `- **${etiquetasLocal[c.hvi_var] || c.hvi_var} → ${etiquetasLocal[c.hilo_var] || c.hilo_var}**: r=${c.r} (${fuerza}). Por cada unidad que sube ${c.hvi_var.toUpperCase()}, ${c.hilo_var.toUpperCase()} ${dir} ${Math.abs(c.slope).toFixed(3)} unidades.`;
+        }),
+        top.length === 0 ? '_No se detectaron correlaciones significativas (r ≥ 0.3) con los datos disponibles._' : '',
+        '',
+        `## 2. Oportunidades de Optimización`,
+        top.length > 0
+          ? `Las ${top.length} correlaciones detectadas sugieren que las variables de fibra con mayor impacto son: **${[...new Set(top.map(c => etiquetasLocal[c.hvi_var] || c.hvi_var))].join(', ')}**. Controlar estas variables en la mezcla de fardos permitirá anticipar el comportamiento del hilo antes de hilar.`
+          : 'Ampliar el período de análisis o incluir más títulos para detectar relaciones accionables.',
+        '',
+        `## 3. Veredicto y Recomendación`,
+        n < 10
+          ? `⚠️ **Muestra insuficiente (n=${n}).** Las correlaciones calculadas tienen baja confiabilidad estadística. Se recomienda ampliar el rango de fechas antes de tomar decisiones de proceso basadas en estos datos.`
+          : `Análisis generado localmente sobre ${n} ensayos. ${
+              top.length >= 3
+                ? `Se identificaron ${top.length} pares con correlación significativa. Los datos son suficientes para orientar ajustes de mezcla.`
+                : 'Se detectaron pocas correlaciones significativas; considerar ampliar el período o revisar la homogeneidad de los datos.'
+            } Para análisis narrativo enriquecido, configurar cuota de Gemini en Google AI Studio (gemini-1.5-flash, capa gratuita).`,
+      ];
+      const narrativaLocal = lineas.join('\n');
+      return res.json({ success: true, narrativa: narrativaLocal, fuente: 'local', aviso: 'Gemini no disponible – análisis generado localmente.' });
+    }
   } catch (error) {
     console.error('Error narrativa correlacion:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -9490,6 +9532,74 @@ function generarNarrativaLocal(rows, loteActual, proveedores = []) {
     ...bloques.flatMap(b => [b, '']),
     ...bloqueProveedores,
     ...bloqueAuditoria,
+    ...(() => {
+      // ── Diagnóstico Mecánico: Paradoja de la Fibra ──────────────────────────
+      const str  = dataActual.hvi.str  != null ? parseFloat(dataActual.hvi.str)  : null;
+      const ui   = dataActual.hvi.ui   != null ? parseFloat(dataActual.hvi.ui)   : null;
+      const paradojas = [];
+      const accionesMecanicas = [];
+      for (const h of HilosActual) {
+        const cvm  = h.cvm       != null ? parseFloat(h.cvm)       : null;
+        const nps  = h.neps_200  != null ? parseFloat(h.neps_200)  : null;
+        const ten  = h.tenacidad != null ? parseFloat(h.tenacidad) : null;
+        const flame = isFlame(h);
+        const neTxt = neLabel(h);
+        const nN    = parseFloat(h.ne);
+        const strBuena = str != null && str >= 27;
+        const uiBuena  = ui  != null && ui  >= 80;
+        // Paradoja: fibra premium + CVm% alto → falla mecánica
+        if (strBuena && cvm != null && cvm > 13 && !flame) {
+          paradojas.push(`  ⚙️ Ne${neTxt}: STR ${f(str,1)} g/tex (fibra premium) pero CVm% ${f(cvm)} — la irregularidad NO viene de la materia prima. Causa: tren de estiraje o rotor.`);
+          accionesMecanicas.push(`  📍 Ne${neTxt}: Revisar desgaste de cots y limpieza de rotores Open-End.`);
+        }
+        // Paradoja: fibra limpia (UI) + Neps altos → neps de proceso
+        if (uiBuena && nps != null && nps > (flame ? 700 : 600) && !flame) {
+          paradojas.push(`  ⚙️ Ne${neTxt}: UI ${f(ui,1)}% (fibra limpia) pero Neps ${f(nps,0)}/km — los neps son de proceso, no de la bala. Causa: purga de aire insuficiente en OE.`);
+          accionesMecanicas.push(`  📍 Ne${neTxt}: Incrementar frecuencia de purga de aire en Open-End.`);
+        }
+        // Paradoja: STR bajo + tenacidad baja → causa en materia prima
+        if (str != null && str < 25 && ten != null && ten < 15) {
+          paradojas.push(`  ⚙️ Ne${neTxt}: STR ${f(str,1)} g/tex (fibra débil) + Tenacidad ${f(ten)} cN/tex — causa en materia prima, no en maquinaria. Revisar proveedor.`);
+        }
+        // CVm subiendo + Neps altos → purga y rotores
+        if (cvm != null && nps != null && cvm > 13 && nps > 650 && !flame) {
+          accionesMecanicas.push(`  📍 Ne${neTxt}: Combinación CVm%+Neps elevados sugiere falla en purga de rotor — ajustar presión de aire.`);
+        }
+        // Urdimbre con elongación baja
+        const elo = h.elongacion != null ? parseFloat(h.elongacion) : null;
+        if (nN >= 10 && !flame && elo != null && elo < 7.5) {
+          accionesMecanicas.push(`  📍 Ne${neTxt}: Elongación ${f(elo)}% crítica para Urdidora — revisar tensión de hilo y pasadores.`);
+        }
+      }
+      // Diferencia CVm entre líneas del mismo Ne (LP vs LI)
+      const neGroups = {};
+      for (const h of HilosActual) {
+        const nK = String(h.ne);
+        if (!neGroups[nK]) neGroups[nK] = [];
+        neGroups[nK].push(parseFloat(h.cvm));
+      }
+      for (const [ne, cvms] of Object.entries(neGroups)) {
+        const validos = cvms.filter(v => !isNaN(v));
+        if (validos.length >= 2) {
+          const diff = Math.max(...validos) - Math.min(...validos);
+          if (diff > 0.3) {
+            accionesMecanicas.push(`  📍 Ne${ne}: Diferencia de CVm% ${f(diff)} entre líneas del mismo título — desajuste mecánico puntual, no de mezcla. Estandarizar ajuste.`);
+          }
+        }
+      }
+      const bloque = [];
+      if (paradojas.length > 0) {
+        bloque.push(`🔬 DIAGNÓSTICO MECÁNICO — Paradoja de la Fibra:`);
+        bloque.push(...paradojas);
+        bloque.push(``);
+      }
+      if (accionesMecanicas.length > 0) {
+        bloque.push(`🚀 ACCIONES MECÁNICAS RECOMENDADAS:`);
+        bloque.push(...accionesMecanicas);
+        bloque.push(``);
+      }
+      return bloque;
+    })(),
     `⚠️ PUNTOS CLAVE PARA PRODUCCIÓN:`,
     ...(puntosClaveAgrupados.length
       ? puntosClaveAgrupados
@@ -9557,7 +9667,7 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
   Hilo:\n${hilos || '   (sin datos)'}${provStr}`;
     }).join('\n\n');
 
-    const modelName = modelReq || 'gemini-2.0-flash';
+    const modelName = modelReq || 'gemini-2.5-flash';
     const genAI  = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
     const model  = genAI.getGenerativeModel({ model: modelName });
 
@@ -9584,6 +9694,20 @@ REGLAS DE AUDITORÍA:
 - No mezclar hilo liso con Hilo de Fantasía: cuando is_flame=true etiquetar como "Ne X FLAME" y tratarlo como serie independiente.
 - Si MIC > 4.7: advertir "cargado al grueso". Si STR supera la matriz por mucho: decir "va sobrado de fuerza".
 - Usar vocabulario natural de hilandería.
+- Si falta un dato clave (ej: tenacidad de Ne 7), NO asumir estado; indicar explícitamente "dato insuficiente para conclusión técnica".
+
+DIAGNÓSTICO MECÁNICO — PARADOJA DE LA FIBRA (obligatorio cuando aplique):
+- Si STR ≥ 27 g/tex (fibra premium) Y CVm% > 13% en hilo liso: concluir causa mecánica (tren de estiraje/rotores), NO de materia prima. Redactar como: "La fibra no es el problema; buscar la falla en el proceso."
+- Si UI ≥ 80% (fibra limpia) Y Neps > 600/km en hilo liso: los neps son de proceso. Causa probable: purga de aire insuficiente en OE.
+- Si STR < 25 g/tex Y tenacidad hilo < 15 cN/tex: causa en materia prima, no en maquinaria. Señalar proveedor si está disponible.
+- Si CVm% sube > 0.5% entre lotes consecutivos SIN cambio de fibra: alerta de degradación mecánica progresiva.
+- Si diferencia de CVm% entre líneas del mismo Ne > 0.3%: desajuste mecánico puntual (no de mezcla); recomendar estandarización.
+
+ACCIONES MECÁNICAS (incluir en sección propia cuando haya alertas):
+📍 CVm% alto con fibra premium → revisar cots (rodillos de caucho) y limpiar rotores Open-End
+📍 Neps altos con UI ≥ 80% → incrementar frecuencia de purga de aire en OE
+📍 Diferencia CVm% entre líneas mismo Ne → estandarizar ajuste mecánico de la línea desviada
+📍 Elongación < 7.5% en Urdimbre → revisar tensión de hilo y estado de pasadores
 
 Generá exactamente este formato en español (500 palabras máx, cuantificá cambios con %):
 
@@ -9602,7 +9726,13 @@ Análisis Comparativo Fibra ↔️ Hilo
   📌 Observaciones:
 [Identificar proveedor con 🏆 mejor STR, 🏆 mejor SCI, 🏆 MIC más cercano a rango 3.5-4.9, 🏆 UHML más largo. Señalar con ⚠️ el peor en cada variable con impacto práctico.]
 
-🔍 AUDITORÍA DE APTITUD POR PROCESO — Lote FIAC ${actual}:
+� DIAGNÓSTICO MECÁNICO — Paradoja de la Fibra (solo si aplica):
+[Si fibra buena y hilo malo: explicar causa mecánica concreta. Si falta dato: decir "dato insuficiente".]
+
+🚀 ACCIONES MECÁNICAS RECOMENDADAS (solo si hay alertas):
+[Lista de acciones por Ne con formato: 📍 NeX: acción concreta sobre máquina/proceso]
+
+�🔍 AUDITORÍA DE APTITUD POR PROCESO — Lote FIAC ${actual}:
 [Para cada Ne: Ne X [Aplicación] → Proceso1 ✅/⚠️/🔴 → Proceso2 ✅/⚠️/🔴 — Estado (Aprobado/Condicional/Rechazado) — Desvío si hay.]
 [Agregar 💬 comentario de planta con vocabulario de hilandería para cada Ne.]
 
@@ -9994,6 +10124,7 @@ app.get('/api/produccion/partidas-rtf-por-rolada', async (req, res) => {
           fim_raw,
           to_char(fim_ts,    'DD/MM/YY HH24:MI')   AS fim_fmt,
           fim_ts,
+          (raw_header->>'metros')::numeric          AS rtf_metros,
           match_partida,
           match_rolada,
           match_score,
@@ -10015,6 +10146,7 @@ app.get('/api/produccion/partidas-rtf-por-rolada', async (req, res) => {
         r.comeco_fmt                                 AS "COMECO_FMT",
         r.fim_raw                                    AS "FIM_RAW",
         r.fim_fmt                                    AS "FIM_FMT",
+        r.rtf_metros                                 AS "RTF_METROS",
         r.match_partida                              AS "MATCH_PARTIDA",
         r.match_rolada                               AS "MATCH_ROLADA",
         r.match_score                                AS "MATCH_SCORE",

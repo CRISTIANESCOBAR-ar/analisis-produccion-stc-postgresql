@@ -18,6 +18,12 @@
           </div>
           <div class="flex items-center gap-2">
             <label for="rolada-vpr" class="text-sm font-medium text-slate-700 whitespace-nowrap">ROLADA:</label>
+            <button
+              @click="navRolada(-1)"
+              :disabled="!roladaInput || roladaInput <= 1 || cargando"
+              class="inline-flex items-center justify-center w-8 h-9 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-slate-600 font-bold text-base transition-colors"
+              title="Rolada anterior"
+            >&lsaquo;</button>
             <input
               id="rolada-vpr"
               v-model.number="roladaInput"
@@ -27,6 +33,12 @@
               class="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-28 text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               @keyup.enter="buscarRolada"
             />
+            <button
+              @click="navRolada(1)"
+              :disabled="!roladaInput || cargando"
+              class="inline-flex items-center justify-center w-8 h-9 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed text-slate-600 font-bold text-base transition-colors"
+              title="Rolada siguiente"
+            >&rsaquo;</button>
             <button
               @click="buscarRolada"
               :disabled="!roladaInput || cargando"
@@ -99,34 +111,35 @@
 
       <!-- Tabla -->
       <div v-if="filas.length > 0" class="flex-1 overflow-auto min-h-0 border border-slate-200 rounded-lg">
-        <table class="w-full min-w-[1600px] text-xs text-left font-[Verdana]">
+        <table class="w-full min-w-[1200px] text-xs text-left font-[Verdana]">
           <thead class="text-xs text-slate-700 bg-slate-50 sticky top-0 z-10 shadow-sm">
             <tr>
-              <th class="px-2 py-2 font-bold border-b border-slate-200 text-center w-8">St.</th>
-              <th class="px-2 py-2 font-bold border-b border-slate-200">Partida</th>
-              <th class="px-2 py-2 font-bold border-b border-slate-200">Base</th>
-              <th class="px-2 py-2 font-bold border-b border-slate-200 text-center">Inicio Prod.</th>
-              <th class="px-2 py-2 font-bold border-b border-slate-200 text-center">Fin Prod.</th>
-              <th class="px-2 py-2 font-bold border-b border-slate-200 text-right">Metros</th>
-              <th class="px-2 py-2 font-bold border-b border-slate-200 text-right">Veloc.</th>
-              <th class="px-2 py-2 font-bold border-b border-slate-200 min-w-[280px]">Archivo RTF</th>
-              <th class="px-2 py-2 font-bold border-b border-slate-200">Receita</th>
-              <th class="px-2 py-2 font-bold border-b border-slate-200 text-center">Inicio RTF</th>
-              <th class="px-2 py-2 font-bold border-b border-slate-200 text-center">Fin RTF</th>
-              <th class="px-2 py-2 font-bold border-b border-slate-200 text-right">Score</th>
-              <th class="px-2 py-2 font-bold border-b border-slate-200">Confianza</th>
-              <th class="px-2 py-2 font-bold border-b border-slate-200">Modo</th>
+              <th class="px-1.5 py-1.5 font-bold border-b border-slate-200 text-center w-[15px]">St.</th>
+              <th class="px-1.5 py-1.5 font-bold border-b border-slate-200 text-left w-[55px]">Partida</th>
+              <th class="px-1.5 py-1.5 font-bold border-b border-slate-200 text-left w-[90px]">Base</th>
+              <th class="px-1.5 py-1.5 font-bold border-b border-slate-200 text-center w-[100px]">Inicio Prod.</th>
+              <th class="px-1.5 py-1.5 font-bold border-b border-slate-200 text-center w-[100px]">Fin Prod.</th>
+              <th class="px-1.5 py-1.5 font-bold border-b border-slate-200 text-right w-[81px]">Metros</th>
+              <th class="px-1.5 py-1.5 font-bold border-b border-slate-200 text-right w-[75px]">Veloc.</th>
+              <th class="px-1.5 py-1.5 font-bold border-b border-slate-200 text-left w-[85px]">Archivo RTF</th>
+              <th class="px-1.5 py-1.5 font-bold border-b border-slate-200 text-right w-[81px]">Metros RTF</th>
+              <th class="px-1.5 py-1.5 font-bold border-b border-slate-200 text-left w-[85px]">Receita</th>
+              <th class="px-1.5 py-1.5 font-bold border-b border-slate-200 text-center w-[85px]">Inicio RTF</th>
+              <th class="px-1.5 py-1.5 font-bold border-b border-slate-200 text-center w-[85px]">Fin RTF</th>
+              <th class="px-2 py-2 font-bold border-b border-slate-200 text-right hidden">Score</th>
+              <th class="px-2 py-2 font-bold border-b border-slate-200 hidden">Confianza</th>
+              <th class="px-1.5 py-1.5 font-bold border-b border-slate-200 text-left w-[85px]">Modo</th>
             </tr>
           </thead>
           <tbody>
             <tr
-              v-for="(row, i) in filas"
+              v-for="(row, i) in filasConMeta"
               :key="i"
               :class="[rowBgClass(row), groupBorderClass(row, i)]"
               class="transition-colors"
             >
-              <!-- Estado -->
-              <td class="px-2 py-1.5 text-center">
+              <!-- Estado (solo primera fila del grupo) -->
+              <td v-if="row._showProd" :rowspan="row._rowspan" class="px-1.5 py-1.5 text-center align-top w-[15px]">
                 <span
                   :class="badgeClass(row)"
                   class="inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold leading-none"
@@ -134,37 +147,40 @@
                 >{{ rowIcon(row) }}</span>
               </td>
 
-              <!-- Datos de producción -->
-              <td class="px-2 py-1.5 font-mono font-semibold text-slate-800">
+              <!-- Datos de producción (solo primera fila del grupo) -->
+              <td v-if="row._showProd" :rowspan="row._rowspan" class="px-1.5 py-1.5 font-mono font-semibold text-slate-800 align-top w-[55px] truncate">
                 {{ formatPartida(row.PARTIDA) || '–' }}
               </td>
-              <td class="px-2 py-1.5 text-slate-700 max-w-[120px] truncate" :title="row.BASE_URDUME || ''">
+              <td v-if="row._showProd" :rowspan="row._rowspan" class="px-1.5 py-1.5 text-slate-700 w-[90px] truncate align-top" :title="row.BASE_URDUME || ''">
                 {{ row.BASE_URDUME || '–' }}
               </td>
-              <td class="px-2 py-1.5 text-center font-mono">{{ row.HORA_INICIAL || '–' }}</td>
-              <td class="px-2 py-1.5 text-center font-mono">{{ row.HORA_FINAL || '–' }}</td>
-              <td class="px-2 py-1.5 text-right font-mono">
+              <td v-if="row._showProd" :rowspan="row._rowspan" class="px-1.5 py-1.5 text-center font-mono align-top w-[100px] truncate">{{ row.HORA_INICIAL || '–' }}</td>
+              <td v-if="row._showProd" :rowspan="row._rowspan" class="px-1.5 py-1.5 text-center font-mono align-top w-[100px] truncate">{{ row.HORA_FINAL || '–' }}</td>
+              <td v-if="row._showProd" :rowspan="row._rowspan" class="px-1.5 py-1.5 text-right font-mono align-top w-[81px] truncate">
                 {{ row.METROS != null ? formatNumber(row.METROS) : '–' }}
               </td>
-              <td class="px-2 py-1.5 text-right font-mono text-blue-700">
+              <td v-if="row._showProd" :rowspan="row._rowspan" class="px-1.5 py-1.5 text-right font-mono text-blue-700 align-top w-[75px] truncate">
                 {{ row.VELOC != null ? formatNumber(row.VELOC) : '–' }}
               </td>
 
               <!-- Datos RTF -->
-              <td class="px-2 py-1.5 min-w-[280px] truncate text-slate-600" :title="row.SOURCE_FILE || ''">
+              <td class="px-1.5 py-1.5 w-[85px] truncate text-slate-600" :title="row.SOURCE_FILE || ''">
                 {{ row.SOURCE_FILE ? basename(row.SOURCE_FILE) : '–' }}
               </td>
-              <td class="px-2 py-1.5 text-slate-600">{{ row.RECEITA || '–' }}</td>
-              <td class="px-2 py-1.5 text-center font-mono text-slate-600" :title="row.COMECO_RAW || ''">
+              <td class="px-1.5 py-1.5 text-right font-mono text-blue-600 w-[81px] truncate">
+                {{ row.RTF_METROS != null ? formatNumber(row.RTF_METROS) : '–' }}
+              </td>
+              <td class="px-1.5 py-1.5 text-slate-600 w-[85px] truncate">{{ row.RECEITA || '–' }}</td>
+              <td class="px-1.5 py-1.5 text-center font-mono text-slate-600 w-[85px] truncate" :title="row.COMECO_RAW || ''">
                 {{ row.COMECO_FMT || '–' }}
               </td>
-              <td class="px-2 py-1.5 text-center font-mono text-slate-600" :title="row.FIM_RAW || ''">
+              <td class="px-1.5 py-1.5 text-center font-mono text-slate-600 w-[85px] truncate" :title="row.FIM_RAW || ''">
                 {{ row.FIM_FMT || '–' }}
               </td>
-              <td class="px-2 py-1.5 text-right font-mono">
+              <td class="px-1.5 py-1.5 text-right font-mono hidden">
                 {{ row.MATCH_SCORE != null ? Number(row.MATCH_SCORE).toFixed(1) : '–' }}
               </td>
-              <td class="px-2 py-1.5">
+              <td class="px-1.5 py-1.5 hidden">
                 <span
                   v-if="row.MATCH_CONFIDENCE"
                   :class="confidenceClass(row.MATCH_CONFIDENCE)"
@@ -172,7 +188,7 @@
                 >{{ row.MATCH_CONFIDENCE }}</span>
                 <span v-else class="text-slate-400">–</span>
               </td>
-              <td class="px-2 py-1.5 text-slate-500">{{ row.MATCH_MODE || '–' }}</td>
+              <td class="px-1.5 py-1.5 text-slate-500 w-[85px] truncate">{{ row.MATCH_MODE || '–' }}</td>
             </tr>
           </tbody>
           <tfoot class="bg-slate-100 font-bold text-slate-800 sticky bottom-0 shadow-inner">
@@ -296,13 +312,10 @@ function rowBgClass(row) {
   }
 }
 
-// Borde superior más grueso cuando cambia la PARTIDA (separador visual de grupos)
+// Borde superior más grueso cuando empieza un nuevo grupo de PARTIDA
 function groupBorderClass(row, index) {
   if (index === 0) return 'border-b border-slate-200'
-  const prev = filas.value[index - 1]
-  const currKey = row.PARTIDA || row.SOURCE_FILE || ''
-  const prevKey = prev.PARTIDA || prev.SOURCE_FILE || ''
-  return currKey !== prevKey
+  return row._showProd
     ? 'border-t-2 border-slate-400 border-b border-slate-200'
     : 'border-b border-slate-100'
 }
@@ -340,6 +353,34 @@ function confidenceClass(confidence) {
   if (c === 'medium' || c === 'media') return 'bg-yellow-100 text-yellow-800'
   if (c === 'low'    || c === 'baja')  return 'bg-red-100 text-red-800'
   return 'bg-slate-100 text-slate-700'
+}
+// ─── Agrupación para rowspan ─────────────────────────────────────────────────────
+const filasConMeta = computed(() => {
+  const arr = filas.value
+  return arr.map((row, i) => {
+    const isOrphan = row.ROW_TYPE === 'rtf_orphan'
+    const prev = arr[i - 1]
+    const isFirst = i === 0 || isOrphan ||
+      !prev || prev.ROW_TYPE === 'rtf_orphan' ||
+      prev.PARTIDA !== row.PARTIDA
+
+    let rowspan = 1
+    if (isFirst && !isOrphan) {
+      let j = i + 1
+      while (j < arr.length && arr[j].PARTIDA === row.PARTIDA && arr[j].ROW_TYPE !== 'rtf_orphan') {
+        rowspan++
+        j++
+      }
+    }
+    return { ...row, _showProd: isFirst, _rowspan: rowspan }
+  })
+})
+// ─── Navegación ◂ ▸ ─────────────────────────────────────────────────────────
+function navRolada(delta) {
+  const next = (parseInt(roladaInput.value) || 0) + delta
+  if (next < 1) return
+  roladaInput.value = next
+  buscarRolada()
 }
 
 // ─── Búsqueda ────────────────────────────────────────────────────────────────

@@ -220,11 +220,17 @@
               class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl shadow transition-all flex items-center gap-2">
               <span>🧠</span> Interpretar resultados
             </button>
-            <button v-if="narrativa && !cargandoNarrativa"
-              @click="generarNarrativa"
-              class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs rounded-lg transition-all flex items-center gap-1.5">
-              <span>🔄</span> Regenerar
-            </button>
+            <div class="flex items-center gap-2">
+              <span v-if="narrativaFuente" class="text-[10px] px-2 py-0.5 rounded-full font-bold"
+                :class="narrativaFuente === 'gemini' ? 'bg-amber-100 text-amber-700' : narrativaFuente === 'cache' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'">
+                {{ narrativaFuente === 'gemini' ? '✨ Gemini' : narrativaFuente === 'cache' ? '💾 Caché' : '⚡ Local' }}
+              </span>
+              <button v-if="narrativa && !cargandoNarrativa"
+                @click="generarNarrativa(true)"
+                class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs rounded-lg transition-all flex items-center gap-1.5">
+                <span>🔄</span> Regenerar
+              </button>
+            </div>
           </div>
 
           <!-- Resumen automático (siempre visible) -->
@@ -238,7 +244,17 @@
             <span class="text-sm text-slate-500">Generando análisis con IA...</span>
           </div>
 
-          <!-- Narrativa Gemini -->
+          <!-- Aviso fallback local -->
+          <div v-if="narrativaAviso && narrativa" class="text-amber-700 text-xs bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 mb-3 flex items-center gap-2">
+            <span>⚠️</span> {{ narrativaAviso }}
+          </div>
+
+          <!-- Error sin narrativa -->
+          <div v-if="narrativaAviso && !narrativa" class="text-red-600 text-sm bg-red-50 rounded-xl p-4">
+            ⚠️ {{ narrativaAviso }}
+          </div>
+
+          <!-- Narrativa IA -->
           <div v-if="narrativa && !cargandoNarrativa"
             class="prose prose-sm max-w-none text-slate-700 leading-relaxed"
             v-html="narrativaHtml">
@@ -276,13 +292,13 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(row, idx) in resultados.datos.slice(0, 100)" :key="idx"
+                <tr v-for="(row, idx) in [...resultados.datos].sort((a,b) => new Date(b.fecha) - new Date(a.fecha)).slice(0, 100)" :key="idx"
                   class="hover:bg-slate-50 transition-colors"
                   :class="idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'">
                   <td class="px-2 py-1.5 border border-slate-100 font-mono text-slate-600">{{ row.lote_raw }}</td>
                   <td class="px-2 py-1.5 border border-slate-100 text-center font-mono text-slate-500">{{ row.mistura_num }}</td>
                   <td class="px-2 py-1.5 border border-slate-100 text-center">{{ row.ne_titulo }}</td>
-                  <td class="px-2 py-1.5 border border-slate-100 text-center text-slate-400">{{ row.fecha }}</td>
+                  <td class="px-2 py-1.5 border border-slate-100 text-center text-slate-400">{{ row.fecha ? new Date(row.fecha).toLocaleDateString('es-AR', {day:'2-digit', month:'2-digit', year:'numeric'}) : '—' }}</td>
                   <td v-if="selectedHVI.includes('str')" class="px-2 py-1.5 border border-slate-100 text-center text-blue-600 font-mono">{{ row.str ?? '—' }}</td>
                   <td v-if="selectedHVI.includes('sci')" class="px-2 py-1.5 border border-slate-100 text-center text-blue-600 font-mono">{{ row.sci ?? '—' }}</td>
                   <td v-if="selectedHVI.includes('mic')" class="px-2 py-1.5 border border-slate-100 text-center text-blue-600 font-mono">{{ row.mic ?? '—' }}</td>
@@ -319,6 +335,14 @@ import { Scatter } from 'vue-chartjs'
 
 ChartJS.register(LinearScale, PointElement, LineElement, Tooltip, Legend)
 
+// ── Utilidad de caché ─────────────────────────────────────────────────────
+function hashPayload(obj) {
+  const str = JSON.stringify(obj)
+  let h = 5381
+  for (let i = 0; i < str.length; i++) h = (Math.imul(h, 33) ^ str.charCodeAt(i)) >>> 0
+  return h.toString(36)
+}
+
 // =============================================
 // CONSTANTES
 // =============================================
@@ -352,6 +376,8 @@ const loading          = ref(false)
 const analized         = ref(false)
 const cargandoNarrativa = ref(false)
 const narrativa        = ref('')
+const narrativaFuente  = ref('')   // 'gemini' | 'local'
+const narrativaAviso   = ref('')
 
 const resultados = ref({ n: 0, datos: [], correlaciones: [] })
 
@@ -596,31 +622,57 @@ async function analizar() {
   }
 }
 
-async function generarNarrativa() {
+async function generarNarrativa(forzar = false) {
   if (resultados.value.n === 0) return
+
+  const correlacionesFiltradas = resultados.value.correlaciones.filter(c =>
+    selectedHVI.value.includes(c.hvi_var) &&
+    selectedHilo.value.includes(c.hilo_var)
+  )
+
+  // ── Caché ─────────────────────────────────────────────────────────────
+  const cachePayload = {
+    correlaciones: correlacionesFiltradas,
+    n: resultados.value.n,
+    fecha_inicio: fechaInicio.value,
+    fecha_fin: fechaFin.value,
+    ne_titulo: neTitulo.value || null
+  }
+  const cacheKey = 'corr_narr_' + hashPayload(cachePayload)
+
+  if (!forzar) {
+    try {
+      const cached = localStorage.getItem(cacheKey)
+      if (cached) {
+        const c = JSON.parse(cached)
+        narrativa.value       = c.narrativa
+        narrativaFuente.value = 'cache'
+        narrativaAviso.value  = ''
+        return
+      }
+    } catch { /* localStorage no disponible */ }
+  }
+
   cargandoNarrativa.value = true
 
   try {
     const res = await fetch('/api/correlacion/narrativa', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        correlaciones: resultados.value.correlaciones.filter(c =>
-          selectedHVI.value.includes(c.hvi_var) &&
-          selectedHilo.value.includes(c.hilo_var)
-        ),
-        n:            resultados.value.n,
-        fecha_inicio: fechaInicio.value,
-        fecha_fin:    fechaFin.value,
-        ne_titulo:    neTitulo.value || null,
-        model:        'gemini-2.0-flash'
-      })
+      body: JSON.stringify({ ...cachePayload, model: 'gemini-2.5-flash' })
     })
     const json = await res.json()
     if (!json.success) throw new Error(json.error)
-    narrativa.value = json.narrativa
+    narrativa.value       = json.narrativa
+    narrativaFuente.value = json.fuente || 'gemini'
+    narrativaAviso.value  = json.aviso  || ''
+
+    // Guardar en caché solo si respondió Gemini
+    if (json.fuente === 'gemini') {
+      try { localStorage.setItem(cacheKey, JSON.stringify({ narrativa: json.narrativa })) } catch { /* cuota LS */ }
+    }
   } catch (err) {
-    alert('Error al generar narrativa: ' + err.message)
+    narrativaAviso.value = 'Error al generar análisis: ' + err.message
   } finally {
     cargandoNarrativa.value = false
   }

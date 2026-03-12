@@ -262,18 +262,18 @@
             <h2 class="font-bold text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wide">
               <span>✨</span> Informe con IA
             </h2>
-            <p class="text-[10px] text-slate-400 mt-0.5">Análisis predictivo en lenguaje natural • Gemini 2.0 Flash con fallback local</p>
+            <p class="text-[10px] text-slate-400 mt-0.5">Análisis predictivo en lenguaje natural • Gemini 2.5 Flash con fallback local</p>
           </div>
           <div class="flex items-center gap-2">
             <span v-if="narrativaFuente" class="text-[10px] px-2 py-0.5 rounded-full font-bold"
-              :class="narrativaFuente === 'gemini' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-600'">
-              {{ narrativaFuente === 'gemini' ? '✨ Gemini' : '⚡ Local' }}
+              :class="narrativaFuente === 'gemini' ? 'bg-purple-100 text-purple-700' : narrativaFuente === 'cache' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'">
+              {{ narrativaFuente === 'gemini' ? '✨ Gemini' : narrativaFuente === 'cache' ? '💾 Caché' : '⚡ Local' }}
             </span>
             <button @click="generarNarrativa(true)" :disabled="loadingNarrativa || !hasData"
               class="px-3 py-2 rounded-xl font-bold text-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-600">
               ⚡ Local
             </button>
-            <button @click="generarNarrativa(false)" :disabled="loadingNarrativa"
+            <button @click="generarNarrativa(false, narrativa ? true : false)" :disabled="loadingNarrativa"
               class="px-5 py-2 rounded-xl font-bold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm hover:shadow-md"
               :class="loadingNarrativa ? 'bg-slate-200 text-slate-500' : narrativa ? 'bg-slate-700 hover:bg-slate-800 text-white' : 'bg-indigo-600 hover:bg-indigo-700 text-white'">
               <span v-if="loadingNarrativa" class="animate-spin inline-block">⟳</span>
@@ -296,9 +296,17 @@
           <div v-if="narrativaAviso && narrativa" class="text-amber-700 text-xs bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 mb-3 flex items-center gap-2">
             <span>⚠️</span> {{ narrativaAviso }}
           </div>
-          <div v-if="narrativa && !loadingNarrativa"
-            class="bg-slate-50 rounded-xl border border-slate-100 p-5 text-sm text-slate-700 whitespace-pre-wrap leading-relaxed font-mono">
-            {{ narrativa }}
+          <div v-if="narrativa && !loadingNarrativa" class="relative group">
+            <button @click="copiarNarrativa"
+              class="absolute top-3 right-3 z-10 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 opacity-0 group-hover:opacity-100"
+              :class="narrativaCopiada ? 'bg-green-100 text-green-700' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 shadow-sm'">
+              <span>{{ narrativaCopiada ? '✓' : '📋' }}</span>
+              {{ narrativaCopiada ? '¡Copiado!' : 'Copiar' }}
+            </button>
+            <div
+              class="bg-slate-50 rounded-xl border border-slate-100 p-5 text-sm text-slate-700 whitespace-pre-wrap leading-relaxed font-mono">
+              {{ narrativa }}
+            </div>
           </div>
           <div v-if="narrativaError" class="text-red-600 text-sm bg-red-50 rounded-xl p-4 mt-3">
             ⚠️ {{ narrativaError }}
@@ -539,10 +547,20 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
+
+// ── Utilidad de caché ─────────────────────────────────────────────────────
+function hashPayload(obj) {
+  const str = JSON.stringify(obj)
+  let h = 5381
+  for (let i = 0; i < str.length; i++) h = (Math.imul(h, 33) ^ str.charCodeAt(i)) >>> 0
+  return h.toString(36)
+}
 
 // ── State ──────────────────────────────────────────────────────────────────
-const lotesInput    = ref('107, 108, 109')
+const LS_KEY        = 'dmh_lotesInput'
+const lotesInput    = ref(localStorage.getItem(LS_KEY) ?? '107, 108, 109')
+watch(lotesInput, v => localStorage.setItem(LS_KEY, v))
 const neFilter      = ref('')
 const loading       = ref(false)
 const rows          = ref([])
@@ -553,6 +571,25 @@ const narrativaFuente = ref('')   // 'gemini' | 'local'
 const narrativaAviso  = ref('')
 const loadingNarrativa = ref(false)
 const whatsappCopiado = ref(false)
+const narrativaCopiada = ref(false)
+
+async function copiarNarrativa() {
+  try {
+    await navigator.clipboard.writeText(narrativa.value)
+    narrativaCopiada.value = true
+    setTimeout(() => { narrativaCopiada.value = false }, 2500)
+  } catch {
+    // Fallback para entornos sin clipboard API
+    const el = document.createElement('textarea')
+    el.value = narrativa.value
+    document.body.appendChild(el)
+    el.select()
+    document.execCommand('copy')
+    document.body.removeChild(el)
+    narrativaCopiada.value = true
+    setTimeout(() => { narrativaCopiada.value = false }, 2500)
+  }
+}
 
 // ── Definición de filas de tabla ──────────────────────────────────────────
 const HVI_ROWS = [
@@ -1228,8 +1265,27 @@ async function analizar() {
   }
 }
 
-async function generarNarrativa(soloLocal = false) {
+async function generarNarrativa(soloLocal = false, forzar = false) {
   if (loadingNarrativa.value || !rows.value.length) return
+
+  // ── Caché: solo para llamadas Gemini, no locales ni forzadas ──
+  const cachePayload = { rows: rows.value, proveedores: proveedores.value, loteActual: loteActual.value }
+  const cacheKey = 'dmh_narr_' + hashPayload(cachePayload)
+
+  if (!soloLocal && !forzar) {
+    try {
+      const cached = localStorage.getItem(cacheKey)
+      if (cached) {
+        const c = JSON.parse(cached)
+        narrativa.value       = c.narrativa
+        narrativaFuente.value = 'cache'
+        narrativaAviso.value  = ''
+        narrativaError.value  = ''
+        return
+      }
+    } catch { /* localStorage no disponible */ }
+  }
+
   loadingNarrativa.value = true
   narrativa.value = ''
   narrativaError.value = ''
@@ -1252,6 +1308,11 @@ async function generarNarrativa(soloLocal = false) {
     narrativa.value = data.narrativa
     narrativaFuente.value = data.fuente || 'local'
     narrativaAviso.value = data.aviso || ''
+
+    // Guardar en caché solo si respondió Gemini
+    if (!soloLocal && data.fuente === 'gemini') {
+      try { localStorage.setItem(cacheKey, JSON.stringify({ narrativa: data.narrativa })) } catch { /* cuota LS */ }
+    }
   } catch (err) {
     narrativaError.value = err.message
   } finally {
