@@ -101,6 +101,11 @@ const routes = [
     meta: { title: 'Metros por Revisor - Control de Calidad' } 
   },
   { 
+    path: '/desempeno-revisores', 
+    component: () => import('./components/produccion/DesempenoRevisores.vue'), 
+    meta: { title: 'Desempeño de Revisores - Control de Calidad' } 
+  },
+  { 
     path: '/analisis-mesa-test', 
     component: () => import('./components/produccion/AnalisisMesaTest.vue'), 
     meta: { title: 'Mesa de Test - Control de Calidad' } 

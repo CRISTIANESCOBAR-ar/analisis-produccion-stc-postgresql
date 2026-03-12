@@ -2476,6 +2476,141 @@ app.get('/api/produccion/calidad/revisor-detalle', async (req, res) => {
   }
 })
 
+// GET /api/produccion/calidad/desempeno-piezas - Piezas individuales de un revisor con datos telar
+app.get('/api/produccion/calidad/desempeno-piezas', async (req, res) => {
+  try {
+    const t0 = hrMs()
+    const { fecha, revisor } = req.query
+    if (!fecha || !revisor) {
+      return res.status(400).json({ error: 'Se requieren fecha y revisor' })
+    }
+
+    const datCandidates = dateTextCandidates(fecha)
+    const metragemNum = sqlParseNumberIntl('"METRAGEM"')
+    const pontuacaoNum = sqlParseNumber('"PONTUACAO"')
+    const larguraNum = sqlParseNumber('"LARGURA"')
+    const prodPtsLidosNum = sqlParseNumber('P."PONTOS_LIDOS"')
+    const prodPts100Num = sqlParseNumber('P."PONTOS_100%"')
+    const prodParTraNum = sqlParseNumber('P."PARADA TEC TRAMA"')
+    const prodParUrdNum = sqlParseNumber('P."PARADA TEC URDUME"')
+
+    const sql = `
+      WITH PIEZAS AS (
+        SELECT
+          btrim(COALESCE("NM MERC"::text, '')) AS nm_merc,
+          "PARTIDA",
+          COALESCE("HORA"::text, '') AS hora,
+          ${metragemNum} AS metragem,
+          ${pontuacaoNum} AS pontuacao,
+          ${larguraNum} AS largura,
+          btrim("QUALIDADE") AS qualidade,
+          "ARTIGO",
+          "COR"
+        FROM tb_calidad
+        WHERE
+          "EMP" = 'STC'
+          AND "DAT_PROD" = ANY($1::text[])
+          AND "REVISOR FINAL" = $2
+          AND "QUALIDADE" NOT ILIKE '%RETALHO%'
+      ),
+      PART_AGG AS (
+        SELECT
+          "PARTIDA",
+          ROUND(
+            (SUM(CASE WHEN qualidade ILIKE 'PRIMEIRA%' THEN COALESCE(pontuacao, 0) ELSE 0 END) * 100)
+            / NULLIF(
+              (SUM(CASE WHEN qualidade ILIKE 'PRIMEIRA%' THEN metragem * COALESCE(largura, 0) ELSE 0 END))
+              / NULLIF(SUM(CASE WHEN qualidade ILIKE 'PRIMEIRA%' THEN metragem ELSE 0 END), 0)
+              / 100
+              * SUM(CASE WHEN qualidade ILIKE 'PRIMEIRA%' THEN metragem ELSE 0 END)
+            , 0)
+          , 1) AS pts100m2
+        FROM PIEZAS
+        GROUP BY "PARTIDA"
+      ),
+      PARTIDA_VARS AS (
+        SELECT DISTINCT
+          "PARTIDA",
+          "PARTIDA" AS Var0,
+          CASE WHEN length("PARTIDA") > 1 AND left("PARTIDA", 1) ~ '^[0-9]$' AND left("PARTIDA", 1)::int > 0
+            THEN (left("PARTIDA", 1)::int - 1)::text || substring("PARTIDA" from 2) END AS Var1,
+          CASE WHEN length("PARTIDA") > 1 AND left("PARTIDA", 1) ~ '^[0-9]$' AND left("PARTIDA", 1)::int > 1
+            THEN (left("PARTIDA", 1)::int - 2)::text || substring("PARTIDA" from 2) END AS Var2,
+          CASE WHEN length("PARTIDA") > 1 AND left("PARTIDA", 1) ~ '^[0-9]$' AND left("PARTIDA", 1)::int > 2
+            THEN (left("PARTIDA", 1)::int - 3)::text || substring("PARTIDA" from 2) END AS Var3,
+          CASE WHEN length("PARTIDA") > 1
+            THEN '0' || substring("PARTIDA" from 2) END AS Var4
+        FROM PIEZAS
+      ),
+      TEJ AS (
+        SELECT PV."PARTIDA" AS cal_partida, TEJ_INNER.*
+        FROM PARTIDA_VARS PV
+        LEFT JOIN LATERAL (
+          SELECT
+            P."PARTIDA",
+            MAX(CASE WHEN right(P."MAQUINA", 2) ~ '^[0-9]{2}$' THEN right(P."MAQUINA", 2)::int ELSE NULL END) AS "Telar",
+            SUM(COALESCE(${prodPtsLidosNum}, 0)) AS "PtsLei",
+            SUM(COALESCE(${prodPts100Num}, 0)) AS "Pts100",
+            SUM(COALESCE(${prodParTraNum}, 0)) AS "ParTra",
+            SUM(COALESCE(${prodParUrdNum}, 0)) AS "ParUrd"
+          FROM tb_produccion P
+          WHERE
+            P."FILIAL" = '05'
+            AND P."SELETOR" = 'TECELAGEM'
+            AND P."PARTIDA" IN (PV.Var0, PV.Var1, PV.Var2, PV.Var3, PV.Var4)
+          GROUP BY P."PARTIDA"
+          ORDER BY CASE P."PARTIDA"
+            WHEN PV.Var0 THEN 0 WHEN PV.Var1 THEN 1 WHEN PV.Var2 THEN 2
+            WHEN PV.Var3 THEN 3 WHEN PV.Var4 THEN 4 ELSE 9
+          END ASC
+          LIMIT 1
+        ) TEJ_INNER ON true
+      )
+      SELECT
+        P.nm_merc AS "NombreArticulo",
+        P."PARTIDA" AS "Partida",
+        P.hora AS "Hora",
+        ROUND(P.metragem::numeric, 2) AS "Metragem",
+        P.qualidade AS "Qualidade",
+        ROUND(P.pontuacao::numeric, 2) AS "Pontuacao",
+        PA.pts100m2 AS "Pts100m2",
+        P."ARTIGO" AS "Artigo",
+        P."COR" AS "Cor",
+        COALESCE(TEJ."Telar", 0) AS "Telar",
+        CASE
+          WHEN TEJ."PtsLei" IS NULL OR TEJ."PtsLei" = 0 THEN NULL
+          ELSE ROUND((TEJ."PtsLei" / NULLIF(TEJ."Pts100", 0)) * 100, 1)
+        END AS "EficienciaPct",
+        CASE
+          WHEN TEJ."PtsLei" IS NULL OR TEJ."PtsLei" = 0 THEN NULL
+          ELSE ROUND((TEJ."ParUrd" * 100000)::numeric / NULLIF((TEJ."PtsLei" * 1000), 0)::numeric, 1)
+        END AS "RU105",
+        CASE
+          WHEN TEJ."PtsLei" IS NULL OR TEJ."PtsLei" = 0 THEN NULL
+          ELSE ROUND((TEJ."ParTra" * 100000)::numeric / NULLIF((TEJ."PtsLei" * 1000), 0)::numeric, 1)
+        END AS "RT105"
+      FROM PIEZAS P
+      LEFT JOIN PART_AGG PA ON PA."PARTIDA" = P."PARTIDA"
+      LEFT JOIN TEJ ON TEJ.cal_partida = P."PARTIDA"
+      ORDER BY
+        CASE
+          WHEN regexp_replace(COALESCE(P.hora, ''), '[^0-9]', '', 'g') ~ '^[0-9]{1,4}$'
+            THEN lpad(regexp_replace(P.hora, '[^0-9]', '', 'g'), 4, '0')
+          ELSE '9999'
+        END ASC
+    `
+
+    const result = await query(sql, [datCandidates, revisor], 'calidad/desempeno-piezas')
+    res.json(result.rows)
+    console.log(
+      `[PERF] GET /calidad/desempeno-piezas fecha=${fecha} revisor=${revisor} rows=${result.rows.length} total=${(hrMs() - t0).toFixed(1)}ms`
+    )
+  } catch (err) {
+    console.error('Error en calidad/desempeno-piezas:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // GET /api/produccion/calidad/partida-detalle - Detalle de defectos por partida
 app.get('/api/produccion/calidad/partida-detalle', async (req, res) => {
   try {

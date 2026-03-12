@@ -259,6 +259,13 @@
               <span>📋</span> Metros por Revisor
             </router-link>
             <router-link 
+              to="/desempeno-revisores" 
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
+              :class="{ 'bg-blue-600': $route.path === '/desempeno-revisores' }"
+            >
+              <span>⚡</span> Desempeño Revisores
+            </router-link>
+            <router-link 
               to="/analisis-mesa-test" 
               class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
               :class="{ 'bg-blue-600': $route.path === '/analisis-mesa-test' }"
@@ -498,7 +505,7 @@ const isProdRouteActive = computed(() => prodRoutes.includes(route.path))
 const inventoryRoutes = ['/inventario']
 const isInventoryRouteActive = computed(() => inventoryRoutes.includes(route.path))
 
-const calidadRoutes = ['/revision-cq', '/analisis-mesa-test', '/calidad-sectores', '/partida-tejeduria']
+const calidadRoutes = ['/revision-cq', '/desempeno-revisores', '/analisis-mesa-test', '/calidad-sectores', '/partida-tejeduria']
 const isCalidadRouteActive = computed(() => calidadRoutes.includes(route.path))
 
 const indigoRoutes = [

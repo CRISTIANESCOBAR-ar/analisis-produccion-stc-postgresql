@@ -97,6 +97,11 @@ export function useDatabase() {
     return await fetchApi(`/calidad/defectos-detalle?etiqueta=${etiqueta}`)
   }
 
+  const getDesempenoPiezas = async (fecha, revisor) => {
+    const params = new URLSearchParams({ fecha, revisor }).toString()
+    return await fetchApi(`/calidad/desempeno-piezas?${params}`)
+  }
+
   // ===================================================================
   // HISTÓRICO REVISORES
   // ===================================================================
@@ -217,6 +222,7 @@ export function useDatabase() {
     getRevisorDetalle,
     getPartidaDetalle,
     getDefectosDetalle,
+    getDesempenoPiezas,
     getHistoricoRevisores,
     getMesaTest,
     getMetrosSector,
