@@ -88,13 +88,44 @@
       </div>
 
       <!-- ── Two-panel layout ────────────────────────────────── -->
-      <div class="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-4 flex-1 min-h-0 overflow-hidden">
+      <div
+        class="flex-1 min-h-0 overflow-hidden grid gap-2"
+        :class="sidebarCollapsed ? 'grid-cols-[32px_1fr]' : 'grid-cols-1 lg:grid-cols-[420px_1fr]'"
+        style="transition: grid-template-columns 0.2s ease;"
+      >
 
         <!-- ── Left: summary table ──────────────────────────── -->
         <div class="flex flex-col gap-2 min-h-0 overflow-hidden">
-          <span class="text-sm font-semibold text-slate-700 shrink-0">
-            {{ calidadData.length }} revisores
-          </span>
+
+          <!-- Collapsed strip -->
+          <div
+            v-if="sidebarCollapsed"
+            class="flex flex-col items-center gap-2 h-full py-2"
+          >
+            <button
+              @click="sidebarCollapsed = false"
+              class="w-7 h-7 flex items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-700 shadow-sm transition-colors"
+              title="Mostrar tabla de revisores"
+            >▶</button>
+            <!-- Rotated label -->
+            <span
+              class="text-[10px] font-semibold text-slate-400 select-none"
+              style="writing-mode: vertical-rl; transform: rotate(180deg); letter-spacing: 0.05em;"
+            >{{ calidadData.length }} revisores</span>
+          </div>
+
+          <!-- Expanded table -->
+          <template v-if="!sidebarCollapsed">
+          <div class="flex items-center justify-between shrink-0">
+            <span class="text-sm font-semibold text-slate-700">
+              {{ calidadData.length }} revisores
+            </span>
+            <button
+              @click="sidebarCollapsed = true"
+              class="w-6 h-6 flex items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700 shadow-sm transition-colors text-xs"
+              title="Colapsar tabla"
+            >◀</button>
+          </div>
           <div class="overflow-auto flex-1 rounded-xl border border-slate-200">
             <table class="min-w-full w-full table-auto divide-y divide-slate-200 text-xs">
               <thead class="bg-gradient-to-r from-slate-50 to-slate-100 sticky top-0 z-20">
@@ -155,6 +186,7 @@
             <div>• Clic en un revisor para ver su gráfico de desempeño →</div>
             <div>• Las teclas ← → navegan entre días</div>
           </div>
+          </template>
         </div>
 
         <!-- ── Right: chart panel ──────────────────────────── -->
@@ -174,10 +206,40 @@
           <template v-else>
             <!-- Chart header / stats bar -->
             <div class="shrink-0 flex items-center justify-between flex-wrap gap-2">
-              <span class="text-sm font-semibold text-slate-700">
-                {{ selectedRevisor.Revisor }}
-                <span class="ml-1 text-xs font-normal text-slate-500">— {{ displayDate }}</span>
-              </span>
+              <div class="flex items-center flex-wrap gap-x-4 gap-y-1">
+                <span class="text-sm font-semibold text-slate-700">
+                  {{ selectedRevisor.Revisor }}
+                  <span class="ml-1 text-xs font-normal text-slate-500">— {{ displayDate }}</span>
+                </span>
+                <div class="flex items-center gap-3 text-xs text-slate-600 divide-x divide-slate-200">
+                  <span class="pr-3">
+                    <span class="text-slate-400">Metros Día</span>
+                    <span class="ml-1 font-bold text-slate-800">{{ formatInteger(selectedRevisor.Mts_Total) }}</span>
+                  </span>
+                  <span class="px-3">
+                    <span class="text-slate-400">Calidad %</span>
+                    <span class="ml-1 font-semibold" :class="Number(selectedRevisor.Calidad_Perc) >= 97 ? 'text-emerald-600' : Number(selectedRevisor.Calidad_Perc) >= 93 ? 'text-amber-600' : 'text-red-600'">
+                      {{ formatNumber(selectedRevisor.Calidad_Perc) }}
+                    </span>
+                  </span>
+                  <span class="px-3">
+                    <span class="text-slate-400">Pts 100 m²</span>
+                    <span class="ml-1 font-semibold text-slate-700">{{ formatNumber(selectedRevisor.Pts_100m2) }}</span>
+                  </span>
+                  <span class="px-3">
+                    <span class="text-slate-400">Rollos 1era</span>
+                    <span class="ml-1 font-semibold text-slate-700">{{ selectedRevisor.Rollos_1era }}</span>
+                  </span>
+                  <span class="px-3">
+                    <span class="text-slate-400">Sin Pts</span>
+                    <span class="ml-1 font-semibold text-slate-700">{{ selectedRevisor.Rollos_Sin_Pts }}</span>
+                    <span class="ml-1 text-slate-400">/</span>
+                    <span class="ml-1 font-semibold" :class="Number(selectedRevisor.Perc_Sin_Pts) >= 20 ? 'text-red-600' : Number(selectedRevisor.Perc_Sin_Pts) >= 10 ? 'text-amber-600' : 'text-slate-700'">
+                      {{ formatNumber(selectedRevisor.Perc_Sin_Pts) }}%
+                    </span>
+                  </span>
+                </div>
+              </div>
               <div v-if="loadingChart" class="text-xs text-slate-400 animate-pulse">Cargando piezas...</div>
             </div>
 
@@ -247,6 +309,7 @@ Chart.register(...registerables)
 const db = useDatabase()
 const containerRef = ref(null)
 const datepickerRef = ref(null)
+const sidebarCollapsed = ref(false)
 
 // ── Date state ─────────────────────────────────────────────────────
 const selectedDate = ref('')
