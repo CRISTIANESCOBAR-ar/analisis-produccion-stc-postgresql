@@ -240,7 +240,15 @@
                   </span>
                 </div>
               </div>
-              <div v-if="loadingChart" class="text-xs text-slate-400 animate-pulse">Cargando piezas...</div>
+              <div class="flex items-center gap-2 shrink-0">
+                <span v-if="loadingChart" class="text-xs text-slate-400 animate-pulse">Cargando piezas...</span>
+                <button
+                  v-if="piezasProcesadas.length > 0 && !loadingChart"
+                  @click="toggleChartMode"
+                  class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border text-xs font-medium transition-colors"
+                  :class="chartMode === 'cronologico' ? 'border-indigo-300 bg-indigo-50 text-indigo-700 hover:bg-indigo-100' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'"
+                >{{ chartMode === 'velocidad' ? '🕐 Cronológico' : '📊 Velocidad' }}</button>
+              </div>
             </div>
 
             <!-- Stats chips -->
@@ -265,6 +273,19 @@
               </span>
             </div>
 
+            <!-- Cronologico navigation -->
+            <div v-if="chartMode === 'cronologico' && piezasProcesadas.length > 0 && !loadingChart" class="shrink-0 flex items-center gap-2 text-xs">
+              <button @click="shiftCronoWindow(-1)" class="px-2 py-0.5 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors">◀ −1h</button>
+              <button @click="resetCronoWindow()" class="px-2 py-0.5 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors">Turno completo</button>
+              <button
+                @click="toggleHourMode()"
+                class="px-2 py-0.5 rounded border transition-colors"
+                :class="cronoHourMode ? 'border-indigo-300 bg-indigo-50 text-indigo-700 font-semibold' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'"
+              >{{ cronoHourMode ? '🔍 1h activo' : 'Ver por Hora' }}</button>
+              <button @click="shiftCronoWindow(1)" class="px-2 py-0.5 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors">+1h ▶</button>
+              <span class="text-slate-400 ml-1 font-mono">{{ formatMinutos(cronoWindowComputed.start) }} – {{ formatMinutos(cronoWindowComputed.end) }}</span>
+            </div>
+
             <!-- Canvas wrapper -->
             <div class="relative flex-1 min-h-0" style="min-height: 300px;">
               <div v-if="loadingChart" class="absolute inset-0 flex items-center justify-center bg-white/80 z-10 rounded">
@@ -283,13 +304,16 @@
                 <span class="inline-block w-3 h-3 rounded" style="background:rgba(249,115,22,0.75)"></span>
                 SEGUNDA
               </span>
-              <span class="flex items-center gap-1">
-                <span class="inline-block w-2.5 h-2.5 rounded-full" style="background:rgb(99,102,241)"></span>
-                m/min (eje der.)
-              </span>
-              <span class="text-slate-400 italic">
-                ⏸ Descuento automático 11:30–12:00 en el cálculo de velocidad
-              </span>
+              <template v-if="chartMode === 'velocidad'">
+                <span class="flex items-center gap-1">
+                  <span class="inline-block w-2.5 h-2.5 rounded-full" style="background:rgb(99,102,241)"></span>
+                  m/min (eje der.)
+                </span>
+                <span class="text-slate-400 italic">⏸ Descuento automático 11:30–12:00 en el cálculo de velocidad</span>
+              </template>
+              <template v-else>
+                <span class="text-slate-400 italic">Eje X = hora real de salida · mayor gap entre puntos = pieza más lenta</span>
+              </template>
             </div>
           </template>
         </div>
@@ -409,8 +433,15 @@ function cambiarFecha(delta) {
 }
 
 function handleKeydown(e) {
-  if (e.key === 'ArrowLeft') { e.preventDefault(); cambiarFecha(-1) }
-  else if (e.key === 'ArrowRight') { e.preventDefault(); cambiarFecha(1) }
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault()
+    if (chartMode.value === 'cronologico' && cronoHourMode.value) shiftCronoWindow(-1)
+    else cambiarFecha(-1)
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault()
+    if (chartMode.value === 'cronologico' && cronoHourMode.value) shiftCronoWindow(1)
+    else cambiarFecha(1)
+  }
 }
 
 // ── Summary data ───────────────────────────────────────────────────
@@ -461,6 +492,10 @@ const loadingChart = ref(false)
 const chartCanvas = ref(null)
 let chartInstance = null
 
+const chartMode = ref('velocidad') // 'velocidad' | 'cronologico'
+const cronoWindow = ref(null)      // { start: mins, end: mins } | null = turno completo
+const cronoHourMode = ref(false)   // true = ventana fija de 60 min
+
 const chartStats = computed(() => {
   const piezas = piezasProcesadas.value
   if (!piezas.length) return null
@@ -484,10 +519,24 @@ const chartStats = computed(() => {
   return { turno, turnoLabel, primerPiezaHora, totalMetros, totalPiezas, mminJornada, mminEntrePiezas }
 })
 
+const cronoWindowComputed = computed(() => {
+  const piezas = piezasProcesadas.value
+  const fallbackStart = piezas.length ? piezas[0]._turnoStart : 360
+  const fallbackEnd   = piezas.length ? Math.min(piezas[piezas.length - 1]._tFin + 30, fallbackStart + 480) : fallbackStart + 480
+  if (cronoHourMode.value) {
+    const start = cronoWindow.value ? cronoWindow.value.start : Math.floor((piezas.length ? piezas[0]._effectiveMins : fallbackStart) / 60) * 60
+    return { start, end: start + 60 }
+  }
+  if (cronoWindow.value) return cronoWindow.value
+  return { start: fallbackStart, end: fallbackEnd }
+})
+
 async function selectRevisor(row) {
   const name = row.Revisor
   selectedRevisor.value = row
   piezasProcesadas.value = []
+  cronoWindow.value = null
+  cronoHourMode.value = false
   destroyChart()
   loadingChart.value = true
   error.value = null
@@ -586,6 +635,14 @@ function destroyChart() {
 }
 
 function renderChart() {
+  if (chartMode.value === 'cronologico') {
+    renderCronologicoChart()
+  } else {
+    renderVelocidadChart()
+  }
+}
+
+function renderVelocidadChart() {
   const piezas = piezasProcesadas.value
   if (!piezas.length || !chartCanvas.value) return
 
@@ -651,10 +708,16 @@ function renderChart() {
           labels: { font: { size: 11 } }
         },
         tooltip: {
-          backgroundColor: 'rgba(15,23,42,0.93)',
-          titleFont: { size: 11, weight: 'bold' },
-          bodyFont: { size: 11 },
-          padding: 10,
+          backgroundColor: 'rgba(248,250,252,0.97)',
+          borderColor: 'rgba(203,213,225,0.8)',
+          borderWidth: 1,
+          titleColor: '#1e293b',
+          bodyColor: '#475569',
+          titleFont: { size: 12, weight: '600', family: 'Verdana, Ubuntu, sans-serif' },
+          bodyFont: { size: 11, family: 'Verdana, Ubuntu, sans-serif' },
+          padding: 12,
+          cornerRadius: 8,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
           callbacks: {
             title(items) {
               const idx = items[0].dataIndex
@@ -734,6 +797,241 @@ function renderChart() {
       }
     }
   })
+}
+
+function renderCronologicoChart() {
+  const piezas = piezasProcesadas.value
+  if (!piezas.length || !chartCanvas.value) return
+  destroyChart()
+
+  const { start, end } = cronoWindowComputed.value
+  const BREAK_INI = 690
+  const BREAK_FIN = 720
+
+  const pointColors = piezas.map(p =>
+    String(p.Qualidade || '').toUpperCase().includes('PRIMEIRA')
+      ? 'rgba(34,197,94,0.9)'
+      : 'rgba(249,115,22,0.9)'
+  )
+  const pointBorders = piezas.map(p =>
+    String(p.Qualidade || '').toUpperCase().includes('PRIMEIRA')
+      ? 'rgb(22,163,74)' : 'rgb(234,88,12)'
+  )
+
+  const ctx = chartCanvas.value.getContext('2d')
+
+  const breakZonePlugin = {
+    id: 'cronBreakZone',
+    beforeDraw(chart) {
+      const { ctx: c, scales } = chart
+      const xScale = scales.xTime
+      const yScale = scales.yMetros
+      if (!xScale || !yScale) return
+      const x1 = xScale.getPixelForValue(BREAK_INI)
+      const x2 = xScale.getPixelForValue(BREAK_FIN)
+      if (x2 < xScale.left || x1 > xScale.right) return
+      const y1 = yScale.top
+      const y2 = yScale.bottom
+      c.save()
+      c.fillStyle = 'rgba(148,163,184,0.18)'
+      c.fillRect(Math.max(x1, xScale.left), y1, Math.min(x2, xScale.right) - Math.max(x1, xScale.left), y2 - y1)
+      if (x1 >= xScale.left) {
+        c.fillStyle = 'rgba(100,116,139,0.6)'
+        c.font = '9px sans-serif'
+        c.fillText('⏸', x1 + 3, y1 + 12)
+      }
+      c.restore()
+    }
+  }
+
+  const pointLabelsPlugin = {
+    id: 'cronPointLabels',
+    afterDatasetsDraw(chart) {
+      const { ctx: c, scales } = chart
+      const xScale = scales.xTime
+      const yScale = scales.yMetros
+      if (!xScale || !yScale) return
+
+      c.save()
+      c.font = '600 9px Verdana, Ubuntu, sans-serif'
+      c.textAlign = 'center'
+
+      piezas.forEach(p => {
+        if (p._effectiveMins < start || p._effectiveMins > end) return
+        const px = xScale.getPixelForValue(p._effectiveMins)
+        const py = yScale.getPixelForValue(Number(p.Metragem) || 0)
+        const metros = `${Number(p.Metragem) || 0} m`
+        const tiempo = `${p._durNeta}'`
+        const vel = p._mmin != null ? `${p._mmin} m/m` : ''
+
+        const lineH = 11
+        // Offset: arriba del punto si hay espacio, abajo si está muy cerca del tope
+        const offset = py - yScale.top < 36 ? 22 : -28
+
+        // Fondo semitransparente para legibilidad
+        const line1 = metros
+        const line2 = vel ? `${tiempo} · ${vel}` : tiempo
+        const boxY = py + offset - lineH
+
+        const isFirst = String(p.Qualidade || '').toUpperCase().includes('PRIMEIRA')
+        c.fillStyle = isFirst ? '#15803d' : '#c2410c'
+        c.fillText(line1, px, boxY + lineH - 1)
+        c.fillStyle = '#475569'
+        c.fillText(line2, px, boxY + lineH * 2 - 1)
+      })
+
+      c.restore()
+    }
+  }
+
+  // Calcular rotación óptima según el gap mínimo entre piezas visibles
+  const visiblePiezas = piezas.filter(p => p._effectiveMins >= start && p._effectiveMins <= end)
+  let minGapMins = Infinity
+  for (let i = 1; i < visiblePiezas.length; i++) {
+    minGapMins = Math.min(minGapMins, visiblePiezas[i]._effectiveMins - visiblePiezas[i - 1]._effectiveMins)
+  }
+  const labelRotation = !cronoHourMode.value ? 0 : minGapMins >= 5 ? 0 : minGapMins >= 3 ? 45 : 90
+
+  chartInstance = new Chart(ctx, {
+    type: 'line',
+    plugins: [breakZonePlugin, pointLabelsPlugin],
+    data: {
+      datasets: [
+        {
+          label: 'Metros / pieza',
+          data: piezas.map(p => ({ x: p._effectiveMins, y: Number(p.Metragem) || 0 })),
+          xAxisID: 'xTime',
+          yAxisID: 'yMetros',
+          borderColor: 'rgba(99,102,241,0.35)',
+          borderWidth: 1.5,
+          borderDash: [5, 4],
+          pointBackgroundColor: pointColors,
+          pointBorderColor: pointBorders,
+          pointBorderWidth: 1.5,
+          pointRadius: 6,
+          pointHoverRadius: 9,
+          fill: false,
+          tension: 0
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      parsing: false,
+      interaction: { mode: 'nearest', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(248,250,252,0.97)',
+          borderColor: 'rgba(203,213,225,0.8)',
+          borderWidth: 1,
+          titleColor: '#1e293b',
+          bodyColor: '#475569',
+          titleFont: { size: 12, weight: '600', family: 'Verdana, Ubuntu, sans-serif' },
+          bodyFont: { size: 11, family: 'Verdana, Ubuntu, sans-serif' },
+          padding: 12,
+          cornerRadius: 8,
+          callbacks: {
+            title(items) {
+              const idx = items[0].dataIndex
+              const p = piezas[idx]
+              return [`${p.NombreArticulo || '-'}`, `${formatHora(p.Hora)}  |  ${p.Qualidade}`]
+            },
+            label(item) {
+              return `  Metros: ${item.parsed.y} m`
+            },
+            afterBody(items) {
+              const idx = items[0].dataIndex
+              const p = piezas[idx]
+              const lines = ['  ─────────────────────────']
+              if (p.Pts100m2 != null)     lines.push(`  Pts/100m²:    ${p.Pts100m2}`)
+              if (p.EficienciaPct != null) lines.push(`  Efic. telar:  ${p.EficienciaPct}%`)
+              if (p.RT105 != null)         lines.push(`  RT/105:        ${p.RT105}`)
+              if (p.RU105 != null)         lines.push(`  RU/105:        ${p.RU105}`)
+              if (p.Telar)                 lines.push(`  Nro telar:     ${p.Telar}`)
+              lines.push(`  Duración: ${p._durNeta} min  |  ${p._mmin ?? '-'} m/min`)
+              return lines
+            }
+          }
+        }
+      },
+      scales: {
+        xTime: {
+          type: 'linear',
+          min: start,
+          max: end,
+          title: { display: true, text: 'Hora del día', font: { size: 11 } },
+          ticks: {
+            stepSize: cronoHourMode.value ? undefined : 30,
+            font: { size: 9 },
+            maxRotation: labelRotation,
+            minRotation: labelRotation,
+            autoSkip: false,
+            callback(val) { return formatMinutos(val) }
+          },
+          afterBuildTicks(scale) {
+            if (cronoHourMode.value) {
+              const vals = piezas
+                .filter(p => p._effectiveMins >= start && p._effectiveMins <= end)
+                .map(p => p._effectiveMins)
+              if (vals.length) scale.ticks = vals.map(v => ({ value: v }))
+            }
+          },
+          grid: { color: 'rgba(0,0,0,0.05)' }
+        },
+        yMetros: {
+          type: 'linear',
+          position: 'left',
+          title: { display: true, text: 'Metros / pieza', font: { size: 11 } },
+          beginAtZero: true,
+          grid: { color: 'rgba(0,0,0,0.05)' },
+          ticks: { font: { size: 10 } }
+        }
+      }
+    }
+  })
+}
+
+function toggleChartMode() {
+  chartMode.value = chartMode.value === 'velocidad' ? 'cronologico' : 'velocidad'
+  destroyChart()
+  nextTick().then(() => nextTick()).then(() => renderChart())
+}
+
+function shiftCronoWindow(delta) {
+  const { start } = cronoWindowComputed.value
+  const newStart = start + delta * 60
+  if (cronoHourMode.value) {
+    cronoWindow.value = { start: newStart, end: newStart + 60 }
+  } else {
+    const { end } = cronoWindowComputed.value
+    cronoWindow.value = { start: newStart, end: end + delta * 60 }
+  }
+  destroyChart()
+  nextTick().then(() => renderCronologicoChart())
+}
+
+function resetCronoWindow() {
+  cronoWindow.value = null
+  cronoHourMode.value = false
+  destroyChart()
+  nextTick().then(() => renderCronologicoChart())
+}
+
+function toggleHourMode() {
+  if (cronoHourMode.value) {
+    cronoHourMode.value = false
+    cronoWindow.value = null
+  } else {
+    cronoHourMode.value = true
+    const piezas = piezasProcesadas.value
+    const firstMins = piezas.length ? piezas[0]._effectiveMins : 360
+    const snapStart = Math.floor(firstMins / 60) * 60
+    cronoWindow.value = { start: snapStart, end: snapStart + 60 }
+  }
+  destroyChart()
+  nextTick().then(() => renderCronologicoChart())
 }
 
 // ── Formatters ─────────────────────────────────────────────────────
