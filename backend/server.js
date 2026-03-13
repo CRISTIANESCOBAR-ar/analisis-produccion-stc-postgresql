@@ -9302,7 +9302,7 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Genera el informe de forma local (sin IA externa) — siempre disponible
 // ─────────────────────────────────────────────────────────────────────────────
-function generarNarrativaLocal(rows, loteActual, proveedores = []) {
+function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha = []) {
   const lotesSorted = [...new Set(rows.map(r => Number(r.mistura)))].sort((a, b) => a - b);
   const actual = loteActual ? Number(loteActual) : Math.max(...lotesSorted);
   const refs   = lotesSorted.filter(l => l !== actual);
@@ -9591,6 +9591,199 @@ function generarNarrativaLocal(rows, loteActual, proveedores = []) {
 
   const refStr = refs.length > 0 ? refs.join('/') : 'sin referencia';
 
+  // ── Evolución diaria por título (rowsPorFecha) ─────────────────────────
+  const bloqueEvolucion = [];
+  const fechasActual = (rowsPorFecha || []).filter(r => Number(r.mistura) === actual);
+  if (fechasActual.length > 0) {
+    const neMap = new Map();
+    for (const r of fechasActual) {
+      const key = `${r.ne}|${r.is_flame}`;
+      if (!neMap.has(key)) neMap.set(key, { ne: r.ne, is_flame: r.is_flame, dias: [] });
+      neMap.get(key).dias.push(r);
+    }
+    bloqueEvolucion.push(`🧵 EVOLUCIÓN Y ESTADO DE TÍTULOS — Lote FIAC ${actual}:`);
+    bloqueEvolucion.push(``);
+    // Ordenar Ne de mayor a menor (los críticos primero: urdimbre antes de trama)
+    const neEntries = [...neMap.values()].sort((a, b) => parseFloat(b.ne) - parseFloat(a.ne));
+    for (const { ne, is_flame, dias } of neEntries) {
+      const flame = is_flame === true || String(is_flame).trim() === 'true' || String(is_flame).trim() === '1';
+      const neTxt = `${ne}${flame ? ' FLAME' : '/1'}`;
+      const mNe = getMatriz(parseFloat(ne), flame);
+      const appNe = mNe?.app || (parseFloat(ne) <= 9 ? 'Trama' : (flame ? 'Urdimbre Flame' : 'Urdimbre'));
+      bloqueEvolucion.push(`Ne ${neTxt} (${appNe}):`);
+      const diasOrd = [...dias].sort((a, b) => String(a.fecha) < String(b.fecha) ? -1 : 1);
+      for (let i = 0; i < diasOrd.length; i++) {
+        const d = diasOrd[i];
+        const fecha = String(d.fecha).slice(0, 10);
+        const dd = fecha.slice(8, 10), mm = fecha.slice(5, 7);
+        const parts = [];
+        if (d.cvm        != null) parts.push(`CVm ${f(d.cvm)}`);
+        if (d.tenacidad  != null) parts.push(`Tenac ${f(d.tenacidad)}`);
+        if (d.neps_200   != null) parts.push(`Neps ${f(d.neps_200, 0)}/km`);
+        if (d.elongacion != null) parts.push(`Elong ${f(d.elongacion)}%`);
+        // Delta inline respecto al día anterior
+        let deltaStr = '';
+        if (i > 0) {
+          const prev = diasOrd[i - 1];
+          const cvmD = (d.cvm != null && prev.cvm != null) ? parseFloat(d.cvm) - parseFloat(prev.cvm) : null;
+          const npsD = (d.neps_200 != null && prev.neps_200 != null) ? parseFloat(d.neps_200) - parseFloat(prev.neps_200) : null;
+          const alertas = [];
+          if (cvmD != null && Math.abs(cvmD) >= 0.1) alertas.push(`CVm ${cvmD > 0 ? '↑' : '↓'}${Math.abs(cvmD).toFixed(2)}`);
+          if (npsD != null && Math.abs(npsD) > 20) alertas.push(`Neps ${npsD > 0 ? '↑' : '↓'}${Math.abs(npsD).toFixed(0)}`);
+          if (alertas.length) deltaStr = `  (${alertas.join(' | ')})`;
+        }
+        const alertIcon = (() => {
+          if (i === 0) return '';
+          const prev = diasOrd[i - 1];
+          const cvmD = (d.cvm != null && prev.cvm != null) ? parseFloat(d.cvm) - parseFloat(prev.cvm) : null;
+          const npsD = (d.neps_200 != null && prev.neps_200 != null) ? parseFloat(d.neps_200) - parseFloat(prev.neps_200) : null;
+          if ((cvmD != null && cvmD > 0.5) || (npsD != null && npsD > 150)) return '⚠️ ';
+          return '';
+        })();
+        bloqueEvolucion.push(`  • ${alertIcon}${dd}/${mm}: ${parts.join(' | ')}${deltaStr}`);
+      }
+      // 👉 ESTADO por Ne basado en último vs penúltimo día
+      if (diasOrd.length >= 2) {
+        const last = diasOrd[diasOrd.length - 1];
+        const prev = diasOrd[diasOrd.length - 2];
+        const cvmD = (last.cvm != null && prev.cvm != null) ? parseFloat(last.cvm) - parseFloat(prev.cvm) : null;
+        const npsD = (last.neps_200 != null && prev.neps_200 != null) ? parseFloat(last.neps_200) - parseFloat(prev.neps_200) : null;
+        let estadoNe, iconNe, descripcion;
+        if ((cvmD != null && cvmD > 0.5) || (npsD != null && npsD > 150)) {
+          iconNe = '🔴'; estadoNe = 'EMPEORÓ CRÍTICAMENTE';
+          const causas = [];
+          if (cvmD != null && cvmD > 0.5) causas.push(`CVm subió ${cvmD > 0 ? '+' : ''}${cvmD.toFixed(2)} pts`);
+          if (npsD != null && npsD > 150) causas.push(`Neps +${npsD.toFixed(0)}/km (${f(last.neps_200, 0)} total)`);
+          descripcion = `${causas.join(', ')}. Falla mecánica probable — no es la fibra.`;
+        } else if (cvmD != null && cvmD < -0.2 && (npsD == null || npsD <= 50)) {
+          iconNe = '🟢'; estadoNe = 'MEJORÓ';
+          descripcion = `CVm bajó ${cvmD.toFixed(2)} pts. Los ajustes están surtiendo efecto.`;
+          if (npsD != null && npsD < 0) descripcion += ` Neps también bajaron ${Math.abs(npsD).toFixed(0)}/km.`;
+        } else if (cvmD != null && cvmD > 0.1) {
+          iconNe = '⚠️'; estadoNe = 'PRECAUCIÓN';
+          descripcion = `CVm subió ${cvmD > 0 ? '+' : ''}${cvmD.toFixed(2)} pts. Monitorear en próximo turno.`;
+        } else {
+          iconNe = '✅'; estadoNe = 'ESTABLE';
+          descripcion = 'Sin variaciones significativas respecto al día anterior.';
+        }
+        bloqueEvolucion.push(`👉 ESTADO: ${iconNe} ${estadoNe}. ${descripcion}`);
+      }
+      bloqueEvolucion.push(``);
+    }
+  }
+
+  // ── Balance de Mejoras y Deterioros ────────────────────────────────────
+  const bloqueBalance = [];
+  if (fechasActual.length > 0) {
+    const neMap2 = new Map();
+    for (const r of fechasActual) {
+      const key = `${r.ne}|${r.is_flame}`;
+      if (!neMap2.has(key)) neMap2.set(key, { ne: r.ne, is_flame: r.is_flame, dias: [] });
+      neMap2.get(key).dias.push(r);
+    }
+    const mejoras    = [];
+    const deterioros  = [];
+    // Acciones por etapa
+    const acOe       = [];
+    const acPasador  = [];
+    const acCardas   = [];
+
+    const neEntries2 = [...neMap2.values()].sort((a, b) => parseFloat(b.ne) - parseFloat(a.ne));
+    for (const { ne, is_flame, dias } of neEntries2) {
+      const flame  = is_flame === true || String(is_flame).trim() === 'true' || String(is_flame).trim() === '1';
+      const neTxt  = `Ne ${ne}${flame ? ' FLAME' : '/1'}`;
+      const mNe2   = getMatriz(parseFloat(ne), flame);
+      const appNe2 = mNe2?.app || (parseFloat(ne) <= 9 ? 'Trama' : (flame ? 'Urdimbre Flame' : 'Urdimbre'));
+      const diasOrd = [...dias].sort((a, b) => String(a.fecha) < String(b.fecha) ? -1 : 1);
+      if (diasOrd.length < 2) continue;
+
+      const last  = diasOrd[diasOrd.length - 1];
+      const prev  = diasOrd[diasOrd.length - 2];
+      const first = diasOrd[0];
+
+      const cvmLast  = last.cvm        != null ? parseFloat(last.cvm)        : null;
+      const cvmPrev  = prev.cvm        != null ? parseFloat(prev.cvm)        : null;
+      const npsLast  = last.neps_200   != null ? parseFloat(last.neps_200)   : null;
+      const npsPrev  = prev.neps_200   != null ? parseFloat(prev.neps_200)   : null;
+      const tenLast  = last.tenacidad  != null ? parseFloat(last.tenacidad)  : null;
+      const tenFirst = first.tenacidad != null ? parseFloat(first.tenacidad) : null;
+
+      const cvmDelta = (cvmLast != null && cvmPrev != null) ? cvmLast - cvmPrev : null;
+      const npsDelta = (npsLast != null && npsPrev != null) ? npsLast - npsPrev : null;
+      const tenDelta = (tenLast != null && tenFirst != null) ? tenLast - tenFirst : null;
+
+      const esCritico = (cvmDelta != null && cvmDelta > 0.5) || (npsDelta != null && npsDelta > 150);
+      const esMejora  = (cvmDelta != null && cvmDelta < -0.2) && (npsDelta == null || npsDelta <= 50);
+
+      if (esMejora) {
+        let desc = `${neTxt}: Recuperó regularidad — CVm bajó ${Math.abs(cvmDelta).toFixed(2)} pts`;
+        if (npsLast != null && npsDelta != null && npsDelta < 0) desc += `, Neps bajaron ${Math.abs(npsDelta).toFixed(0)}/km`;
+        if (tenDelta != null && tenDelta > 0.2) desc += `. Tenacidad mejoró +${tenDelta.toFixed(2)} cN/tex vs inicio de lote`;
+        desc += `. Los ajustes están surtiendo efecto.`;
+        mejoras.push(`  ${neTxt}: ${desc}`);
+      } else if (esCritico) {
+        const causas = [];
+        if (cvmDelta != null && cvmDelta > 0.5) causas.push(`CVm subió +${cvmDelta.toFixed(2)} pts`);
+        if (npsDelta != null && npsDelta > 150) causas.push(`Neps +${npsDelta.toFixed(0)}/km (${npsLast?.toFixed(0)}/km total)`);
+        const desc = `${neTxt} [${appNe2}]: ${causas.join(', ')}. La fibra no es el problema; buscar la falla en el proceso.`;
+        deterioros.push(`  ${desc}`);
+        // acciones por etapa
+        if (parseFloat(ne) >= 10) {
+          acOe.push(`  ${neTxt}: Limpieza de rotores y revisión del canal de transporte — CVm ${cvmLast?.toFixed(2)}% con Neps ${npsLast?.toFixed(0)}/km. Verificar que la purga de aire sea constante.`);
+          acCardas.push(`  ${neTxt}: Verificar ajuste de chapones — la fibra es buena, pero si la carda no abre bien los neps, el OE los multiplica.`);
+        } else {
+          acPasador.push(`  ${neTxt}: CVm subió +${cvmDelta?.toFixed(2)} pts — revisar presión de rodillos de estiraje y estado de cots para frenar la flotación de fibra.`);
+        }
+      } else if (cvmDelta != null && Math.abs(cvmDelta) > 0.1) {
+        if (cvmDelta > 0) {
+          deterioros.push(`  ${neTxt}: Leve aumento de irregularidad (CVm +${cvmDelta.toFixed(2)} pts). Monitorear turno siguiente.`);
+          if (parseFloat(ne) < 10) {
+            acPasador.push(`  ${neTxt}: Verificar alfa de torsión y tensión de salida — CVm mostró tendencia alcista.`);
+          }
+        } else {
+          mejoras.push(`  ${neTxt}: Pequeña mejora de masa (CVm ${cvmDelta.toFixed(2)} pts). Mantener ajuste actual.`);
+        }
+      }
+    }
+
+    if (mejoras.length > 0 || deterioros.length > 0) {
+      bloqueBalance.push(`⚖️ BALANCE DE TENDENCIAS`);
+      bloqueBalance.push(``);
+      if (mejoras.length > 0) {
+        bloqueBalance.push(`📈 MEJORAS:`);
+        bloqueBalance.push(...mejoras);
+        bloqueBalance.push(``);
+      }
+      if (deterioros.length > 0) {
+        bloqueBalance.push(`📉 DETERIOROS:`);
+        bloqueBalance.push(...deterioros);
+        bloqueBalance.push(``);
+      }
+    }
+    // Acciones por etapa (solo si hay)
+    const hayAcciones = acOe.length || acPasador.length || acCardas.length;
+    if (hayAcciones) {
+      let prioNum = 1;
+      bloqueBalance.push(`🛠 ACCIONES RECOMENDADAS (URGENTE):`);
+      if (acOe.length) {
+        bloqueBalance.push(``);
+        bloqueBalance.push(`${prioNum++}️⃣ OPEN END (OE):`);
+        bloqueBalance.push(...acOe);
+      }
+      if (acPasador.length) {
+        bloqueBalance.push(``);
+        bloqueBalance.push(`${prioNum++}️⃣ PASADOR (MANUAR):`);
+        bloqueBalance.push(...acPasador);
+      }
+      if (acCardas.length) {
+        bloqueBalance.push(``);
+        bloqueBalance.push(`${prioNum++}️⃣ CARDAS:`);
+        bloqueBalance.push(...acCardas);
+      }
+      bloqueBalance.push(``);
+    }
+  }
+
   // ── Auditoría de Aptitud por Proceso (texto) ───────────────────────────
   const bloqueAuditoria = [];
   if (dataActual.hilos.length > 0) {
@@ -9665,6 +9858,8 @@ function generarNarrativaLocal(rows, loteActual, proveedores = []) {
     `📊 COMPARATIVA TÉCNICA (Promedios):`,
     ``,
     ...bloques.flatMap(b => [b, '']),
+    ...bloqueEvolucion,
+    ...bloqueBalance,
     ...bloqueProveedores,
     ...bloqueAuditoria,
     ...(() => {
@@ -9672,7 +9867,8 @@ function generarNarrativaLocal(rows, loteActual, proveedores = []) {
       const str  = dataActual.hvi.str  != null ? parseFloat(dataActual.hvi.str)  : null;
       const ui   = dataActual.hvi.ui   != null ? parseFloat(dataActual.hvi.ui)   : null;
       const paradojas = [];
-      const accionesMecanicas = [];
+      // Acciones agrupadas por etapa del proceso
+      const accionesPorEtapa = { blowroom: [], cardas: [], manuar: [], oe: [] };
       for (const h of HilosActual) {
         const cvm  = h.cvm       != null ? parseFloat(h.cvm)       : null;
         const nps  = h.neps_200  != null ? parseFloat(h.neps_200)  : null;
@@ -9685,25 +9881,28 @@ function generarNarrativaLocal(rows, loteActual, proveedores = []) {
         // Paradoja: fibra premium + CVm% alto → falla mecánica
         if (strBuena && cvm != null && cvm > 13 && !flame) {
           paradojas.push(`  ⚙️ Ne${neTxt}: STR ${f(str,1)} g/tex (fibra premium) pero CVm% ${f(cvm)} — la irregularidad NO viene de la materia prima. Causa: tren de estiraje o rotor.`);
-          accionesMecanicas.push(`  📍 Ne${neTxt}: Revisar desgaste de cots y limpieza de rotores Open-End.`);
+          accionesPorEtapa.manuar.push(`  📍 Ne${neTxt}: Revisar presión de rodillos y estado de cots (gomas de estiraje).`);
+          accionesPorEtapa.oe.push(`  📍 Ne${neTxt}: Limpiar rotores Open-End — CVm% ${f(cvm)} con fibra premium indica falla de proceso.`);
         }
         // Paradoja: fibra limpia (UI) + Neps altos → neps de proceso
         if (uiBuena && nps != null && nps > (flame ? 700 : 600) && !flame) {
-          paradojas.push(`  ⚙️ Ne${neTxt}: UI ${f(ui,1)}% (fibra limpia) pero Neps ${f(nps,0)}/km — los neps son de proceso, no de la bala. Causa: purga de aire insuficiente en OE.`);
-          accionesMecanicas.push(`  📍 Ne${neTxt}: Incrementar frecuencia de purga de aire en Open-End.`);
+          paradojas.push(`  ⚙️ Ne${neTxt}: UI ${f(ui,1)}% (fibra limpia) pero Neps ${f(nps,0)}/km — los neps son de proceso, no de la bala.`);
+          accionesPorEtapa.blowroom.push(`  📍 Ne${neTxt}: Revisar distancias entre cilindros abridores y rejillas — la apertura puede estar nepeando el algodón.`);
+          accionesPorEtapa.cardas.push(`  📍 Ne${neTxt}: Verificar estado de guarnición del tambor y chapones. Neps altos con UI ${f(ui,1)}% apuntan a cardado insuficiente.`);
+          accionesPorEtapa.oe.push(`  📍 Ne${neTxt}: Incrementar frecuencia de purga de aire — purga insuficiente arrastra neps al rotor.`);
         }
         // Paradoja: STR bajo + tenacidad baja → causa en materia prima
         if (str != null && str < 25 && ten != null && ten < 15) {
           paradojas.push(`  ⚙️ Ne${neTxt}: STR ${f(str,1)} g/tex (fibra débil) + Tenacidad ${f(ten)} cN/tex — causa en materia prima, no en maquinaria. Revisar proveedor.`);
         }
-        // CVm subiendo + Neps altos → purga y rotores
+        // CVm% + Neps combinados → falla en rotor
         if (cvm != null && nps != null && cvm > 13 && nps > 650 && !flame) {
-          accionesMecanicas.push(`  📍 Ne${neTxt}: Combinación CVm%+Neps elevados sugiere falla en purga de rotor — ajustar presión de aire.`);
+          accionesPorEtapa.oe.push(`  📍 Ne${neTxt}: CVm% ${f(cvm)} + Neps ${f(nps,0)}/km — limpiar rotor y ajustar presión de aire del canal de transporte.`);
         }
         // Urdimbre con elongación baja
         const elo = h.elongacion != null ? parseFloat(h.elongacion) : null;
         if (nN >= 10 && !flame && elo != null && elo < 7.5) {
-          accionesMecanicas.push(`  📍 Ne${neTxt}: Elongación ${f(elo)}% crítica para Urdidora — revisar tensión de hilo y pasadores.`);
+          accionesPorEtapa.oe.push(`  📍 Ne${neTxt}: Elongación ${f(elo)}% crítica — revisar tensión de hilo, pasadores y canal de salida en OE.`);
         }
       }
       // Diferencia CVm entre líneas del mismo Ne (LP vs LI)
@@ -9718,19 +9917,30 @@ function generarNarrativaLocal(rows, loteActual, proveedores = []) {
         if (validos.length >= 2) {
           const diff = Math.max(...validos) - Math.min(...validos);
           if (diff > 0.3) {
-            accionesMecanicas.push(`  📍 Ne${ne}: Diferencia de CVm% ${f(diff)} entre líneas del mismo título — desajuste mecánico puntual, no de mezcla. Estandarizar ajuste.`);
+            accionesPorEtapa.manuar.push(`  📍 Ne${ne}: Diferencia de CVm% ${f(diff)} entre líneas — desajuste mecánico puntual. Estandarizar ajuste de tren de estiraje.`);
           }
         }
       }
+      const tieneAcciones = Object.values(accionesPorEtapa).some(a => a.length > 0);
+      const etapaLabels = [
+        { key: 'blowroom', icon: '1️⃣', label: 'APERTURA Y BLOWROOM' },
+        { key: 'cardas',   icon: '2️⃣', label: 'CARDAS' },
+        { key: 'manuar',   icon: '3️⃣', label: 'PASADOR (MANUAR)' },
+        { key: 'oe',       icon: '4️⃣', label: 'OPEN END (OE)' },
+      ];
       const bloque = [];
       if (paradojas.length > 0) {
         bloque.push(`🔬 DIAGNÓSTICO MECÁNICO — Paradoja de la Fibra:`);
         bloque.push(...paradojas);
         bloque.push(``);
       }
-      if (accionesMecanicas.length > 0) {
-        bloque.push(`🚀 ACCIONES MECÁNICAS RECOMENDADAS:`);
-        bloque.push(...accionesMecanicas);
+      if (tieneAcciones) {
+        bloque.push(`🛠 ACCIONES RECOMENDADAS POR PROCESO:`);
+        for (const { key, icon, label } of etapaLabels) {
+          if (accionesPorEtapa[key].length === 0) continue;
+          bloque.push(`${icon} ${label}:`);
+          bloque.push(...accionesPorEtapa[key]);
+        }
         bloque.push(``);
       }
       return bloque;
@@ -9768,13 +9978,151 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
 
     // Si piden explícitamente local, o no hay API key → generación local directa
     if (modo === 'local' || !process.env.GOOGLE_API_KEY) {
-      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || []);
+      const loteNums = [...new Set(rows.map(r => Number(r.mistura)).filter(n => n > 0))];
+      let rowsPorFecha = [];
+      try {
+        const sqlDiario = `
+          SELECT
+            DATE(COALESCE(
+              CASE WHEN trim(u.time_stamp) ~ '^\\d{2}/\\d{2}/\\d{4}' THEN TO_TIMESTAMP(trim(u.time_stamp), 'DD/MM/YYYY HH24:MI') ELSE NULL END,
+              u.created_at
+            )) AS fecha,
+            COALESCE(
+              (regexp_match(u.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1],
+              (regexp_match(u.lote, '(\\d+)'))[1]
+            )::integer AS mistura,
+            u.nomcount AS ne,
+            CASE WHEN lower(trim(COALESCE(u.matclass, ''))) = 'hilo de fantasia' THEN true ELSE false END AS is_flame,
+            ROUND(AVG(t.cvm_percent)::numeric, 2) AS cvm,
+            ROUND(AVG(t.neps_200_km)::numeric, 1) AS neps_200,
+            ROUND(AVG(t.neps_140_km)::numeric, 1) AS neps_140,
+            ROUND(AVG(tp2.tenacidad)::numeric, 2) AS tenacidad,
+            ROUND(AVG(tp2.elongacion)::numeric, 2) AS elongacion,
+            COUNT(DISTINCT u.testnr) AS n_tests
+          FROM tb_uster_par u
+          JOIN tb_uster_tbl t ON t.testnr = u.testnr
+          LEFT JOIN tb_tensorapid_par tp ON tp.uster_testnr = u.testnr
+          LEFT JOIN tb_tensorapid_tbl tp2 ON tp2.testnr = tp.testnr
+          WHERE COALESCE(
+              CASE WHEN trim(u.time_stamp) ~ '^\\d{2}/\\d{2}/\\d{4}' THEN TO_TIMESTAMP(trim(u.time_stamp), 'DD/MM/YYYY HH24:MI') ELSE NULL END,
+              u.created_at
+            ) IS NOT NULL
+            AND COALESCE(
+              (regexp_match(u.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1],
+              (regexp_match(u.lote, '(\\d+)'))[1]
+            ) ~ '^\\d+$'
+            AND COALESCE(
+              (regexp_match(u.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1],
+              (regexp_match(u.lote, '(\\d+)'))[1]
+            )::integer = ANY($1::integer[])
+          GROUP BY
+            DATE(COALESCE(
+              CASE WHEN trim(u.time_stamp) ~ '^\\d{2}/\\d{2}/\\d{4}' THEN TO_TIMESTAMP(trim(u.time_stamp), 'DD/MM/YYYY HH24:MI') ELSE NULL END,
+              u.created_at
+            )),
+            COALESCE((regexp_match(u.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1], (regexp_match(u.lote, '(\\d+)'))[1])::integer,
+            u.nomcount,
+            CASE WHEN lower(trim(COALESCE(u.matclass, ''))) = 'hilo de fantasia' THEN true ELSE false END
+          ORDER BY fecha ASC, mistura ASC, u.nomcount::numeric ASC NULLS LAST`;
+        const rDiario = await query(sqlDiario, [loteNums], 'narrativa-lotes/diario');
+        rowsPorFecha = rDiario.rows || [];
+        console.log(`[narrativa-lotes/local] diario: ${rowsPorFecha.length} filas para lotes [${loteNums.join(',')}]`);
+        if (rowsPorFecha.length) console.log('[narrativa-lotes/local] muestra:', JSON.stringify(rowsPorFecha.slice(0, 3)));
+        else console.warn('[narrativa-lotes/local] sin datos diarios — verificar campo lote en tb_uster_par para lotes:', loteNums);
+      } catch (e) {
+        console.warn('narrativa-lotes: no se pudo obtener datos diarios:', e.message?.slice(0, 80));
+      }
+      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], rowsPorFecha);
       return res.json({ success: true, narrativa, fuente: 'local' });
     }
 
     const lotesSorted = [...new Set(rows.map(r => Number(r.mistura)))].sort((a, b) => a - b);
     const actual = loteActual ? Number(loteActual) : Math.max(...lotesSorted);
     const refs   = lotesSorted.filter(l => l !== actual);
+
+    // ── Datos diarios para evolución temporal ──────────────────────────────
+    const loteNums = lotesSorted;
+    let rowsPorFechaGemini = [];
+    try {
+      const sqlDiario = `
+        SELECT
+          DATE(COALESCE(
+            CASE WHEN trim(u.time_stamp) ~ '^\\d{2}/\\d{2}/\\d{4}' THEN TO_TIMESTAMP(trim(u.time_stamp), 'DD/MM/YYYY HH24:MI') ELSE NULL END,
+            u.created_at
+          )) AS fecha,
+          COALESCE(
+            (regexp_match(u.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1],
+            (regexp_match(u.lote, '(\\d+)'))[1]
+          )::integer AS mistura,
+          u.nomcount AS ne,
+          CASE WHEN lower(trim(COALESCE(u.matclass, ''))) = 'hilo de fantasia' THEN true ELSE false END AS is_flame,
+          ROUND(AVG(t.cvm_percent)::numeric, 2) AS cvm,
+          ROUND(AVG(t.neps_200_km)::numeric, 1) AS neps_200,
+          ROUND(AVG(t.neps_140_km)::numeric, 1) AS neps_140,
+          ROUND(AVG(tp2.tenacidad)::numeric, 2) AS tenacidad,
+          ROUND(AVG(tp2.elongacion)::numeric, 2) AS elongacion
+        FROM tb_uster_par u
+        JOIN tb_uster_tbl t ON t.testnr = u.testnr
+        LEFT JOIN tb_tensorapid_par tp ON tp.uster_testnr = u.testnr
+        LEFT JOIN tb_tensorapid_tbl tp2 ON tp2.testnr = tp.testnr
+        WHERE COALESCE(
+            CASE WHEN trim(u.time_stamp) ~ '^\\d{2}/\\d{2}/\\d{4}' THEN TO_TIMESTAMP(trim(u.time_stamp), 'DD/MM/YYYY HH24:MI') ELSE NULL END,
+            u.created_at
+          ) IS NOT NULL
+          AND COALESCE(
+            (regexp_match(u.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1],
+            (regexp_match(u.lote, '(\\d+)'))[1]
+          ) ~ '^\\d+$'
+          AND COALESCE(
+            (regexp_match(u.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1],
+            (regexp_match(u.lote, '(\\d+)'))[1]
+          )::integer = ANY($1::integer[])
+        GROUP BY
+          DATE(COALESCE(
+            CASE WHEN trim(u.time_stamp) ~ '^\\d{2}/\\d{2}/\\d{4}' THEN TO_TIMESTAMP(trim(u.time_stamp), 'DD/MM/YYYY HH24:MI') ELSE NULL END,
+            u.created_at
+          )),
+          COALESCE((regexp_match(u.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1], (regexp_match(u.lote, '(\\d+)'))[1])::integer,
+          u.nomcount,
+          CASE WHEN lower(trim(COALESCE(u.matclass, ''))) = 'hilo de fantasia' THEN true ELSE false END
+        ORDER BY fecha ASC, mistura ASC, u.nomcount::numeric ASC NULLS LAST`;
+      const rDiario = await query(sqlDiario, [loteNums], 'narrativa-lotes-gemini/diario');
+      rowsPorFechaGemini = rDiario.rows || [];
+      console.log(`[narrativa-lotes/gemini] diario: ${rowsPorFechaGemini.length} filas para lotes [${loteNums.join(',')}]`);
+      if (rowsPorFechaGemini.length) console.log('[narrativa-lotes/gemini] muestra:', JSON.stringify(rowsPorFechaGemini.slice(0, 3)));
+      else console.warn('[narrativa-lotes/gemini] sin datos diarios — verificar campo lote en tb_uster_par para lotes:', loteNums);
+    } catch (e) {
+      console.warn('narrativa-lotes Gemini: datos diarios no disponibles:', e.message?.slice(0, 80));
+    }
+    // Formatea bloque de evolución diaria para incluir en el prompt
+    const evolucionDiariaStr = (() => {
+      if (!rowsPorFechaGemini.length) return '';
+      const neMap = new Map();
+      for (const r of rowsPorFechaGemini) {
+        const key = `${r.mistura}|${r.ne}|${r.is_flame}`;
+        if (!neMap.has(key)) neMap.set(key, { mistura: Number(r.mistura), ne: r.ne, is_flame: r.is_flame, dias: [] });
+        neMap.get(key).dias.push(r);
+      }
+      const lines = [];
+      for (const { mistura, ne, is_flame, dias } of neMap.values()) {
+        const flame = is_flame === true || String(is_flame).trim() === 'true' || String(is_flame).trim() === '1';
+        const neTxt = `${ne}${flame ? ' FLAME' : '/1'}`;
+        const loteTag = mistura === actual ? '[ACTUAL]' : '[REF]';
+        lines.push(`Ne ${neTxt} — Lote ${mistura} ${loteTag}:`);
+        const diasOrd = [...dias].sort((a, b) => String(a.fecha) < String(b.fecha) ? -1 : 1);
+        for (const d of diasOrd) {
+          const fecha = String(d.fecha).slice(0, 10);
+          const parts = [`Fecha=${fecha}`];
+          if (d.cvm       != null) parts.push(`CVm=${d.cvm}`);
+          if (d.tenacidad != null) parts.push(`Tenac=${d.tenacidad}`);
+          if (d.neps_200  != null) parts.push(`Neps+200=${d.neps_200}/km`);
+          if (d.neps_140  != null) parts.push(`Neps+140=${d.neps_140}/km`);
+          if (d.elongacion!= null) parts.push(`Elong=${d.elongacion}%`);
+          lines.push(`  ${parts.join(' | ')}`);
+        }
+      }
+      return `\nDATA DIARIA (por fecha de ensayo):\n` + lines.join('\n');
+    })();
 
     const resumenLotes = lotesSorted.map(mistura => {
       const filas = rows.filter(r => Number(r.mistura) === mistura);
@@ -9784,7 +10132,7 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
         .map(r => {
           const flame = r.is_flame === true || String(r.is_flame ?? '').trim().toLowerCase() === 'true' || String(r.is_flame ?? '').trim() === '1';
           const neTxt = `${r.ne}${flame ? ' FLAME' : '/1'}`;
-          return `   • Ne ${neTxt}: Tenacidad=${r.tenacidad ?? '-'} cN/tex | Elongación=${r.elongacion ?? '-'}% | CVm%=${r.cvm ?? '-'} | Neps+200%=${r.neps_200 ?? '-'}/km`;
+          return `   • Ne ${neTxt}: Tenacidad=${r.tenacidad ?? '-'} cN/tex | Elongación=${r.elongacion ?? '-'}% | CVm%=${r.cvm ?? '-'} | Neps+200%=${r.neps_200 ?? '-'}/km | Neps+140%=${r.neps_140 ?? '-'}/km`;
         })
         .join('\n');
       const misturaLabel = hvi.mistura_real ? `${mistura} (Mistura ${hvi.mistura_real})` : `${mistura}`;
@@ -9809,7 +10157,9 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
     const prompt = `Actúa como Auditor de Calidad Textil y Experto en Tejeduría e Hilandería de denim de alta velocidad.
 
 DATOS COMPARATIVOS:
-${resumenLotes}
+${resumenLotes}${evolucionDiariaStr}
+
+NOTA SOBRE NEPS: Neps+200% = impurezas grandes que afectan absorción del colorante en Índigo. Neps+140% = conteo total de neps incluyendo pequeños, indicador de agresividad del proceso de apertura y cardado. Los umbrales de decisión aplican a Neps+200%; usar Neps+140% como indicador complementario de proceso (apertura/cardas).
 
 UMBRALES: Tenacidad hilo >16.0=APTO, 14.5-16.0=PRECAUCIÓN, <14.5=CRÍTICO | Elongación <7.5%=RIESGO URDIDORA | Neps+200% >700=RIESGO ÍNDIGO (liso) / >850 (FLAME)=CRÍTICO | CVm% >13=IRREGULAR (liso) / >18 (FLAME)=ALERTA | STR fibra >27=ÓPTIMO
 
@@ -9838,11 +10188,11 @@ DIAGNÓSTICO MECÁNICO — PARADOJA DE LA FIBRA (obligatorio cuando aplique):
 - Si CVm% sube > 0.5% entre lotes consecutivos SIN cambio de fibra: alerta de degradación mecánica progresiva.
 - Si diferencia de CVm% entre líneas del mismo Ne > 0.3%: desajuste mecánico puntual (no de mezcla); recomendar estandarización.
 
-ACCIONES MECÁNICAS (incluir en sección propia cuando haya alertas):
-📍 CVm% alto con fibra premium → revisar cots (rodillos de caucho) y limpiar rotores Open-End
-📍 Neps altos con UI ≥ 80% → incrementar frecuencia de purga de aire en OE
-📍 Diferencia CVm% entre líneas mismo Ne → estandarizar ajuste mecánico de la línea desviada
-📍 Elongación < 7.5% en Urdimbre → revisar tensión de hilo y estado de pasadores
+ACCIONES RECOMENDADAS POR PROCESO (obligatorio cuando haya alertas, agrupar por etapa):
+1️⃣ APERTURA Y BLOWROOM: revisar distancias entre cilindros abridores y rejillas cuando Neps altos con fibra limpia.
+2️⃣ CARDAS: verificar guarnición del tambor y chapones cuando Neps+140% superan lo esperado para el UI.
+3️⃣ PASADOR (MANUAR): revisar presión de rodillos y cots cuando CVm% alto con fibra premium o diferencia entre líneas mismo Ne.
+4️⃣ OPEN END (OE): limpiar rotores, ajustar purga de aire y revisar canal de transporte cuando CVm%+Neps elevados o Elongación < 7.5%.
 
 Generá exactamente este formato en español (500 palabras máx, cuantificá cambios con %):
 
@@ -9864,10 +10214,27 @@ Análisis Comparativo Fibra ↔️ Hilo
 � DIAGNÓSTICO MECÁNICO — Paradoja de la Fibra (solo si aplica):
 [Si fibra buena y hilo malo: explicar causa mecánica concreta. Si falta dato: decir "dato insuficiente".]
 
-🚀 ACCIONES MECÁNICAS RECOMENDADAS (solo si hay alertas):
-[Lista de acciones por Ne con formato: 📍 NeX: acción concreta sobre máquina/proceso]
+� ACCIONES RECOMENDADAS POR PROCESO (solo si hay alertas, groupar por etapa):
+1️⃣ APERTURA Y BLOWROOM: [acciones o "sin novedad"]
+2️⃣ CARDAS: [acciones o "sin novedad"]
+3️⃣ PASADOR (MANUAR): [acciones o "sin novedad"]
+4️⃣ OPEN END (OE): [acciones o "sin novedad"]
 
-�🔍 AUDITORÍA DE APTITUD POR PROCESO — Lote FIAC ${actual}:
+🧵 EVOLUCIÓN Y ESTADO DE TÍTULOS (solo si hay DATA DIARIA, omitir si no hay. OBLIGATORIO: fechas en formato DD/MM en español):
+[Ordenar Ne de mayor a menor (urdimbre primero). Para cada Ne:
+  - Título: "Ne X/1 (Urdimbre|Trama):"
+  - Una línea por fecha: "  • DD/MM: CVm X.XX | Tenac X.XX | Neps XXX/km | Elong X.XX%  (CVm ↑/↓X.XX | Neps ↑/↓XXX si cambió)"
+  - Prefijo ⚠️ en línea si CVm subió >0.5 pts o Neps subió >150/km respecto al día anterior
+  - Después de la última fecha, línea "👉 ESTADO: 🔴/🟢/⚠️/✅ TEXTO BREVE. Descripción concreta de 1 oración en español."]
+
+⚖️ BALANCE DE TENDENCIAS (solo si hay DATA DIARIA):
+[📈 MEJORAS: lista de Ne que mejoraron con descripción concreta]
+[📉 DETERIOROS: lista de Ne que empeoraron con diagnosis de causa mecánica]
+
+🛠 ACCIONES RECOMENDADAS (URGENTE) (solo si hay deterioros):
+[Organizar por etapa: 1️⃣ OE, 2️⃣ PASADOR, 3️⃣ CARDAS. Para cada Ne afectado, una acción concreta sobre máquina. Sin acciones genéricas.]
+
+🔍 AUDITORÍA DE APTITUD POR PROCESO — Lote FIAC ${actual}:
 [Para cada Ne: Ne X [Aplicación] → Proceso1 ✅/⚠️/🔴 → Proceso2 ✅/⚠️/🔴 — Estado (Aprobado/Condicional/Rechazado) — Desvío si hay.]
 [Agregar 💬 comentario de planta con vocabulario de hilandería para cada Ne.]
 
@@ -9885,7 +10252,7 @@ Análisis Comparativo Fibra ↔️ Hilo
     } catch (geminiErr) {
       // Fallback local ante cualquier error de Gemini (quota, red, etc.)
       console.warn('Gemini no disponible, usando generación local:', geminiErr.message?.slice(0, 120));
-      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || []);
+      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], rowsPorFechaGemini);
       return res.json({ success: true, narrativa, fuente: 'local', aviso: 'Gemini no disponible – informe generado localmente.' });
     }
 
