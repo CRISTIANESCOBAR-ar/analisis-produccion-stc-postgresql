@@ -9302,7 +9302,7 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Genera el informe de forma local (sin IA externa) — siempre disponible
 // ─────────────────────────────────────────────────────────────────────────────
-function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha = []) {
+function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha = [], rowsMaquinas = []) {
   const lotesSorted = [...new Set(rows.map(r => Number(r.mistura)))].sort((a, b) => a - b);
   const actual = loteActual ? Number(loteActual) : Math.max(...lotesSorted);
   const refs   = lotesSorted.filter(l => l !== actual);
@@ -9892,6 +9892,15 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
     };
     const hilosOrd = [...HilosActual].sort((a, b) => nivelNe(b) - nivelNe(a));
 
+    // Índice de máquinas por Ne (del lote actual)
+    const maqPorNe = new Map();
+    for (const mr of rowsMaquinas) {
+      if (Number(mr.mistura) !== actual) continue;
+      const flame = mr.is_flame === true || String(mr.is_flame).trim() === 'true' || String(mr.is_flame).trim() === '1';
+      const key = `${mr.ne}|${flame}`;
+      maqPorNe.set(key, mr);
+    }
+
     const campoLabel = { tenacidad: 'Tenac', elongacion: 'Elong', cvm: 'CVm', neps_200: 'Neps' };
     const campoUnidad = { tenacidad: 'cN/tex', elongacion: '%', cvm: '%', neps_200: '/km' };
     const campoDec    = { tenacidad: 2, elongacion: 2, cvm: 2, neps_200: 0 };
@@ -9920,6 +9929,16 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
       const icon   = nv === 'crit' ? '🔴' : nv === 'warn' ? '🟡' : '🟢';
       const estado = nv === 'crit' ? 'ALERTA CRÍTICA' : nv === 'warn' ? 'CONDICIONAL' : 'APROBADO';
       bloqueDictamen.push(`${icon} Ne ${neTxt} (${m.app}): ${estado}`);
+
+      // Datos de proceso: máquina OE, pasador, estiraje
+      const maqInfo = maqPorNe.get(`${h.ne}|${flame}`);
+      if (maqInfo) {
+        const maqStr   = maqInfo.maquinas ? `OE: ${maqInfo.maquinas}` : null;
+        const pasStr   = maqInfo.pasador === 'SI' ? 'Pasador: SÍ' : maqInfo.pasador === 'NO' ? 'Pasador: NO' : null;
+        const estStr   = maqInfo.estiraje_avg != null ? `Estiraje: ${parseFloat(maqInfo.estiraje_avg).toFixed(2)}x` : null;
+        const infoParts = [maqStr, pasStr, estStr].filter(Boolean);
+        if (infoParts.length) bloqueDictamen.push(`   Proceso: ${infoParts.join(' | ')}`);
+      }
 
       if (fuera.length > 0) {
         bloqueDictamen.push(`   Fuera de umbral: ${fuera.join(' | ')}`);
@@ -10129,8 +10148,50 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
       } catch (e) {
         console.warn('narrativa-lotes: no se pudo obtener datos diarios:', e.message?.slice(0, 80));
       }
-      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], rowsPorFecha);
-      return res.json({ success: true, narrativa, fuente: 'local' });
+      // ── Máquinas OE + pasador + estiraje por Ne ──────────────────────────
+      let rowsMaquinas = [];
+      const sqlMaquinas = `
+        SELECT
+          COALESCE(
+            (regexp_match(u.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1],
+            (regexp_match(u.lote, '(\\d+)'))[1]
+          )::integer AS mistura,
+          u.nomcount AS ne,
+          CASE WHEN lower(trim(COALESCE(u.matclass, ''))) = 'hilo de fantasia' THEN true ELSE false END AS is_flame,
+          string_agg(DISTINCT trim(u.maschnr), ', ' ORDER BY trim(u.maschnr))
+            FILTER (WHERE u.maschnr IS NOT NULL AND trim(u.maschnr) <> '') AS maquinas,
+          CASE
+            WHEN COUNT(CASE WHEN upper(trim(u.pasador)) = 'SI' THEN 1 END) >
+                 COUNT(CASE WHEN upper(trim(u.pasador)) = 'NO' THEN 1 END) THEN 'SI'
+            WHEN COUNT(CASE WHEN upper(trim(u.pasador)) = 'NO' THEN 1 END) > 0 THEN 'NO'
+            ELSE NULL
+          END AS pasador,
+          ROUND(AVG(CASE
+            WHEN u.estiraje IS NOT NULL AND trim(u.estiraje::text) ~ '^[0-9\\.]+$'
+            THEN u.estiraje::numeric END)::numeric, 2) AS estiraje_avg
+        FROM tb_uster_par u
+        WHERE COALESCE(
+            (regexp_match(u.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1],
+            (regexp_match(u.lote, '(\\d+)'))[1]
+          ) ~ '^\\d+$'
+          AND COALESCE(
+            (regexp_match(u.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1],
+            (regexp_match(u.lote, '(\\d+)'))[1]
+          )::integer = ANY($1::integer[])
+        GROUP BY
+          COALESCE((regexp_match(u.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1], (regexp_match(u.lote, '(\\d+)'))[1])::integer,
+          u.nomcount,
+          CASE WHEN lower(trim(COALESCE(u.matclass, ''))) = 'hilo de fantasia' THEN true ELSE false END
+        ORDER BY mistura, u.nomcount::numeric ASC NULLS LAST`;
+      try {
+        const rMaq = await query(sqlMaquinas, [loteNums], 'narrativa-lotes/maquinas');
+        rowsMaquinas = rMaq.rows || [];
+      } catch (e) {
+        console.warn('narrativa-lotes: datos de máquinas no disponibles:', e.message?.slice(0, 80));
+      }
+      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], rowsPorFecha, rowsMaquinas);
+      const fuenteLocal = `⚡ Fuente: Generador local (sin IA externa) · ${new Date().toLocaleString('es-AR')}\n\n`;
+      return res.json({ success: true, narrativa: fuenteLocal + narrativa, fuente: 'local' });
     }
 
     const lotesSorted = [...new Set(rows.map(r => Number(r.mistura)))].sort((a, b) => a - b);
@@ -10191,6 +10252,47 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
     } catch (e) {
       console.warn('narrativa-lotes Gemini: datos diarios no disponibles:', e.message?.slice(0, 80));
     }
+    // ── Máquinas OE + pasador + estiraje (Gemini path) ─────────────────────
+    let rowsMaquinasGemini = [];
+    const sqlMaquinasG = `
+      SELECT
+        COALESCE(
+          (regexp_match(u.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1],
+          (regexp_match(u.lote, '(\\d+)'))[1]
+        )::integer AS mistura,
+        u.nomcount AS ne,
+        CASE WHEN lower(trim(COALESCE(u.matclass, ''))) = 'hilo de fantasia' THEN true ELSE false END AS is_flame,
+        string_agg(DISTINCT trim(u.maschnr), ', ' ORDER BY trim(u.maschnr))
+          FILTER (WHERE u.maschnr IS NOT NULL AND trim(u.maschnr) <> '') AS maquinas,
+        CASE
+          WHEN COUNT(CASE WHEN upper(trim(u.pasador)) = 'SI' THEN 1 END) >
+               COUNT(CASE WHEN upper(trim(u.pasador)) = 'NO' THEN 1 END) THEN 'SI'
+          WHEN COUNT(CASE WHEN upper(trim(u.pasador)) = 'NO' THEN 1 END) > 0 THEN 'NO'
+          ELSE NULL
+        END AS pasador,
+        ROUND(AVG(CASE
+          WHEN u.estiraje IS NOT NULL AND trim(u.estiraje::text) ~ '^[0-9\\.]+$'
+          THEN u.estiraje::numeric END)::numeric, 2) AS estiraje_avg
+      FROM tb_uster_par u
+      WHERE COALESCE(
+          (regexp_match(u.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1],
+          (regexp_match(u.lote, '(\\d+)'))[1]
+        ) ~ '^\\d+$'
+        AND COALESCE(
+          (regexp_match(u.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1],
+          (regexp_match(u.lote, '(\\d+)'))[1]
+        )::integer = ANY($1::integer[])
+      GROUP BY
+        COALESCE((regexp_match(u.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1], (regexp_match(u.lote, '(\\d+)'))[1])::integer,
+        u.nomcount,
+        CASE WHEN lower(trim(COALESCE(u.matclass, ''))) = 'hilo de fantasia' THEN true ELSE false END
+      ORDER BY mistura, u.nomcount::numeric ASC NULLS LAST`;
+    try {
+      const rMaqG = await query(sqlMaquinasG, [loteNums], 'narrativa-lotes-gemini/maquinas');
+      rowsMaquinasGemini = rMaqG.rows || [];
+    } catch (e) {
+      console.warn('narrativa-lotes Gemini: datos de máquinas no disponibles:', e.message?.slice(0, 80));
+    }
     // Formatea bloque de evolución diaria para incluir en el prompt
     const evolucionDiariaStr = (() => {
       if (!rowsPorFechaGemini.length) return '';
@@ -10219,9 +10321,21 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
         }
       }
       return `\nDATA DIARIA (por fecha de ensayo):\n` + lines.join('\n');
+    // ── Datos de proceso por Ne para el prompt de Gemini ───────────────────
+    const maquinasStr = (() => {
+      const actMaq = rowsMaquinasGemini.filter(r => Number(r.mistura) === actual);
+      if (!actMaq.length) return '';
+      const lines = actMaq.map(r => {
+        const flame = r.is_flame === true || String(r.is_flame).trim() === 'true' || String(r.is_flame).trim() === '1';
+        const neTxt = `${r.ne}${flame ? ' FLAME' : '/1'}`;
+        const parts = [`Ne ${neTxt}`];
+        if (r.maquinas) parts.push(`Máquinas OE: ${r.maquinas}`);
+        if (r.pasador)  parts.push(`Pasador: ${r.pasador}`);
+        if (r.estiraje_avg != null) parts.push(`Estiraje: ${parseFloat(r.estiraje_avg).toFixed(2)}x`);
+        return `  ${parts.join(' | ')}`;
+      });
+      return `\nDATOS DE PROCESO (máquinas OE, pasador, estiraje — Lote ${actual}):\n` + lines.join('\n');
     })();
-
-    const resumenLotes = lotesSorted.map(mistura => {
       const filas = rows.filter(r => Number(r.mistura) === mistura);
       const hvi = filas[0] || {};
       const hilos = filas
@@ -10254,7 +10368,7 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
     const prompt = `Actúa como Auditor de Calidad Textil y Experto en Tejeduría e Hilandería de denim de alta velocidad.
 
 DATOS COMPARATIVOS:
-${resumenLotes}${evolucionDiariaStr}
+${resumenLotes}${evolucionDiariaStr}${maquinasStr}
 
 NOTA SOBRE NEPS: Neps+200% = impurezas grandes que afectan absorción del colorante en Índigo. Neps+140% = conteo total de neps incluyendo pequeños, indicador de agresividad del proceso de apertura y cardado. Los umbrales de decisión aplican a Neps+200%; usar Neps+140% como indicador complementario de proceso (apertura/cardas).
 
@@ -10290,6 +10404,8 @@ ACCIONES RECOMENDADAS POR PROCESO (obligatorio cuando haya alertas, agrupar por 
 2️⃣ CARDAS: verificar guarnición del tambor y chapones cuando Neps+140% superan lo esperado para el UI.
 3️⃣ PASADOR (MANUAR): revisar presión de rodillos y cots cuando CVm% alto con fibra premium o diferencia entre líneas mismo Ne.
 4️⃣ OPEN END (OE): limpiar rotores, ajustar purga de aire y revisar canal de transporte cuando CVm%+Neps elevados o Elongación < 7.5%.
+
+INSTRUCCIÓN SOBRE DATOS DE PROCESO: si en DATOS DE PROCESO aparecen números de máquina OE, mencionarlos explícitamente en las acciones (ej: "Máquina OE #47: limpiar rotor..."). Si Pasador=SI, indicar "pasó por manuar" en el diagnóstico. Si Pasador=NO, indicar "sin doblez previo" como posible causa de irregularidad. Si el dato de pasador es nulo, no mencionar el pasador en el análisis.
 
 Generá exactamente este formato en español (600 palabras máx, cuantificá cambios con %):
 
@@ -10344,12 +10460,14 @@ Generá exactamente este formato en español (600 palabras máx, cuantificá cam
 
     try {
       const result = await model.generateContent(prompt);
-      return res.json({ success: true, narrativa: result.response.text(), fuente: 'gemini' });
+      const fuenteGemini = `✨ Fuente: Gemini Flash 2.5 · ${new Date().toLocaleString('es-AR')}\n\n`;
+      return res.json({ success: true, narrativa: fuenteGemini + result.response.text(), fuente: 'gemini' });
     } catch (geminiErr) {
       // Fallback local ante cualquier error de Gemini (quota, red, etc.)
       console.warn('Gemini no disponible, usando generación local:', geminiErr.message?.slice(0, 120));
-      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], rowsPorFechaGemini);
-      return res.json({ success: true, narrativa, fuente: 'local', aviso: 'Gemini no disponible – informe generado localmente.' });
+      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], rowsPorFechaGemini, rowsMaquinasGemini);
+      const fuenteFallback = `⚡ Fuente: Generador local (Gemini no disponible) · ${new Date().toLocaleString('es-AR')}\n\n`;
+      return res.json({ success: true, narrativa: fuenteFallback + narrativa, fuente: 'local', aviso: 'Gemini no disponible – informe generado localmente.' });
     }
 
   } catch (err) {
