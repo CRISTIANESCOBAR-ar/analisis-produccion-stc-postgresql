@@ -14,6 +14,7 @@ DROP TABLE IF EXISTS tb_PROCESO CASCADE;
 DROP TABLE IF EXISTS tb_DEFECTOS CASCADE;
 DROP TABLE IF EXISTS tb_CALIDAD_FIBRA CASCADE;
 DROP TABLE IF EXISTS tb_PRODUCCION_OE CASCADE;
+DROP TABLE IF EXISTS tb_PRODUCCION_CARDA CASCADE;
 
 -- =====================================================
 -- tb_FICHAS
@@ -502,6 +503,43 @@ CREATE TABLE tb_PRODUCCION_OE (
     "% ROB 03" TEXT
 );
 
+-- =====================================================
+-- tb_PRODUCCION_CARDA
+-- =====================================================
+CREATE TABLE tb_PRODUCCION_CARDA (
+    "MAQUINA" TEXT,
+    "LF" TEXT,
+    "DATA" TEXT,
+    "T" TEXT,
+    "HR_INI" TEXT,
+    "HR_FINA" TEXT,
+    "ITEM" TEXT,
+    "DESC ITEM" TEXT,
+    "TITULO" TEXT,
+    "RPM" TEXT,
+    "TEMPO TOTAL" TEXT,
+    "PROD KG/H" TEXT,
+    "PROD CALC" TEXT,
+    "PROD INFORM" TEXT,
+    "EFIC INFOR" TEXT,
+    "EFIC CALC" TEXT,
+    "OBS" TEXT,
+    "D%" TEXT,
+    "CV" TEXT,
+    "CVIn" TEXT,
+    "PG" TEXT,
+    "A%" TEXT,
+    "T (25%)" TEXT,
+    "T (20%)" TEXT,
+    "T (15%)" TEXT,
+    "T1 (25%)" TEXT,
+    "T1 (20%)" TEXT,
+    "T1 (15%)" TEXT,
+    "T2 (25%)" TEXT,
+    "T2 (20%)" TEXT,
+    "T2 (15%)" TEXT
+);
+
 -- Crear índices básicos
 CREATE INDEX IF NOT EXISTS idx_produccion_fecha ON tb_PRODUCCION("DT_BASE_PRODUCAO");
 CREATE INDEX IF NOT EXISTS idx_produccion_maquina ON tb_PRODUCCION("MAQUINA");
@@ -509,3 +547,4 @@ CREATE INDEX IF NOT EXISTS idx_calidad_fecha ON tb_CALIDAD("DAT_PROD");
 CREATE INDEX IF NOT EXISTS idx_paradas_fecha ON tb_PARADAS("DATA_BASE");
 CREATE INDEX IF NOT EXISTS idx_fichas_artigo ON tb_FICHAS("ARTIGO");
 CREATE INDEX IF NOT EXISTS idx_produccion_oe_fecha ON tb_PRODUCCION_OE("DATA_PRODUCAO");
+CREATE INDEX IF NOT EXISTS idx_produccion_carda_fecha ON tb_PRODUCCION_CARDA("DATA");

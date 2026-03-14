@@ -20,6 +20,7 @@ const FULL_TRUNCATE_TABLES = new Set([
 const TABLE_DATE_COLUMN = {
   tb_produccion: 'DT_BASE_PRODUCAO',
   tb_produccion_oe: 'data_producao',
+  tb_produccion_carda: 'data',
   tb_testes: 'dt_prod',
   tb_paradas: 'data_base',
   tb_residuos_por_sector: 'DT_MOV',
@@ -45,9 +46,17 @@ function quoteIdent(name) {
 function parseDateToISO(value) {
   const s = String(value ?? '').trim();
   if (!s) return null;
-  // dd/mm/yyyy
-  const m1 = s.match(/^([0-3]\d)\/([0-1]\d)\/(\d{4})$/u);
-  if (m1) return `${m1[3]}-${m1[2]}-${m1[1]}`;
+  // dd/mm/yyyy o dd/mm/yy (opcionalmente con hora)
+  const m1 = s.match(/^([0-3]?\d)\/([0-1]?\d)\/(\d{2}|\d{4})(?:\s+.*)?$/u);
+  if (m1) {
+    const dd = m1[1].padStart(2, '0');
+    const mm = m1[2].padStart(2, '0');
+    const yy = m1[3];
+    const yyyy = yy.length === 2
+      ? String((Number(yy) >= 70 ? 1900 : 2000) + Number(yy))
+      : yy;
+    return `${yyyy}-${mm}-${dd}`;
+  }
   // yyyy-mm-dd (o yyyy-mm-dd HH:..)
   const m2 = s.match(/^(\d{4}-\d{2}-\d{2})/u);
   if (m2) return m2[1];
@@ -189,12 +198,16 @@ async function applyImportStrategy(client, tableName, csvPath) {
   } else if (dataType.includes('timestamp')) {
     dateExpr = `DATE(${qcol})`;
   } else {
-    // TEXT u otros: soportar DD/MM/YYYY y YYYY-MM-DD(+hora)
+    // TEXT u otros: soportar DD/MM/YYYY, DD/MM/YY y YYYY-MM-DD(+hora)
     dateExpr = `(
       CASE
-        WHEN ${qcol} IS NULL OR ${qcol} = '' THEN NULL
-        WHEN ${qcol} ~ '^[0-3][0-9]/[0-1][0-9]/[0-9]{4}' THEN to_date(substring(${qcol} from 1 for 10), 'DD/MM/YYYY')
-        WHEN ${qcol} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' THEN substring(${qcol} from 1 for 10)::date
+        WHEN ${qcol} IS NULL OR btrim(${qcol}) = '' THEN NULL
+        WHEN btrim(${qcol}) ~ '^[0-3]?[0-9]/[0-1]?[0-9]/[0-9]{4}(\\s|$)'
+          THEN to_date(split_part(btrim(${qcol}), ' ', 1), 'DD/MM/YYYY')
+        WHEN btrim(${qcol}) ~ '^[0-3]?[0-9]/[0-1]?[0-9]/[0-9]{2}(\\s|$)'
+          THEN to_date(split_part(btrim(${qcol}), ' ', 1), 'DD/MM/YY')
+        WHEN btrim(${qcol}) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
+          THEN substring(btrim(${qcol}) from 1 for 10)::date
         ELSE NULL
       END
     )`;
@@ -719,6 +732,7 @@ async function importCSVToTableCopyTransformed(client, csvPath, tableName) {
 const CSV_TO_TABLE_MAP = {
   'rptProducaoMaquina.csv': 'tb_PRODUCCION',
   'rptProducaoOE.csv': 'tb_PRODUCCION_OE',
+  'rptProducaoCarda.csv': 'tb_PRODUCCION_CARDA',
   'rptPrdTestesFisicos.csv': 'tb_TESTES',
   'rptParadaMaquinaPRD.csv': 'tb_PARADAS',
   'fichaArtigo.csv': 'tb_FICHAS',

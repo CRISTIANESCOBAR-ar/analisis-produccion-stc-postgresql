@@ -155,6 +155,105 @@
         </div>
       </div>
 
+      <!-- ── CONTEXTO OPERATIVO CARDAS ── -->
+      <div v-if="hasData && cardasContext" class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h2 class="font-bold text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wide">
+              <span>🧺</span> Contexto Operativo Cardas
+            </h2>
+            <p class="text-[10px] text-slate-400 mt-0.5">Resumen del último día importado de producción de cardas</p>
+          </div>
+          <span v-if="cardasContext.disponible" class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-700">
+            {{ cardasContext.resumen?.data_ref || 'S/D' }}
+          </span>
+          <span v-else class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-700">
+            Sin datos vinculables
+          </span>
+        </div>
+
+        <div v-if="cardasContext.disponible" class="p-6 space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-3 text-xs">
+            <div class="bg-slate-50 rounded-lg p-3">
+              <div class="text-[10px] text-slate-400 uppercase tracking-wider">Máquinas</div>
+              <div class="font-bold text-slate-700 text-base">{{ cardasContext.resumen?.maquinas ?? '–' }}</div>
+            </div>
+            <div class="bg-slate-50 rounded-lg p-3">
+              <div class="text-[10px] text-slate-400 uppercase tracking-wider">Filas activas</div>
+              <div class="font-bold text-slate-700 text-base">{{ cardasContext.resumen?.filas_activas ?? '–' }} / {{ cardasContext.resumen?.filas ?? '–' }}</div>
+            </div>
+            <div class="bg-slate-50 rounded-lg p-3">
+              <div class="text-[10px] text-slate-400 uppercase tracking-wider">Efic. Calc Prom</div>
+              <div class="font-bold text-slate-700 text-base">{{ fmt(cardasContext.resumen?.efic_calc_avg, 2) }}%</div>
+            </div>
+            <div class="bg-slate-50 rounded-lg p-3">
+              <div class="text-[10px] text-slate-400 uppercase tracking-wider">Prod. Informada</div>
+              <div class="font-bold text-slate-700 text-base">{{ fmt(cardasContext.resumen?.prod_inform_total, 0) }} kg</div>
+            </div>
+            <div class="bg-slate-50 rounded-lg p-3">
+              <div class="text-[10px] text-slate-400 uppercase tracking-wider">Cobertura dato</div>
+              <div class="font-bold text-slate-700 text-base">{{ fmt(cardasContext.resumen?.cobertura_prod_pct, 1) }}%</div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div class="border border-slate-100 rounded-xl overflow-hidden">
+              <div class="px-3 py-2 bg-slate-50 text-[10px] font-bold uppercase tracking-widest text-slate-500">Turnos</div>
+              <table class="w-full text-[11px]">
+                <thead class="text-slate-400 border-b border-slate-100">
+                  <tr>
+                    <th class="text-left px-3 py-2">Turno</th>
+                    <th class="text-right px-3 py-2">Efic Calc%</th>
+                    <th class="text-right px-3 py-2">Prod Inform</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="t in (cardasContext.turnos || [])" :key="`carda-turno-${t.turno}`" class="border-t border-slate-50">
+                    <td class="px-3 py-2 font-bold text-slate-600">{{ t.turno }}</td>
+                    <td class="px-3 py-2 text-right font-mono" :class="Number(t.efic_calc_avg) < 85 ? 'text-red-600' : 'text-slate-700'">
+                      {{ fmt(t.efic_calc_avg, 2) }}
+                    </td>
+                    <td class="px-3 py-2 text-right font-mono text-slate-600">{{ fmt(t.prod_inform_total, 0) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="border border-slate-100 rounded-xl overflow-hidden">
+              <div class="px-3 py-2 bg-slate-50 text-[10px] font-bold uppercase tracking-widest text-slate-500">Máquinas más inestables</div>
+              <table class="w-full text-[11px]">
+                <thead class="text-slate-400 border-b border-slate-100">
+                  <tr>
+                    <th class="text-left px-3 py-2">Máquina</th>
+                    <th class="text-right px-3 py-2">Efic Calc%</th>
+                    <th class="text-right px-3 py-2">Prod Inform</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="m in (cardasContext.maquinasCriticas || [])" :key="`carda-maq-${m.maquina}`" class="border-t border-slate-50">
+                    <td class="px-3 py-2 font-bold text-slate-600">{{ m.maquina }}</td>
+                    <td class="px-3 py-2 text-right font-mono" :class="Number(m.efic_calc_avg) < 85 ? 'text-red-600' : 'text-slate-700'">
+                      {{ fmt(m.efic_calc_avg, 2) }}
+                    </td>
+                    <td class="px-3 py-2 text-right font-mono text-slate-600">{{ fmt(m.prod_inform_total, 0) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div v-if="cardasContext.calidadDato" class="text-[10px] text-slate-500 bg-slate-50 rounded-lg px-3 py-2">
+            Calidad de dato: {{ cardasContext.calidadDato.prod_inform_cero || 0 }} filas con producción 0 ·
+            {{ cardasContext.calidadDato.efic_calc_cero || 0 }} filas con eficiencia 0 ·
+            {{ cardasContext.calidadDato.rpm_cero || 0 }} filas con RPM 0.
+          </div>
+        </div>
+
+        <div v-else class="p-6 text-xs text-amber-700 bg-amber-50 border-t border-amber-100">
+          ⚠️ {{ cardasContext.motivo || 'No se pudo construir contexto de cardas con los datos importados.' }}
+        </div>
+      </div>
+
       <!-- ── TABLA COMPARATIVA ── -->
       <div v-if="hasData" class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
         <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
@@ -565,6 +664,7 @@ const neFilter      = ref('')
 const loading       = ref(false)
 const rows          = ref([])
 const proveedores   = ref([])
+const cardasContext = ref(null)
 const narrativa     = ref('')
 const narrativaError= ref('')
 const narrativaFuente = ref('')   // 'gemini' | 'local'
@@ -1244,6 +1344,7 @@ async function analizar() {
   if (!lotesInput.value.trim() || loading.value) return
   loading.value = true
   rows.value = []
+  cardasContext.value = null
   narrativa.value = ''
   narrativaError.value = ''
 
@@ -1257,9 +1358,11 @@ async function analizar() {
     if (!res.ok) throw new Error(data.error || 'Error al obtener datos')
     rows.value = data.rows || []
     proveedores.value = data.proveedores || []
+    cardasContext.value = data.cardas || null
   } catch (err) {
     console.error('[DashboardMezclaHilo]', err)
     rows.value = []
+    cardasContext.value = null
   } finally {
     loading.value = false
   }

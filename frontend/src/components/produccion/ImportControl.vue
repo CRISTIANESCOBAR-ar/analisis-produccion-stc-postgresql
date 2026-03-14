@@ -335,7 +335,8 @@
             </tr>
             <tr v-for="item in statusList" :key="item.table" class="hover:bg-gray-50 transition-colors">
               <td class="px-3 py-2 whitespace-nowrap">
-                <div class="text-sm font-medium text-gray-900">{{ item.table }}</div>
+                <div class="text-sm font-medium text-gray-900">{{ getTableDisplayName(item.table) }}</div>
+                <div class="text-[10px] text-gray-400 font-mono">{{ item.table }}</div>
               </td>
               <td class="px-3 py-2 whitespace-nowrap">
                 <div class="text-sm text-gray-500" :title="item.csv_file">{{ getFileName(item.csv_file) }}</div>
@@ -1077,6 +1078,26 @@ async function triggerImport() {
 function getFileName(path) {
   if (!path) return '-'
   return path.split('\\').pop().split('/').pop()
+}
+
+function getTableDisplayName(table) {
+  const t = String(table || '').toUpperCase()
+  const names = {
+    TB_PRODUCCION: 'Producción Máquina',
+    TB_PRODUCCION_OE: 'Producción Open End',
+    TB_PRODUCCION_CARDA: 'Producción Cardas',
+    TB_TESTES: 'Testes Físicos',
+    TB_PARADAS: 'Paradas',
+    TB_FICHAS: 'Fichas',
+    TB_RESIDUOS_POR_SECTOR: 'Residuos por Sector',
+    TB_RESIDUOS_INDIGO: 'Residuos Índigo',
+    TB_CALIDAD: 'Calidad',
+    TB_CALIDAD_FIBRA: 'Calidad Fibra',
+    TB_EST_MP: 'Est. Materia Prima',
+    TB_PROCESO: 'Proceso',
+    TB_DEFECTOS: 'Defectos'
+  }
+  return names[t] || table
 }
 
 function countStatus(status) {

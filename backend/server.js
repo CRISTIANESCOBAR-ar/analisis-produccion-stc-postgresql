@@ -9292,7 +9292,124 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
       ORDER BY mistura, fardos_consumidos DESC
     `;
     const provResult = await query(sqlProv, [loteList], 'dashboard/mezcla-lotes/proveedores');
-    res.json({ success: true, rows: result.rows, proveedores: provResult.rows, lotes: loteList });
+
+    // ── Contexto operativo Cardas (última fecha disponible) ──────────────────
+    let cardas = {
+      disponible: false,
+      motivo: 'Sin datos de cardas disponibles',
+      resumen: null,
+      turnos: [],
+      maquinasCriticas: [],
+      calidadDato: null
+    };
+
+    try {
+      const parseDateCarda = (col) => `
+        CASE
+          WHEN ${col} ~ '^[0-3]?[0-9]/[0-1]?[0-9]/[0-9]{4}(\\s|$)' THEN to_date(split_part(${col}, ' ', 1), 'DD/MM/YYYY')
+          WHEN ${col} ~ '^[0-3]?[0-9]/[0-1]?[0-9]/[0-9]{2}(\\s|$)' THEN to_date(split_part(${col}, ' ', 1), 'DD/MM/YY')
+          ELSE NULL
+        END`;
+      const parseNumCarda = (col) => `
+        CASE
+          WHEN ${col} ~ '^[0-9][0-9\\.,]*$' THEN REPLACE(REPLACE(${col}, '.', ''), ',', '.')::numeric
+          ELSE NULL
+        END`;
+
+      const cteCarda = `
+        WITH carda_raw AS (
+          SELECT
+            ${parseDateCarda('"DATA"')} AS data_date,
+            NULLIF(trim("T"), '') AS turno,
+            NULLIF(trim("MAQUINA"), '') AS maquina,
+            NULLIF(trim("ITEM"), '') AS item,
+            ${parseNumCarda('"EFIC CALC"')} AS efic_calc,
+            ${parseNumCarda('"EFIC INFOR"')} AS efic_infor,
+            ${parseNumCarda('"PROD CALC"')} AS prod_calc,
+            ${parseNumCarda('"PROD INFORM"')} AS prod_inform,
+            ${parseNumCarda('"RPM"')} AS rpm
+          FROM tb_PRODUCCION_CARDA
+        ),
+        dmax AS (
+          SELECT MAX(data_date) AS data_ref FROM carda_raw
+        ),
+        base AS (
+          SELECT cr.*
+          FROM carda_raw cr
+          JOIN dmax d ON cr.data_date = d.data_ref
+        )`;
+
+      const rResumen = await query(`${cteCarda}
+        SELECT
+          to_char(d.data_ref, 'DD/MM/YYYY') AS data_ref,
+          COUNT(*)::int AS filas,
+          COUNT(DISTINCT b.maquina)::int AS maquinas,
+          COUNT(*) FILTER (WHERE COALESCE(b.prod_inform, 0) > 0)::int AS filas_activas,
+          ROUND((COUNT(*) FILTER (WHERE COALESCE(b.prod_inform, 0) > 0)::numeric / NULLIF(COUNT(*), 0)) * 100, 2) AS cobertura_prod_pct,
+          ROUND(AVG(b.efic_calc)::numeric, 2) AS efic_calc_avg,
+          ROUND(AVG(b.efic_infor)::numeric, 2) AS efic_infor_avg,
+          ROUND(SUM(b.prod_calc)::numeric, 2) AS prod_calc_total,
+          ROUND(SUM(b.prod_inform)::numeric, 2) AS prod_inform_total,
+          ROUND(AVG(b.rpm)::numeric, 2) AS rpm_avg
+        FROM dmax d
+        LEFT JOIN base b ON true`, [], 'dashboard/mezcla-lotes/carda-resumen');
+
+      const rTurnos = await query(`${cteCarda}
+        SELECT
+          COALESCE(turno, 'S/D') AS turno,
+          COUNT(*)::int AS filas,
+          COUNT(DISTINCT maquina)::int AS maquinas,
+          ROUND(AVG(efic_calc)::numeric, 2) AS efic_calc_avg,
+          ROUND(AVG(efic_infor)::numeric, 2) AS efic_infor_avg,
+          ROUND(SUM(prod_inform)::numeric, 2) AS prod_inform_total
+        FROM base
+        GROUP BY COALESCE(turno, 'S/D')
+        ORDER BY CASE COALESCE(turno, 'S/D') WHEN 'A' THEN 1 WHEN 'B' THEN 2 WHEN 'C' THEN 3 ELSE 9 END`, [], 'dashboard/mezcla-lotes/carda-turnos');
+
+      const rMaq = await query(`${cteCarda}
+        SELECT
+          COALESCE(maquina, 'S/D') AS maquina,
+          ROUND(AVG(efic_calc)::numeric, 2) AS efic_calc_avg,
+          ROUND(AVG(efic_infor)::numeric, 2) AS efic_infor_avg,
+          ROUND(SUM(prod_inform)::numeric, 2) AS prod_inform_total,
+          ROUND(SUM(prod_calc)::numeric, 2) AS prod_calc_total
+        FROM base
+        GROUP BY COALESCE(maquina, 'S/D')
+        ORDER BY AVG(efic_calc) ASC NULLS LAST
+        LIMIT 8`, [], 'dashboard/mezcla-lotes/carda-maquinas-criticas');
+
+      const rCalidadDato = await query(`${cteCarda}
+        SELECT
+          COUNT(*)::int AS filas,
+          COUNT(*) FILTER (WHERE COALESCE(prod_inform, 0) = 0)::int AS prod_inform_cero,
+          COUNT(*) FILTER (WHERE COALESCE(efic_calc, 0) = 0)::int AS efic_calc_cero,
+          COUNT(*) FILTER (WHERE COALESCE(rpm, 0) = 0)::int AS rpm_cero,
+          COUNT(*) FILTER (WHERE maquina IS NULL OR maquina = '')::int AS maquina_sin_dato
+        FROM base`, [], 'dashboard/mezcla-lotes/carda-calidad-dato');
+
+      const resumen = rResumen.rows?.[0] || null;
+      if (resumen?.data_ref) {
+        cardas = {
+          disponible: true,
+          motivo: '',
+          resumen,
+          turnos: rTurnos.rows || [],
+          maquinasCriticas: rMaq.rows || [],
+          calidadDato: rCalidadDato.rows?.[0] || null
+        };
+      }
+    } catch (cardaErr) {
+      cardas = {
+        disponible: false,
+        motivo: `Cardas no disponible: ${cardaErr.message?.slice(0, 120) || 'error no identificado'}`,
+        resumen: null,
+        turnos: [],
+        maquinasCriticas: [],
+        calidadDato: null
+      };
+    }
+
+    res.json({ success: true, rows: result.rows, proveedores: provResult.rows, lotes: loteList, cardas });
   } catch (err) {
     console.error('Error /api/dashboard/mezcla-lotes:', err.message);
     res.status(500).json({ error: err.message });
@@ -9302,7 +9419,7 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Genera el informe de forma local (sin IA externa) — siempre disponible
 // ─────────────────────────────────────────────────────────────────────────────
-function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha = [], rowsMaquinas = []) {
+function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha = [], rowsMaquinas = [], rowsProduccionOe = []) {
   const lotesSorted = [...new Set(rows.map(r => Number(r.mistura)))].sort((a, b) => a - b);
   const actual = loteActual ? Number(loteActual) : Math.max(...lotesSorted);
   const refs   = lotesSorted.filter(l => l !== actual);
@@ -9404,6 +9521,77 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
   const getLote = (m) => ({ hvi: rows.find(r => Number(r.mistura) === m) || {}, hilos: rows.filter(r => Number(r.mistura) === m && r.ne != null) });
   const dataActual = getLote(actual);
   const dataRefs   = refs.map(getLote);
+  const toNeKey = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n.toFixed(2) : null;
+  };
+  const toDateKey = (v) => {
+    if (v instanceof Date && !Number.isNaN(v.getTime())) {
+      return v.toISOString().slice(0, 10);
+    }
+    const raw = String(v || '').trim();
+    if (!raw) return null;
+
+    const iso = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (iso) return iso[1];
+
+    const br = raw.match(/^([0-3]?\d)\/([0-1]?\d)\/(\d{2}|\d{4})/);
+    if (br) {
+      const dd = br[1].padStart(2, '0');
+      const mm = br[2].padStart(2, '0');
+      const yy = br[3].length === 2
+        ? String((Number(br[3]) >= 70 ? 1900 : 2000) + Number(br[3]))
+        : br[3];
+      return `${yy}-${mm}-${dd}`;
+    }
+
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString().slice(0, 10);
+    }
+    return null;
+  };
+  const fmtFechaCorta = (v) => {
+    const k = toDateKey(v);
+    if (!k) return 'S/D';
+    return `${k.slice(8, 10)}/${k.slice(5, 7)}`;
+  };
+  const fmtMaq = (m) => {
+    const s = String(m || '').trim().replace(/^#/, '');
+    if (!s) return '';
+    const sp = s.search(/\s/);
+    if (sp === -1) {
+      const n = parseInt(s, 10);
+      return Number.isFinite(n) ? String(n) : s;
+    }
+    const num = parseInt(s.slice(0, sp), 10);
+    const suf = s.slice(sp + 1).trim().slice(0, 2);
+    const base = Number.isFinite(num) ? String(num) : s.slice(0, sp).trim();
+    return suf ? `${base} ${suf}` : base;
+  };
+
+  const oeActual = (rowsProduccionOe || []).filter(r => Number(r.mistura) === actual);
+  const oeByNe = new Map();
+  const oeByNeDate = new Map();
+  for (const r of oeActual) {
+    const neKey = toNeKey(r.ne);
+    if (!neKey) continue;
+    if (!oeByNe.has(neKey)) oeByNe.set(neKey, []);
+    oeByNe.get(neKey).push(r);
+    const dateKey = toDateKey(r.fecha);
+    if (dateKey) oeByNeDate.set(`${neKey}|${dateKey}`, r);
+  }
+  const getOeRowsByNe = (neValue) => {
+    const neKey = toNeKey(neValue);
+    if (!neKey) return [];
+    return oeByNe.get(neKey) || [];
+  };
+  const getOeRowByNeDate = (neValue, fechaValue) => {
+    const neKey = toNeKey(neValue);
+    const dateKey = toDateKey(fechaValue);
+    if (!neKey || !dateKey) return null;
+    return oeByNeDate.get(`${neKey}|${dateKey}`) || null;
+  };
 
   // Nivel de semáforo global del lote actual
   let nivelGlobal = 'VERDE';
@@ -9611,25 +9799,38 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
       const mNe = getMatriz(parseFloat(ne), flame);
       const appNe = mNe?.app || (parseFloat(ne) <= 9 ? 'Trama' : (flame ? 'Urdimbre Flame' : 'Urdimbre'));
       bloqueEvolucion.push(`Ne ${neTxt} (${appNe}):`);
-      const diasOrd = [...dias].sort((a, b) => String(a.fecha) < String(b.fecha) ? -1 : 1);
+      const diasOrd = [...dias].sort((a, b) => {
+        const ka = toDateKey(a.fecha) || '';
+        const kb = toDateKey(b.fecha) || '';
+        return ka.localeCompare(kb);
+      });
       for (let i = 0; i < diasOrd.length; i++) {
         const d = diasOrd[i];
-        const fecha = String(d.fecha).slice(0, 10);
-        const dd = fecha.slice(8, 10), mm = fecha.slice(5, 7);
+        const fecha = toDateKey(d.fecha);
+        const dd = fecha ? fecha.slice(8, 10) : '??';
+        const mm = fecha ? fecha.slice(5, 7) : '??';
+        const oeDia = getOeRowByNeDate(ne, d.fecha);
         const parts = [];
         if (d.cvm        != null) parts.push(`CVm ${f(d.cvm)}`);
         if (d.tenacidad  != null) parts.push(`Tenac ${f(d.tenacidad)}`);
         if (d.neps_200   != null) parts.push(`Neps ${f(d.neps_200, 0)}/km`);
         if (d.elongacion != null) parts.push(`Elong ${f(d.elongacion)}%`);
+        if (oeDia?.cvm_oe != null) parts.push(`OE-CVm ${f(oeDia.cvm_oe)}`);
+        if (oeDia?.efic_oe != null) parts.push(`OE-Efic ${f(oeDia.efic_oe, 1)}%`);
         // Delta inline respecto al día anterior
         let deltaStr = '';
         if (i > 0) {
           const prev = diasOrd[i - 1];
+          const oePrev = getOeRowByNeDate(ne, prev.fecha);
           const cvmD = (d.cvm != null && prev.cvm != null) ? parseFloat(d.cvm) - parseFloat(prev.cvm) : null;
           const npsD = (d.neps_200 != null && prev.neps_200 != null) ? parseFloat(d.neps_200) - parseFloat(prev.neps_200) : null;
+          const oeCvmD = (oeDia?.cvm_oe != null && oePrev?.cvm_oe != null)
+            ? parseFloat(oeDia.cvm_oe) - parseFloat(oePrev.cvm_oe)
+            : null;
           const alertas = [];
           if (cvmD != null && Math.abs(cvmD) >= 0.1) alertas.push(`CVm ${cvmD > 0 ? '↑' : '↓'}${Math.abs(cvmD).toFixed(2)}`);
           if (npsD != null && Math.abs(npsD) > 20) alertas.push(`Neps ${npsD > 0 ? '↑' : '↓'}${Math.abs(npsD).toFixed(0)}`);
+          if (oeCvmD != null && Math.abs(oeCvmD) >= 0.1) alertas.push(`OE-CVm ${oeCvmD > 0 ? '↑' : '↓'}${Math.abs(oeCvmD).toFixed(2)}`);
           if (alertas.length) deltaStr = `  (${alertas.join(' | ')})`;
         }
         const alertIcon = (() => {
@@ -9694,7 +9895,11 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
       const neTxt  = `Ne ${ne}${flame ? ' FLAME' : '/1'}`;
       const mNe2   = getMatriz(parseFloat(ne), flame);
       const appNe2 = mNe2?.app || (parseFloat(ne) <= 9 ? 'Trama' : (flame ? 'Urdimbre Flame' : 'Urdimbre'));
-      const diasOrd = [...dias].sort((a, b) => String(a.fecha) < String(b.fecha) ? -1 : 1);
+      const diasOrd = [...dias].sort((a, b) => {
+        const ka = toDateKey(a.fecha) || '';
+        const kb = toDateKey(b.fecha) || '';
+        return ka.localeCompare(kb);
+      });
       if (diasOrd.length < 2) continue;
 
       const last  = diasOrd[diasOrd.length - 1];
@@ -9730,7 +9935,9 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
         // acciones por etapa
         if (parseFloat(ne) >= 10) {
           acOe.push(`  ${neTxt}: Limpieza de rotores y revisión del canal de transporte — CVm ${cvmLast?.toFixed(2)}% con Neps ${npsLast?.toFixed(0)}/km. Verificar que la purga de aire sea constante.`);
-          acCardas.push(`  ${neTxt}: Verificar ajuste de chapones — la fibra es buena, pero si la carda no abre bien los neps, el OE los multiplica.`);
+          if (npsLast != null && npsLast > 700) {
+            acCardas.push(`  ${neTxt}: Verificar ajuste de chapones — neps altos sostenidos sugieren revisar cardado antes del OE.`);
+          }
         } else {
           acPasador.push(`  ${neTxt}: CVm subió +${cvmDelta?.toFixed(2)} pts — revisar presión de rodillos de estiraje y estado de cots para frenar la flotación de fibra.`);
         }
@@ -9782,6 +9989,104 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
       }
       bloqueBalance.push(``);
     }
+  }
+
+  // ── Correlación explícita con tb_PRODUCCION_OE ─────────────────────────
+  const bloqueCorrelacionOe = [];
+  if (dataActual.hilos.length > 0) {
+    bloqueCorrelacionOe.push(`🔗 CORRELACIÓN CON PRODUCCIÓN OE (tb_PRODUCCION_OE):`);
+    const hilosCorrOrd = [...dataActual.hilos].sort((a, b) => parseFloat(b.ne) - parseFloat(a.ne));
+    const totalDef = (r) => {
+      if (!r) return null;
+      const vals = [
+        r.n_total, r.s_total, r.l_total, r.t_total, r.mo_total,
+        r.cp_v_sl_total, r.cm_v_sl_total, r.ccp_c_total, r.ccm_c_total,
+        r.jp_p_total, r.jm_p_total, r.cort_nat_total,
+      ].map(v => Number(v)).filter(v => Number.isFinite(v));
+      if (!vals.length) return null;
+      return vals.reduce((a, b) => a + b, 0);
+    };
+    for (const h of hilosCorrOrd) {
+      const flame = isFlame(h);
+      const neTxt = `${h.ne}${flame ? ' FLAME' : '/1'}`;
+      const diasNe = fechasActual
+        .filter(r => Number(r.ne) === Number(h.ne) && isFlame(r) === flame)
+        .sort((a, b) => (toDateKey(a.fecha) || '').localeCompare(toDateKey(b.fecha) || ''));
+      const oeRowsNe = getOeRowsByNe(h.ne)
+        .slice()
+        .sort((a, b) => (toDateKey(a.fecha) || '').localeCompare(toDateKey(b.fecha) || ''));
+
+      if (!oeRowsNe.length) {
+        bloqueCorrelacionOe.push(`  • Ne ${neTxt}: sin registros en tb_PRODUCCION_OE para este lote/título.`);
+        continue;
+      }
+
+      const oeLast = oeRowsNe[oeRowsNe.length - 1];
+      const resumenOe = `OE ${oeLast.fecha_txt || fmtFechaCorta(oeLast.fecha)} · CVm ${f(oeLast.cvm_oe)} · CVP ${f(oeLast.cvp_oe)} · Efic ${f(oeLast.efic_oe, 1)}% · Prod ${f(oeLast.prod_oe, 0)} kg · Máq activas ${oeLast.maquinas_activas ?? '–'}/${oeLast.maquinas_total ?? '–'}`;
+
+      if (diasNe.length < 2) {
+        bloqueCorrelacionOe.push(`  • Ne ${neTxt}: ${resumenOe}. Sin solape diario suficiente con ensayos para confirmar tendencia.`);
+        continue;
+      }
+
+      const lastEns = diasNe[diasNe.length - 1];
+      const prevEns = diasNe[diasNe.length - 2];
+      const oeLastMatch = getOeRowByNeDate(h.ne, lastEns.fecha);
+      const oePrevMatch = getOeRowByNeDate(h.ne, prevEns.fecha);
+      if (!oeLastMatch || !oePrevMatch || lastEns.cvm == null || prevEns.cvm == null) {
+        const fechasOe = oeRowsNe.map(r => r.fecha_txt || fmtFechaCorta(r.fecha)).join(', ');
+        bloqueCorrelacionOe.push(`  • Ne ${neTxt}: ${resumenOe}. Hay datos OE (${fechasOe}), pero sin solape fecha-a-fecha con USTER para correlación robusta.`);
+        continue;
+      }
+
+      const dUster = parseFloat(lastEns.cvm) - parseFloat(prevEns.cvm);
+      const dOe = (oeLastMatch.cvm_oe != null && oePrevMatch.cvm_oe != null)
+        ? parseFloat(oeLastMatch.cvm_oe) - parseFloat(oePrevMatch.cvm_oe)
+        : null;
+      const dEfic = (oeLastMatch.efic_oe != null && oePrevMatch.efic_oe != null)
+        ? parseFloat(oeLastMatch.efic_oe) - parseFloat(oePrevMatch.efic_oe)
+        : null;
+      const dProd = (oeLastMatch.prod_oe != null && oePrevMatch.prod_oe != null)
+        ? parseFloat(oeLastMatch.prod_oe) - parseFloat(oePrevMatch.prod_oe)
+        : null;
+      const dDef = (() => {
+        const a = totalDef(oeLastMatch);
+        const b = totalDef(oePrevMatch);
+        if (a == null || b == null) return null;
+        return a - b;
+      })();
+      const dActivas = (oeLastMatch.maquinas_activas != null && oePrevMatch.maquinas_activas != null)
+        ? Number(oeLastMatch.maquinas_activas) - Number(oePrevMatch.maquinas_activas)
+        : null;
+
+      const cvmOeNoConfiable = (oeLastMatch.cvm_oe == null || oePrevMatch.cvm_oe == null)
+        || (Number(oeLastMatch.cvm_oe) === 0 && Number(oePrevMatch.cvm_oe) === 0);
+      let juicio = 'sin correlación fuerte';
+      if (!cvmOeNoConfiable && dOe != null) {
+        if (dUster > 0.30 && dOe > 0.20) juicio = 'correlación positiva (ambos empeoran)';
+        else if (dUster < -0.20 && dOe < -0.15) juicio = 'correlación positiva (ambos mejoran)';
+        else if ((dUster > 0.30 && dOe <= 0.05) || (dUster < -0.20 && dOe >= -0.05)) juicio = 'desacople USTER vs OE';
+      } else {
+        if ((dUster > 0.30 && dEfic != null && dEfic < -8) || (dUster > 0.30 && dDef != null && dDef > 20)) {
+          juicio = 'correlación operativa parcial (eficiencia/defectología)';
+        } else {
+          juicio = 'sin evidencia de correlación por CVm_OE (CVM OE en 0.00/no confiable)';
+        }
+      }
+
+      const evidencia = [
+        dOe != null ? `OE CVm ${dOe >= 0 ? '+' : ''}${dOe.toFixed(2)} pts` : null,
+        dEfic != null ? `OE Efic ${dEfic >= 0 ? '+' : ''}${dEfic.toFixed(1)} pts` : null,
+        dProd != null ? `OE Prod ${dProd >= 0 ? '+' : ''}${dProd.toFixed(0)} kg` : null,
+        dActivas != null ? `Máq activas ${dActivas >= 0 ? '+' : ''}${dActivas}` : null,
+        dDef != null ? `Defectología ${dDef >= 0 ? '+' : ''}${dDef.toFixed(0)}` : null,
+      ].filter(Boolean).join(' | ');
+
+      bloqueCorrelacionOe.push(
+        `  • Ne ${neTxt}: USTER CVm ${fmtFechaCorta(prevEns.fecha)}→${fmtFechaCorta(lastEns.fecha)} ${dUster >= 0 ? '+' : ''}${dUster.toFixed(2)} pts | ${evidencia || 'sin evidencia operativa comparable'} → ${juicio}.`
+      );
+    }
+    bloqueCorrelacionOe.push('');
   }
 
   // ── Auditoría de Aptitud por Proceso (texto) ───────────────────────────
@@ -9933,14 +10238,6 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
       // Datos de proceso: máquina OE, pasador, estiraje
       const maqInfo = maqPorNe.get(`${h.ne}|${flame}`);
       if (maqInfo) {
-        const fmtMaq = m => {
-          const s = m.trim().replace(/^#/, '');
-          const sp = s.search(/\s/);
-          if (sp === -1) return String(parseInt(s, 10));
-          const num = String(parseInt(s.slice(0, sp), 10));
-          const suf = s.slice(sp + 1).trim().slice(0, 2);
-          return suf ? `${num} ${suf}` : num;
-        };
         const maqStr = maqInfo.maquinas
           ? `Hechos en OE ${maqInfo.maquinas.split(',').map(fmtMaq).join(' y ')}`
           : null;
@@ -9954,6 +10251,76 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
         bloqueDictamen.push(`   ${infoParts.length ? infoParts.join(' | ') : '⚠️ Sin datos de máquina registrados'}`);
       } else {
         bloqueDictamen.push(`   ⚠️ Sin datos de máquina registrados`);
+      }
+
+      const oeRowsNe = getOeRowsByNe(h.ne)
+        .slice()
+        .sort((a, b) => (toDateKey(a.fecha) || '').localeCompare(toDateKey(b.fecha) || ''));
+      const oeLast = oeRowsNe.length ? oeRowsNe[oeRowsNe.length - 1] : null;
+      if (oeLast) {
+        const oeFecha = oeLast.fecha_txt || fmtFechaCorta(oeLast.fecha);
+        const oeMaq = oeLast.maquinas_oe
+          ? oeLast.maquinas_oe.split(',').map(fmtMaq).filter(Boolean).join(' y ')
+          : '';
+        const oeLine = [
+          `tb_PRODUCCION_OE ${oeFecha}`,
+          oeLast.filiales ? `Filial ${oeLast.filiales}` : null,
+          oeLast.loc_fisicos ? `Loc ${oeLast.loc_fisicos}` : null,
+          oeMaq ? `OEs ${oeMaq}` : null,
+          oeLast.maquinas_activas != null && oeLast.filas != null
+            ? `Máq activas ${oeLast.maquinas_activas}/${oeLast.maquinas_total ?? oeLast.filas}`
+            : null,
+          oeLast.turnos ? `Turnos ${oeLast.turnos}` : null,
+          oeLast.lados ? `Lados ${oeLast.lados}` : null,
+          (oeLast.hora_inicial_min || oeLast.hora_final_max)
+            ? `Horario ${oeLast.hora_inicial_min || 'S/D'}-${oeLast.hora_final_max || 'S/D'}`
+            : null,
+          oeLast.operadores ? `Operador(es) ${oeLast.operadores}` : null,
+        ].filter(Boolean).join(' | ');
+        const oePerf = [
+          `OE-RESUMEN: RPM ${f(oeLast.rpm_avg, 0)}`,
+          oeLast.num_fusos_avg != null ? `Fusos ${f(oeLast.num_fusos_avg, 0)}` : null,
+          oeLast.alfa_avg != null ? `Alfa ${f(oeLast.alfa_avg, 2)}` : null,
+          oeLast.torcao_p_poleg_avg != null ? `Tors/pol ${f(oeLast.torcao_p_poleg_avg, 2)}` : null,
+          oeLast.torcao_p_metro_avg != null ? `Tors/m ${f(oeLast.torcao_p_metro_avg, 2)}` : null,
+          oeLast.prod_mt_min_avg != null ? `Prod ${f(oeLast.prod_mt_min_avg, 1)} mt/min` : null,
+          oeLast.prod_kg_hr_avg != null ? `Prod ${f(oeLast.prod_kg_hr_avg, 1)} kg/h` : null,
+          oeLast.prod_oe != null ? `Prod inf ${f(oeLast.prod_oe, 0)} kg` : null,
+          oeLast.prod_calc_total != null ? `Prod calc ${f(oeLast.prod_calc_total, 0)} kg` : null,
+          oeLast.efic_calc_oe != null ? `Efic calc ${f(oeLast.efic_calc_oe, 1)}%` : null,
+          oeLast.efic_oe != null ? `Efic inf ${f(oeLast.efic_oe, 1)}%` : null,
+          oeLast.t_bob_avg != null ? `T.BOB ${f(oeLast.t_bob_avg, 3)}` : null,
+          oeLast.rpm_card_avg != null ? `RPM Card ${f(oeLast.rpm_card_avg, 0)}` : null,
+          oeLast.cvp_oe != null ? `CVP ${f(oeLast.cvp_oe, 2)}` : null,
+          oeLast.cvm_oe != null ? `CVM ${f(oeLast.cvm_oe, 2)}` : null,
+          (oeLast.rob_01_avg != null || oeLast.rob_02_avg != null || oeLast.rob_03_avg != null)
+            ? `%ROB ${f(oeLast.rob_01_avg, 1)}/${f(oeLast.rob_02_avg, 1)}/${f(oeLast.rob_03_avg, 1)}`
+            : null,
+        ].filter(Boolean).join(' | ');
+        const oeCal = [
+          `OE-DEFECTOLOGÍA:`,
+          `N ${f(oeLast.n_total, 0)}`,
+          `S ${f(oeLast.s_total, 0)}`,
+          `L ${f(oeLast.l_total, 0)}`,
+          `T ${f(oeLast.t_total, 0)}`,
+          `MO ${f(oeLast.mo_total, 0)}`,
+          `CP ${f(oeLast.cp_v_sl_total, 0)}`,
+          `CM ${f(oeLast.cm_v_sl_total, 0)}`,
+          `CCp ${f(oeLast.ccp_c_total, 0)}`,
+          `CCm ${f(oeLast.ccm_c_total, 0)}`,
+          `JP ${f(oeLast.jp_p_total, 0)}`,
+          `JM ${f(oeLast.jm_p_total, 0)}`,
+          `CORT NAT ${f(oeLast.cort_nat_total, 0)}`,
+        ].join(' | ');
+        bloqueDictamen.push(`   ${oeLine}`);
+        bloqueDictamen.push(`   ${oePerf}`);
+        // En estado OK mostrar defectología solo si hay señal; en WARN/CRIT mostrar siempre.
+        const haySenialDef = [
+          oeLast.n_total, oeLast.s_total, oeLast.l_total, oeLast.t_total, oeLast.mo_total,
+          oeLast.cp_v_sl_total, oeLast.cm_v_sl_total, oeLast.ccp_c_total, oeLast.ccm_c_total,
+          oeLast.jp_p_total, oeLast.jm_p_total, oeLast.cort_nat_total,
+        ].some(v => Number(v) > 0);
+        if (nv !== 'ok' || haySenialDef) bloqueDictamen.push(`   ${oeCal}`);
       }
 
       if (fuera.length > 0) {
@@ -9988,6 +10355,7 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
     ...bloqueDictamen,
     ...bloqueBalance,
     ...bloqueEvolucion,
+    ...bloqueCorrelacionOe,
     ...bloqueProveedores,
     ...bloqueAuditoria,
     ...(() => {
@@ -10108,6 +10476,253 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
     const { rows, loteActual, model: modelReq, modo, proveedores } = req.body;
     if (!rows || rows.length === 0) return res.status(400).json({ error: 'Sin datos para analizar' });
 
+    const cargarContextoOe = async (loteNums, traceTag) => {
+      if (!Array.isArray(loteNums) || loteNums.length === 0) return [];
+      const colsRes = await query(
+        `SELECT column_name
+         FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'tb_produccion_oe'`,
+        [],
+        `${traceTag}/oe-cols`
+      );
+      const norm = (s) => String(s || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '');
+      const colMap = new Map((colsRes.rows || []).map(r => [norm(r.column_name), r.column_name]));
+      const pickCol = (...candidates) => {
+        for (const c of candidates) {
+          const found = colMap.get(norm(c));
+          if (found) return found;
+        }
+        return null;
+      };
+
+      const cData = pickCol('DATA_PRODUCAO', 'DATA PRODUCAO', 'DATA');
+      const cTitulo = pickCol('TÍTULO', 'TITULO', 'TITULO_NE');
+      const cCvm = pickCol('CVM');
+      const cCvp = pickCol('CVP');
+      const cEfic = pickCol('EFIC INFORMADA', 'EFIC_INFORMADA');
+      const cEficCalc = pickCol('EFIC CALCULADA', 'EFIC_CALCULADA');
+      const cProd = pickCol('PROD INFORMADA', 'PROD_INFORMADA');
+      const cProdCalc = pickCol('PROD CALCULADA', 'PROD_CALCULADA');
+      const cProdKgHr = pickCol('PROD KG/HR', 'PROD_KG_HR');
+      const cProdMtMin = pickCol('PROD MT/MIN', 'PROD_MT_MIN');
+      const cMaq = pickCol('MAQUINA');
+      const cNomeMaq = pickCol('NOME_MAQUINA', 'NOME MAQUINA');
+      const cFilial = pickCol('FILIAL');
+      const cLoc = pickCol('LOC. FISICO', 'LOC FISICO', 'LOC_FISICO');
+      const cTurno = pickCol('TURNO');
+      const cLado = pickCol('LADO');
+      const cItem = pickCol('ITEM');
+      const cDescItem = pickCol('DESC ITEM', 'DESC_ITEM');
+      const cOperador = pickCol('OPERADOR');
+      const cHoraIni = pickCol('HORA INICIAL', 'HORA_INICIAL');
+      const cHoraFim = pickCol('HORA FINAL', 'HORA_FINAL');
+      const cRpm = pickCol('RPM');
+      const cNumFusos = pickCol('NUM FUSOS', 'NUM_FUSOS');
+      const cAlfa = pickCol('ALFA');
+      const cTempo = pickCol('TEMPO');
+      const cTorcPoleg = pickCol('TORCAO P POLEG', 'TORCAO_P_POLEG');
+      const cTorcMetro = pickCol('TORCAO P METRO', 'TORCAO_P_METRO');
+      const cTBob = pickCol('T.BOB.', 'T_BOB');
+      const cRpmCard = pickCol('RPM CARD', 'RPM_CARD');
+      const cN = pickCol('N');
+      const cS = pickCol('S');
+      const cL = pickCol('L');
+      const cT = pickCol('T');
+      const cMo = pickCol('MO');
+      const cCp = pickCol('CP V+ SL+', 'CP_V_SL');
+      const cCm = pickCol('CM V- SL-', 'CM_V_SL');
+      const cCcp = pickCol('CCp C+', 'CCP_C');
+      const cCcm = pickCol('CCm C-', 'CCM_C');
+      const cJp = pickCol('JP (P+)', 'JP_P');
+      const cJm = pickCol('JM (P-)', 'JM_P');
+      const cCort = pickCol('CORT NAT', 'CORT_NAT');
+      const cRob1 = pickCol('% ROB 01', 'ROB_01');
+      const cRob2 = pickCol('% ROB 02', 'ROB_02');
+      const cRob3 = pickCol('% ROB 03', 'ROB_03');
+      const cLote = pickCol('LOTE PRODUC', 'LOTE_PRODUC', 'LOTE PRODUCAO', 'LOTE_PRODUCAO');
+
+      if (!cData || !cTitulo || !cLote) {
+        console.warn(`narrativa-lotes: columnas OE insuficientes para correlación (data=${cData}, titulo=${cTitulo}, lote=${cLote})`);
+        return [];
+      }
+
+      const qData = quoteIdent(cData);
+      const qTitulo = quoteIdent(cTitulo);
+      const qCvm = cCvm ? quoteIdent(cCvm) : 'NULL::text';
+      const qCvp = cCvp ? quoteIdent(cCvp) : 'NULL::text';
+      const qEfic = cEfic ? quoteIdent(cEfic) : 'NULL::text';
+      const qEficCalc = cEficCalc ? quoteIdent(cEficCalc) : 'NULL::text';
+      const qProd = cProd ? quoteIdent(cProd) : 'NULL::text';
+      const qProdCalc = cProdCalc ? quoteIdent(cProdCalc) : 'NULL::text';
+      const qProdKgHr = cProdKgHr ? quoteIdent(cProdKgHr) : 'NULL::text';
+      const qProdMtMin = cProdMtMin ? quoteIdent(cProdMtMin) : 'NULL::text';
+      const qMaq = cMaq ? quoteIdent(cMaq) : 'NULL::text';
+      const qNomeMaq = cNomeMaq ? quoteIdent(cNomeMaq) : 'NULL::text';
+      const qFilial = cFilial ? quoteIdent(cFilial) : 'NULL::text';
+      const qLoc = cLoc ? quoteIdent(cLoc) : 'NULL::text';
+      const qTurno = cTurno ? quoteIdent(cTurno) : 'NULL::text';
+      const qLado = cLado ? quoteIdent(cLado) : 'NULL::text';
+      const qItem = cItem ? quoteIdent(cItem) : 'NULL::text';
+      const qDescItem = cDescItem ? quoteIdent(cDescItem) : 'NULL::text';
+      const qOperador = cOperador ? quoteIdent(cOperador) : 'NULL::text';
+      const qHoraIni = cHoraIni ? quoteIdent(cHoraIni) : 'NULL::text';
+      const qHoraFim = cHoraFim ? quoteIdent(cHoraFim) : 'NULL::text';
+      const qRpm = cRpm ? quoteIdent(cRpm) : 'NULL::text';
+      const qNumFusos = cNumFusos ? quoteIdent(cNumFusos) : 'NULL::text';
+      const qAlfa = cAlfa ? quoteIdent(cAlfa) : 'NULL::text';
+      const qTempo = cTempo ? quoteIdent(cTempo) : 'NULL::text';
+      const qTorcPoleg = cTorcPoleg ? quoteIdent(cTorcPoleg) : 'NULL::text';
+      const qTorcMetro = cTorcMetro ? quoteIdent(cTorcMetro) : 'NULL::text';
+      const qTBob = cTBob ? quoteIdent(cTBob) : 'NULL::text';
+      const qRpmCard = cRpmCard ? quoteIdent(cRpmCard) : 'NULL::text';
+      const qN = cN ? quoteIdent(cN) : 'NULL::text';
+      const qS = cS ? quoteIdent(cS) : 'NULL::text';
+      const qL = cL ? quoteIdent(cL) : 'NULL::text';
+      const qT = cT ? quoteIdent(cT) : 'NULL::text';
+      const qMo = cMo ? quoteIdent(cMo) : 'NULL::text';
+      const qCp = cCp ? quoteIdent(cCp) : 'NULL::text';
+      const qCm = cCm ? quoteIdent(cCm) : 'NULL::text';
+      const qCcp = cCcp ? quoteIdent(cCcp) : 'NULL::text';
+      const qCcm = cCcm ? quoteIdent(cCcm) : 'NULL::text';
+      const qJp = cJp ? quoteIdent(cJp) : 'NULL::text';
+      const qJm = cJm ? quoteIdent(cJm) : 'NULL::text';
+      const qCort = cCort ? quoteIdent(cCort) : 'NULL::text';
+      const qRob1 = cRob1 ? quoteIdent(cRob1) : 'NULL::text';
+      const qRob2 = cRob2 ? quoteIdent(cRob2) : 'NULL::text';
+      const qRob3 = cRob3 ? quoteIdent(cRob3) : 'NULL::text';
+      const qLote = quoteIdent(cLote);
+
+      const oeFechaExpr = sqlParseDate(`btrim(COALESCE(${qData}::text, ''))`);
+      const oeNeExpr = sqlParseNumberIntl(`btrim(COALESCE(${qTitulo}::text, ''))`);
+      const oeCvmExpr = sqlParseNumberIntl(`btrim(COALESCE(${qCvm}::text, ''))`);
+      const oeCvpExpr = sqlParseNumberIntl(`btrim(COALESCE(${qCvp}::text, ''))`);
+      const oeEficCalcExpr = sqlParseNumberIntl(`btrim(COALESCE(${qEficCalc}::text, ''))`);
+      const oeEficExpr = sqlParseNumberIntl(`btrim(COALESCE(${qEfic}::text, ''))`);
+      const oeProdExpr = sqlParseNumberIntl(`btrim(COALESCE(${qProd}::text, ''))`);
+      const sqlOe = `
+        WITH oe_raw AS (
+          SELECT
+            NULLIF(regexp_replace(COALESCE(${qLote}::text, ''), '\\D', '', 'g'), '')::integer AS mistura,
+            ${oeFechaExpr} AS fecha,
+            ROUND(${oeNeExpr}::numeric, 2) AS ne,
+            NULLIF(btrim(COALESCE(${qFilial}::text, '')), '') AS filial,
+            NULLIF(btrim(COALESCE(${qLoc}::text, '')), '') AS loc_fisico,
+            NULLIF(btrim(COALESCE(${qMaq}::text, '')), '') AS maquina,
+            NULLIF(btrim(COALESCE(${qNomeMaq}::text, '')), '') AS nome_maquina,
+            NULLIF(btrim(COALESCE(${qTurno}::text, '')), '') AS turno,
+            NULLIF(btrim(COALESCE(${qLado}::text, '')), '') AS lado,
+            NULLIF(btrim(COALESCE(${qItem}::text, '')), '') AS item,
+            NULLIF(btrim(COALESCE(${qDescItem}::text, '')), '') AS desc_item,
+            NULLIF(btrim(COALESCE(${qOperador}::text, '')), '') AS operador,
+            NULLIF(btrim(COALESCE(${qHoraIni}::text, '')), '') AS hora_inicial,
+            NULLIF(btrim(COALESCE(${qHoraFim}::text, '')), '') AS hora_final,
+            ${sqlParseNumberIntl(`btrim(COALESCE(${qRpm}::text, ''))`)} AS rpm,
+            ${sqlParseNumberIntl(`btrim(COALESCE(${qNumFusos}::text, ''))`)} AS num_fusos,
+            ${sqlParseNumberIntl(`btrim(COALESCE(${qAlfa}::text, ''))`)} AS alfa,
+            ${sqlParseNumberIntl(`btrim(COALESCE(${qTempo}::text, ''))`)} AS tempo,
+            ${sqlParseNumberIntl(`btrim(COALESCE(${qTorcPoleg}::text, ''))`)} AS torcao_p_poleg,
+            ${sqlParseNumberIntl(`btrim(COALESCE(${qTorcMetro}::text, ''))`)} AS torcao_p_metro,
+            ${sqlParseNumberIntl(`btrim(COALESCE(${qProdMtMin}::text, ''))`)} AS prod_mt_min,
+            ${sqlParseNumberIntl(`btrim(COALESCE(${qProdKgHr}::text, ''))`)} AS prod_kg_hr,
+            ${sqlParseNumberIntl(`btrim(COALESCE(${qProdCalc}::text, ''))`)} AS prod_calc,
+            ${oeCvmExpr} AS cvm_oe,
+            ${oeCvpExpr} AS cvp_oe,
+            ${oeEficCalcExpr} AS efic_calc_oe,
+            ${oeEficExpr} AS efic_oe,
+            ${oeProdExpr} AS prod_oe,
+            ${sqlParseNumberIntl(`btrim(COALESCE(${qTBob}::text, ''))`)} AS t_bob,
+            ${sqlParseNumberIntl(`btrim(COALESCE(${qRpmCard}::text, ''))`)} AS rpm_card,
+            ${sqlParseNumberIntl(`btrim(COALESCE(${qN}::text, ''))`)} AS n,
+            ${sqlParseNumberIntl(`btrim(COALESCE(${qS}::text, ''))`)} AS s,
+            ${sqlParseNumberIntl(`btrim(COALESCE(${qL}::text, ''))`)} AS l,
+            ${sqlParseNumberIntl(`btrim(COALESCE(${qT}::text, ''))`)} AS t,
+            ${sqlParseNumberIntl(`btrim(COALESCE(${qMo}::text, ''))`)} AS mo,
+            ${sqlParseNumberIntl(`btrim(COALESCE(${qCp}::text, ''))`)} AS cp_v_sl,
+            ${sqlParseNumberIntl(`btrim(COALESCE(${qCm}::text, ''))`)} AS cm_v_sl,
+            ${sqlParseNumberIntl(`btrim(COALESCE(${qCcp}::text, ''))`)} AS ccp_c,
+            ${sqlParseNumberIntl(`btrim(COALESCE(${qCcm}::text, ''))`)} AS ccm_c,
+            ${sqlParseNumberIntl(`btrim(COALESCE(${qJp}::text, ''))`)} AS jp_p,
+            ${sqlParseNumberIntl(`btrim(COALESCE(${qJm}::text, ''))`)} AS jm_p,
+            ${sqlParseNumberIntl(`btrim(COALESCE(${qCort}::text, ''))`)} AS cort_nat,
+            ${sqlParseNumberIntl(`btrim(COALESCE(${qRob1}::text, ''))`)} AS rob_01,
+            ${sqlParseNumberIntl(`btrim(COALESCE(${qRob2}::text, ''))`)} AS rob_02,
+            ${sqlParseNumberIntl(`btrim(COALESCE(${qRob3}::text, ''))`)} AS rob_03
+          FROM tb_PRODUCCION_OE
+        )
+        SELECT
+          mistura,
+          fecha,
+          to_char(fecha, 'DD/MM/YYYY') AS fecha_txt,
+          ne,
+          string_agg(DISTINCT filial, ', ' ORDER BY filial)
+            FILTER (WHERE filial IS NOT NULL AND filial <> '') AS filiales,
+          string_agg(DISTINCT loc_fisico, ', ' ORDER BY loc_fisico)
+            FILTER (WHERE loc_fisico IS NOT NULL AND loc_fisico <> '') AS loc_fisicos,
+          string_agg(DISTINCT maquina, ', ' ORDER BY maquina)
+            FILTER (WHERE maquina IS NOT NULL AND maquina <> '') AS maquinas_oe,
+          string_agg(DISTINCT nome_maquina, ' | ' ORDER BY nome_maquina)
+            FILTER (WHERE nome_maquina IS NOT NULL AND nome_maquina <> '') AS nomes_maquina,
+          string_agg(DISTINCT turno, ', ' ORDER BY turno)
+            FILTER (WHERE turno IS NOT NULL AND turno <> '') AS turnos,
+          string_agg(DISTINCT lado, ', ' ORDER BY lado)
+            FILTER (WHERE lado IS NOT NULL AND lado <> '') AS lados,
+          string_agg(DISTINCT item, ', ' ORDER BY item)
+            FILTER (WHERE item IS NOT NULL AND item <> '') AS itens,
+          string_agg(DISTINCT desc_item, ' | ' ORDER BY desc_item)
+            FILTER (WHERE desc_item IS NOT NULL AND desc_item <> '') AS desc_itens,
+          string_agg(DISTINCT operador, ', ' ORDER BY operador)
+            FILTER (WHERE operador IS NOT NULL AND operador <> '') AS operadores,
+          MIN(hora_inicial) AS hora_inicial_min,
+          MAX(hora_final) AS hora_final_max,
+          ROUND(AVG(rpm)::numeric, 2) AS rpm_avg,
+          ROUND(AVG(num_fusos)::numeric, 2) AS num_fusos_avg,
+          ROUND(AVG(alfa)::numeric, 2) AS alfa_avg,
+          ROUND(AVG(tempo)::numeric, 2) AS tempo_avg,
+          ROUND(AVG(torcao_p_poleg)::numeric, 2) AS torcao_p_poleg_avg,
+          ROUND(AVG(torcao_p_metro)::numeric, 2) AS torcao_p_metro_avg,
+          ROUND(AVG(prod_mt_min)::numeric, 2) AS prod_mt_min_avg,
+          ROUND(AVG(prod_kg_hr)::numeric, 2) AS prod_kg_hr_avg,
+          ROUND(SUM(prod_calc)::numeric, 2) AS prod_calc_total,
+          ROUND(AVG(cvm_oe)::numeric, 2) AS cvm_oe,
+          ROUND(AVG(cvp_oe)::numeric, 2) AS cvp_oe,
+          ROUND(AVG(efic_calc_oe)::numeric, 2) AS efic_calc_oe,
+          ROUND(AVG(efic_oe)::numeric, 2) AS efic_oe,
+          ROUND(SUM(prod_oe)::numeric, 2) AS prod_oe,
+          ROUND(AVG(t_bob)::numeric, 3) AS t_bob_avg,
+          ROUND(AVG(rpm_card)::numeric, 2) AS rpm_card_avg,
+          ROUND(SUM(n)::numeric, 2) AS n_total,
+          ROUND(SUM(s)::numeric, 2) AS s_total,
+          ROUND(SUM(l)::numeric, 2) AS l_total,
+          ROUND(SUM(t)::numeric, 2) AS t_total,
+          ROUND(SUM(mo)::numeric, 2) AS mo_total,
+          ROUND(SUM(cp_v_sl)::numeric, 2) AS cp_v_sl_total,
+          ROUND(SUM(cm_v_sl)::numeric, 2) AS cm_v_sl_total,
+          ROUND(SUM(ccp_c)::numeric, 2) AS ccp_c_total,
+          ROUND(SUM(ccm_c)::numeric, 2) AS ccm_c_total,
+          ROUND(SUM(jp_p)::numeric, 2) AS jp_p_total,
+          ROUND(SUM(jm_p)::numeric, 2) AS jm_p_total,
+          ROUND(SUM(cort_nat)::numeric, 2) AS cort_nat_total,
+          ROUND(AVG(rob_01)::numeric, 2) AS rob_01_avg,
+          ROUND(AVG(rob_02)::numeric, 2) AS rob_02_avg,
+          ROUND(AVG(rob_03)::numeric, 2) AS rob_03_avg,
+          COUNT(*)::int AS filas,
+          COUNT(DISTINCT maquina)::int AS maquinas_total,
+          COUNT(DISTINCT CASE WHEN COALESCE(prod_oe, 0) > 0 THEN maquina END)::int AS maquinas_activas,
+          COUNT(*) FILTER (WHERE COALESCE(prod_oe, 0) > 0)::int AS filas_activas
+        FROM oe_raw
+        WHERE mistura = ANY($1::integer[])
+          AND fecha IS NOT NULL
+          AND ne IS NOT NULL
+        GROUP BY mistura, fecha, ne
+        ORDER BY mistura, ne, fecha`;
+      const r = await query(sqlOe, [loteNums], `${traceTag}/oe-contexto`);
+      return r.rows || [];
+    };
+
     // Si piden explícitamente local, o no hay API key → generación local directa
     if (modo === 'local' || !process.env.GOOGLE_API_KEY) {
       const loteNums = [...new Set(rows.map(r => Number(r.mistura)).filter(n => n > 0))];
@@ -10205,7 +10820,13 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
       } catch (e) {
         console.warn('narrativa-lotes: datos de máquinas no disponibles:', e.message?.slice(0, 80));
       }
-      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], rowsPorFecha, rowsMaquinas);
+      let rowsProduccionOe = [];
+      try {
+        rowsProduccionOe = await cargarContextoOe(loteNums, 'narrativa-lotes/local');
+      } catch (e) {
+        console.warn('narrativa-lotes: contexto OE no disponible:', e.message?.slice(0, 80));
+      }
+      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], rowsPorFecha, rowsMaquinas, rowsProduccionOe);
       const fuenteLocal = `⚡ Fuente: Generador local (sin IA externa) · ${new Date().toLocaleString('es-AR')}\n\n`;
       return res.json({ success: true, narrativa: fuenteLocal + narrativa, fuente: 'local' });
     }
@@ -10309,6 +10930,12 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
     } catch (e) {
       console.warn('narrativa-lotes Gemini: datos de máquinas no disponibles:', e.message?.slice(0, 80));
     }
+    let rowsProduccionOeGemini = [];
+    try {
+      rowsProduccionOeGemini = await cargarContextoOe(loteNums, 'narrativa-lotes/gemini');
+    } catch (e) {
+      console.warn('narrativa-lotes Gemini: contexto OE no disponible:', e.message?.slice(0, 80));
+    }
     // Formatea bloque de evolución diaria para incluir en el prompt
     const evolucionDiariaStr = (() => {
       if (!rowsPorFechaGemini.length) return '';
@@ -10365,6 +10992,36 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
       return `\nDATOS DE PROCESO (máquinas OE, pasador, estiraje — Lote ${actual}):\n` + lines.join('\n');
     })();
 
+    const oeProduccionStr = (() => {
+      const oeActual = rowsProduccionOeGemini
+        .filter(r => Number(r.mistura) === actual)
+        .sort((a, b) => {
+          const neA = Number(a.ne) || 0;
+          const neB = Number(b.ne) || 0;
+          if (neA !== neB) return neB - neA;
+          const ka = (a.fecha instanceof Date && !Number.isNaN(a.fecha.getTime())) ? a.fecha.toISOString().slice(0, 10) : String(a.fecha || '').slice(0, 10);
+          const kb = (b.fecha instanceof Date && !Number.isNaN(b.fecha.getTime())) ? b.fecha.toISOString().slice(0, 10) : String(b.fecha || '').slice(0, 10);
+          return ka.localeCompare(kb);
+        });
+      if (!oeActual.length) return `\nDATA OE (tb_PRODUCCION_OE):\n  Sin datos de producción OE para Lote ${actual}.`;
+      const lines = oeActual.map(r => {
+        const neTxt = Number.isFinite(Number(r.ne)) ? Number(r.ne).toFixed(2) : String(r.ne || 'S/D');
+        const fechaTxt = r.fecha_txt || ((r.fecha instanceof Date && !Number.isNaN(r.fecha.getTime())) ? r.fecha.toISOString().slice(0, 10) : String(r.fecha || '').slice(0, 10)) || 'S/D';
+        return [
+          `  Ne ${neTxt} | Fecha ${fechaTxt}`,
+          `Filial=${r.filiales || '-'} | Loc=${r.loc_fisicos || '-'} | OEs=${r.maquinas_oe || 'S/D'} | NombreMaq=${r.nomes_maquina || '-'}`,
+          `Turno=${r.turnos || '-'} | Lado=${r.lados || '-'} | Horario=${r.hora_inicial_min || '-'}-${r.hora_final_max || '-'} | Operador=${r.operadores || '-'}`,
+          `Item=${r.itens || '-'} | DescItem=${r.desc_itens || '-'}`,
+          `RPM=${r.rpm_avg ?? '-'} | NumFusos=${r.num_fusos_avg ?? '-'} | Alfa=${r.alfa_avg ?? '-'} | Tempo=${r.tempo_avg ?? '-'} | TorcaoPol=${r.torcao_p_poleg_avg ?? '-'} | TorcaoM=${r.torcao_p_metro_avg ?? '-'}`,
+          `ProdMtMin=${r.prod_mt_min_avg ?? '-'} | ProdKgHr=${r.prod_kg_hr_avg ?? '-'} | ProdCalc=${r.prod_calc_total ?? '-'} | ProdInf=${r.prod_oe ?? '-'} | EficCalc=${r.efic_calc_oe ?? '-'} | EficInf=${r.efic_oe ?? '-'}`,
+          `T.BOB=${r.t_bob_avg ?? '-'} | RPMCard=${r.rpm_card_avg ?? '-'} | CVP=${r.cvp_oe ?? '-'} | CVM=${r.cvm_oe ?? '-'} | CortNat=${r.cort_nat_total ?? '-'}`,
+          `N=${r.n_total ?? '-'} | S=${r.s_total ?? '-'} | L=${r.l_total ?? '-'} | T=${r.t_total ?? '-'} | MO=${r.mo_total ?? '-'} | CP=${r.cp_v_sl_total ?? '-'} | CM=${r.cm_v_sl_total ?? '-'} | CCp=${r.ccp_c_total ?? '-'} | CCm=${r.ccm_c_total ?? '-'} | JP=${r.jp_p_total ?? '-'} | JM=${r.jm_p_total ?? '-'}`,
+          `%ROB01=${r.rob_01_avg ?? '-'} | %ROB02=${r.rob_02_avg ?? '-'} | %ROB03=${r.rob_03_avg ?? '-'} | FilasActivas=${r.filas_activas ?? '-'} / ${r.filas ?? '-'} | MaqActivas=${r.maquinas_activas ?? '-'} / ${r.maquinas_total ?? '-'}`,
+        ].join(' \n    ');
+      });
+      return `\nDATA OE (tb_PRODUCCION_OE):\n` + lines.join('\n');
+    })();
+
     const resumenLotes = lotesSorted.map(mistura => {
       const filas = rows.filter(r => Number(r.mistura) === mistura);
       const hvi = filas[0] || {};
@@ -10398,7 +11055,7 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
     const prompt = `Actúa como Auditor de Calidad Textil y Experto en Tejeduría e Hilandería de denim de alta velocidad.
 
 DATOS COMPARATIVOS:
-${resumenLotes}${evolucionDiariaStr}${maquinasStr}
+${resumenLotes}${evolucionDiariaStr}${maquinasStr}${oeProduccionStr}
 
 NOTA SOBRE NEPS: Neps+200% = impurezas grandes que afectan absorción del colorante en Índigo. Neps+140% = conteo total de neps incluyendo pequeños, indicador de agresividad del proceso de apertura y cardado. Los umbrales de decisión aplican a Neps+200%; usar Neps+140% como indicador complementario de proceso (apertura/cardas).
 
@@ -10436,6 +11093,12 @@ ACCIONES RECOMENDADAS POR PROCESO (obligatorio cuando haya alertas, agrupar por 
 4️⃣ OPEN END (OE): limpiar rotores, ajustar purga de aire y revisar canal de transporte cuando CVm%+Neps elevados o Elongación < 7.5%.
 
 INSTRUCCIÓN SOBRE DATOS DE PROCESO: si en DATOS DE PROCESO aparecen números de máquina OE, mencionarlos explícitamente en las acciones (ej: "Máquina OE #47: limpiar rotor..."). Si Pasador=SI, indicar "pasó por manuar" en el diagnóstico. Si Pasador=NO, indicar "sin doblez previo" como posible causa de irregularidad. Si el dato de pasador es nulo, no mencionar el pasador en el análisis.
+INSTRUCCIÓN SOBRE DATA OE: usar las variables de tb_PRODUCCION_OE relevantes para diagnóstico (filial, loc_fisico, maquina, nome_maquina, data_producao, turno, lado, item, desc_item, hora inicial/final, rpm, num_fusos, alfa, lote_produc, titulo, tempo, torcao p poleg/metro, prod mt/min, prod kg/hr, prod calculada/informada, efic calculada/informada, operador, t.bob, rpm card, n/s/l/t/mo, cp/cm/ccp/ccm/jp/jm, cvp/cvm, cort nat, %rob 01/02/03). No listar todo crudo: sintetizar en máximo 2 líneas por Ne (operación + calidad/defectología).
+
+REGLA DE EVIDENCIA OE (obligatoria):
+- Solo afirmar "correlación" o "origen común" cuando exista coincidencia por Ne + fecha entre DATA DIARIA y DATA OE.
+- Si no hay solape fecha-a-fecha, escribir explícitamente "sin evidencia de correlación con tb_PRODUCCION_OE".
+- No recomendar intervención de cardas si no hay evidencia específica de neps de proceso o datos de cardas/contexto.
 
 Generá exactamente este formato en español (600 palabras máx, cuantificá cambios con %):
 
@@ -10448,6 +11111,7 @@ Generá exactamente este formato en español (600 palabras máx, cuantificá cam
 🧵 ESTADO DE TÍTULOS (Semáforo de Calidad):
 [Para cada Ne, de peor a mejor — 🔴/🟡/🟢 Ne X/1 (Urdimbre|Trama): ALERTA CRÍTICA|CONDICIONAL|APROBADO]
 [OBLIGATORIO — si DATOS DE PROCESO contiene datos para ese Ne, copiar la línea ya formateada exactamente como aparece en DATOS DE PROCESO, ej: "   Hechos en OE 3 LI y 3 LP | Con pasador | Estiraje aplicado: 132". Si no hay datos de proceso para ese Ne: "   ⚠️ Sin datos de máquina registrados"]
+[OBLIGATORIO — agregar una línea "   OE-RESUMEN: ..." con variables OE resumidas (turno/lado/horario, rpm/alfa/fusos, producción/eficiencia, CVP/CVM, defectología N-S-L-T-MO y CP/CM/CCp/CCm/JP/JM, CORT NAT, %ROB).]
 [Si fuera de umbral: "   Fuera de umbral: CVm X.XX% 🔴 | Neps XXX/km ⚠️ (etc.)"]
 [Si "Sin pasador" y CVm o Neps elevados: incluir en Diagnóstico "Sin doblez previo (un solo pasaje) — mayor riesgo de flotación de fibra y perlas."]
 [Si "Con pasador" y aún hay CVm elevado: incluir en Diagnóstico "Pasó por manuar, lo que descarta falta de doblaje — buscar falla en cots o rodillos del pasador."]
@@ -10458,6 +11122,9 @@ Generá exactamente este formato en español (600 palabras máx, cuantificá cam
 ⚖️ BALANCE DE TENDENCIAS (solo si hay DATA DIARIA):
 [📈 MEJORAS: descripción narrativa de qué Ne mejoró y por qué]
 [📉 DETERIOROS: descripción narrativa con diagnosis de causa mecánica. Si ≥2 títulos empeoran el mismo día: "⚠️ ORIGEN COMÚN: revisar Pasador/Manuar — falla upstream simultánea en múltiples títulos."]
+
+🔗 CORRELACIÓN CON PRODUCCIÓN OE (tb_PRODUCCION_OE):
+[Por cada Ne del lote actual: contrastar USTER con OE en fechas coincidentes usando CVm_OE y además eficiencia, producción, máquinas activas, defectología y %ROB. Si CVm_OE está en 0.00/no confiable, decirlo explícitamente y apoyar conclusión solo con señales operativas disponibles. Si no hay solape: "sin evidencia de correlación con tb_PRODUCCION_OE".]
 
 🛠 ACCIONES RECOMENDADAS (URGENTE) (solo si hay deterioros o alertas):
 [Organizar por etapa. Para cada Ne afectado, acción concreta sobre máquina. Sin genéricos.]
@@ -10498,7 +11165,7 @@ Generá exactamente este formato en español (600 palabras máx, cuantificá cam
     } catch (geminiErr) {
       // Fallback local ante cualquier error de Gemini (quota, red, etc.)
       console.warn('Gemini no disponible, usando generación local:', geminiErr.message?.slice(0, 120));
-      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], rowsPorFechaGemini, rowsMaquinasGemini);
+      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], rowsPorFechaGemini, rowsMaquinasGemini, rowsProduccionOeGemini);
       const fuenteFallback = `⚡ Fuente: Generador local (Gemini no disponible) · ${new Date().toLocaleString('es-AR')}\n\n`;
       return res.json({ success: true, narrativa: fuenteFallback + narrativa, fuente: 'local', aviso: 'Gemini no disponible – informe generado localmente.' });
     }
