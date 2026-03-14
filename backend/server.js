@@ -10321,6 +10321,8 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
         }
       }
       return `\nDATA DIARIA (por fecha de ensayo):\n` + lines.join('\n');
+    })();
+
     // ── Datos de proceso por Ne para el prompt de Gemini ───────────────────
     const maquinasStr = (() => {
       const actMaq = rowsMaquinasGemini.filter(r => Number(r.mistura) === actual);
@@ -10336,6 +10338,8 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
       });
       return `\nDATOS DE PROCESO (máquinas OE, pasador, estiraje — Lote ${actual}):\n` + lines.join('\n');
     })();
+
+    const resumenLotes = lotesSorted.map(mistura => {
       const filas = rows.filter(r => Number(r.mistura) === mistura);
       const hvi = filas[0] || {};
       const hilos = filas
