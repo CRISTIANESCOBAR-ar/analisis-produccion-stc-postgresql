@@ -9933,13 +9933,27 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
       // Datos de proceso: máquina OE, pasador, estiraje
       const maqInfo = maqPorNe.get(`${h.ne}|${flame}`);
       if (maqInfo) {
-        const maqStr   = maqInfo.maquinas ? `OE: ${maqInfo.maquinas}` : null;
-        const pasStr   = maqInfo.pasador === 'SI' ? 'Pasador: SÍ' : maqInfo.pasador === 'NO' ? 'Pasador: NO' : null;
-        const estStr   = maqInfo.estiraje_avg != null ? `Estiraje: ${parseFloat(maqInfo.estiraje_avg).toFixed(2)}x` : null;
+        const fmtMaq = m => {
+          const s = m.trim().replace(/^#/, '');
+          const sp = s.search(/\s/);
+          if (sp === -1) return String(parseInt(s, 10));
+          const num = String(parseInt(s.slice(0, sp), 10));
+          const suf = s.slice(sp + 1).trim().slice(0, 2);
+          return suf ? `${num} ${suf}` : num;
+        };
+        const maqStr = maqInfo.maquinas
+          ? `Hechos en OE ${maqInfo.maquinas.split(',').map(fmtMaq).join(' y ')}`
+          : null;
+        const pasStr = maqInfo.pasador === 'SI' ? 'Con pasador'
+                     : maqInfo.pasador === 'NO' ? 'Sin pasador'
+                     : 'sin información de pasador';
+        const estStr = maqInfo.estiraje_avg != null
+          ? `Estiraje aplicado: ${Math.round(parseFloat(maqInfo.estiraje_avg))}`
+          : null;
         const infoParts = [maqStr, pasStr, estStr].filter(Boolean);
-        bloqueDictamen.push(`   Proceso: ${infoParts.length ? infoParts.join(' | ') : '⚠️ Sin datos de máquina registrados'}`);
+        bloqueDictamen.push(`   ${infoParts.length ? infoParts.join(' | ') : '⚠️ Sin datos de máquina registrados'}`);
       } else {
-        bloqueDictamen.push(`   Proceso: ⚠️ Sin datos de máquina registrados`);
+        bloqueDictamen.push(`   ⚠️ Sin datos de máquina registrados`);
       }
 
       if (fuera.length > 0) {
@@ -10333,9 +10347,19 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
         const flame = r.is_flame === true || String(r.is_flame).trim() === 'true' || String(r.is_flame).trim() === '1';
         const neTxt = `${r.ne}${flame ? ' FLAME' : '/1'}`;
         const parts = [`Ne ${neTxt}`];
-        if (r.maquinas) parts.push(`Máquinas OE: ${r.maquinas}`);
-        if (r.pasador)  parts.push(`Pasador: ${r.pasador}`);
-        if (r.estiraje_avg != null) parts.push(`Estiraje: ${parseFloat(r.estiraje_avg).toFixed(2)}x`);
+        if (r.maquinas) {
+          const fmtMaqG = m => {
+            const s = m.trim().replace(/^#/, '');
+            const sp = s.search(/\s/);
+            if (sp === -1) return String(parseInt(s, 10));
+            const num = String(parseInt(s.slice(0, sp), 10));
+            const suf = s.slice(sp + 1).trim().slice(0, 2);
+            return suf ? `${num} ${suf}` : num;
+          };
+          parts.push(`Hechos en OE ${r.maquinas.split(',').map(fmtMaqG).join(' y ')}`);
+        }
+        parts.push(r.pasador === 'SI' ? 'Con pasador' : r.pasador === 'NO' ? 'Sin pasador' : 'sin información de pasador');
+        if (r.estiraje_avg != null) parts.push(`Estiraje aplicado: ${Math.round(parseFloat(r.estiraje_avg))}`);
         return `  ${parts.join(' | ')}`;
       });
       return `\nDATOS DE PROCESO (máquinas OE, pasador, estiraje — Lote ${actual}):\n` + lines.join('\n');
@@ -10423,10 +10447,10 @@ Generá exactamente este formato en español (600 palabras máx, cuantificá cam
 
 🧵 ESTADO DE TÍTULOS (Semáforo de Calidad):
 [Para cada Ne, de peor a mejor — 🔴/🟡/🟢 Ne X/1 (Urdimbre|Trama): ALERTA CRÍTICA|CONDICIONAL|APROBADO]
-[OBLIGATORIO — si DATOS DE PROCESO contiene datos para ese Ne, incluir inmediatamente debajo del semáforo: "   Proceso: OE: #XX, #YY | Pasador: SÍ/NO | Estiraje: X.XXx". Si no hay datos de proceso para ese Ne: "   Proceso: ⚠️ Sin datos de máquina registrados"]
+[OBLIGATORIO — si DATOS DE PROCESO contiene datos para ese Ne, copiar la línea ya formateada exactamente como aparece en DATOS DE PROCESO, ej: "   Hechos en OE 3 LI y 3 LP | Con pasador | Estiraje aplicado: 132". Si no hay datos de proceso para ese Ne: "   ⚠️ Sin datos de máquina registrados"]
 [Si fuera de umbral: "   Fuera de umbral: CVm X.XX% 🔴 | Neps XXX/km ⚠️ (etc.)"]
-[Si Pasador=NO y CVm o Neps elevados: incluir en Diagnóstico "Sin doblez previo (un solo pasaje) — mayor riesgo de flotación de fibra y perlas."]
-[Si Pasador=SÍ y aún hay CVm elevado: incluir en Diagnóstico "Pasó por manuar, lo que descarta falta de doblaje — buscar falla en cots o rodillos del pasador."]
+[Si "Sin pasador" y CVm o Neps elevados: incluir en Diagnóstico "Sin doblez previo (un solo pasaje) — mayor riesgo de flotación de fibra y perlas."]
+[Si "Con pasador" y aún hay CVm elevado: incluir en Diagnóstico "Pasó por manuar, lo que descarta falta de doblaje — buscar falla en cots o rodillos del pasador."]
 [Agregar "   Diagnóstico: ..." si la fibra es buena y el problema es mecánico.]
 [Agregar "   Riesgo: ..." con impacto operacional concreto (urdido, índigo, telar).]
 [Si dato ausente: "   ⚠️ PENDIENTE: Validar [variable] en Laboratorio" — nunca silencio ni guión.]
