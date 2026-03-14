@@ -9848,18 +9848,111 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
     bloqueAuditoria.push('');
   }
 
+  // ── bloqueDictamen: cabecera ejecutiva + semáforo por Ne ─────────────────
+  const bloqueDictamen = [];
+  {
+    const strHVI  = dataActual.hvi.str != null ? parseFloat(dataActual.hvi.str) : null;
+    const encabezado = {
+      VERDE:    `📢 INFORME DE CALIDAD — LOTE FIAC ${actual}`,
+      AMARILLO: `📢 INFORME LOTE FIAC ${actual} — ⚠️ CONDICIONAL`,
+      ROJO:     `📢 REPORTE CRÍTICO: LOTE FIAC ${actual}`,
+    }[nivelGlobal];
+    const prioLabel = {
+      VERDE:    ``,
+      AMARILLO: `Prioridad: Media — Monitoreo Activo`,
+      ROJO:     `Prioridad: Alta — Revisión Mecánica Urgente`,
+    }[nivelGlobal];
+    const iconDict = nivelGlobal === 'VERDE' ? '✅' : nivelGlobal === 'AMARILLO' ? '⚠️' : '🔴';
+    const fibDesc = strHVI != null
+      ? ` Fibra STR ${f(strHVI, 2)} g/tex${strHVI >= 27 ? ' (premium)' : strHVI >= 25 ? ' (apta)' : ' (débil)'}.`
+      : '';
+
+    bloqueDictamen.push(encabezado);
+    if (prioLabel) bloqueDictamen.push(prioLabel);
+    bloqueDictamen.push(``);
+    bloqueDictamen.push(`${iconDict} DICTAMEN FINAL:`);
+    bloqueDictamen.push(conclusionBase + fibDesc);
+    bloqueDictamen.push(``);
+    bloqueDictamen.push(`🧵 ESTADO DE TÍTULOS (Semáforo de Calidad):`);
+    bloqueDictamen.push(``);
+
+    // Calcular nivel de cada Ne para ordenar de peor a mejor
+    const nivelNe = (h) => {
+      const m = getMatriz(parseFloat(h.ne), isFlame(h));
+      if (!m) return 0;
+      let n = 0;
+      for (const [campo, umb] of Object.entries(m.umb)) {
+        const v = parseFloat(h[campo]);
+        if (isNaN(v)) continue;
+        const e = evalUmbral(v, umb);
+        if (e === 'crit') n = Math.max(n, 2);
+        else if (e === 'warn') n = Math.max(n, 1);
+      }
+      return n;
+    };
+    const hilosOrd = [...HilosActual].sort((a, b) => nivelNe(b) - nivelNe(a));
+
+    const campoLabel = { tenacidad: 'Tenac', elongacion: 'Elong', cvm: 'CVm', neps_200: 'Neps' };
+    const campoUnidad = { tenacidad: 'cN/tex', elongacion: '%', cvm: '%', neps_200: '/km' };
+    const campoDec    = { tenacidad: 2, elongacion: 2, cvm: 2, neps_200: 0 };
+
+    for (const h of hilosOrd) {
+      const flame  = isFlame(h);
+      const ne     = parseFloat(h.ne);
+      const neTxt  = `${h.ne}${flame ? ' FLAME' : '/1'}`;
+      const m      = getMatriz(ne, flame);
+      if (!m) continue;
+
+      let nv = 'ok';
+      const fuera = [], enRango = [];
+      for (const [campo, umb] of Object.entries(m.umb)) {
+        const v = parseFloat(h[campo]);
+        const lbl = campoLabel[campo] || campo;
+        const und = campoUnidad[campo] || '';
+        const dec = campoDec[campo] ?? 2;
+        if (isNaN(v)) continue;
+        const e = evalUmbral(v, umb);
+        if (e === 'crit') { nv = 'crit'; fuera.push(`${lbl} ${f(v, dec)}${und} 🔴`); }
+        else if (e === 'warn') { if (nv !== 'crit') nv = 'warn'; fuera.push(`${lbl} ${f(v, dec)}${und} ⚠️`); }
+        else { enRango.push(`${lbl} ${f(v, dec)}${und}`); }
+      }
+
+      const icon   = nv === 'crit' ? '🔴' : nv === 'warn' ? '🟡' : '🟢';
+      const estado = nv === 'crit' ? 'ALERTA CRÍTICA' : nv === 'warn' ? 'CONDICIONAL' : 'APROBADO';
+      bloqueDictamen.push(`${icon} Ne ${neTxt} (${m.app}): ${estado}`);
+
+      if (fuera.length > 0) {
+        bloqueDictamen.push(`   Fuera de umbral: ${fuera.join(' | ')}`);
+        const cvm = parseFloat(h.cvm);
+        const nps = parseFloat(h.neps_200);
+        const ten = parseFloat(h.tenacidad);
+        // Diagnóstico de causa
+        if (!isNaN(cvm) && m.umb.cvm && cvm > m.umb.cvm.ok && strHVI != null && strHVI >= 26) {
+          bloqueDictamen.push(`   Diagnóstico: Fibra buena (STR ${f(strHVI, 2)} g/tex) — irregularidad es de proceso, no de la bala.`);
+        } else if (!isNaN(ten) && m.umb.tenacidad && ten < m.umb.tenacidad.w) {
+          bloqueDictamen.push(`   Diagnóstico: Tenacidad comprometida — revisar STR de fibra y torsión del hilo.`);
+        }
+        // Riesgos operacionales
+        if (!isNaN(nps) && nps > (flame ? 700 : 600)) {
+          bloqueDictamen.push(`   Riesgo: Manchas de tinte desiguales en Índigo y paradas en urdido.`);
+        }
+        if (!isNaN(ten) && ten < (ne >= 10 ? 15.5 : 14.0)) {
+          bloqueDictamen.push(`   Riesgo: Cortes de hilo en Telar/Urdidora con carga normal de producción.`);
+        }
+        if (!isNaN(cvm) && cvm > (flame ? 19 : 13.5) && ne < 10) {
+          bloqueDictamen.push(`   Riesgo: Barras de trama visibles en tela — revisar CVm antes de continuar.`);
+        }
+      } else {
+        bloqueDictamen.push(`   Valores en rango: ${enRango.join(' | ')}`);
+      }
+      bloqueDictamen.push(``);
+    }
+  }
+
   const lines = [
-    `📋 INFORME DE DESEMPEÑO: LOTE FIAC ${actual} vs ${refStr}`,
-    `Análisis Comparativo Fibra ↔️ Hilo`,
-    ``,
-    `✅ CONCLUSIÓN GENERAL:`,
-    conclusionBase,
-    ``,
-    `📊 COMPARATIVA TÉCNICA (Promedios):`,
-    ``,
-    ...bloques.flatMap(b => [b, '']),
-    ...bloqueEvolucion,
+    ...bloqueDictamen,
     ...bloqueBalance,
+    ...bloqueEvolucion,
     ...bloqueProveedores,
     ...bloqueAuditoria,
     ...(() => {
@@ -9945,12 +10038,7 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
       }
       return bloque;
     })(),
-    `⚠️ PUNTOS CLAVE PARA PRODUCCIÓN:`,
-    ...(puntosClaveAgrupados.length
-      ? puntosClaveAgrupados
-      : ['  ✓ Sin alertas críticas en el lote actual.']),
-    ``,
-    `🚀 ESTADO: ${estadoLabel}`,
+    `🚀 ESTADO OPERATIVO: ${estadoLabel}`,
     (() => {
       const lf = actual;
       const mr = dataActual.hvi.n_fardos != null ? `${dataActual.hvi.n_fardos} fardos consumidos` : '– fardos';
@@ -9959,6 +10047,15 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
       if (HilosActual.length === 0) return `Solo se disponen de datos HVI para el Lote FIAC ${lf}${mreal}; los datos de ensayos de hilo están pendientes.`;
       return `El Lote FIAC ${lf}${mreal} tiene ${mr}${ms ? ' y ' + ms : ''} asociadas.`;
     })(),
+    ``,
+    `─────────────────────────────────────────`,
+    `📊 COMPARATIVA TÉCNICA DETALLADA (Promedios por variable):`,
+    ``,
+    ...bloques.flatMap(b => [b, '']),
+    `⚠️ PUNTOS CLAVE PARA PRODUCCIÓN:`,
+    ...(puntosClaveAgrupados.length
+      ? puntosClaveAgrupados
+      : ['  ✓ Sin alertas críticas en el lote actual.']),
     ``,
     `_Informe generado localmente · ${new Date().toLocaleString('es-AR')}_`,
   ];
@@ -10194,57 +10291,56 @@ ACCIONES RECOMENDADAS POR PROCESO (obligatorio cuando haya alertas, agrupar por 
 3️⃣ PASADOR (MANUAR): revisar presión de rodillos y cots cuando CVm% alto con fibra premium o diferencia entre líneas mismo Ne.
 4️⃣ OPEN END (OE): limpiar rotores, ajustar purga de aire y revisar canal de transporte cuando CVm%+Neps elevados o Elongación < 7.5%.
 
-Generá exactamente este formato en español (500 palabras máx, cuantificá cambios con %):
+Generá exactamente este formato en español (600 palabras máx, cuantificá cambios con %):
 
-📋 INFORME DE DESEMPEÑO: LOTE FIAC ${actual} vs ${refs.join('/') || 'sin referencia'}
-Análisis Comparativo Fibra ↔️ Hilo
+📢 REPORTE — LOTE FIAC ${actual}${refs.length ? ` vs ${refs.join('/')}` : ''}
+[Si hay algún Ne en estado CRÍTICO: primera línea = "Prioridad: Alta — Revisión Mecánica Urgente". Si solo CONDICIONAL: "Prioridad: Media — Monitoreo Activo". Si todo OK: omitir línea de prioridad.]
 
-✅ CONCLUSIÓN GENERAL:
-[veredicto 1-2 oraciones]
+✅/⚠️/🔴 DICTAMEN FINAL:
+[Una oración con el veredicto del lote, mencionando el STR de la fibra y el impacto operacional.]
 
-📊 COMPARATIVA TÉCNICA (Promedios):
+🧵 ESTADO DE TÍTULOS (Semáforo de Calidad):
+[Para cada Ne, de peor a mejor — 🔴/🟡/🟢 Ne X/1 (Urdimbre|Trama): ALERTA CRÍTICA|CONDICIONAL|APROBADO]
+[Si fuera de umbral: "   Fuera de umbral: CVm X.XX% 🔴 | Neps XXX/km ⚠️ (etc.)"]
+[Agregar "   Diagnóstico: ..." si la fibra es buena y el problema es mecánico.]
+[Agregar "   Riesgo: ..." con impacto operacional concreto (urdido, índigo, telar).]
+[Si dato ausente: "   ⚠️ PENDIENTE: Validar [variable] en Laboratorio" — nunca silencio ni guión.]
+
+⚖️ BALANCE DE TENDENCIAS (solo si hay DATA DIARIA):
+[📈 MEJORAS: descripción narrativa de qué Ne mejoró y por qué]
+[📉 DETERIOROS: descripción narrativa con diagnosis de causa mecánica. Si ≥2 títulos empeoran el mismo día: "⚠️ ORIGEN COMÚN: revisar Pasador/Manuar — falla upstream simultánea en múltiples títulos."]
+
+🛠 ACCIONES RECOMENDADAS (URGENTE) (solo si hay deterioros o alertas):
+[Organizar por etapa. Para cada Ne afectado, acción concreta sobre máquina. Sin genéricos.]
+1️⃣ MANUAR (PASADOR): [acciones por Ne con valores o "sin novedad"]
+2️⃣ OPEN END (OE): [acciones por Ne con valores o "sin novedad"]
+3️⃣ CARDAS: [acciones por Ne o "sin novedad"]
+
+🧵 EVOLUCIÓN Y ESTADO DE TÍTULOS (solo si hay DATA DIARIA. Fechas siempre DD/MM en español, nunca nombres de días):
+[Ordenar Ne de mayor a menor. Por cada Ne:
+  "Ne X/1 (Aplicación):"
+  "  • DD/MM: CVm X.XX | Tenac X.XX | Neps XXX/km | Elong X.XX%  (CVm ↑/↓X.XX | Neps ↑/↓XXX si cambió)"
+  Prefijo ⚠️ si CVm >0.5 pts o Neps >150/km. Línea "👉 ESTADO: 🔴/🟢/⚠️/✅ descripción 1 oración."]
+
+─────────────────────────────────────────
+📊 COMPARATIVA TÉCNICA DETALLADA:
 [bloques numerados 1️⃣ 2️⃣ 3️⃣ para STR, Tenacidad, Neps, CVm%, Elongación con valores por lote y 👉 Impacto]
 
 📦 ANÁLISIS POR PROVEEDOR — Lote FIAC ${actual}:
 [Para cada proveedor: nombre, fardos consumidos, % participación, STR, SCI, MIC, UHML.]
 
-  📌 Observaciones:
-[Identificar proveedor con 🏆 mejor STR, 🏆 mejor SCI, 🏆 MIC más cercano a rango 3.5-4.9, 🏆 UHML más largo. Señalar con ⚠️ el peor en cada variable con impacto práctico.]
-
-� DIAGNÓSTICO MECÁNICO — Paradoja de la Fibra (solo si aplica):
-[Si fibra buena y hilo malo: explicar causa mecánica concreta. Si falta dato: decir "dato insuficiente".]
-
-� ACCIONES RECOMENDADAS POR PROCESO (solo si hay alertas, groupar por etapa):
-1️⃣ APERTURA Y BLOWROOM: [acciones o "sin novedad"]
-2️⃣ CARDAS: [acciones o "sin novedad"]
-3️⃣ PASADOR (MANUAR): [acciones o "sin novedad"]
-4️⃣ OPEN END (OE): [acciones o "sin novedad"]
-
-🧵 EVOLUCIÓN Y ESTADO DE TÍTULOS (solo si hay DATA DIARIA, omitir si no hay. OBLIGATORIO: fechas en formato DD/MM en español):
-[Ordenar Ne de mayor a menor (urdimbre primero). Para cada Ne:
-  - Título: "Ne X/1 (Urdimbre|Trama):"
-  - Una línea por fecha: "  • DD/MM: CVm X.XX | Tenac X.XX | Neps XXX/km | Elong X.XX%  (CVm ↑/↓X.XX | Neps ↑/↓XXX si cambió)"
-  - Prefijo ⚠️ en línea si CVm subió >0.5 pts o Neps subió >150/km respecto al día anterior
-  - Después de la última fecha, línea "👉 ESTADO: 🔴/🟢/⚠️/✅ TEXTO BREVE. Descripción concreta de 1 oración en español."]
-
-⚖️ BALANCE DE TENDENCIAS (solo si hay DATA DIARIA):
-[📈 MEJORAS: lista de Ne que mejoraron con descripción concreta]
-[📉 DETERIOROS: lista de Ne que empeoraron con diagnosis de causa mecánica]
-
-🛠 ACCIONES RECOMENDADAS (URGENTE) (solo si hay deterioros):
-[Organizar por etapa: 1️⃣ OE, 2️⃣ PASADOR, 3️⃣ CARDAS. Para cada Ne afectado, una acción concreta sobre máquina. Sin acciones genéricas.]
+🔬 DIAGNÓSTICO MECÁNICO — Paradoja de la Fibra (solo si aplica):
+[Fibra buena + hilo malo → causa mecánica. Fibra débil + hilo débil → proveedor.]
 
 🔍 AUDITORÍA DE APTITUD POR PROCESO — Lote FIAC ${actual}:
-[Para cada Ne: Ne X [Aplicación] → Proceso1 ✅/⚠️/🔴 → Proceso2 ✅/⚠️/🔴 — Estado (Aprobado/Condicional/Rechazado) — Desvío si hay.]
-[Agregar 💬 comentario de planta con vocabulario de hilandería para cada Ne.]
+[Para cada Ne: Ne X [Aplicación] → Proceso1 ✅/⚠️/🔴 → Estado — Desvío si hay.]
+[💬 comentario de planta en vocabulario de hilandería.]
 
 ⚠️ PUNTOS CLAVE PARA PRODUCCIÓN:
-[Agrupar por título Ne en una sola fila: si un Ne tiene varias novedades, listarlas en la misma línea separadas por " | ".]
-[Usar columna fija de título Ne: tomar el Ne más largo del bloque y alinear todas las filas a ese ancho.]
-[Formato sugerido: "  • NeX[...espacios] | ⚠️ ... | 🔸 ..."]
+[Agrupar por Ne: "  • NeX | ⚠️ ... | 🔸 ..."]
 
-🚀 ESTADO: [APROBADO PARA CONTINUIDAD / PRECAUCIÓN - REVISAR / CRÍTICO - DETENER]
-[oración de cierre]`;
+🚀 ESTADO OPERATIVO: [APROBADO PARA CONTINUIDAD / PRECAUCIÓN - REVISAR / CRÍTICO - DETENER]
+["[oración de cierre con frase de impacto]"]`;
 
     try {
       const result = await model.generateContent(prompt);
