@@ -9937,7 +9937,9 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
         const pasStr   = maqInfo.pasador === 'SI' ? 'Pasador: SÍ' : maqInfo.pasador === 'NO' ? 'Pasador: NO' : null;
         const estStr   = maqInfo.estiraje_avg != null ? `Estiraje: ${parseFloat(maqInfo.estiraje_avg).toFixed(2)}x` : null;
         const infoParts = [maqStr, pasStr, estStr].filter(Boolean);
-        if (infoParts.length) bloqueDictamen.push(`   Proceso: ${infoParts.join(' | ')}`);
+        bloqueDictamen.push(`   Proceso: ${infoParts.length ? infoParts.join(' | ') : '⚠️ Sin datos de máquina registrados'}`);
+      } else {
+        bloqueDictamen.push(`   Proceso: ⚠️ Sin datos de máquina registrados`);
       }
 
       if (fuera.length > 0) {
@@ -10421,7 +10423,10 @@ Generá exactamente este formato en español (600 palabras máx, cuantificá cam
 
 🧵 ESTADO DE TÍTULOS (Semáforo de Calidad):
 [Para cada Ne, de peor a mejor — 🔴/🟡/🟢 Ne X/1 (Urdimbre|Trama): ALERTA CRÍTICA|CONDICIONAL|APROBADO]
+[OBLIGATORIO — si DATOS DE PROCESO contiene datos para ese Ne, incluir inmediatamente debajo del semáforo: "   Proceso: OE: #XX, #YY | Pasador: SÍ/NO | Estiraje: X.XXx". Si no hay datos de proceso para ese Ne: "   Proceso: ⚠️ Sin datos de máquina registrados"]
 [Si fuera de umbral: "   Fuera de umbral: CVm X.XX% 🔴 | Neps XXX/km ⚠️ (etc.)"]
+[Si Pasador=NO y CVm o Neps elevados: incluir en Diagnóstico "Sin doblez previo (un solo pasaje) — mayor riesgo de flotación de fibra y perlas."]
+[Si Pasador=SÍ y aún hay CVm elevado: incluir en Diagnóstico "Pasó por manuar, lo que descarta falta de doblaje — buscar falla en cots o rodillos del pasador."]
 [Agregar "   Diagnóstico: ..." si la fibra es buena y el problema es mecánico.]
 [Agregar "   Riesgo: ..." con impacto operacional concreto (urdido, índigo, telar).]
 [Si dato ausente: "   ⚠️ PENDIENTE: Validar [variable] en Laboratorio" — nunca silencio ni guión.]
