@@ -111,6 +111,66 @@ function formatNumber(val) {
   return String(parseFloat(num.toFixed(2)))
 }
 
+function formatTimestampEsAr24(date = new Date()) {
+  return new Date(date).toLocaleString('es-AR', {
+    timeZone: process.env.REPORT_TIME_ZONE || 'America/Argentina/Buenos_Aires',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  })
+}
+
+function formatOeMachineCode(value) {
+  const raw = String(value || '').trim().replace(/^#/, '')
+  if (!raw) return ''
+
+  const sp = raw.search(/\s/)
+  const baseRaw = sp === -1 ? raw : raw.slice(0, sp)
+  const suffix = sp === -1 ? '' : raw.slice(sp + 1).trim().slice(0, 2)
+
+  const digits = baseRaw.replace(/\D/g, '')
+  if (!digits) return raw
+
+  const core = digits.length > 2 ? digits.slice(-2) : digits
+  const num = parseInt(core, 10)
+  const base = Number.isFinite(num) ? String(num) : String(parseInt(digits, 10))
+  return suffix ? `${base} ${suffix}` : base
+}
+
+function normalizeNarrativaGemini(text) {
+  if (text == null) return ''
+  let out = String(text)
+
+  // Uniforma bullets para mantener el estilo de salida esperado (Opcion 1)
+  out = out.replace(/^\s*\*\s+/gm, '- ')
+
+  // Regla temporal: ocultar CVm OE cuando viene como 0.00/no util para decision.
+  out = out
+    .split('\n')
+    .filter((line) => !/\bcvm\b[^\n]*\boe\b[^\n]*0[\.,]00/i.test(line) && !/0[\.,]00[^\n]*\bcvm\b[^\n]*\boe\b/i.test(line))
+    .join('\n')
+
+  out = out.replace(/\s*\|\s*CVM\s*0[\.,]00\b/gi, '')
+  out = out.replace(/\bCVm(?:_OE)?\s*(?:en\s*OE)?\s*=?\s*0[\.,]00(?:\s*\([^\)]*\))?/gi, '')
+  out = out.replace(/[ \t]{2,}/g, ' ')
+
+  // Normaliza etiquetas de maquina para planta: OE 050409 / OE R60 010 -> OE 9 / OE 10
+  out = out.replace(/\bOE\s+[A-Z0-9]+\s+0*(\d{2,3})\b/gi, (_, n) => `OE ${parseInt(String(n).slice(-2), 10)}`)
+  out = out.replace(/\bOE\s*\(\s*(\d{5,6})\s*\)/gi, (_, n) => `OE ${parseInt(String(n).slice(-2), 10)}`)
+  out = out.replace(/\bOE\s+0*(\d{5,6})\b/gi, (_, n) => `OE ${parseInt(String(n).slice(-2), 10)}`)
+
+  // Evita ruido visual cuando el modelo genera fila UI totalmente vacia
+  out = out.replace(/^\s*HVI\s*UI\s*\(%\)\s+N\/D\s+N\/D\s+N\/D\s*$/gmi, '')
+  out = out.replace(/^\s*UI\s*fibra\s*\(%\)\s+N\/D\s+N\/D\s+N\/D\s*$/gmi, '')
+  out = out.replace(/\n{3,}/g, '\n\n')
+
+  return out
+}
+
 // Helpers SQL (PostgreSQL): parseo robusto de fechas/números desde TEXT
 function sqlParseDate(colIdent) {
   // Soporta D/M/YYYY o DD/MM/YYYY y YYYY-MM-DD (opcional con hora)
@@ -9278,6 +9338,7 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
         ROUND(AVG(CASE WHEN "SCI"  ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("SCI",  ',', '.')::numeric END), 1) AS sci,
         ROUND(AVG(CASE WHEN "MIC"  ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("MIC",  ',', '.')::numeric END), 3) AS mic,
         ROUND(AVG(CASE WHEN "UHML" ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("UHML", ',', '.')::numeric END), 2) AS uhml,
+        ROUND(AVG(CASE WHEN "ELG"  ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("ELG",  ',', '.')::numeric END), 2) AS elg,
         SUM(CASE WHEN "DT_ENTRADA_PROD" IS NOT NULL AND "DT_ENTRADA_PROD" <> ''
                  THEN ROUND(REPLACE("QTDE"::text, ',', '.')::numeric)::integer
                  ELSE 0 END) AS fardos_consumidos,
@@ -9419,7 +9480,7 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Genera el informe de forma local (sin IA externa) — siempre disponible
 // ─────────────────────────────────────────────────────────────────────────────
-function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha = [], rowsMaquinas = [], rowsProduccionOe = []) {
+function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha = [], rowsMaquinas = [], rowsProduccionOe = [], fechaCorte = null) {
   const lotesSorted = [...new Set(rows.map(r => Number(r.mistura)))].sort((a, b) => a - b);
   const actual = loteActual ? Number(loteActual) : Math.max(...lotesSorted);
   const refs   = lotesSorted.filter(l => l !== actual);
@@ -9551,23 +9612,14 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
     }
     return null;
   };
+  const toLocalDateKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const fmtFechaCorta = (v) => {
     const k = toDateKey(v);
     if (!k) return 'S/D';
     return `${k.slice(8, 10)}/${k.slice(5, 7)}`;
   };
   const fmtMaq = (m) => {
-    const s = String(m || '').trim().replace(/^#/, '');
-    if (!s) return '';
-    const sp = s.search(/\s/);
-    if (sp === -1) {
-      const n = parseInt(s, 10);
-      return Number.isFinite(n) ? String(n) : s;
-    }
-    const num = parseInt(s.slice(0, sp), 10);
-    const suf = s.slice(sp + 1).trim().slice(0, 2);
-    const base = Number.isFinite(num) ? String(num) : s.slice(0, sp).trim();
-    return suf ? `${base} ${suf}` : base;
+    return formatOeMachineCode(m);
   };
 
   const oeActual = (rowsProduccionOe || []).filter(r => Number(r.mistura) === actual);
@@ -9779,9 +9831,30 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
 
   const refStr = refs.length > 0 ? refs.join('/') : 'sin referencia';
 
+  const fechasActualAll = (rowsPorFecha || []).filter(r => Number(r.mistura) === actual);
+  const fechaCorteSolicitadaKey = toDateKey(fechaCorte);
+  const ayer = new Date();
+  ayer.setDate(ayer.getDate() - 1);
+  const ayerKey = toLocalDateKey(ayer);
+  const fechasDisponibles = fechasActualAll
+    .map(r => toDateKey(r.fecha))
+    .filter(Boolean)
+    .sort();
+  const fechaCorteAplicadaKey = fechaCorteSolicitadaKey
+    || [...fechasDisponibles].filter(k => k <= ayerKey).pop()
+    || fechasDisponibles[fechasDisponibles.length - 1]
+    || ayerKey;
+  const fechasActual = fechasActualAll.filter(r => {
+    const k = toDateKey(r.fecha);
+    return k && k <= fechaCorteAplicadaKey;
+  });
+  const fechasPosteriores = fechasActualAll.filter(r => {
+    const k = toDateKey(r.fecha);
+    return k && k > fechaCorteAplicadaKey;
+  });
+
   // ── Evolución diaria por título (rowsPorFecha) ─────────────────────────
   const bloqueEvolucion = [];
-  const fechasActual = (rowsPorFecha || []).filter(r => Number(r.mistura) === actual);
   if (fechasActual.length > 0) {
     const neMap = new Map();
     for (const r of fechasActual) {
@@ -10351,116 +10424,310 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
     }
   }
 
+  const toNum = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const avgField = (arr, field) => {
+    const vals = arr.map(x => toNum(x[field])).filter(v => v != null);
+    if (!vals.length) return null;
+    return vals.reduce((a, b) => a + b, 0) / vals.length;
+  };
+  const neToNum = (h) => Number(h?.ne);
+  const dateSortAsc = (a, b) => (toDateKey(a.fecha) || '').localeCompare(toDateKey(b.fecha) || '');
+  const prioridadLabel = nivelGlobal === 'ROJO'
+    ? 'Alta — Revisión Mecánica Urgente'
+    : nivelGlobal === 'AMARILLO'
+      ? 'Media — Monitoreo Activo'
+      : null;
+  const estadoOperativo = nivelGlobal === 'ROJO'
+    ? 'CRÍTICO - DETENER'
+    : nivelGlobal === 'AMARILLO'
+      ? 'PRECAUCIÓN - REVISAR'
+      : 'APROBADO PARA CONTINUIDAD';
+
+  const severityForHilo = (h) => {
+    const m = getMatriz(neToNum(h), isFlame(h));
+    if (!m?.umb) return 0;
+    let maxS = 0;
+    for (const [campo, umb] of Object.entries(m.umb)) {
+      const ev = evalUmbral(toNum(h[campo]), umb);
+      if (ev === 'crit') return 2;
+      if (ev === 'warn') maxS = Math.max(maxS, 1);
+    }
+    return maxS;
+  };
+
+  const hiloSeverity = HilosActual
+    .map(h => ({ h, s: severityForHilo(h) }))
+    .sort((a, b) => b.s - a.s || neToNum(b.h) - neToNum(a.h));
+  const foco = hiloSeverity.filter(x => x.s > 0);
+  const focoList = foco.length ? foco.map(x => x.h) : (hiloSeverity[0] ? [hiloSeverity[0].h] : []);
+
+  const getMaqInfo = (h) => {
+    const flame = isFlame(h);
+    return (rowsMaquinas || []).find(r => Number(r.mistura) === actual && String(r.ne) === String(h.ne) && (isFlame(r) === flame));
+  };
+  const formatOeList = (raw) => String(raw || '')
+    .split(',')
+    .map(x => formatOeMachineCode(x))
+    .filter(Boolean)
+    .map(x => `OE ${x}`)
+    .join(' y ');
+
+  const hviStr = toNum(dataActual.hvi.str);
+  const hviSci = toNum(dataActual.hvi.sci);
+  const hviUi = toNum(dataActual.hvi.ui);
+  const hviMic = toNum(dataActual.hvi.mic);
+  const hilosNeps140 = avgField(HilosActual, 'neps_140');
+  const hilosCvm = avgField(HilosActual, 'cvm');
+  const hilosTen = avgField(HilosActual, 'tenacidad');
+  const hilosElo = avgField(HilosActual, 'elongacion');
+
+  const resumenBullets = [];
+  if (focoList.length >= 2) {
+    const topNames = focoList.slice(0, 2).map(h => `Ne ${neLabel(h)}`).join(' y ');
+    resumenBullets.push(`${topNames} comparten un posible origen común de proceso (variación de regularidad/neps).`);
+  } else if (focoList.length === 1) {
+    resumenBullets.push(`Ne ${neLabel(focoList[0])} concentra el principal desvío del lote actual.`);
+  } else {
+    resumenBullets.push('No se detectan desvíos críticos; mantener control de rutina por título.');
+  }
+  resumenBullets.push(`${conclusionBase} ${hviStr != null ? `STR fibra ${f(hviStr, 2)} g/tex.` : ''}`.trim());
+  resumenBullets.push(`**Impacto inmediato en producción:** ${nivelGlobal === 'ROJO' ? 'alto riesgo de roturas y variabilidad en urdido/índigo.' : nivelGlobal === 'AMARILLO' ? 'riesgo moderado; puede aumentar ajustes y paradas en urdido/telar.' : 'sin impacto crítico esperado en continuidad.'}`);
+  resumenBullets.push(`**Decisión recomendada:** ${nivelGlobal === 'ROJO' ? 'intervenir de inmediato las OE foco antes de sostener ritmo normal.' : nivelGlobal === 'AMARILLO' ? 'continuar con condición, aplicando ajustes y monitoreo en próximos 2-3 cortes.' : 'continuar y validar estabilidad con muestreo de rutina.'}`);
+
+  const comparativaRows = [
+    { p: 'STR fibra (g/tex)', a: hviStr != null ? f(hviStr, 2) : 'N/D', r: '>=27.0', t: hviStr == null ? 'N/D' : (hviStr >= 27 ? 'OK' : 'Desvio') },
+    { p: 'SCI fibra', a: hviSci != null ? f(hviSci, 1) : 'N/D', r: '>=110', t: hviSci == null ? 'N/D' : (hviSci >= 110 ? 'OK' : 'Leve baja') },
+    { p: 'MIC fibra', a: hviMic != null ? f(hviMic, 3) : 'N/D', r: '3.8-4.7', t: hviMic == null ? 'N/D' : (hviMic >= 3.8 && hviMic <= 4.7 ? 'OK' : 'Alto') },
+    { p: 'CVm% promedio', a: hilosCvm != null ? f(hilosCvm, 2) : 'N/D', r: '<=11.0', t: hilosCvm == null ? 'N/D' : (hilosCvm <= 11 ? 'OK' : 'Desvio') },
+    { p: 'Neps+140 prom.', a: hilosNeps140 != null ? f(hilosNeps140, 1) : 'N/D', r: '<=300', t: hilosNeps140 == null ? 'N/D' : (hilosNeps140 <= 300 ? 'OK' : 'Desvio') },
+    { p: 'Tenacidad prom.', a: hilosTen != null ? f(hilosTen, 2) : 'N/D', r: '>=16.5', t: hilosTen == null ? 'N/D' : (hilosTen >= 16.5 ? 'OK' : 'Desvio') },
+    { p: 'Elongación prom.', a: hilosElo != null ? f(hilosElo, 2) : 'N/D', r: '>=8.5', t: hilosElo == null ? 'N/D' : (hilosElo >= 8.5 ? 'OK' : 'Estable') },
+  ];
+  if (hviUi != null) {
+    comparativaRows.splice(3, 0, {
+      p: 'UI fibra (%)',
+      a: f(hviUi, 2),
+      r: '>=80',
+      t: hviUi >= 80 ? 'OK' : 'Desvio',
+    });
+  }
+
+  const novedades = [];
+  const byNe = new Map();
+  for (const r of fechasActual) {
+    const key = `${r.ne}|${isFlame(r)}`;
+    if (!byNe.has(key)) byNe.set(key, []);
+    byNe.get(key).push(r);
+  }
+  const corteDateKey = fechaCorteAplicadaKey || null;
+  const fechaAnteriorKey = fechasActual
+    .map(r => toDateKey(r.fecha))
+    .filter(Boolean)
+    .filter(k => !corteDateKey || k < corteDateKey)
+    .sort()
+    .pop() || null;
+  const corteTxt = corteDateKey ? `${corteDateKey.slice(8, 10)}/${corteDateKey.slice(5, 7)}` : 'S/D';
+
+  for (const h of focoList.slice(0, 4)) {
+    const key = `${h.ne}|${isFlame(h)}`;
+    const dias = (byNe.get(key) || []).slice().sort(dateSortAsc);
+    if (!dias.length) {
+      novedades.push(`- Ne ${neLabel(h)}: sin dato del corte ${corteTxt}.`);
+      continue;
+    }
+    const diaCorte = corteDateKey
+      ? dias.find(d => toDateKey(d.fecha) === corteDateKey)
+      : dias[dias.length - 1];
+    if (!diaCorte) {
+      const ultimo = dias[dias.length - 1];
+      novedades.push(`- Ne ${neLabel(h)}: sin dato en corte ${corteTxt}; último disponible ${fmtFechaCorta(ultimo.fecha)}.`);
+      continue;
+    }
+    const prev = fechaAnteriorKey
+      ? dias.filter(d => toDateKey(d.fecha) && toDateKey(d.fecha) <= fechaAnteriorKey).sort(dateSortAsc).pop()
+      : null;
+    const cvmD = (diaCorte?.cvm != null && prev?.cvm != null) ? toNum(diaCorte.cvm) - toNum(prev.cvm) : null;
+    const n140D = (diaCorte?.neps_140 != null && prev?.neps_140 != null) ? toNum(diaCorte.neps_140) - toNum(prev.neps_140) : null;
+    const tenD = (diaCorte?.tenacidad != null && prev?.tenacidad != null) ? toNum(diaCorte.tenacidad) - toNum(prev.tenacidad) : null;
+    const eloD = (diaCorte?.elongacion != null && prev?.elongacion != null) ? toNum(diaCorte.elongacion) - toNum(prev.elongacion) : null;
+    const cambios = [];
+    if (cvmD != null && Math.abs(cvmD) >= 0.30) cambios.push(`CVm ${cvmD > 0 ? '↑' : '↓'}${Math.abs(cvmD).toFixed(2)}`);
+    if (n140D != null && Math.abs(n140D) >= 100) cambios.push(`Neps+140 ${n140D > 0 ? '↑' : '↓'}${Math.abs(n140D).toFixed(0)}`);
+    if (tenD != null && Math.abs(tenD) >= 0.30) cambios.push(`Tenac ${tenD > 0 ? '↑' : '↓'}${Math.abs(tenD).toFixed(2)}`);
+    if (eloD != null && Math.abs(eloD) >= 0.30) cambios.push(`Elong ${eloD > 0 ? '↑' : '↓'}${Math.abs(eloD).toFixed(2)}`);
+    const fechaTxt = fmtFechaCorta(diaCorte.fecha);
+    if (!prev) {
+      novedades.push(`- Ne ${neLabel(h)} (${fechaTxt}): sin base de comparación diaria.`);
+      continue;
+    }
+    novedades.push(`- Ne ${neLabel(h)} (${fechaTxt}): ${cambios.length ? cambios.join(' | ') : 'sin variaciones fuertes vs corte previo'}.`);
+  }
+  if (!novedades.length) novedades.push('- Sin variaciones diarias relevantes para los títulos foco.');
+
+  const novedadesActuales = [];
+  if (fechasPosteriores.length > 0) {
+    const posterioresByNe = new Map();
+    for (const r of fechasPosteriores) {
+      const key = `${r.ne}|${isFlame(r)}`;
+      if (!posterioresByNe.has(key)) posterioresByNe.set(key, []);
+      posterioresByNe.get(key).push(r);
+    }
+    for (const [key, dias] of posterioresByNe.entries()) {
+      const ord = dias.slice().sort(dateSortAsc);
+      const last = ord[ord.length - 1];
+      const tag = last ? `${fmtFechaCorta(last.fecha)}` : 'S/D';
+      const partes = [];
+      if (last?.cvm != null) partes.push(`CVm ${f(last.cvm)}`);
+      if (last?.neps_140 != null) partes.push(`Neps+140 ${f(last.neps_140, 0)}`);
+      if (last?.tenacidad != null) partes.push(`Tenac ${f(last.tenacidad, 2)}`);
+      if (last?.elongacion != null) partes.push(`Elong ${f(last.elongacion, 2)}%`);
+      const [neRaw, flameRaw] = key.split('|');
+      const neTxt = `${neRaw}${flameRaw === 'true' ? ' FLAME' : '/1'}`;
+      novedadesActuales.push(`- Ne ${neTxt}: dato nuevo del día ${tag} (${partes.join(' | ') || 'sin variables comparables'}).`);
+    }
+  }
+
+  const planAccion = [];
+  for (const h of focoList.slice(0, 3)) {
+    const maq = getMaqInfo(h);
+    const oeTxt = maq?.maquinas ? formatOeList(maq.maquinas) : 'OE S/D';
+    const sev = severityForHilo(h);
+    const objetivo = sev >= 2
+      ? 'bajar irregularidad y recuperar estabilidad del título crítico'
+      : 'estabilizar variación y evitar escalamiento en próximos cortes';
+    planAccion.push(`- ${oeTxt} (Ne ${neLabel(h)}): ajustar limpieza/estiraje y verificar alimentación; objetivo: ${objetivo}.`);
+  }
+  if (!planAccion.length) {
+    planAccion.push('- OE foco del lote actual: mantener parámetros y verificar consistencia por turno.');
+  }
+
+  const detalleNe = [];
+  for (const h of focoList.length ? focoList : HilosActual.slice(0, 1)) {
+    const m = getMatriz(neToNum(h), isFlame(h));
+    const estado = severityForHilo(h) >= 2 ? 'Rechazado' : severityForHilo(h) === 1 ? 'Condicional' : 'Aprobado';
+    const problemas = [];
+    if (m?.umb?.tenacidad) {
+      const e = evalUmbral(toNum(h.tenacidad), m.umb.tenacidad);
+      if (e !== 'ok' && toNum(h.tenacidad) != null) problemas.push(`Tenacidad ${f(h.tenacidad, 2)} cN/tex`);
+    }
+    if (m?.umb?.cvm) {
+      const e = evalUmbral(toNum(h.cvm), m.umb.cvm);
+      if (e !== 'ok' && toNum(h.cvm) != null) problemas.push(`CVm ${f(h.cvm, 2)}%`);
+    }
+    if (toNum(h.neps_140) != null && toNum(h.neps_140) > 600) problemas.push(`Neps+140 ${f(h.neps_140, 1)}/km`);
+    const maq = getMaqInfo(h);
+    const proceso = maq
+      ? `${formatOeList(maq.maquinas)} | ${maq.pasador === 'SI' ? 'Con pasador' : maq.pasador === 'NO' ? 'Sin pasador' : 'Pasador S/D'} | Estiraje ${maq.estiraje_avg != null ? Math.round(parseFloat(maq.estiraje_avg)) : 'S/D'}`
+      : 'Sin datos de máquina';
+    detalleNe.push(`Ne ${neLabel(h)} (${m?.app || 'Proceso'}):`);
+    detalleNe.push(`    Estado: ${estado}`);
+    detalleNe.push(`    Problemas: ${problemas.length ? problemas.join(' | ') : 'sin desvíos críticos en corte actual'}`);
+    detalleNe.push(`    Proceso: ${proceso}`);
+    detalleNe.push(`    Riesgo: ${severityForHilo(h) >= 2 ? 'alto impacto en continuidad de urdido/telar' : severityForHilo(h) === 1 ? 'riesgo moderado; vigilar próximos cortes' : 'bajo'}`);
+  }
+
+  const correlacion = [];
+  for (const h of focoList.slice(0, 3)) {
+    const dias = (byNe.get(`${h.ne}|${isFlame(h)}`) || []).slice().sort(dateSortAsc);
+    const ens = dias[dias.length - 1] || null;
+    const oeRows = getOeRowsByNe(h.ne).slice().sort((a, b) => (toDateKey(a.fecha) || '').localeCompare(toDateKey(b.fecha) || ''));
+    const oe = ens ? (getOeRowByNeDate(h.ne, ens.fecha) || oeRows[oeRows.length - 1] || null) : (oeRows[oeRows.length - 1] || null);
+    const fechaTxt = ens ? fmtFechaCorta(ens.fecha) : (oe ? (oe.fecha_txt || fmtFechaCorta(oe.fecha)) : 'S/D');
+    const oeTag = oe?.maquinas_oe ? formatOeList(oe.maquinas_oe) : 'OE S/D';
+    correlacion.push(`Ne ${neLabel(h)} (${fechaTxt}, ${oeTag}):`);
+    if (!oe) {
+      correlacion.push(`    Hecho: sin registros OE comparables para este título.`);
+      correlacion.push(`    Hipótesis probable: sin evidencia suficiente para vincular causa mecánica puntual.`);
+      correlacion.push(`    Qué observar en próximos 2-3 cortes: disponibilidad de OE por fecha y evolución de CVm/Neps del hilo.`);
+      continue;
+    }
+    const lVal = toNum(oe.l_total);
+    const tVal = toNum(oe.t_total);
+    const cortVal = toNum(oe.cort_nat_total);
+    const hecho = [
+      lVal != null ? `L=${f(lVal, 0)}` : null,
+      tVal != null ? `T=${f(tVal, 0)}` : null,
+      cortVal != null ? `CortNat=${f(cortVal, 0)}` : null,
+      oe.efic_oe != null ? `Efic=${f(oe.efic_oe, 1)}%` : null,
+    ].filter(Boolean).join(' | ');
+    correlacion.push(`    Hecho: ${hecho || 'sin señal operativa consolidada'}${(lVal != null || tVal != null) ? ' (L=lugares gruesos, T=lugares delgados; ambos aumentan irregularidad y ajustes en telar).' : ''}`);
+    correlacion.push(`    Hipótesis probable: la variación en OE está contribuyendo al desvío de calidad observado en USTER, sin evidencia de error operativo humano.`);
+    correlacion.push(`    Qué observar en próximos 2-3 cortes: descenso de L/T y CortNat junto con mejora de CVm y Neps+140 del hilo.`);
+  }
+
+  const totalFardosProv = provActual.reduce((s, p) => s + (Number(p.fardos_consumidos) || 0), 0);
+  const provRiesgo = provActual.filter(p => {
+    const mic = toNum(p.mic);
+    const str = toNum(p.str);
+    return (mic != null && mic > 4.7) || (str != null && str < 27);
+  });
+  const provTop = [...provActual].sort((a, b) => (Number(b.fardos_consumidos) || 0) - (Number(a.fardos_consumidos) || 0)).slice(0, 3);
+  const provShowMap = new Map();
+  for (const p of [...provTop, ...provRiesgo]) provShowMap.set(`${p.produtor}`, p);
+  const provShow = [...provShowMap.values()];
+
+  const bloqueProv = [];
+  if (provShow.length) {
+    bloqueProv.push('Proveedor      %     STR    MIC    ELG    UHML');
+    for (const p of provShow) {
+      const fardos = Number(p.fardos_consumidos) || 0;
+      const prc = totalFardosProv > 0 ? ((fardos / totalFardosProv) * 100).toFixed(1) : '0.0';
+      bloqueProv.push(
+        `${String(p.produtor || 'S/D').padEnd(12)} ${prc.padStart(5)} ${f(p.str, 2).padStart(6)} ${f(p.mic, 3).padStart(6)} ${f(p.elg, 2).padStart(6)} ${f(p.uhml, 2).padStart(7)}`
+      );
+    }
+  } else {
+    bloqueProv.push('Sin datos de proveedores para el lote actual.');
+  }
+
+  const diagnostico = (() => {
+    const noFibra = (hviStr != null && hviStr >= 27) && focoList.some(h => severityForHilo(h) > 0);
+    if (noFibra) {
+      return `STR fibra ${f(hviStr, 2)} g/tex con desvíos en hilo sugiere causa de proceso. **No es la fibra**. Hipótesis probable: variación mecánica en preparación/OE; observar 2-3 cortes para validar estabilización de CVm y Neps+140.`;
+    }
+    return `La evidencia no descarta impacto de materia prima. **Sí es la fibra** como hipótesis probable; observar mezcla por proveedor y evolución de tenacidad/cvm tras ajustes de proceso.`;
+  })();
+
   const lines = [
-    ...bloqueDictamen,
-    ...bloqueBalance,
-    ...bloqueEvolucion,
-    ...bloqueCorrelacionOe,
-    ...bloqueProveedores,
-    ...bloqueAuditoria,
-    ...(() => {
-      // ── Diagnóstico Mecánico: Paradoja de la Fibra ──────────────────────────
-      const str  = dataActual.hvi.str  != null ? parseFloat(dataActual.hvi.str)  : null;
-      const ui   = dataActual.hvi.ui   != null ? parseFloat(dataActual.hvi.ui)   : null;
-      const paradojas = [];
-      // Acciones agrupadas por etapa del proceso
-      const accionesPorEtapa = { blowroom: [], cardas: [], manuar: [], oe: [] };
-      for (const h of HilosActual) {
-        const cvm  = h.cvm       != null ? parseFloat(h.cvm)       : null;
-        const nps  = h.neps_200  != null ? parseFloat(h.neps_200)  : null;
-        const ten  = h.tenacidad != null ? parseFloat(h.tenacidad) : null;
-        const flame = isFlame(h);
-        const neTxt = neLabel(h);
-        const nN    = parseFloat(h.ne);
-        const strBuena = str != null && str >= 27;
-        const uiBuena  = ui  != null && ui  >= 80;
-        // Paradoja: fibra premium + CVm% alto → falla mecánica
-        if (strBuena && cvm != null && cvm > 13 && !flame) {
-          paradojas.push(`  ⚙️ Ne${neTxt}: STR ${f(str,1)} g/tex (fibra premium) pero CVm% ${f(cvm)} — la irregularidad NO viene de la materia prima. Causa: tren de estiraje o rotor.`);
-          accionesPorEtapa.manuar.push(`  📍 Ne${neTxt}: Revisar presión de rodillos y estado de cots (gomas de estiraje).`);
-          accionesPorEtapa.oe.push(`  📍 Ne${neTxt}: Limpiar rotores Open-End — CVm% ${f(cvm)} con fibra premium indica falla de proceso.`);
-        }
-        // Paradoja: fibra limpia (UI) + Neps altos → neps de proceso
-        if (uiBuena && nps != null && nps > (flame ? 700 : 600) && !flame) {
-          paradojas.push(`  ⚙️ Ne${neTxt}: UI ${f(ui,1)}% (fibra limpia) pero Neps ${f(nps,0)}/km — los neps son de proceso, no de la bala.`);
-          accionesPorEtapa.blowroom.push(`  📍 Ne${neTxt}: Revisar distancias entre cilindros abridores y rejillas — la apertura puede estar nepeando el algodón.`);
-          accionesPorEtapa.cardas.push(`  📍 Ne${neTxt}: Verificar estado de guarnición del tambor y chapones. Neps altos con UI ${f(ui,1)}% apuntan a cardado insuficiente.`);
-          accionesPorEtapa.oe.push(`  📍 Ne${neTxt}: Incrementar frecuencia de purga de aire — purga insuficiente arrastra neps al rotor.`);
-        }
-        // Paradoja: STR bajo + tenacidad baja → causa en materia prima
-        if (str != null && str < 25 && ten != null && ten < 15) {
-          paradojas.push(`  ⚙️ Ne${neTxt}: STR ${f(str,1)} g/tex (fibra débil) + Tenacidad ${f(ten)} cN/tex — causa en materia prima, no en maquinaria. Revisar proveedor.`);
-        }
-        // CVm% + Neps combinados → falla en rotor
-        if (cvm != null && nps != null && cvm > 13 && nps > 650 && !flame) {
-          accionesPorEtapa.oe.push(`  📍 Ne${neTxt}: CVm% ${f(cvm)} + Neps ${f(nps,0)}/km — limpiar rotor y ajustar presión de aire del canal de transporte.`);
-        }
-        // Urdimbre con elongación baja
-        const elo = h.elongacion != null ? parseFloat(h.elongacion) : null;
-        if (nN >= 10 && !flame && elo != null && elo < 7.5) {
-          accionesPorEtapa.oe.push(`  📍 Ne${neTxt}: Elongación ${f(elo)}% crítica — revisar tensión de hilo, pasadores y canal de salida en OE.`);
-        }
-      }
-      // Diferencia CVm entre líneas del mismo Ne (LP vs LI)
-      const neGroups = {};
-      for (const h of HilosActual) {
-        const nK = String(h.ne);
-        if (!neGroups[nK]) neGroups[nK] = [];
-        neGroups[nK].push(parseFloat(h.cvm));
-      }
-      for (const [ne, cvms] of Object.entries(neGroups)) {
-        const validos = cvms.filter(v => !isNaN(v));
-        if (validos.length >= 2) {
-          const diff = Math.max(...validos) - Math.min(...validos);
-          if (diff > 0.3) {
-            accionesPorEtapa.manuar.push(`  📍 Ne${ne}: Diferencia de CVm% ${f(diff)} entre líneas — desajuste mecánico puntual. Estandarizar ajuste de tren de estiraje.`);
-          }
-        }
-      }
-      const tieneAcciones = Object.values(accionesPorEtapa).some(a => a.length > 0);
-      const etapaLabels = [
-        { key: 'blowroom', icon: '1️⃣', label: 'APERTURA Y BLOWROOM' },
-        { key: 'cardas',   icon: '2️⃣', label: 'CARDAS' },
-        { key: 'manuar',   icon: '3️⃣', label: 'PASADOR (MANUAR)' },
-        { key: 'oe',       icon: '4️⃣', label: 'OPEN END (OE)' },
-      ];
-      const bloque = [];
-      if (paradojas.length > 0) {
-        bloque.push(`🔬 DIAGNÓSTICO MECÁNICO — Paradoja de la Fibra:`);
-        bloque.push(...paradojas);
-        bloque.push(``);
-      }
-      if (tieneAcciones) {
-        bloque.push(`🛠 ACCIONES RECOMENDADAS POR PROCESO:`);
-        for (const { key, icon, label } of etapaLabels) {
-          if (accionesPorEtapa[key].length === 0) continue;
-          bloque.push(`${icon} ${label}:`);
-          bloque.push(...accionesPorEtapa[key]);
-        }
-        bloque.push(``);
-      }
-      return bloque;
-    })(),
-    `🚀 ESTADO OPERATIVO: ${estadoLabel}`,
-    (() => {
-      const lf = actual;
-      const mr = dataActual.hvi.n_fardos != null ? `${dataActual.hvi.n_fardos} fardos consumidos` : '– fardos';
-      const ms = dataActual.hvi.n_secuencias != null ? `${dataActual.hvi.n_secuencias} secuencias de blendomat` : '';
-      const mreal = dataActual.hvi.mistura_real ? ` (Mistura interna ${dataActual.hvi.mistura_real})` : '';
-      if (HilosActual.length === 0) return `Solo se disponen de datos HVI para el Lote FIAC ${lf}${mreal}; los datos de ensayos de hilo están pendientes.`;
-      return `El Lote FIAC ${lf}${mreal} tiene ${mr}${ms ? ' y ' + ms : ''} asociadas.`;
-    })(),
+    `📢 REPORTE TÉCNICO — LOTE FIAC ${actual}${refs.length ? ` vs ${refs.join('/')}` : ''}`,
+    ...(prioridadLabel ? [`Prioridad: ${prioridadLabel}`] : []),
     ``,
-    `─────────────────────────────────────────`,
-    `📊 COMPARATIVA TÉCNICA DETALLADA (Promedios por variable):`,
+    `🚦 RESUMEN DE MANDO`,
+    ...resumenBullets.map(x => `- ${x}`),
     ``,
-    ...bloques.flatMap(b => [b, '']),
-    `⚠️ PUNTOS CLAVE PARA PRODUCCIÓN:`,
-    ...(puntosClaveAgrupados.length
-      ? puntosClaveAgrupados
-      : ['  ✓ Sin alertas críticas en el lote actual.']),
+    `📊 COMPARATIVA CONSOLIDADA:`,
+    `Parametro            Actual    Ref/Obj    Tendencia`,
+    ...comparativaRows.map(r => `${r.p.padEnd(20)} ${String(r.a).padStart(7)} ${String(r.r).padStart(10)} ${String(r.t).padStart(10)}`),
     ``,
-    `_Informe generado localmente · ${new Date().toLocaleString('es-AR')}_`,
+    `📅 NOVEDADES DEL DÍA:`,
+    `Corte diario: ${corteTxt}`,
+    `Base de análisis: datos hasta ${corteTxt}${fechaAnteriorKey ? ` (comparado contra ${fechaAnteriorKey.slice(8, 10)}/${fechaAnteriorKey.slice(5, 7)})` : ' (sin base de comparación diaria)'}`,
+    ...novedades,
+    ...(novedadesActuales.length ? [`Datos actuales posteriores al corte:`, ...novedadesActuales] : []),
+    ``,
+    `🛠 PLAN DE ACCIÓN PRIORIZADO (24h):`,
+    ...planAccion,
+    ``,
+    `🧵 DETALLE TÉCNICO POR NE:`,
+    ...detalleNe,
+    ``,
+    `🔗 CORRELACIÓN CON PRODUCCIÓN OE:`,
+    ...correlacion,
+    ``,
+    `📦 PROVEEDORES CLAVE — Lote FIAC ${actual}:`,
+    ...bloqueProv,
+    ``,
+    `🔬 DIAGNÓSTICO MECÁNICO — Paradoja de la Fibra:`,
+    diagnostico,
+    ``,
+    `🚀 ESTADO OPERATIVO: ${estadoOperativo}`,
+    `    Plan inmediato: ejecutar acciones priorizadas y sostener seguimiento por turno en títulos foco.`,
+    `    Validación: tomar nuevas muestras tras el ajuste para confirmar corrección.`,
+    ``,
+    `_Informe generado localmente · ${formatTimestampEsAr24()}_`,
   ];
 
   return lines.join('\n');
@@ -10473,8 +10740,37 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
 // ─────────────────────────────────────────────────────────────────────────────
 app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
   try {
-    const { rows, loteActual, model: modelReq, modo, proveedores } = req.body;
+    const { rows, loteActual, model: modelReq, modo, proveedores, fechaCorte } = req.body;
     if (!rows || rows.length === 0) return res.status(400).json({ error: 'Sin datos para analizar' });
+
+    const dateKey = (value) => {
+      if (value instanceof Date && !Number.isNaN(value.getTime())) {
+        return value.toISOString().slice(0, 10);
+      }
+      const raw = String(value || '').trim();
+      if (!raw) return null;
+      const iso = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+      if (iso) return iso[1];
+      const br = raw.match(/^([0-3]?\d)\/([0-1]?\d)\/(\d{2}|\d{4})/);
+      if (br) {
+        const dd = br[1].padStart(2, '0');
+        const mm = br[2].padStart(2, '0');
+        const yy = br[3].length === 2
+          ? String((Number(br[3]) >= 70 ? 1900 : 2000) + Number(br[3]))
+          : br[3];
+        return `${yy}-${mm}-${dd}`;
+      }
+      const parsed = new Date(raw);
+      if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+      return null;
+    };
+
+    const fmtDateDdMm = (value) => {
+      const k = dateKey(value);
+      return k ? `${k.slice(8, 10)}/${k.slice(5, 7)}` : 'S/D';
+    };
+
+    const toLocalDateKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
     const cargarContextoOe = async (loteNums, traceTag) => {
       if (!Array.isArray(loteNums) || loteNums.length === 0) return [];
@@ -10826,9 +11122,10 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
       } catch (e) {
         console.warn('narrativa-lotes: contexto OE no disponible:', e.message?.slice(0, 80));
       }
-      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], rowsPorFecha, rowsMaquinas, rowsProduccionOe);
-      const fuenteLocal = `⚡ Fuente: Generador local (sin IA externa) · ${new Date().toLocaleString('es-AR')}\n\n`;
-      return res.json({ success: true, narrativa: fuenteLocal + narrativa, fuente: 'local' });
+      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], rowsPorFecha, rowsMaquinas, rowsProduccionOe, fechaCorte);
+      const narrativaLocal = normalizeNarrativaGemini(narrativa);
+      const fuenteLocal = `⚡ Fuente: Generador local (sin IA externa) · ${formatTimestampEsAr24()}\n\n`;
+      return res.json({ success: true, narrativa: fuenteLocal + narrativaLocal, fuente: 'local' });
     }
 
     const lotesSorted = [...new Set(rows.map(r => Number(r.mistura)))].sort((a, b) => a - b);
@@ -10889,6 +11186,31 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
     } catch (e) {
       console.warn('narrativa-lotes Gemini: datos diarios no disponibles:', e.message?.slice(0, 80));
     }
+
+    const ayerGemini = new Date();
+    ayerGemini.setDate(ayerGemini.getDate() - 1);
+    const ayerGeminiKey = toLocalDateKey(ayerGemini);
+    const fechaCorteReqKey = dateKey(fechaCorte);
+    const fechasActualGeminiDisponibles = rowsPorFechaGemini
+      .filter(r => Number(r.mistura) === actual)
+      .map(r => dateKey(r.fecha))
+      .filter(Boolean)
+      .sort();
+    const fechaCorteGeminiKey = fechaCorteReqKey
+      || [...fechasActualGeminiDisponibles].filter(k => k <= ayerGeminiKey).pop()
+      || fechasActualGeminiDisponibles[fechasActualGeminiDisponibles.length - 1]
+      || ayerGeminiKey;
+
+    const rowsPorFechaGeminiBase = rowsPorFechaGemini.filter(r => {
+      const k = dateKey(r.fecha);
+      return k && k <= fechaCorteGeminiKey;
+    });
+    const rowsPorFechaGeminiPosteriorActual = rowsPorFechaGemini.filter(r => {
+      const k = dateKey(r.fecha);
+      return Number(r.mistura) === actual && k && k > fechaCorteGeminiKey;
+    });
+    rowsPorFechaGemini = rowsPorFechaGeminiBase;
+
     // ── Máquinas OE + pasador + estiraje (Gemini path) ─────────────────────
     let rowsMaquinasGemini = [];
     const sqlMaquinasG = `
@@ -10966,6 +11288,35 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
       return `\nDATA DIARIA (por fecha de ensayo):\n` + lines.join('\n');
     })();
 
+    const datosActualesPosterioresStr = (() => {
+      if (!rowsPorFechaGeminiPosteriorActual.length) return '';
+      const map = new Map();
+      for (const r of rowsPorFechaGeminiPosteriorActual) {
+        const key = `${r.ne}|${r.is_flame}`;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(r);
+      }
+      const lines = [];
+      for (const [key, dias] of map.entries()) {
+        const ord = dias.slice().sort((a, b) => {
+          const ka = dateKey(a.fecha) || '';
+          const kb = dateKey(b.fecha) || '';
+          return ka.localeCompare(kb);
+        });
+        const last = ord[ord.length - 1];
+        const [neRaw, flameRaw] = key.split('|');
+        const neTxt = `${neRaw}${String(flameRaw).trim() === 'true' || String(flameRaw).trim() === '1' ? ' FLAME' : '/1'}`;
+        const parts = [];
+        if (last?.cvm != null) parts.push(`CVm=${last.cvm}`);
+        if (last?.neps_140 != null) parts.push(`Neps+140=${last.neps_140}/km`);
+        if (last?.neps_200 != null) parts.push(`Neps+200=${last.neps_200}/km`);
+        if (last?.tenacidad != null) parts.push(`Tenac=${last.tenacidad}`);
+        if (last?.elongacion != null) parts.push(`Elong=${last.elongacion}%`);
+        lines.push(`  Ne ${neTxt} | Fecha=${dateKey(last.fecha) || 'S/D'} | ${parts.join(' | ') || 'sin variables comparables'}`);
+      }
+      return `\nDATOS ACTUALES POSTERIORES AL CORTE (mostrar en NOVEDADES si existen):\n` + lines.join('\n');
+    })();
+
     // ── Datos de proceso por Ne para el prompt de Gemini ───────────────────
     const maquinasStr = (() => {
       const actMaq = rowsMaquinasGemini.filter(r => Number(r.mistura) === actual);
@@ -10975,15 +11326,7 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
         const neTxt = `${r.ne}${flame ? ' FLAME' : '/1'}`;
         const parts = [`Ne ${neTxt}`];
         if (r.maquinas) {
-          const fmtMaqG = m => {
-            const s = m.trim().replace(/^#/, '');
-            const sp = s.search(/\s/);
-            if (sp === -1) return String(parseInt(s, 10));
-            const num = String(parseInt(s.slice(0, sp), 10));
-            const suf = s.slice(sp + 1).trim().slice(0, 2);
-            return suf ? `${num} ${suf}` : num;
-          };
-          parts.push(`Hechos en OE ${r.maquinas.split(',').map(fmtMaqG).join(' y ')}`);
+          parts.push(`Hechos en OE ${r.maquinas.split(',').map(formatOeMachineCode).join(' y ')}`);
         }
         parts.push(r.pasador === 'SI' ? 'Con pasador' : r.pasador === 'NO' ? 'Sin pasador' : 'sin información de pasador');
         if (r.estiraje_avg != null) parts.push(`Estiraje aplicado: ${Math.round(parseFloat(r.estiraje_avg))}`);
@@ -10993,8 +11336,12 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
     })();
 
     const oeProduccionStr = (() => {
-      const oeActual = rowsProduccionOeGemini
+      const oeActualBase = rowsProduccionOeGemini
         .filter(r => Number(r.mistura) === actual)
+        .filter(r => {
+          const k = dateKey(r.fecha);
+          return k && k <= fechaCorteGeminiKey;
+        })
         .sort((a, b) => {
           const neA = Number(a.ne) || 0;
           const neB = Number(b.ne) || 0;
@@ -11003,23 +11350,55 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
           const kb = (b.fecha instanceof Date && !Number.isNaN(b.fecha.getTime())) ? b.fecha.toISOString().slice(0, 10) : String(b.fecha || '').slice(0, 10);
           return ka.localeCompare(kb);
         });
-      if (!oeActual.length) return `\nDATA OE (tb_PRODUCCION_OE):\n  Sin datos de producción OE para Lote ${actual}.`;
-      const lines = oeActual.map(r => {
+      const oeActualPosterior = rowsProduccionOeGemini
+        .filter(r => Number(r.mistura) === actual)
+        .filter(r => {
+          const k = dateKey(r.fecha);
+          return k && k > fechaCorteGeminiKey;
+        })
+        .sort((a, b) => {
+          const ka = dateKey(a.fecha) || '';
+          const kb = dateKey(b.fecha) || '';
+          return ka.localeCompare(kb);
+        });
+
+      if (!oeActualBase.length) {
+        const postTxt = oeActualPosterior.length
+          ? `\nDATA OE ACTUAL (posterior al corte ${fmtDateDdMm(fechaCorteGeminiKey)}):\n  ${oeActualPosterior.length} registro(s) OE detectados para lote actual.`
+          : '';
+        return `\nDATA OE (tb_PRODUCCION_OE, base <= ${fmtDateDdMm(fechaCorteGeminiKey)}):\n  Sin datos de producción OE para Lote ${actual}.` + postTxt;
+      }
+
+      const lines = oeActualBase.map(r => {
         const neTxt = Number.isFinite(Number(r.ne)) ? Number(r.ne).toFixed(2) : String(r.ne || 'S/D');
         const fechaTxt = r.fecha_txt || ((r.fecha instanceof Date && !Number.isNaN(r.fecha.getTime())) ? r.fecha.toISOString().slice(0, 10) : String(r.fecha || '').slice(0, 10)) || 'S/D';
+        const oeMaqTxt = (r.maquinas_oe || '')
+          .split(',')
+          .map(x => formatOeMachineCode(x))
+          .filter(Boolean)
+          .join(', ');
         return [
           `  Ne ${neTxt} | Fecha ${fechaTxt}`,
-          `Filial=${r.filiales || '-'} | Loc=${r.loc_fisicos || '-'} | OEs=${r.maquinas_oe || 'S/D'} | NombreMaq=${r.nomes_maquina || '-'}`,
+          `Filial=${r.filiales || '-'} | Loc=${r.loc_fisicos || '-'} | OEs=${oeMaqTxt || 'S/D'} | NombreMaq=${r.nomes_maquina || '-'}`,
           `Turno=${r.turnos || '-'} | Lado=${r.lados || '-'} | Horario=${r.hora_inicial_min || '-'}-${r.hora_final_max || '-'} | Operador=${r.operadores || '-'}`,
           `Item=${r.itens || '-'} | DescItem=${r.desc_itens || '-'}`,
           `RPM=${r.rpm_avg ?? '-'} | NumFusos=${r.num_fusos_avg ?? '-'} | Alfa=${r.alfa_avg ?? '-'} | Tempo=${r.tempo_avg ?? '-'} | TorcaoPol=${r.torcao_p_poleg_avg ?? '-'} | TorcaoM=${r.torcao_p_metro_avg ?? '-'}`,
           `ProdMtMin=${r.prod_mt_min_avg ?? '-'} | ProdKgHr=${r.prod_kg_hr_avg ?? '-'} | ProdCalc=${r.prod_calc_total ?? '-'} | ProdInf=${r.prod_oe ?? '-'} | EficCalc=${r.efic_calc_oe ?? '-'} | EficInf=${r.efic_oe ?? '-'}`,
           `T.BOB=${r.t_bob_avg ?? '-'} | RPMCard=${r.rpm_card_avg ?? '-'} | CVP=${r.cvp_oe ?? '-'} | CVM=${r.cvm_oe ?? '-'} | CortNat=${r.cort_nat_total ?? '-'}`,
           `N=${r.n_total ?? '-'} | S=${r.s_total ?? '-'} | L=${r.l_total ?? '-'} | T=${r.t_total ?? '-'} | MO=${r.mo_total ?? '-'} | CP=${r.cp_v_sl_total ?? '-'} | CM=${r.cm_v_sl_total ?? '-'} | CCp=${r.ccp_c_total ?? '-'} | CCm=${r.ccm_c_total ?? '-'} | JP=${r.jp_p_total ?? '-'} | JM=${r.jm_p_total ?? '-'}`,
-          `%ROB01=${r.rob_01_avg ?? '-'} | %ROB02=${r.rob_02_avg ?? '-'} | %ROB03=${r.rob_03_avg ?? '-'} | FilasActivas=${r.filas_activas ?? '-'} / ${r.filas ?? '-'} | MaqActivas=${r.maquinas_activas ?? '-'} / ${r.maquinas_total ?? '-'}`,
+          `%ROB01=${r.rob_01_avg ?? '-'} | %ROB02=${r.rob_02_avg ?? '-'} | %ROB03=${r.rob_03_avg ?? '-'}`,
         ].join(' \n    ');
       });
-      return `\nDATA OE (tb_PRODUCCION_OE):\n` + lines.join('\n');
+      const posterioresTxt = oeActualPosterior.length
+        ? `\nDATA OE ACTUAL (posterior al corte ${fmtDateDdMm(fechaCorteGeminiKey)}):\n` + oeActualPosterior.map(r => {
+            const fechaTxt = r.fecha_txt || fmtDateDdMm(r.fecha);
+            const neTxt = Number.isFinite(Number(r.ne)) ? Number(r.ne).toFixed(2) : String(r.ne || 'S/D');
+            const cvmTxt = r.cvm_oe != null ? Number(r.cvm_oe).toFixed(2) : 'S/D';
+            const eficTxt = r.efic_oe != null ? Number(r.efic_oe).toFixed(1) : 'S/D';
+            return `  Ne ${neTxt} | Fecha ${fechaTxt} | CVm_OE=${cvmTxt} | Efic_OE=${eficTxt}%`;
+          }).join('\n')
+        : '';
+      return `\nDATA OE (tb_PRODUCCION_OE, base <= ${fmtDateDdMm(fechaCorteGeminiKey)}):\n` + lines.join('\n') + posterioresTxt;
     })();
 
     const resumenLotes = lotesSorted.map(mistura => {
@@ -11040,11 +11419,11 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
       const provStr = provLote.length
         ? '\n  Proveedores:\n' + provLote.map(p => {
             const pct = totalFardosProv > 0 ? ((Number(p.fardos_consumidos) / totalFardosProv) * 100).toFixed(1) : '–';
-            return `   • ${p.produtor}: ${p.fardos_consumidos} fardos (${pct}%) STR=${p.str ?? '-'} SCI=${p.sci ?? '-'} MIC=${p.mic ?? '-'} UHML=${p.uhml ?? '-'}`;
+            return `   • ${p.produtor}: ${p.fardos_consumidos} fardos (${pct}%) STR=${p.str ?? '-'} SCI=${p.sci ?? '-'} MIC=${p.mic ?? '-'} ELG=${p.elg ?? '-'} UHML=${p.uhml ?? '-'}`;
           }).join('\n')
         : '';
       return `LOTE_FIAC ${misturaLabel}${mistura === actual ? ' [ACTUAL]' : ' [REFERENCIA]'}:
-  HVI: STR=${hvi.str ?? '-'} g/tex | SCI=${hvi.sci ?? '-'} | MIC=${hvi.mic ?? '-'} | UHML=${hvi.uhml ?? '-'} mm | ${hvi.n_fardos ?? '-'} fardos consumidos | ${hvi.n_secuencias ?? '-'} secuencias blendomat
+  HVI: STR=${hvi.str ?? '-'} g/tex | SCI=${hvi.sci ?? '-'} | MIC=${hvi.mic ?? '-'} | UHML=${hvi.uhml ?? '-'} mm | UI=${hvi.ui ?? '-'} % | ELG=${hvi.elg_fibra ?? '-'} % | ${hvi.n_fardos ?? '-'} fardos consumidos | ${hvi.n_secuencias ?? '-'} secuencias blendomat
   Hilo:\n${hilos || '   (sin datos)'}${provStr}`;
     }).join('\n\n');
 
@@ -11054,120 +11433,150 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
 
     const prompt = `Actúa como Auditor de Calidad Textil y Experto en Tejeduría e Hilandería de denim de alta velocidad.
 
+OBJETIVO PRINCIPAL:
+- Entregar claridad accionable para responsables de planta, evitando sobrecarga de datos.
+- Priorizar qué hacer primero (24h), luego explicar por qué.
+- Separar salida en dos capas: VISTA EJECUTIVA (decisión) y VISTA TÉCNICA (evidencia).
+
 DATOS COMPARATIVOS:
-${resumenLotes}${evolucionDiariaStr}${maquinasStr}${oeProduccionStr}
+${resumenLotes}
+FECHA_CORTE_SOLICITADA: ${fechaCorteReqKey ? fmtDateDdMm(fechaCorteReqKey) : 'No informada (usa corte por defecto)'}. FECHA_CORTE_EFECTIVA: ${fmtDateDdMm(fechaCorteGeminiKey)}.
+Regla de cálculo obligatoria: todo análisis principal debe usar SOLO datos con fecha <= FECHA_CORTE_EFECTIVA.
+${evolucionDiariaStr}${datosActualesPosterioresStr}${maquinasStr}${oeProduccionStr}
 
-NOTA SOBRE NEPS: Neps+200% = impurezas grandes que afectan absorción del colorante en Índigo. Neps+140% = conteo total de neps incluyendo pequeños, indicador de agresividad del proceso de apertura y cardado. Los umbrales de decisión aplican a Neps+200%; usar Neps+140% como indicador complementario de proceso (apertura/cardas).
+NOTA SOBRE NEPS: Neps+200% = impurezas grandes que afectan absorción del colorante en Índigo. Neps+140% = conteo total de neps incluyendo pequeños, indicador de agresividad del proceso de apertura y cardado. Los umbrales de decisión aplican a Neps+200%; usar Neps+140% como indicador complementario de proceso.
 
-UMBRALES: Tenacidad hilo >16.0=APTO, 14.5-16.0=PRECAUCIÓN, <14.5=CRÍTICO | Elongación <7.5%=RIESGO URDIDORA | Neps+200% >700=RIESGO ÍNDIGO (liso) / >850 (FLAME)=CRÍTICO | CVm% >13=IRREGULAR (liso) / >18 (FLAME)=ALERTA | STR fibra >27=ÓPTIMO
+UMBRALES GENERALES: Tenacidad hilo >16.0=APTO, 14.5-16.0=PRECAUCIÓN, <14.5=CRÍTICO | Elongación <7.5%=RIESGO URDIDORA | Neps+200% >700=RIESGO ÍNDIGO (liso) / >850 (FLAME)=CRÍTICO | CVm% >13=IRREGULAR (liso) / >18 (FLAME)=ALERTA | STR fibra >27=ÓPTIMO
 
 MATRIZ DE REQUISITOS MÍNIMOS POR TÍTULO:
-Ne 7 (Trama):  Tenac ok≥14.0 (warn 13.0), CVm ok≤13.5 (warn 14.5), Neps ok≤700 (warn 850) → solo TELAR
-Ne 9 (Trama):  Tenac ok≥14.5 (warn 13.5), CVm ok≤13.0 (warn 14.0), Neps ok≤600 (warn 750) → solo TELAR
-Ne 10 (Urdimbre): Tenac ok≥16.0 (warn 15.0), Elong ok≥8.0 (warn 7.5), CVm ok≤12.0 (warn 13.0), Neps ok≤500 (warn 650) → URDIDORA→ÍNDIGO→TELAR
-Ne 10 FLAME (Urdimbre Flame): Tenac ok≥16.0 (warn 15.0), Elong ok≥8.0 (warn 7.5), CVm ok≤18.0 (warn 20.0), Neps ok≤700 (warn 850) → URDIDORA→ÍNDIGO→TELAR
-Ne 12.5 (Urdimbre): Tenac ok≥16.5 (warn 15.5), Elong ok≥8.0 (warn 7.5), CVm ok≤11.5 (warn 12.5), Neps ok≤450 (warn 600) → URDIDORA→ÍNDIGO→TELAR
-Ne 14 (Urdimbre): Tenac ok≥17.0 (warn 16.0), Elong ok≥8.5 (warn 8.0), CVm ok≤11.0 (warn 12.0), Neps ok≤400 (warn 550) → URDIDORA→ÍNDIGO→TELAR
+Ne 7 (Trama): Tenac ok≥14.0 (warn 13.0), CVm ok≤13.5 (warn 14.5), Neps ok≤700 (warn 850) -> solo TELAR
+Ne 9 (Trama): Tenac ok≥14.5 (warn 13.5), CVm ok≤13.0 (warn 14.0), Neps ok≤600 (warn 750) -> solo TELAR
+Ne 10 (Urdimbre): Tenac ok≥16.0 (warn 15.0), Elong ok≥8.0 (warn 7.5), CVm ok≤12.0 (warn 13.0), Neps ok≤500 (warn 650) -> URDIDORA->INDIGO->TELAR
+Ne 10 FLAME (Urdimbre Flame): Tenac ok≥16.0 (warn 15.0), Elong ok≥8.0 (warn 7.5), CVm ok≤18.0 (warn 20.0), Neps ok≤700 (warn 850) -> URDIDORA->INDIGO->TELAR
+Ne 12.5 (Urdimbre): Tenac ok≥16.5 (warn 15.5), Elong ok≥8.0 (warn 7.5), CVm ok≤11.5 (warn 12.5), Neps ok≤450 (warn 600) -> URDIDORA->INDIGO->TELAR
+Ne 14 (Urdimbre): Tenac ok≥17.0 (warn 16.0), Elong ok≥8.5 (warn 8.0), CVm ok≤11.0 (warn 12.0), Neps ok≤400 (warn 550) -> URDIDORA->INDIGO->TELAR
 
-REGLAS DE AUDITORÍA:
-- Si es Urdimbre (Ne≥10): ser implacable con Elongación y CVm% (pasa por Urdidora + Índigo).
-- Si es FLAME: no evaluarlo con criterio de hilo liso; CVm% describe efecto y solo alerta si supera 18.
-- Si es Trama (Ne≤9): priorizar estabilidad de masa (CVm%) para evitar barreado.
+REGLAS DE AUDITORÍA (OBLIGATORIAS):
+- Si es Urdimbre (Ne>=10): priorizar Elongación y CVm%.
+- Si es FLAME: no usar criterio de hilo liso; tratarlo como serie independiente.
+- Si es Trama (Ne<=9): priorizar estabilidad de masa (CVm%).
 - Estado por Ne: Aprobado (todo OK), Condicional (solo WARN), Rechazado (algún CRIT).
-- No mezclar hilo liso con Hilo de Fantasía: cuando is_flame=true etiquetar como "Ne X FLAME" y tratarlo como serie independiente.
-- Si MIC > 4.7: advertir "cargado al grueso". Si STR supera la matriz por mucho: decir "va sobrado de fuerza".
-- Usar vocabulario natural de hilandería.
-- Si falta un dato clave (ej: tenacidad de Ne 7), NO asumir estado; indicar explícitamente "dato insuficiente para conclusión técnica".
+- Si MIC > 4.7: advertir "cargado al grueso".
+- Si falta un dato crítico: escribir "dato insuficiente para conclusión técnica".
 
-DIAGNÓSTICO MECÁNICO — PARADOJA DE LA FIBRA (obligatorio cuando aplique):
-- Si STR ≥ 27 g/tex (fibra premium) Y CVm% > 13% en hilo liso: concluir causa mecánica (tren de estiraje/rotores), NO de materia prima. Redactar como: "La fibra no es el problema; buscar la falla en el proceso."
-- Si UI ≥ 80% (fibra limpia) Y Neps > 600/km en hilo liso: los neps son de proceso. Causa probable: purga de aire insuficiente en OE.
-- Si STR < 25 g/tex Y tenacidad hilo < 15 cN/tex: causa en materia prima, no en maquinaria. Señalar proveedor si está disponible.
-- Si CVm% sube > 0.5% entre lotes consecutivos SIN cambio de fibra: alerta de degradación mecánica progresiva.
-- Si diferencia de CVm% entre líneas del mismo Ne > 0.3%: desajuste mecánico puntual (no de mezcla); recomendar estandarización.
+REGLAS DE PRIORIDAD OPERATIVA:
+- Usar FECHA_CORTE_EFECTIVA provista arriba (no recalcular otra fecha de corte).
+- Detectar FECHA_ANTERIOR = fecha inmediatamente previa para comparación.
+- Si no hay DATA DIARIA para FECHA_CORTE: declarar explícitamente "sin datos diarios recientes".
+- Si FECHA_CORTE existe, comparar FECHA_CORTE vs FECHA_ANTERIOR y destacar solo cambios relevantes: CVm (>=0.30 pts), Neps+140 (>=100/km), Tenacidad (>=0.30), Elongación (>=0.30).
+- Si existen "DATOS ACTUALES POSTERIORES AL CORTE", mostrarlos al final de NOVEDADES con etiqueta "dato nuevo del día DD/MM".
+- Si hay señal en USTER y no hay solape fecha-a-fecha con OE, indicar "sin evidencia de correlación con tb_PRODUCCION_OE".
 
-ACCIONES RECOMENDADAS POR PROCESO (obligatorio cuando haya alertas, agrupar por etapa):
-1️⃣ APERTURA Y BLOWROOM: revisar distancias entre cilindros abridores y rejillas cuando Neps altos con fibra limpia.
-2️⃣ CARDAS: verificar guarnición del tambor y chapones cuando Neps+140% superan lo esperado para el UI.
-3️⃣ PASADOR (MANUAR): revisar presión de rodillos y cots cuando CVm% alto con fibra premium o diferencia entre líneas mismo Ne.
-4️⃣ OPEN END (OE): limpiar rotores, ajustar purga de aire y revisar canal de transporte cuando CVm%+Neps elevados o Elongación < 7.5%.
+DIAGNÓSTICO MECÁNICO (PARADOJA DE LA FIBRA):
+- Si STR >= 27 g/tex y CVm% elevado en hilo liso: concluir causa mecánica (no materia prima).
+- Si UI >= 80% y Neps altos en hilo liso: señalar causa de proceso (apertura/cardas/OE).
+- Si STR < 25 g/tex y tenacidad hilo < 15: causa de materia prima.
 
-INSTRUCCIÓN SOBRE DATOS DE PROCESO: si en DATOS DE PROCESO aparecen números de máquina OE, mencionarlos explícitamente en las acciones (ej: "Máquina OE #47: limpiar rotor..."). Si Pasador=SI, indicar "pasó por manuar" en el diagnóstico. Si Pasador=NO, indicar "sin doblez previo" como posible causa de irregularidad. Si el dato de pasador es nulo, no mencionar el pasador en el análisis.
-INSTRUCCIÓN SOBRE DATA OE: usar las variables de tb_PRODUCCION_OE relevantes para diagnóstico (filial, loc_fisico, maquina, nome_maquina, data_producao, turno, lado, item, desc_item, hora inicial/final, rpm, num_fusos, alfa, lote_produc, titulo, tempo, torcao p poleg/metro, prod mt/min, prod kg/hr, prod calculada/informada, efic calculada/informada, operador, t.bob, rpm card, n/s/l/t/mo, cp/cm/ccp/ccm/jp/jm, cvp/cvm, cort nat, %rob 01/02/03). No listar todo crudo: sintetizar en máximo 2 líneas por Ne (operación + calidad/defectología).
+INSTRUCCIÓN SOBRE DATOS DE PROCESO:
+- Si hay datos de máquina para un Ne, incluir explícitamente OE/pasador/estiraje.
+- Si Pasador=SI y hay desvío, aclarar que pasó por manuar y buscar falla de ajuste.
+- Si Pasador=NO y hay desvío, aclarar "sin doblez previo" como riesgo de irregularidad.
 
-REGLA DE EVIDENCIA OE (obligatoria):
-- Solo afirmar "correlación" o "origen común" cuando exista coincidencia por Ne + fecha entre DATA DIARIA y DATA OE.
-- Si no hay solape fecha-a-fecha, escribir explícitamente "sin evidencia de correlación con tb_PRODUCCION_OE".
-- No recomendar intervención de cardas si no hay evidencia específica de neps de proceso o datos de cardas/contexto.
+INSTRUCCIÓN SOBRE DATA OE:
+- Sintetizar por Ne en máximo 2 líneas: operación (turno/lado/horario, rpm/alfa/fusos, producción/eficiencia) y calidad (CVP/CVM, defectología, CORT NAT, %ROB).
+- No volcar tabla cruda extensa.
 
-Generá exactamente este formato en español (600 palabras máx, cuantificá cambios con %):
+REGLAS DE CUMPLIMIENTO ESTRICTO (OBLIGATORIAS):
+- La respuesta DEBE seguir exactamente los encabezados solicitados abajo, en el mismo orden.
+- PROHIBIDO usar estos encabezados del formato antiguo: "DICTAMEN FINAL", "ESTADO DE TÍTULOS (Semáforo de Calidad)", "BALANCE DE TENDENCIAS", "ACCIONES RECOMENDADAS (URGENTE)", "EVOLUCIÓN Y ESTADO DE TÍTULOS", "PUNTOS CLAVE PARA PRODUCCIÓN".
+- PROHIBIDO usar estas frases sin evidencia directa: "alta defectología", "cambio operativo", "error de carga".
+- PROHIBIDO mencionar "CVm en OE 0.00" o equivalentes mientras el dato no sea confiable en fuente operativa.
+- Si por error generás un encabezado prohibido, reescribí la respuesta completa antes de enviarla.
+- No superar 650 palabras.
+
+Generá exactamente este formato en español (máximo 650 palabras), priorizando simplicidad y claridad:
 
 📢 REPORTE — LOTE FIAC ${actual}${refs.length ? ` vs ${refs.join('/')}` : ''}
-[Si hay algún Ne en estado CRÍTICO: primera línea = "Prioridad: Alta — Revisión Mecánica Urgente". Si solo CONDICIONAL: "Prioridad: Media — Monitoreo Activo". Si todo OK: omitir línea de prioridad.]
+[Si hay algún Ne en CRÍTICO: "Prioridad: Alta — Revisión Mecánica Urgente". Si solo CONDICIONAL: "Prioridad: Media — Monitoreo Activo". Si todo OK, omitir prioridad.]
 
-✅/⚠️/🔴 DICTAMEN FINAL:
-[Una oración con el veredicto del lote, mencionando el STR de la fibra y el impacto operacional.]
+🚦 RESUMEN EJECUTIVO (máx 4 bullets, lenguaje de planta):
+[Si dos o más Ne comparten el mismo problema, mencionar primero los hilos juntos y después el problema común. Ejemplo correcto: "Ne 12.5/1 y Ne 10/1 comparten un aumento de neps de proceso...".]
+[Si la evidencia no alcanza para afirmar causalidad única, usar "posible origen común".]
+[El bullet 3 debe empezar exactamente con **Impacto inmediato en producción:**]
+[El bullet 4 debe empezar exactamente con **Decisión recomendada:**]
+[No usar bullets con asterisco (*). Usar guion (-) en los 4 bullets.]
 
-🧵 ESTADO DE TÍTULOS (Semáforo de Calidad):
-[Para cada Ne, de peor a mejor — 🔴/🟡/🟢 Ne X/1 (Urdimbre|Trama): ALERTA CRÍTICA|CONDICIONAL|APROBADO]
-[OBLIGATORIO — si DATOS DE PROCESO contiene datos para ese Ne, copiar la línea ya formateada exactamente como aparece en DATOS DE PROCESO, ej: "   Hechos en OE 3 LI y 3 LP | Con pasador | Estiraje aplicado: 132". Si no hay datos de proceso para ese Ne: "   ⚠️ Sin datos de máquina registrados"]
-[OBLIGATORIO — agregar una línea "   OE-RESUMEN: ..." con variables OE resumidas (turno/lado/horario, rpm/alfa/fusos, producción/eficiencia, CVP/CVM, defectología N-S-L-T-MO y CP/CM/CCp/CCm/JP/JM, CORT NAT, %ROB).]
-[Si fuera de umbral: "   Fuera de umbral: CVm X.XX% 🔴 | Neps XXX/km ⚠️ (etc.)"]
-[Si "Sin pasador" y CVm o Neps elevados: incluir en Diagnóstico "Sin doblez previo (un solo pasaje) — mayor riesgo de flotación de fibra y perlas."]
-[Si "Con pasador" y aún hay CVm elevado: incluir en Diagnóstico "Pasó por manuar, lo que descarta falta de doblaje — buscar falla en cots o rodillos del pasador."]
-[Agregar "   Diagnóstico: ..." si la fibra es buena y el problema es mecánico.]
-[Agregar "   Riesgo: ..." con impacto operacional concreto (urdido, índigo, telar).]
-[Si dato ausente: "   ⚠️ PENDIENTE: Validar [variable] en Laboratorio" — nunca silencio ni guión.]
+📊 COMPARATIVA CONSOLIDADA (obligatorio, inmediatamente después):
+[NO usar tabla markdown ni separadores con |---|.]
+[Usar bloque textual alineado, estilo monoespaciado, con 4 columnas: Parámetro, Actual, Ref/Obj, Tendencia.]
+[Usar una sola línea de encabezado corta: "Parametro            Actual    Ref/Obj    Tendencia".]
+[Usar valores breves y uniformes. Si falta dato, usar "N/D" en lugar de "Dato insuficiente".]
+[No ensanchar la columna Tendencia: usar términos cortos como "OK", "Leve baja", "Alto", "Mejora", "Desvio".]
+[Incluir UI cuando exista en DATOS COMPARATIVOS. Si viene en HVI, no escribir N/D.]
+[Nunca escribir la fila exacta "HVI UI (%) N/D N/D N/D". Si UI no existe en dataset, omitir esa fila.]
+[Añadir debajo solo 2 hallazgos clave, en 2 líneas breves.]
 
-⚖️ BALANCE DE TENDENCIAS (solo si hay DATA DIARIA):
-[📈 MEJORAS: descripción narrativa de qué Ne mejoró y por qué]
-[📉 DETERIOROS: descripción narrativa con diagnosis de causa mecánica. Si ≥2 títulos empeoran el mismo día: "⚠️ ORIGEN COMÚN: revisar Pasador/Manuar — falla upstream simultánea en múltiples títulos."]
+📅 NOVEDADES DEL DÍA (obligatorio):
+[Encabezado: "Corte diario: DD/MM" usando FECHA_CORTE. Nunca usar nombres de mes en inglés o español abreviado (ej: no usar "Mar 13").]
+[Cruzar USTER + Tensorapid + OE de FECHA_CORTE vs FECHA_ANTERIOR. Mostrar solo desvíos relevantes por Ne.]
+[Si no hay FECHA_ANTERIOR: indicar "sin base de comparación diaria"].
+[Si hay datos del día de corte, listarlos explícitamente como "dato nuevo del día" usando siempre DD/MM.]
 
-🔗 CORRELACIÓN CON PRODUCCIÓN OE (tb_PRODUCCION_OE):
-[Por cada Ne del lote actual: contrastar USTER con OE en fechas coincidentes usando CVm_OE y además eficiencia, producción, máquinas activas, defectología y %ROB. Si CVm_OE está en 0.00/no confiable, decirlo explícitamente y apoyar conclusión solo con señales operativas disponibles. Si no hay solape: "sin evidencia de correlación con tb_PRODUCCION_OE".]
+🛠 PLAN DE ACCIÓN PRIORIZADO (24h):
+[Máximo 3 acciones, ordenadas por impacto: 1 urgente, 1 importante, 1 monitoreo].
+[Cada acción debe incluir: proceso (MANUAR/OE/CARDAS), Ne afectado, máquina si existe, y objetivo técnico de ajuste].
+[No usar acciones genéricas ni más de 1 línea por acción].
+[Formatear máquinas siempre como "OE N" usando últimos 2 dígitos y sin ceros a izquierda (ej: 050409 -> OE 9, 050410 -> OE 10).]
 
-🛠 ACCIONES RECOMENDADAS (URGENTE) (solo si hay deterioros o alertas):
-[Organizar por etapa. Para cada Ne afectado, acción concreta sobre máquina. Sin genéricos.]
-1️⃣ MANUAR (PASADOR): [acciones por Ne con valores o "sin novedad"]
-2️⃣ OPEN END (OE): [acciones por Ne con valores o "sin novedad"]
-3️⃣ CARDAS: [acciones por Ne o "sin novedad"]
+🧵 DETALLE TÉCNICO POR NE (solo focos, no volcado masivo):
+[Listar solo Ne en Rechazado o Condicional; si todo está OK, listar solo 1 Ne representativo].
+[No escribir todo en una sola línea. Formato obligatorio: primero una línea corta con el título. Debajo, 3 a 5 líneas con sangría de 4 espacios para Problemas, Proceso, OE-resumen y Riesgo.]
+[Ejemplo de estructura: "Ne 10/1 (Urdimbre):" y debajo "    Estado: ...", "    Problemas: ...", "    Proceso: ...", "    Riesgo: ...".]
 
-🧵 EVOLUCIÓN Y ESTADO DE TÍTULOS (solo si hay DATA DIARIA. Fechas siempre DD/MM en español, nunca nombres de días):
-[Ordenar Ne de mayor a menor. Por cada Ne:
-  "Ne X/1 (Aplicación):"
-  "  • DD/MM: CVm X.XX | Tenac X.XX | Neps XXX/km | Elong X.XX%  (CVm ↑/↓X.XX | Neps ↑/↓XXX si cambió)"
-  Prefijo ⚠️ si CVm >0.5 pts o Neps >150/km. Línea "👉 ESTADO: 🔴/🟢/⚠️/✅ descripción 1 oración."]
+🔗 CORRELACIÓN CON PRODUCCIÓN OE:
+[Por Ne del lote actual, confirmar o descartar correlación solo si hay coincidencia por Ne+fecha].
+[Usar siempre fecha DD/MM, nunca "Mar 12" o similares.]
+[No escribir todo en una sola línea. Formato obligatorio: una línea con "Ne X/1 (DD/MM, OE Y):" y debajo 2 a 4 líneas con sangría para Evidencia, Mejora/Problema y Conclusión.]
+[En cada Ne usar mini-estructura obligatoria: "Hecho:", "Hipótesis probable:", "Qué observar en próximos 2-3 cortes:".]
+[Cuando se mencionen códigos L y T, explicar en lenguaje de planta: L=lugares gruesos y T=lugares delgados; ambos elevan irregularidad y riesgo de paro/ajuste.]
+[Mantener redacción neutral: no atribuir culpa operativa sin evidencia directa.]
 
-─────────────────────────────────────────
-📊 COMPARATIVA TÉCNICA DETALLADA:
-[bloques numerados 1️⃣ 2️⃣ 3️⃣ para STR, Tenacidad, Neps, CVm%, Elongación con valores por lote y 👉 Impacto]
+📦 PROVEEDORES CLAVE — Lote FIAC ${actual}:
+[Mostrar top 3 por participación + cualquier proveedor con señal de riesgo (MIC alto o STR bajo).]
+[Usar bloque textual alineado, no bullets largos, con columnas: Proveedor, %, STR, MIC, ELG, UHML.]
+[Si ELG por proveedor no existe en los datos, usar "N/D". Si existe, mostrarlo.]
 
-📦 ANÁLISIS POR PROVEEDOR — Lote FIAC ${actual}:
-[Para cada proveedor: nombre, fardos consumidos, % participación, STR, SCI, MIC, UHML.]
-
-🔬 DIAGNÓSTICO MECÁNICO — Paradoja de la Fibra (solo si aplica):
-[Fibra buena + hilo malo → causa mecánica. Fibra débil + hilo débil → proveedor.]
-
-🔍 AUDITORÍA DE APTITUD POR PROCESO — Lote FIAC ${actual}:
-[Para cada Ne: Ne X [Aplicación] → Proceso1 ✅/⚠️/🔴 → Estado — Desvío si hay.]
-[💬 comentario de planta en vocabulario de hilandería.]
-
-⚠️ PUNTOS CLAVE PARA PRODUCCIÓN:
-[Agrupar por Ne: "  • NeX | ⚠️ ... | 🔸 ..."]
+🔬 DIAGNÓSTICO MECÁNICO — Paradoja de la Fibra:
+[1 párrafo corto: ¿problema de fibra o de proceso? con evidencia numérica.]
+[Resaltar en negrita la conclusión central: **Sí es la fibra** o **No es la fibra**.]
+[Si hay causalidad no probada, etiquetar explícitamente como "hipótesis probable" y agregar qué variable/turno/máquina observar para confirmar.] 
 
 🚀 ESTADO OPERATIVO: [APROBADO PARA CONTINUIDAD / PRECAUCIÓN - REVISAR / CRÍTICO - DETENER]
-["[oración de cierre con frase de impacto]"]`;
+[Debajo, agregar 2 líneas obligatorias con sangría: "    Plan inmediato: ..." y "    Validación: tomar nuevas muestras tras el ajuste para confirmar corrección".]`;
 
     try {
       const result = await model.generateContent(prompt);
-      const fuenteGemini = `✨ Fuente: Gemini Flash 2.5 · ${new Date().toLocaleString('es-AR')}\n\n`;
-      return res.json({ success: true, narrativa: fuenteGemini + result.response.text(), fuente: 'gemini' });
+      const narrativaGemini = normalizeNarrativaGemini(result.response.text());
+      const fuenteGemini = `✨ Fuente: Gemini Flash 2.5 · ${formatTimestampEsAr24()}\n\n`;
+      return res.json({ success: true, narrativa: fuenteGemini + narrativaGemini, fuente: 'gemini' });
     } catch (geminiErr) {
       // Fallback local ante cualquier error de Gemini (quota, red, etc.)
       console.warn('Gemini no disponible, usando generación local:', geminiErr.message?.slice(0, 120));
-      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], rowsPorFechaGemini, rowsMaquinasGemini, rowsProduccionOeGemini);
-      const fuenteFallback = `⚡ Fuente: Generador local (Gemini no disponible) · ${new Date().toLocaleString('es-AR')}\n\n`;
-      return res.json({ success: true, narrativa: fuenteFallback + narrativa, fuente: 'local', aviso: 'Gemini no disponible – informe generado localmente.' });
+      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], rowsPorFechaGemini, rowsMaquinasGemini, rowsProduccionOeGemini, fechaCorteGeminiKey);
+      const narrativaLocal = normalizeNarrativaGemini(narrativa);
+      const fuenteFallback = `⚡ Fuente: Generador local (Gemini no disponible) · ${formatTimestampEsAr24()}\n\n`;
+      const geminiErrText = String(geminiErr?.message || '');
+      const cuotaDiariaAgotada = /generate_content_free_tier_requests|GenerateRequestsPerDayPerProjectPerModel-FreeTier|quota exceeded|429 Too Many Requests/i.test(geminiErrText);
+      const aviso = cuotaDiariaAgotada
+        ? 'Límite diario de Gemini alcanzado (20/día). Informe generado localmente.'
+        : 'Gemini no disponible – informe generado localmente.';
+      return res.json({
+        success: true,
+        narrativa: fuenteFallback + narrativaLocal,
+        fuente: 'local',
+        aviso,
+        geminiEstado: cuotaDiariaAgotada ? 'quota-daily' : 'unavailable'
+      });
     }
 
   } catch (err) {

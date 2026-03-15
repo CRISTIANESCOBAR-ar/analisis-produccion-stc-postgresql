@@ -362,8 +362,19 @@
               <span>✨</span> Informe con IA
             </h2>
             <p class="text-[10px] text-slate-400 mt-0.5">Análisis predictivo en lenguaje natural • Gemini 2.5 Flash con fallback local</p>
+            <p v-if="modoLocalAutomatico" class="text-[10px] text-amber-600 mt-1 font-semibold">
+              {{ geminiCuotaDiariaAgotada ? 'Modo local activo: límite diario de Gemini alcanzado (20/día).' : 'Modo local activo por indisponibilidad de Gemini.' }}
+            </p>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex items-end gap-2">
+            <div class="flex flex-col">
+              <label class="text-[9px] uppercase font-bold text-slate-400 tracking-widest mb-1">Corte</label>
+              <input
+                v-model="fechaCorte"
+                type="date"
+                class="h-8 border border-slate-200 rounded-lg px-2 text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+              />
+            </div>
             <span v-if="narrativaFuente" class="text-[10px] px-2 py-0.5 rounded-full font-bold"
               :class="narrativaFuente === 'gemini' ? 'bg-purple-100 text-purple-700' : narrativaFuente === 'cache' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'">
               {{ narrativaFuente === 'gemini' ? '✨ Gemini' : narrativaFuente === 'cache' ? '💾 Caché' : '⚡ Local' }}
@@ -372,12 +383,16 @@
               class="px-3 py-2 rounded-xl font-bold text-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-600">
               ⚡ Local
             </button>
+            <button v-if="modoLocalAutomatico" @click="probarGemini" :disabled="loadingNarrativa"
+              class="px-3 py-2 rounded-xl font-bold text-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 bg-amber-100 hover:bg-amber-200 text-amber-700">
+              ✨ Probar Gemini
+            </button>
             <button @click="generarNarrativa(false, narrativa ? true : false)" :disabled="loadingNarrativa"
               class="px-5 py-2 rounded-xl font-bold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm hover:shadow-md"
-              :class="loadingNarrativa ? 'bg-slate-200 text-slate-500' : narrativa ? 'bg-slate-700 hover:bg-slate-800 text-white' : 'bg-indigo-600 hover:bg-indigo-700 text-white'">
+              :class="loadingNarrativa ? 'bg-slate-200 text-slate-500' : modoLocalAutomatico ? 'bg-slate-500 hover:bg-slate-600 text-white' : narrativa ? 'bg-slate-700 hover:bg-slate-800 text-white' : 'bg-indigo-600 hover:bg-indigo-700 text-white'">
               <span v-if="loadingNarrativa" class="animate-spin inline-block">⟳</span>
-              <span v-else>{{ narrativa ? '↺' : '✨' }}</span>
-              {{ loadingNarrativa ? 'Analizando...' : narrativa ? 'Regenerar' : 'Generar Informe' }}
+              <span v-else>{{ modoLocalAutomatico ? '⚡' : (narrativa ? '↺' : '✨') }}</span>
+              {{ loadingNarrativa ? 'Analizando...' : modoLocalAutomatico ? (narrativa ? 'Regenerar Local' : 'Generar Local') : (narrativa ? 'Regenerar' : 'Generar Informe') }}
             </button>
           </div>
         </div>
@@ -648,6 +663,15 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 
+function defaultYesterdayISO() {
+  const d = new Date()
+  d.setDate(d.getDate() - 1)
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
+}
+
 // ── Utilidad de caché ─────────────────────────────────────────────────────
 function hashPayload(obj) {
   const str = JSON.stringify(obj)
@@ -670,8 +694,19 @@ const narrativaError= ref('')
 const narrativaFuente = ref('')   // 'gemini' | 'local'
 const narrativaAviso  = ref('')
 const loadingNarrativa = ref(false)
+const modoLocalAutomatico = ref(false)
+const geminiCuotaDiariaAgotada = ref(false)
 const whatsappCopiado = ref(false)
 const narrativaCopiada = ref(false)
+const fechaCorte = ref(defaultYesterdayISO())
+
+watch(fechaCorte, () => {
+  narrativa.value = ''
+  narrativaError.value = ''
+  narrativaFuente.value = ''
+  narrativaAviso.value = ''
+  geminiCuotaDiariaAgotada.value = false
+})
 
 async function copiarNarrativa() {
   try {
@@ -1370,12 +1405,19 @@ async function analizar() {
 
 async function generarNarrativa(soloLocal = false, forzar = false) {
   if (loadingNarrativa.value || !rows.value.length) return
+  const usarLocal = soloLocal || modoLocalAutomatico.value
 
   // ── Caché: solo para llamadas Gemini, no locales ni forzadas ──
-  const cachePayload = { rows: rows.value, proveedores: proveedores.value, loteActual: loteActual.value }
+  const cachePayload = {
+    rows: rows.value,
+    proveedores: proveedores.value,
+    loteActual: loteActual.value,
+    fechaCorte: fechaCorte.value,
+    modo: usarLocal ? 'local' : 'gemini'
+  }
   const cacheKey = 'dmh_narr_' + hashPayload(cachePayload)
 
-  if (!soloLocal && !forzar) {
+  if (!usarLocal && !forzar) {
     try {
       const cached = localStorage.getItem(cacheKey)
       if (cached) {
@@ -1384,6 +1426,7 @@ async function generarNarrativa(soloLocal = false, forzar = false) {
         narrativaFuente.value = 'cache'
         narrativaAviso.value  = ''
         narrativaError.value  = ''
+        geminiCuotaDiariaAgotada.value = false
         return
       }
     } catch { /* localStorage no disponible */ }
@@ -1394,6 +1437,7 @@ async function generarNarrativa(soloLocal = false, forzar = false) {
   narrativaError.value = ''
   narrativaFuente.value = ''
   narrativaAviso.value = ''
+  geminiCuotaDiariaAgotada.value = false
 
   try {
     const res = await fetch('/api/dashboard/narrativa-lotes', {
@@ -1403,7 +1447,8 @@ async function generarNarrativa(soloLocal = false, forzar = false) {
         rows: rows.value,
         proveedores: proveedores.value,
         loteActual: loteActual.value,
-        modo: soloLocal ? 'local' : undefined
+        fechaCorte: fechaCorte.value,
+        modo: usarLocal ? 'local' : undefined
       })
     })
     const data = await res.json()
@@ -1411,15 +1456,32 @@ async function generarNarrativa(soloLocal = false, forzar = false) {
     narrativa.value = data.narrativa
     narrativaFuente.value = data.fuente || 'local'
     narrativaAviso.value = data.aviso || ''
+    geminiCuotaDiariaAgotada.value = data.geminiEstado === 'quota-daily' || /l[ií]mite diario|20\/d[ií]a/i.test(data.aviso || '')
+    if ((data.fuente === 'local') && (/gemini no disponible|l[ií]mite diario/i.test(data.aviso || ''))) {
+      modoLocalAutomatico.value = true
+    } else if (data.fuente === 'gemini') {
+      modoLocalAutomatico.value = false
+      geminiCuotaDiariaAgotada.value = false
+    }
 
     // Guardar en caché solo si respondió Gemini
-    if (!soloLocal && data.fuente === 'gemini') {
+    if (!usarLocal && data.fuente === 'gemini') {
       try { localStorage.setItem(cacheKey, JSON.stringify({ narrativa: data.narrativa })) } catch { /* cuota LS */ }
     }
   } catch (err) {
     narrativaError.value = err.message
+    if (/quota|429|gemini/i.test(err.message || '')) {
+      modoLocalAutomatico.value = true
+    }
   } finally {
     loadingNarrativa.value = false
   }
+}
+
+function probarGemini() {
+  if (loadingNarrativa.value) return
+  modoLocalAutomatico.value = false
+  geminiCuotaDiariaAgotada.value = false
+  generarNarrativa(false, true)
 }
 </script>
