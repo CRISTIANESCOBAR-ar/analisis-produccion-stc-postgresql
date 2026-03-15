@@ -368,11 +368,11 @@
           </div>
           <div class="flex items-end gap-2">
             <div class="flex flex-col">
-              <label class="text-[9px] uppercase font-bold text-slate-400 tracking-widest mb-1">Corte</label>
-              <input
+              <label class="text-[9px] uppercase font-bold text-slate-400 tracking-widest mb-1">Día</label>
+              <CustomDatepicker
                 v-model="fechaCorte"
-                type="date"
-                class="h-8 border border-slate-200 rounded-lg px-2 text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                :showButtons="false"
+                placeholder="Selecciona una fecha"
               />
             </div>
             <span v-if="narrativaFuente" class="text-[10px] px-2 py-0.5 rounded-full font-bold"
@@ -662,6 +662,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue'
+import CustomDatepicker from '@/components/CustomDatepicker.vue'
 
 function defaultYesterdayISO() {
   const d = new Date()
