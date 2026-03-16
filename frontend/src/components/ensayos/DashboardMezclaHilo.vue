@@ -343,12 +343,26 @@
             <span>⚠️</span> {{ narrativaAviso }}
           </div>
           <div v-if="narrativa && !loadingNarrativa" class="relative group">
-            <button @click="copiarNarrativa"
-              class="absolute top-3 right-3 z-10 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 opacity-0 group-hover:opacity-100"
-              :class="narrativaCopiada ? 'bg-green-100 text-green-700' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 shadow-sm'">
-              <span>{{ narrativaCopiada ? '✓' : '📋' }}</span>
-              {{ narrativaCopiada ? '¡Copiado!' : 'Copiar' }}
-            </button>
+            <div class="absolute top-3 right-3 z-10 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+              <button v-if="ultimoPromptGemini" @click="copiarPromptGemini"
+                class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5"
+                :class="promptGeminiCopiado ? 'bg-cyan-100 text-cyan-700' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 shadow-sm'">
+                <span>{{ promptGeminiCopiado ? '✓' : '🧠' }}</span>
+                {{ promptGeminiCopiado ? 'Prompt copiado' : 'Copiar Prompt' }}
+              </button>
+              <button v-if="ultimoPayloadNarrativa" @click="copiarPayloadNarrativa"
+                class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5"
+                :class="payloadNarrativaCopiado ? 'bg-emerald-100 text-emerald-700' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 shadow-sm'">
+                <span>{{ payloadNarrativaCopiado ? '✓' : '{}' }}</span>
+                {{ payloadNarrativaCopiado ? 'JSON copiado' : 'Copiar JSON' }}
+              </button>
+              <button @click="copiarNarrativa"
+                class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5"
+                :class="narrativaCopiada ? 'bg-green-100 text-green-700' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 shadow-sm'">
+                <span>{{ narrativaCopiada ? '✓' : '📋' }}</span>
+                {{ narrativaCopiada ? '¡Copiado!' : 'Copiar' }}
+              </button>
+            </div>
             <div
               class="bg-slate-50 rounded-xl border border-slate-100 p-5 text-sm text-slate-700 whitespace-pre-wrap leading-relaxed font-mono">
               {{ narrativa }}
@@ -841,6 +855,10 @@ const modoLocalAutomatico = ref(false)
 const geminiCuotaDiariaAgotada = ref(false)
 const whatsappCopiado = ref(false)
 const narrativaCopiada = ref(false)
+const promptGeminiCopiado = ref(false)
+const payloadNarrativaCopiado = ref(false)
+const ultimoPromptGemini = ref('')
+const ultimoPayloadNarrativa = ref(null)
 const fechaCorte = ref(localStorage.getItem(LS_KEY_FECHA) ?? defaultYesterdayISO())
 
 watch(fechaCorte, async () => {
@@ -850,6 +868,10 @@ watch(fechaCorte, async () => {
   narrativaFuente.value = ''
   narrativaAviso.value = ''
   geminiCuotaDiariaAgotada.value = false
+  ultimoPromptGemini.value = ''
+  promptGeminiCopiado.value = false
+  ultimoPayloadNarrativa.value = null
+  payloadNarrativaCopiado.value = false
 
   // El datepicker en header gobierna el dashboard completo.
   if (rows.value.length > 0 && !loading.value) {
@@ -872,6 +894,55 @@ async function copiarNarrativa() {
     document.body.removeChild(el)
     narrativaCopiada.value = true
     setTimeout(() => { narrativaCopiada.value = false }, 2500)
+  }
+}
+
+async function copiarPromptGemini() {
+  if (!ultimoPromptGemini.value) return
+  try {
+    await navigator.clipboard.writeText(ultimoPromptGemini.value)
+    promptGeminiCopiado.value = true
+    setTimeout(() => { promptGeminiCopiado.value = false }, 2500)
+  } catch {
+    const el = document.createElement('textarea')
+    el.value = ultimoPromptGemini.value
+    document.body.appendChild(el)
+    el.select()
+    document.execCommand('copy')
+    document.body.removeChild(el)
+    promptGeminiCopiado.value = true
+    setTimeout(() => { promptGeminiCopiado.value = false }, 2500)
+  }
+}
+
+async function copiarPayloadNarrativa() {
+  if (!ultimoPayloadNarrativa.value) return
+  const payload = JSON.stringify(ultimoPayloadNarrativa.value, null, 2)
+  try {
+    await navigator.clipboard.writeText(payload)
+    payloadNarrativaCopiado.value = true
+    setTimeout(() => { payloadNarrativaCopiado.value = false }, 2500)
+  } catch {
+    const el = document.createElement('textarea')
+    el.value = payload
+    document.body.appendChild(el)
+    el.select()
+    document.execCommand('copy')
+    document.body.removeChild(el)
+    payloadNarrativaCopiado.value = true
+    setTimeout(() => { payloadNarrativaCopiado.value = false }, 2500)
+  }
+}
+
+function buildNarrativaPayload(modo) {
+  return {
+    rows: rows.value,
+    proveedores: proveedores.value,
+    sideDaily: sideDaily.value,
+    cardas: cardasContext.value,
+    loteActual: loteActual.value,
+    fechaCorte: fechaCorte.value,
+    modo,
   }
 }
 
@@ -1596,6 +1667,10 @@ async function analizar() {
   cardasContext.value = null
   narrativa.value = ''
   narrativaError.value = ''
+  ultimoPromptGemini.value = ''
+  promptGeminiCopiado.value = false
+  ultimoPayloadNarrativa.value = null
+  payloadNarrativaCopiado.value = false
 
   try {
     const lotesClean = lotesInput.value.replace(/[^0-9,]/g, '').replace(/,+/g, ',').replace(/^,|,$/g, '')
@@ -1622,16 +1697,14 @@ async function analizar() {
 async function generarNarrativa(soloLocal = false, forzar = false) {
   if (loadingNarrativa.value || !rows.value.length) return
   const usarLocal = soloLocal || modoLocalAutomatico.value
+  const payload = buildNarrativaPayload(usarLocal ? 'local' : 'gemini')
+  ultimoPromptGemini.value = ''
+  promptGeminiCopiado.value = false
+  ultimoPayloadNarrativa.value = payload
+  payloadNarrativaCopiado.value = false
 
   // ── Caché: solo para llamadas Gemini, no locales ni forzadas ──
-  const cachePayload = {
-    rows: rows.value,
-    proveedores: proveedores.value,
-    sideDaily: sideDaily.value,
-    loteActual: loteActual.value,
-    fechaCorte: fechaCorte.value,
-    modo: usarLocal ? 'local' : 'gemini'
-  }
+  const cachePayload = payload
   const cacheKey = 'dmh_narr_' + hashPayload(cachePayload)
 
   if (!usarLocal && !forzar) {
@@ -1643,6 +1716,8 @@ async function generarNarrativa(soloLocal = false, forzar = false) {
         narrativaFuente.value = 'cache'
         narrativaAviso.value  = ''
         narrativaError.value  = ''
+        ultimoPromptGemini.value = typeof c.promptGemini === 'string' ? c.promptGemini : ''
+        promptGeminiCopiado.value = false
         geminiCuotaDiariaAgotada.value = false
         return
       }
@@ -1660,20 +1735,15 @@ async function generarNarrativa(soloLocal = false, forzar = false) {
     const res = await fetch('/api/dashboard/narrativa-lotes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        rows: rows.value,
-        proveedores: proveedores.value,
-        sideDaily: sideDaily.value,
-        loteActual: loteActual.value,
-        fechaCorte: fechaCorte.value,
-        modo: usarLocal ? 'local' : undefined
-      })
+      body: JSON.stringify(usarLocal ? payload : { ...payload, modo: undefined })
     })
     const data = await res.json()
     if (!data.success) throw new Error(data.error || 'Error al generar')
     narrativa.value = data.narrativa
     narrativaFuente.value = data.fuente || 'local'
     narrativaAviso.value = data.aviso || ''
+    ultimoPromptGemini.value = typeof data.promptGemini === 'string' ? data.promptGemini : ''
+    promptGeminiCopiado.value = false
     geminiCuotaDiariaAgotada.value = data.geminiEstado === 'quota-daily' || /l[ií]mite diario|20\/d[ií]a/i.test(data.aviso || '')
     if ((data.fuente === 'local') && (/gemini no disponible|l[ií]mite diario/i.test(data.aviso || ''))) {
       modoLocalAutomatico.value = true
@@ -1684,7 +1754,12 @@ async function generarNarrativa(soloLocal = false, forzar = false) {
 
     // Guardar en caché solo si respondió Gemini
     if (!usarLocal && data.fuente === 'gemini') {
-      try { localStorage.setItem(cacheKey, JSON.stringify({ narrativa: data.narrativa })) } catch { /* cuota LS */ }
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify({
+          narrativa: data.narrativa,
+          promptGemini: ultimoPromptGemini.value,
+        }))
+      } catch { /* cuota LS */ }
     }
   } catch (err) {
     narrativaError.value = err.message

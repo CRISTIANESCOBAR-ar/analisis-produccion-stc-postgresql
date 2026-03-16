@@ -1800,6 +1800,65 @@ async function ensureSyncHistoryTables() {
   `)
 }
 
+async function ensureUsterCardasSchema() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS tb_uster_carda_par (
+      testnr TEXT PRIMARY KEY,
+      source_prefix TEXT,
+      catalog TEXT,
+      sortiment TEXT,
+      style TEXT,
+      machine_family TEXT,
+      nomcount NUMERIC,
+      maschnr TEXT,
+      lote TEXT,
+      laborant TEXT,
+      time_stamp TEXT,
+      matclass TEXT,
+      obs TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `)
+
+  await query('CREATE INDEX IF NOT EXISTS idx_uster_carda_par_time ON tb_uster_carda_par(time_stamp)')
+  await query('CREATE INDEX IF NOT EXISTS idx_uster_carda_par_lote ON tb_uster_carda_par(lote)')
+  await query('CREATE INDEX IF NOT EXISTS idx_uster_carda_par_style ON tb_uster_carda_par(style)')
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS tb_uster_carda_tbl (
+      id BIGSERIAL PRIMARY KEY,
+      testnr TEXT NOT NULL REFERENCES tb_uster_carda_par(testnr) ON DELETE CASCADE,
+      seqno INTEGER NOT NULL,
+      no_ NUMERIC,
+      u_percent NUMERIC,
+      cvm_percent NUMERIC,
+      cvm_1m_percent NUMERIC,
+      cvm_3m_percent NUMERIC,
+      cvm_10m_percent NUMERIC,
+      titulo_machine NUMERIC,
+      titulo_rel_perc NUMERIC,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(testnr, seqno)
+    )
+  `)
+
+  await query('CREATE INDEX IF NOT EXISTS idx_uster_carda_tbl_testnr ON tb_uster_carda_tbl(testnr)')
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS tb_uster_carda_titulo_tbl (
+      id BIGSERIAL PRIMARY KEY,
+      testnr TEXT NOT NULL REFERENCES tb_uster_carda_par(testnr) ON DELETE CASCADE,
+      repno SMALLINT NOT NULL CHECK (repno BETWEEN 1 AND 3),
+      titulo NUMERIC NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(testnr, repno)
+    )
+  `)
+
+  await query('CREATE INDEX IF NOT EXISTS idx_uster_carda_titulo_testnr ON tb_uster_carda_titulo_tbl(testnr)')
+}
+
 function arraysEqualCaseSensitive(a, b) {
   const aa = Array.isArray(a) ? a : []
   const bb = Array.isArray(b) ? b : []
@@ -5500,6 +5559,226 @@ app.delete('/api/uster/delete/:testnr', async (req, res) => {
     res.json({ success: true })
   } catch (err) { 
     res.status(500).json({ error: err.message }) 
+  }
+})
+
+// =====================================================
+// ENDPOINTS USTER CARDAS
+// =====================================================
+
+app.post('/api/uster-cardas/status', async (req, res) => {
+  const { testnrs } = req.body
+  if (!Array.isArray(testnrs) || testnrs.length === 0) {
+    return res.status(400).json({ error: 'testnrs must be a non-empty array' })
+  }
+  try {
+    const placeholders = testnrs.map((_, i) => `$${i + 1}`).join(',')
+    const result = await query(`SELECT testnr FROM tb_uster_carda_par WHERE testnr IN (${placeholders})`, testnrs)
+    res.json({ existing: result.rows.map((row) => row.testnr) })
+  } catch (err) {
+    console.error('Error en /api/uster-cardas/status:', err.message)
+    res.json({ existing: [] })
+  }
+})
+
+app.get('/api/uster-cardas/par', async (_req, res) => {
+  try {
+    const result = await query(`
+      SELECT
+        p.testnr,
+        p.source_prefix,
+        p.catalog,
+        p.sortiment,
+        p.style,
+        p.machine_family,
+        p.nomcount,
+        p.maschnr,
+        p.lote,
+        p.laborant,
+        p.time_stamp,
+        p.matclass,
+        p.obs,
+        p.created_at,
+        p.updated_at,
+        s.titulo_1,
+        s.titulo_2,
+        s.titulo_3,
+        s.titulo_avg,
+        s.titulo_stddev,
+        s.titulo_cv
+      FROM tb_uster_carda_par p
+      LEFT JOIN LATERAL (
+        SELECT
+          MAX(CASE WHEN repno = 1 THEN titulo END) AS titulo_1,
+          MAX(CASE WHEN repno = 2 THEN titulo END) AS titulo_2,
+          MAX(CASE WHEN repno = 3 THEN titulo END) AS titulo_3,
+          AVG(titulo) AS titulo_avg,
+          STDDEV_SAMP(titulo) AS titulo_stddev,
+          CASE
+            WHEN AVG(titulo) IS NULL OR AVG(titulo) = 0 THEN NULL
+            ELSE (STDDEV_SAMP(titulo) / AVG(titulo)) * 100
+          END AS titulo_cv
+        FROM tb_uster_carda_titulo_tbl
+        WHERE testnr = p.testnr
+      ) s ON true
+      ORDER BY p.testnr
+    `)
+    res.json({ rows: result.rows.map(uppercaseKeys) })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/uster-cardas/tbl', async (req, res) => {
+  const testnr = req.query.testnr
+  try {
+    const sql = testnr
+      ? `SELECT * FROM tb_uster_carda_tbl WHERE testnr = $1 ORDER BY seqno`
+      : `SELECT * FROM tb_uster_carda_tbl ORDER BY testnr, seqno`
+    const result = await query(sql, testnr ? [testnr] : [])
+    res.json({ rows: result.rows.map(uppercaseKeys) })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/uster-cardas/titulos', async (req, res) => {
+  const testnr = req.query.testnr
+  if (!testnr) return res.status(400).json({ error: 'testnr is required' })
+  try {
+    const result = await query(
+      'SELECT testnr, repno, titulo FROM tb_uster_carda_titulo_tbl WHERE testnr = $1 ORDER BY repno',
+      [testnr]
+    )
+    res.json({ rows: result.rows.map(uppercaseKeys) })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.post('/api/uster-cardas/upload', async (req, res) => {
+  const { par, tbl, titulos } = req.body
+  if (!par?.TESTNR) return res.status(400).json({ error: 'Missing PAR data or TESTNR' })
+
+  const client = await getClient()
+  const toNum = (val) => {
+    if (val == null || val === '') return null
+    const num = parseFloat(val)
+    return Number.isNaN(num) ? null : num
+  }
+
+  try {
+    await client.query('BEGIN')
+
+    await client.query(
+      `
+        INSERT INTO tb_uster_carda_par (
+          testnr, source_prefix, catalog, sortiment, style, machine_family,
+          nomcount, maschnr, lote, laborant, time_stamp, matclass, obs, updated_at
+        )
+        VALUES (
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW()
+        )
+        ON CONFLICT (testnr) DO UPDATE SET
+          source_prefix = EXCLUDED.source_prefix,
+          catalog = EXCLUDED.catalog,
+          sortiment = EXCLUDED.sortiment,
+          style = EXCLUDED.style,
+          machine_family = EXCLUDED.machine_family,
+          nomcount = EXCLUDED.nomcount,
+          maschnr = EXCLUDED.maschnr,
+          lote = EXCLUDED.lote,
+          laborant = EXCLUDED.laborant,
+          time_stamp = EXCLUDED.time_stamp,
+          matclass = EXCLUDED.matclass,
+          obs = EXCLUDED.obs,
+          updated_at = NOW()
+      `,
+      [
+        par.TESTNR,
+        par.SOURCE_PREFIX || null,
+        par.CATALOG || null,
+        par.SORTIMENT || null,
+        par.STYLE || null,
+        par.MACHINE_FAMILY || null,
+        toNum(par.NOMCOUNT),
+        par.MASCHNR || null,
+        par.LOTE || null,
+        par.LABORANT || null,
+        par.TIME_STAMP || null,
+        par.MATCLASS || null,
+        par.OBS || null,
+      ]
+    )
+
+    await client.query('DELETE FROM tb_uster_carda_tbl WHERE testnr = $1', [par.TESTNR])
+    await client.query('DELETE FROM tb_uster_carda_titulo_tbl WHERE testnr = $1', [par.TESTNR])
+
+    if (Array.isArray(tbl) && tbl.length > 0) {
+      for (let i = 0; i < tbl.length; i++) {
+        const r = tbl[i] || {}
+        await client.query(
+          `
+            INSERT INTO tb_uster_carda_tbl (
+              testnr, seqno, no_, u_percent, cvm_percent,
+              cvm_1m_percent, cvm_3m_percent, cvm_10m_percent,
+              titulo_machine, titulo_rel_perc
+            ) VALUES (
+              $1,$2,$3,$4,$5,$6,$7,$8,$9,$10
+            )
+          `,
+          [
+            par.TESTNR,
+            Number.isFinite(Number(r.SEQNO)) ? Number(r.SEQNO) : (i + 1),
+            toNum(r.NO_),
+            toNum(r.U_PERCENT),
+            toNum(r.CVM_PERCENT),
+            toNum(r.CVM_1M_PERCENT),
+            toNum(r.CVM_3M_PERCENT),
+            toNum(r.CVM_10M_PERCENT),
+            toNum(r.TITULO_MACHINE),
+            toNum(r.TITULO_REL_PERC),
+          ]
+        )
+      }
+    }
+
+    if (Array.isArray(titulos) && titulos.length > 0) {
+      for (const t of titulos) {
+        const rep = Number(t?.REPNO)
+        const titulo = toNum(t?.TITULO)
+        if (!Number.isFinite(rep) || rep < 1 || rep > 3) continue
+        if (titulo == null) continue
+        await client.query(
+          'INSERT INTO tb_uster_carda_titulo_tbl (testnr, repno, titulo) VALUES ($1, $2, $3)',
+          [par.TESTNR, rep, titulo]
+        )
+      }
+    }
+
+    await client.query('COMMIT')
+    res.json({
+      success: true,
+      testnr: par.TESTNR,
+      tblRows: Array.isArray(tbl) ? tbl.length : 0,
+      titulosRows: Array.isArray(titulos) ? titulos.length : 0,
+    })
+  } catch (err) {
+    await client.query('ROLLBACK')
+    console.error('Error uploading Uster Cardas:', err)
+    res.status(500).json({ error: err.message })
+  } finally {
+    client.release()
+  }
+})
+
+app.delete('/api/uster-cardas/delete/:testnr', async (req, res) => {
+  try {
+    const result = await query('DELETE FROM tb_uster_carda_par WHERE testnr = $1', [req.params.testnr])
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' })
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
   }
 })
 
@@ -9663,7 +9942,7 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Genera el informe de forma local (sin IA externa) — siempre disponible
 // ─────────────────────────────────────────────────────────────────────────────
-function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha = [], rowsMaquinas = [], rowsProduccionOe = [], fechaCorte = null, sideDaily = []) {
+function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha = [], rowsMaquinas = [], rowsProduccionOe = [], fechaCorte = null, sideDaily = [], cardasContext = null) {
   const lotesSorted = [...new Set(rows.map(r => Number(r.mistura)))].sort((a, b) => a - b);
   const actual = loteActual ? Number(loteActual) : Math.max(...lotesSorted);
   const refs   = lotesSorted.filter(l => l !== actual);
@@ -10910,6 +11189,50 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
     planAccion.push('- OE foco del lote actual: mantener parámetros y verificar consistencia por turno.');
   }
 
+  const cardasInfo = (cardasContext && typeof cardasContext === 'object') ? cardasContext : null;
+  const cardasDisponible = Boolean(cardasInfo?.disponible && cardasInfo?.resumen);
+  const cardasTurnoCritico = cardasDisponible
+    ? (cardasInfo.turnos || [])
+      .filter(r => toNum(r?.efic_calc_avg) != null)
+      .sort((a, b) => toNum(a.efic_calc_avg) - toNum(b.efic_calc_avg))[0] || null
+    : null;
+  const cardasMaqCritica = cardasDisponible
+    ? (cardasInfo.maquinasCriticas || [])
+      .filter(r => toNum(r?.efic_calc_avg) != null)
+      .sort((a, b) => toNum(a.efic_calc_avg) - toNum(b.efic_calc_avg))[0] || null
+    : null;
+
+  if (cardasDisponible) {
+    const eficCardas = toNum(cardasInfo.resumen?.efic_calc_avg);
+    const coberturaCardas = toNum(cardasInfo.resumen?.cobertura_prod_pct);
+    const requiereAccionCardas = (eficCardas != null && eficCardas < 85) || (coberturaCardas != null && coberturaCardas < 80);
+    if (requiereAccionCardas) {
+      const turnoTxt = cardasTurnoCritico?.turno ? `Turno ${cardasTurnoCritico.turno}` : 'Turno S/D';
+      const maqTxt = cardasMaqCritica?.maquina ? `Maq ${cardasMaqCritica.maquina}` : 'Maq S/D';
+      planAccion.unshift(`- CARDAS (${turnoTxt}, ${maqTxt}): estabilizar eficiencia/carga y revisar alimentación-cardado; objetivo: reducir aporte de neps al OE.`);
+    }
+  }
+  if (planAccion.length > 3) planAccion.length = 3;
+
+  const cardasNarrativa = [];
+  if (cardasDisponible) {
+    const carda = cardasInfo.resumen || {};
+    cardasNarrativa.push(`Fecha ref: ${carda.data_ref || 'S/D'} | Máquinas: ${carda.maquinas ?? 'S/D'} | Efic calc prom.: ${f(carda.efic_calc_avg, 2)}% | Prod inform.: ${f(carda.prod_inform_total, 0)} kg | Cobertura prod.: ${f(carda.cobertura_prod_pct, 1)}%.`);
+    if (cardasTurnoCritico) {
+      cardasNarrativa.push(`Turno crítico: ${cardasTurnoCritico.turno || 'S/D'} con Efic calc ${f(cardasTurnoCritico.efic_calc_avg, 2)}% y Prod ${f(cardasTurnoCritico.prod_inform_total, 0)} kg.`);
+    }
+    if (cardasMaqCritica) {
+      cardasNarrativa.push(`Máquina crítica: ${cardasMaqCritica.maquina || 'S/D'} con Efic calc ${f(cardasMaqCritica.efic_calc_avg, 2)}% y Prod ${f(cardasMaqCritica.prod_inform_total, 0)} kg.`);
+    }
+    if (cardasInfo.calidadDato) {
+      cardasNarrativa.push(`Calidad de dato: Prod=0 (${cardasInfo.calidadDato.prod_inform_cero || 0}), Efic=0 (${cardasInfo.calidadDato.efic_calc_cero || 0}), RPM=0 (${cardasInfo.calidadDato.rpm_cero || 0}).`);
+    }
+  } else if (cardasInfo?.motivo) {
+    cardasNarrativa.push(cardasInfo.motivo);
+  } else {
+    cardasNarrativa.push('Sin contexto de cardas para la fecha analizada.');
+  }
+
   const detalleNe = [];
   for (const h of focoList.length ? focoList : HilosActual.slice(0, 1)) {
     const m = getMatriz(neToNum(h), isFlame(h));
@@ -11059,6 +11382,9 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
     `🔗 CORRELACIÓN CON PRODUCCIÓN OE:`,
     ...correlacion,
     ``,
+    `🧺 CONTEXTO OPERATIVO CARDAS:`,
+    ...cardasNarrativa,
+    ``,
     `📦 PROVEEDORES CLAVE — Lote FIAC ${actual}:`,
     ...bloqueProv,
     ``,
@@ -11082,7 +11408,7 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
 // ─────────────────────────────────────────────────────────────────────────────
 app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
   try {
-    const { rows, loteActual, model: modelReq, modo, proveedores, fechaCorte, sideDaily } = req.body;
+    const { rows, loteActual, model: modelReq, modo, proveedores, fechaCorte, sideDaily, cardas } = req.body;
     if (!rows || rows.length === 0) return res.status(400).json({ error: 'Sin datos para analizar' });
 
     const dateKey = (value) => {
@@ -11488,10 +11814,16 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
       } catch (e) {
         console.warn('narrativa-lotes: contexto OE no disponible:', e.message?.slice(0, 80));
       }
-      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], rowsPorFecha, rowsMaquinas, rowsProduccionOe, fechaCorte, sideDaily || []);
+      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], rowsPorFecha, rowsMaquinas, rowsProduccionOe, fechaCorte, sideDaily || [], cardas || null);
       const narrativaLocal = normalizeNarrativaGemini(narrativa);
       const fuenteLocal = `⚡ Fuente: Generador local (sin IA externa) · ${formatTimestampEsAr24()}\n\n`;
-      return res.json({ success: true, narrativa: fuenteLocal + narrativaLocal, fuente: 'local' });
+      return res.json({
+        success: true,
+        narrativa: fuenteLocal + narrativaLocal,
+        fuente: 'local',
+        promptGemini: '',
+        modeloGemini: null,
+      });
     }
 
     const lotesSorted = [...new Set(rows.map(r => Number(r.mistura)))].sort((a, b) => a - b);
@@ -11844,6 +12176,46 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
       return `\nDATA OE (tb_PRODUCCION_OE, base <= fecha analizada ${fmtDateDdMm(fechaCorteGeminiKey)}):\n` + lines.join('\n') + posterioresTxt;
     })();
 
+    const cardasContextStr = (() => {
+      const ctx = (cardas && typeof cardas === 'object') ? cardas : null;
+      const fmtNum = (v, d = 2) => {
+        const n = Number(v);
+        return Number.isFinite(n) ? n.toFixed(d) : 'S/D';
+      };
+      if (!ctx) {
+        return `\nDATA CARDAS:\n  Sin contexto de cardas en el payload.`;
+      }
+      if (!ctx.disponible || !ctx.resumen) {
+        return `\nDATA CARDAS:\n  ${ctx.motivo || 'Sin datos de cardas disponibles para la fecha analizada.'}`;
+      }
+      const resumen = ctx.resumen;
+      const turnos = (ctx.turnos || [])
+        .slice()
+        .sort((a, b) => (Number(a?.efic_calc_avg) || Number.POSITIVE_INFINITY) - (Number(b?.efic_calc_avg) || Number.POSITIVE_INFINITY))
+        .slice(0, 3)
+        .map(t => `  Turno ${t.turno || 'S/D'} | EficCalc=${fmtNum(t.efic_calc_avg, 2)} | Prod=${fmtNum(t.prod_inform_total, 0)} kg`)
+        .join('\n');
+      const maquinas = (ctx.maquinasCriticas || [])
+        .slice()
+        .sort((a, b) => (Number(a?.efic_calc_avg) || Number.POSITIVE_INFINITY) - (Number(b?.efic_calc_avg) || Number.POSITIVE_INFINITY))
+        .slice(0, 5)
+        .map(m => `  Maq ${m.maquina || 'S/D'} | EficCalc=${fmtNum(m.efic_calc_avg, 2)} | Prod=${fmtNum(m.prod_inform_total, 0)} kg`)
+        .join('\n');
+      const calidad = ctx.calidadDato
+        ? `Prod0=${ctx.calidadDato.prod_inform_cero || 0} | Efic0=${ctx.calidadDato.efic_calc_cero || 0} | RPM0=${ctx.calidadDato.rpm_cero || 0}`
+        : 'S/D';
+
+      const lines = [
+        '',
+        'DATA CARDAS (contexto operativo de cardado para orientar causalidad de Neps/CVm):',
+        `  FechaRef=${resumen.data_ref || 'S/D'} | Maquinas=${resumen.maquinas ?? 'S/D'} | FilasActivas=${resumen.filas_activas ?? 'S/D'}/${resumen.filas ?? 'S/D'} | EficCalcProm=${fmtNum(resumen.efic_calc_avg, 2)} | ProdInform=${fmtNum(resumen.prod_inform_total, 0)} kg | CoberturaProd=${fmtNum(resumen.cobertura_prod_pct, 1)}%`,
+        turnos ? `  Turnos críticos:\n${turnos}` : '  Turnos críticos: S/D',
+        maquinas ? `  Máquinas críticas:\n${maquinas}` : '  Máquinas críticas: S/D',
+        `  CalidadDato=${calidad}`,
+      ];
+      return lines.join('\n');
+    })();
+
     const resumenLotes = lotesSorted.map(mistura => {
       const filas = rows.filter(r => Number(r.mistura) === mistura);
       const hvi = filas[0] || {};
@@ -11885,7 +12257,7 @@ DATOS COMPARATIVOS:
 ${resumenLotes}
 FECHA_ANALIZADA_SOLICITADA: ${fechaCorteReqKey ? fmtDateDdMm(fechaCorteReqKey) : 'No informada (usa corte por defecto)'}. FECHA_ANALIZADA_EFECTIVA: ${fmtDateDdMm(fechaCorteGeminiKey)}.
 Regla de cálculo obligatoria: todo análisis principal debe usar SOLO datos con fecha <= FECHA_ANALIZADA_EFECTIVA.
-${evolucionDiariaStr}${datosActualesPosterioresStr}${maquinasStr}${sideDailyStr}${oeProduccionStr}
+${evolucionDiariaStr}${datosActualesPosterioresStr}${maquinasStr}${sideDailyStr}${oeProduccionStr}${cardasContextStr}
 
 NOTA SOBRE NEPS: Neps+200% = impurezas grandes que afectan absorción del colorante en Índigo. Neps+140% = conteo total de neps incluyendo pequeños, indicador de agresividad del proceso de apertura y cardado. Los umbrales de decisión aplican a Neps+200%; usar Neps+140% como indicador complementario de proceso.
 
@@ -11923,6 +12295,11 @@ INSTRUCCIÓN SOBRE DATOS DE PROCESO:
 - Si Pasador=SI y hay desvío, aclarar que pasó por manuar y buscar falla de ajuste.
 - Si Pasador=NO y hay desvío, aclarar "sin doblez previo" como riesgo de irregularidad.
 - Si DATA LI/LP reporta Estado=CRITICO en un Ne, elevar prioridad operativa de ese título y describir el lado dominante (LP o LI).
+
+INSTRUCCIÓN SOBRE CONTEXTO CARDAS:
+- Si DATA CARDAS reporta eficiencia baja (<85%) o cobertura de producción baja (<80%), incluir una acción específica de CARDAS en PLAN DE ACCIÓN.
+- Si DATA CARDAS reporta máquina/turno crítico, mencionarlo como posible origen de Neps/CVm previo al OE.
+- Si DATA CARDAS no está disponible, declararlo explícitamente y no forzar causalidad en esa etapa.
 
 INSTRUCCIÓN SOBRE DATA OE:
 - Sintetizar por Ne en máximo 2 líneas: operación (turno/lado/horario, rpm/alfa/fusos, producción/eficiencia) y calidad (CVP/CVM, defectología, CORT NAT, %ROB).
@@ -12001,11 +12378,17 @@ Generá exactamente este formato en español (máximo 650 palabras), priorizando
       const result = await model.generateContent(prompt);
       const narrativaGemini = normalizeNarrativaGemini(result.response.text());
       const fuenteGemini = `✨ Fuente: Gemini Flash 2.5 · ${formatTimestampEsAr24()}\n\n`;
-      return res.json({ success: true, narrativa: fuenteGemini + narrativaGemini, fuente: 'gemini' });
+      return res.json({
+        success: true,
+        narrativa: fuenteGemini + narrativaGemini,
+        fuente: 'gemini',
+        promptGemini: prompt,
+        modeloGemini: modelName,
+      });
     } catch (geminiErr) {
       // Fallback local ante cualquier error de Gemini (quota, red, etc.)
       console.warn('Gemini no disponible, usando generación local:', geminiErr.message?.slice(0, 120));
-      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], rowsPorFechaGemini, rowsMaquinasGemini, rowsProduccionOeGemini, fechaCorteGeminiKey, sideDaily || []);
+      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], rowsPorFechaGemini, rowsMaquinasGemini, rowsProduccionOeGemini, fechaCorteGeminiKey, sideDaily || [], cardas || null);
       const narrativaLocal = normalizeNarrativaGemini(narrativa);
       const fuenteFallback = `⚡ Fuente: Generador local (Gemini no disponible) · ${formatTimestampEsAr24()}\n\n`;
       const geminiErrText = String(geminiErr?.message || '');
@@ -12018,7 +12401,9 @@ Generá exactamente este formato en español (máximo 650 palabras), priorizando
         narrativa: fuenteFallback + narrativaLocal,
         fuente: 'local',
         aviso,
-        geminiEstado: cuotaDiariaAgotada ? 'quota-daily' : 'unavailable'
+        geminiEstado: cuotaDiariaAgotada ? 'quota-daily' : 'unavailable',
+        promptGemini: prompt,
+        modeloGemini: modelName,
       });
     }
 
@@ -12467,6 +12852,8 @@ async function startServer() {
 
     if (lastErr) throw lastErr
     console.log('✓ Conexión a PostgreSQL exitosa')
+
+    await ensureUsterCardasSchema()
 
     // Índices para endpoints de calidad (impacta en performance con muchos datos)
     ensureCalidadIndexes().catch((e) => console.warn('ensureCalidadIndexes falló:', e.message))
