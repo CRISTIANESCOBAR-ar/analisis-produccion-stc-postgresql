@@ -1,0 +1,153 @@
+﻿⚡ Fuente: Generador local (sin IA externa) · 14/3/2026, 05:37:00
+
+📢 INFORME LOTE FIAC 110 — ⚠️ CONDICIONAL
+Prioridad: Media — Monitoreo Activo
+
+⚠️ DICTAMEN FINAL:
+El Lote FIAC 110 presenta valores fuera de rango en algunas variables; se recomienda monitoreo intensivo en los procesos afectados. Fibra STR 27.37 g/tex (premium).
+
+🧵 ESTADO DE TÍTULOS (Semáforo de Calidad):
+
+🟡 Ne 12.5/1 (Urdimbre): CONDICIONAL
+   Hechos en OE 3 LI y 3 LP | Con pasador | Estiraje aplicado: 132
+   tb_PRODUCCION_OE 12/03/2026 | Filial 05 | Loc 003 | OEs 50403 | Máq activas 1/1 | Turnos A, B, C | Lados A, B | Horario 06:00-22:00 | Operador(es) 00096
+   OE-RESUMEN: RPM 90000 | Fusos 300 | Alfa 5.30 | Tors/pol 18.74 | Tors/m 737.73 | Prod 122.0 mt/min | Prod 103.7 kg/h | Prod inf 4584 kg | Prod calc 4979 kg | Efic calc 92.0% | Efic inf 92.0% | T.BOB 1.006 | RPM Card 9500 | CVP 0.00 | CVM 0.00 | %ROB 0.0/0.0/0.0
+   OE-DEFECTOLOGÍA: | N 4 | S 245 | L 34 | T 164 | MO 221 | CP 54 | CM 94 | CCp 74 | CCm 20 | JP 63 | JM 1 | CORT NAT 747
+   Fuera de umbral: Tenac 15.99cN/tex ⚠️ | CVm 12.21% ⚠️
+   Diagnóstico: Fibra buena (STR 27.37 g/tex) — irregularidad es de proceso, no de la bala.
+
+🟢 Ne 7/1 (Trama): APROBADO
+   Hechos en OE 9 | Sin pasador | Estiraje aplicado: 72
+   tb_PRODUCCION_OE 12/03/2026 | Filial 05 | Loc 009 | OEs 50409 | Máq activas 1/1 | Turnos A, B, C | Lados U | Horario 06:00-22:00 | Operador(es) 00096
+   OE-RESUMEN: RPM 80000 | Fusos 540 | Alfa 5.30 | Tors/pol 14.02 | Tors/m 552.07 | Prod 144.9 mt/min | Prod 396.1 kg/h | Prod inf 4987 kg | Prod calc 9506 kg | Efic calc 52.5% | Efic inf 53.8% | T.BOB 0.654 | RPM Card 6333 | CVP 0.00 | CVM 0.00 | %ROB 32.0/30.3/31.0
+   OE-DEFECTOLOGÍA: | N 2 | S 166 | L 43 | T 97 | MO 98 | CP 2 | CM 0 | CCp 85 | CCm 107 | JP 43 | JM 6 | CORT NAT 207
+   Valores en rango: Tenac 16.42cN/tex | Elong 9.51% | CVm 10.88% | Neps 4/km
+
+🟢 Ne 9/1 (Trama): APROBADO
+   Hechos en OE 8 | Sin pasador | Estiraje aplicado: 90
+   tb_PRODUCCION_OE 12/03/2026 | Filial 05 | Loc 008 | OEs 50408 | Máq activas 1/1 | Turnos A, B, C | Lados U | Horario 06:00-22:00 | Operador(es) 00096
+   OE-RESUMEN: RPM 80000 | Fusos 540 | Alfa 5.30 | Tors/pol 15.90 | Tors/m 625.98 | Prod 127.8 mt/min | Prod 271.7 kg/h | Prod inf 6326 kg | Prod calc 6520 kg | Efic calc 97.0% | Efic inf 96.5% | T.BOB 0.994 | RPM Card 9500 | CVP 0.00 | CVM 0.00 | %ROB 86.7/91.0/88.0
+   OE-DEFECTOLOGÍA: | N 9 | S 107 | L 151 | T 69 | MO 39 | CP 18 | CM 6 | CCp 155 | CCm 332 | JP 13 | JM 11 | CORT NAT 369
+   Valores en rango: Tenac 16.27cN/tex | Elong 9.60% | CVm 11.29% | Neps 9/km
+
+🟢 Ne 10/1 (Urdimbre): APROBADO
+   Hechos en OE 7 y 10 | Con pasador | Estiraje aplicado: 102
+   tb_PRODUCCION_OE 12/03/2026 | Filial 05 | Loc 010 | OEs 50410 | Máq activas 1/1 | Turnos A, B, C | Lados U | Horario 06:00-22:00 | Operador(es) 00096
+   OE-RESUMEN: RPM 80000 | Fusos 540 | Alfa 5.30 | Tors/pol 16.76 | Tors/m 659.84 | Prod 121.2 mt/min | Prod 232.0 kg/h | Prod inf 5163 kg | Prod calc 5567 kg | Efic calc 92.7% | Efic inf 92.9% | T.BOB 1.002 | RPM Card 9500 | CVP 0.00 | CVM 0.00 | %ROB 96.0/94.7/94.0
+   OE-DEFECTOLOGÍA: | N 43 | S 193 | L 167 | T 157 | MO 26 | CP 0 | CM 2 | CCp 25 | CCm 135 | JP 8 | JM 6 | CORT NAT 435
+   Valores en rango: Tenac 16.18cN/tex | Elong 9.07% | CVm 11.99% | Neps 32/km
+
+⚖️ BALANCE DE TENDENCIAS
+
+📈 MEJORAS:
+  Ne 12.5/1: Ne 12.5/1: Recuperó regularidad — CVm bajó 0.22 pts, Neps bajaron 9/km. Los ajustes están surtiendo efecto.
+
+📉 DETERIOROS:
+  Ne 10/1 [Urdimbre]: CVm subió +0.80 pts. La fibra no es el problema; buscar la falla en el proceso.
+  Ne 9/1 [Trama]: CVm subió +0.62 pts. La fibra no es el problema; buscar la falla en el proceso.
+  Ne 7/1 [Trama]: CVm subió +0.56 pts. La fibra no es el problema; buscar la falla en el proceso.
+
+🛠 ACCIONES RECOMENDADAS (URGENTE):
+
+1️⃣ OPEN END (OE):
+  Ne 10/1: Limpieza de rotores y revisión del canal de transporte — CVm 12.72% con Neps 56/km. Verificar que la purga de aire sea constante.
+
+2️⃣ PASADOR (MANUAR):
+  Ne 9/1: CVm subió +0.62 pts — revisar presión de rodillos de estiraje y estado de cots para frenar la flotación de fibra.
+  Ne 7/1: CVm subió +0.56 pts — revisar presión de rodillos de estiraje y estado de cots para frenar la flotación de fibra.
+
+🧵 EVOLUCIÓN Y ESTADO DE TÍTULOS — Lote FIAC 110:
+
+Ne 12.5/1 (Urdimbre):
+  • 09/03: CVm 12.32 | Tenac 15.93 | Neps 60/km | Elong 8.22% | OE-CVm 0.00 | OE-Efic 95.4%
+  • 10/03: CVm 12.25 | Tenac 15.67 | Neps 66/km | Elong 8.21% | OE-CVm 0.00 | OE-Efic 99.0%
+  • 11/03: CVm 12.09 | Tenac 16.44 | Neps 53/km | Elong 8.32% | OE-CVm 0.00 | OE-Efic 95.8%  (CVm ↓0.16)
+  • 12/03: CVm 12.30 | Tenac 15.93 | Neps 55/km | Elong 8.27% | OE-CVm 0.00 | OE-Efic 92.0%  (CVm ↑0.21)
+  • 13/03: CVm 12.08 | Neps 47/km  (CVm ↓0.22)
+👉 ESTADO: 🟢 MEJORÓ. CVm bajó -0.22 pts. Los ajustes están surtiendo efecto. Neps también bajaron 9/km.
+
+Ne 10/1 (Urdimbre):
+  • 09/03: CVm 11.97 | Tenac 16.25 | Neps 36/km | Elong 8.91% | OE-CVm 0.00 | OE-Efic 92.4%
+  • 10/03: CVm 11.95 | Tenac 16.30 | Neps 28/km | Elong 8.98% | OE-CVm 0.00 | OE-Efic 97.9%
+  • 11/03: CVm 11.92 | Tenac 15.96 | Neps 27/km | Elong 9.07% | OE-CVm 0.00 | OE-Efic 91.2%
+  • ⚠️ 12/03: CVm 12.72 | Tenac 16.19 | Neps 56/km | Elong 9.58% | OE-CVm 0.00 | OE-Efic 92.9%  (CVm ↑0.80 | Neps ↑29)
+👉 ESTADO: 🔴 EMPEORÓ CRÍTICAMENTE. CVm subió +0.80 pts. Falla mecánica probable — no es la fibra.
+
+Ne 9/1 (Trama):
+  • 10/03: CVm 11.41 | Tenac 16.31 | Neps 11/km | Elong 9.05% | OE-CVm 0.00 | OE-Efic 80.6%
+  • 11/03: CVm 10.93 | Tenac 16.24 | Neps 6/km | Elong 10.15% | OE-CVm 0.00 | OE-Efic 96.2%  (CVm ↓0.48)
+  • ⚠️ 12/03: CVm 11.55 | Neps 10/km | OE-CVm 0.00 | OE-Efic 96.5%  (CVm ↑0.62)
+👉 ESTADO: 🔴 EMPEORÓ CRÍTICAMENTE. CVm subió +0.62 pts. Falla mecánica probable — no es la fibra.
+
+Ne 7/1 (Trama):
+  • 11/03: CVm 10.60 | Tenac 16.03 | Neps 1/km | Elong 8.89%
+  • ⚠️ 12/03: CVm 11.16 | Tenac 16.80 | Neps 6/km | Elong 10.12% | OE-CVm 0.00 | OE-Efic 53.8%  (CVm ↑0.56)
+👉 ESTADO: 🔴 EMPEORÓ CRÍTICAMENTE. CVm subió +0.56 pts. Falla mecánica probable — no es la fibra.
+
+🔗 CORRELACIÓN CON PRODUCCIÓN OE (tb_PRODUCCION_OE):
+  • Ne 12.5/1: OE 12/03/2026 · CVm 0.00 · CVP 0.00 · Efic 92.0% · Prod 4584 kg · Máq activas 1/1. Hay datos OE (09/03/2026, 10/03/2026, 11/03/2026, 12/03/2026), pero sin solape fecha-a-fecha con USTER para correlación robusta.
+  • Ne 10/1: USTER CVm 11/03→12/03 +0.80 pts | OE CVm +0.00 pts | OE Efic +1.8 pts | OE Prod -4973 kg | Máq activas -1 | Defectología -1166 → sin evidencia de correlación por CVm_OE (CVM OE en 0.00/no confiable).
+  • Ne 9/1: USTER CVm 11/03→12/03 +0.62 pts | OE CVm +0.00 pts | OE Efic +0.3 pts | OE Prod +20 kg | Máq activas +0 | Defectología -29 → sin evidencia de correlación por CVm_OE (CVM OE en 0.00/no confiable).
+  • Ne 7/1: OE 12/03/2026 · CVm 0.00 · CVP 0.00 · Efic 53.8% · Prod 4987 kg · Máq activas 1/1. Hay datos OE (12/03/2026), pero sin solape fecha-a-fecha con USTER para correlación robusta.
+
+📦 ANÁLISIS POR PROVEEDOR — Lote FIAC 110:
+  • VICENTIN          242 fardos ( 43.7%)  STR 27.40 g/tex | SCI 119.0 | MIC 4.455 | UHML 26.92 mm
+  • CARAM             161 fardos ( 29.1%)  STR 27.43 g/tex | SCI 107.6 | MIC 4.424 | UHML 26.71 mm
+  • CZYRUK             48 fardos (  8.7%)  STR 30.90 g/tex | SCI 124.0 | MIC 4.650 | UHML 27.89 mm
+  • ALAL               37 fardos (  6.7%)  STR 26.27 g/tex | SCI  95.7 | MIC 4.844 | UHML 25.90 mm
+  • NASICH             24 fardos (  4.3%)  STR 26.10 g/tex | SCI  96.0 | MIC 4.330 | UHML 25.82 mm
+  • ZORIAN             21 fardos (  3.8%)  STR 27.10 g/tex | SCI 103.0 | MIC 4.733 | UHML 26.94 mm
+  • LANGELLOTTI        12 fardos (  2.2%)  STR 26.60 g/tex | SCI  98.0 | MIC 4.370 | UHML 25.89 mm
+  • DEPELER             9 fardos (  1.6%)  STR 28.50 g/tex | SCI 104.0 | MIC 4.680 | UHML 26.72 mm
+
+  📌 Observaciones:
+  🏆 STR más alto: CZYRUK (30.90 g/tex) — fibra más resistente para hilatura.
+  ⚠️  STR más bajo: NASICH (26.10 g/tex) — monitorear impacto en tenacidad del hilo.
+  🏆 SCI más alto: CZYRUK (124.0) — mayor índice de hilabilidad, menos paradas esperadas.
+  ⚠️  SCI más bajo: ALAL (95.7) — riesgo de inestabilidad en hilatura.
+  🏆 MIC óptimo:   NASICH (4.330) — finura más cercana al rango ideal (3.5–4.9).
+  ⚠️  MIC más alejado del centro: ALAL (4.844).
+  🏆 UHML más largo: CZYRUK (27.89 mm) — fibra más larga, menor neps y mejor resistencia.
+  ⚠️  UHML más corto: NASICH (25.82 mm).
+
+🔍 AUDITORÍA DE APTITUD POR PROCESO — Lote FIAC 110:
+  Ne 7 [Trama] → TELAR ⚠️ — ⚠️ Condicional — Fibra: SCI 108 < 115
+  Ne 9 [Trama] → TELAR ⚠️ — ⚠️ Condicional — Fibra: SCI 108 < 120
+  Ne 10 [Urdimbre] → URDIDORA ⚠️ → INDIGO ⚠️ → TELAR ⚠️ — ⚠️ Condicional — Fibra: SCI 108 < 130
+  Ne 12.5 [Urdimbre] → URDIDORA ⚠️ → INDIGO ⚠️ → TELAR ⚠️ — ⚠️ Condicional — Vigilancia: Tenac. 15.99 (zona de vigilancia), CVm% 12.21 (zona de vigilancia) | Fibra: SCI 108 < 135
+    💬 "Ne 12.5 en vigilancia condicional: desvío leve en promedio. Corroborar en Informe Auditoría si hubo mínimos aislados por fecha/operador antes de escalar a rechazo."
+
+🚀 ESTADO OPERATIVO: ⚠️ PRECAUCIÓN – REVISAR
+El Lote FIAC 110 (Mistura interna 162) tiene 554 fardos consumidos y 12 secuencias de blendomat asociadas.
+
+─────────────────────────────────────────
+📊 COMPARATIVA TÉCNICA DETALLADA (Promedios por variable):
+
+1️⃣ STR — TENACIDAD FIBRA:
+  • Lote 110: 27.37 g/tex ✅ Óptimo
+
+
+2️⃣ SCI — ÍNDICE HILABILIDAD:
+  • Lote 110: 108.20  🔴 Crítico
+
+
+3️⃣ TENACIDAD HILO:
+  • Lote 110: 16.21 cN/tex ✅ Óptimo
+
+
+4️⃣ ELONGACIÓN HILO:
+  • Lote 110: 9.11 % ✅ Óptimo
+
+
+5️⃣ CVM% — IRREGULARIDAD DE MASA:
+  • Lote 110: 11.59 % ✅ Óptimo
+
+
+6️⃣ NEPS +200%:
+  • Lote 110: 25.10 /km ✅ Óptimo
+
+
+⚠️ PUNTOS CLAVE PARA PRODUCCIÓN:
+  • Ne12.5 | ⚠️ Tenacidad en zona de precaución (15.99 cN/tex)
+
+_Informe generado localmente · 14/3/2026, 05:37:00_

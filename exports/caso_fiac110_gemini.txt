@@ -1,0 +1,139 @@
+﻿✨ Fuente: Gemini Flash 2.5 · 14/3/2026, 05:37:42
+
+📢 REPORTE — LOTE FIAC 110
+Prioridad: Media — Monitoreo Activo
+
+✅ DICTAMEN FINAL:
+El Lote FIAC 110, con una fibra STR promedio de 27.37 g/tex (óptima), presenta una calidad general aceptable. No obstante, el título Ne 12.5/1 exhibe una condición "CONDICIONAL" por tenacidad y CVm%, mientras que múltiples títulos muestran deterioros puntuales en la estabilidad de masa (CVm%) en días recientes, lo que indica la necesidad de una revisión procesal para mantener la consistencia operativa.
+
+🧵 ESTADO DE TÍTULOS (Semáforo de Calidad):
+
+🟡 Ne 12.5/1 (Urdimbre): CONDICIONAL
+   Hechos en OE 3 LI y 3 LP | Con pasador | Estiraje aplicado: 132
+   OE-RESUMEN (09-12/03): Maq. OPEN END III (OEs=050403), RPM=90000, Alfa=5.30, 300 fusos, ProdMtMin=122, ProdKgHr=103.74, Efic. promedio ≈ 95.5%, CortNat promedio ≈ 725, CVM/CVP=0.00 (no confiable). Defectología N:6-12, S:245-366, L:30-44, T:161-204. %ROB=0.00.
+   Fuera de umbral: Tenacidad 15.99 cN/tex ⚠️ (promedio, <16.5) | CVm% 12.21 ⚠️ (promedio, >11.5)
+   Diagnóstico: Pasó por manuar, lo que descarta falta de doblaje. La fibra es premium (STR 27.37), lo que indica un posible desajuste mecánico en el tren de estiraje del pasador o en la OE, contribuyendo a la irregularidad.
+   Riesgo: Tenacidad limítrofe y CVm% elevado pueden generar problemas en urdidora y telar por roturas y barreado.
+   ⚠️ PENDIENTE: Validar Tenacidad y Elongación en ensayo de 13/03.
+
+🟢 Ne 10/1 (Urdimbre): APROBADO
+   Hechos en OE 7 y 10 | Con pasador | Estiraje aplicado: 102
+   OE-RESUMEN (09-12/03): Maq. OPEN END R60 (OEs=050407, 050410), RPM=80000, Alfa=5.30, 540 fusos, ProdMtMin=121.24, ProdKgHr=231.96, Efic. promedio ≈ 93.5% (Maq.010 en 12/03), CortNat promedio ≈ 592, CVM/CVP=0.00 (no confiable). Defectología N:43-116, S:185-290, L:167-431, T:157-491. %ROB ≈ 93.5%.
+   Riesgo: El deterioro de CVm% y Neps+140% del 12/03 (ver Balance) requiere atención para evitar impactos futuros.
+
+🟢 Ne 9/1 (Trama): APROBADO
+   Hechos en OE 8 | Sin pasador | Estiraje aplicado: 90
+   OE-RESUMEN (10-12/03): Maq. OPEN END RIETER R60 (OEs=050408), RPM=80000, Alfa=5.30, 540 fusos, ProdMtMin=127.80, ProdKgHr=271.68, Efic. promedio ≈ 91.1%, CortNat promedio ≈ 452, CVM/CVP=0.00 (no confiable). Defectología N:5-10, S:105-120, L:140-151, T:59-70. %ROB ≈ 88.0%.
+   Diagnóstico: Sin doblez previo (un solo pasaje) — mayor riesgo de flotación de fibra y perlas, lo que podría explicar la fluctuación de CVm%.
+
+🟢 Ne 7/1 (Trama): APROBADO
+   Hechos en OE 9 | Sin pasador | Estiraje aplicado: 72
+   OE-RESUMEN (12/03): Maq. OPEN END RIETER R60 (OEs=050409), RPM=80000, Alfa=5.30, 540 fusos, ProdMtMin=144.91, ProdKgHr=396.07, Efic. 53.77% (baja), CortNat 207, CVM/CVP=0.00 (no confiable). Defectología N:2, S:166, L:43, T:97. %ROB ≈ 31.1%.
+   Diagnóstico: Sin doblez previo (un solo pasaje) — mayor riesgo de flotación de fibra y perlas. La baja eficiencia OE del 12/03 es preocupante.
+
+⚖️ BALANCE DE TENDENCIAS:
+📉 DETERIOROS: El 12/03, se observó un deterioro simultáneo en el CVm% para Ne 10/1 (↑0.80 puntos), Ne 9/1 (↑0.62 puntos) y Ne 7/1 (↑0.56 puntos) respecto a días anteriores. Además, los Neps+140% del Ne 10/1 aumentaron en 337.3/km el mismo día.
+⚠️ ORIGEN COMÚN: La degradación simultánea de CVm% en múltiples títulos el 12/03 apunta a una falla upstream, probablemente en Manuar (Pasador) o la apertura/cardado, afectando la homogeneidad de la mecha antes del OE.
+
+🔗 CORRELACIÓN CON PRODUCCIÓN OE (tb_PRODUCCION_OE):
+*   **Ne 12.5/1 (09-12/03):** La eficiencia de OE III se mantuvo estable pero bajó a 91.97% el 12/03, coincidiendo con un CVm% elevado en USTER. El aumento de CortNat a 747 el 12/03 apoya una posible inestabilidad en la producción. CVM de OE=0.00, no confiable.
+*   **Ne 10/1 (09-12/03):** La eficiencia OE R60 (050407, 050410) fluctuó, con una eficacia del 92.73% para OE 010 el 12/03. El incremento en CVm% (12.72) y Neps+140% (889.5) el 12/03, aunque no directamente reflejado en las defectologías N/S/L/T/MO de OE con el mismo patrón, podría estar ligado a la inestabilidad en la eficiencia de producción. CVM de OE=0.00, no confiable.
+*   **Ne 9/1 (10-12/03):** La eficiencia de OE 8 para Ne 9/1 fue críticamente baja (80.60%) el 10/03, y si bien mejoró, el aumento de CVm% el 12/03 (11.55) sin un claro deterioro en OE sugiere que el origen del problema está antes del Open End. CVM de OE=0.00, no confiable.
+*   **Ne 7/1 (12/03):** La eficiencia de OE 9 fue alarmantemente baja (53.77%) el 12/03, junto con un aumento significativo en CVm% (11.16). Esta correlación es fuerte, indicando problemas severos en la operación de la máquina OE 9 ese día. CVM de OE=0.00, no confiable.
+
+🛠 ACCIONES RECOMENDADAS (URGENTE):
+
+1️⃣ MANUAR (PASADOR):
+*   Ne 10/1 y Ne 12.5/1: Revisar y calibrar la presión de los rodillos y el estado de los cots en la sección de estiraje del manuar, especialmente considerando el deterioro generalizado del CVm% el 12/03. Si se identifican múltiples líneas, estandarizar los ajustes.
+
+2️⃣ OPEN END (OE):
+*   Ne 12.5/1 (OE III - OEs=050403): Limpiar rotores y revisar el ajuste de la purga de aire. El descenso de eficiencia y el aumento de CortNat el 12/03, junto al CVm% elevado, sugieren problemas de operación o contaminación interna.
+*   Ne 10/1 (OE R60 - OEs=050407, 050410): Monitorear de cerca las máquinas, especialmente la OE 010 (operando sola el 12/03), por el deterioro de CVm% y Neps+140%. Limpieza de rotores y revisión del canal de transporte.
+*   Ne 7/1 (OE R60 - OEs=050409): Urgente revisión de la máquina OE 9. La eficiencia del 53.77% es crítica e inaceptable. Investigar causas de paradas y realizar un mantenimiento exhaustivo, incluyendo limpieza de rotores y ajuste de parámetros de hilatura.
+*   Ne 9/1 (OE R60 - OEs=050408): Monitorear la eficiencia y los paros en OE 8.
+
+3️⃣ CARDAS: sin novedad.
+
+🧵 EVOLUCIÓN Y ESTADO DE TÍTULOS:
+
+Ne 12.5/1 (Urdimbre):
+  • 09/03: CVm 12.32 | Tenac 15.93 | Neps 60.4/km | Elong 8.22%
+  • 10/03: CVm 12.25 | Tenac 15.67 | Neps 66.2/km | Elong 8.21%
+  • 11/03: CVm 12.09 | Tenac 16.44 (Tenac ↑0.77) | Neps 52.5/km | Elong 8.32%
+  • 12/03: CVm 12.30 | Tenac 15.93 (Tenac ↓0.51) | Neps 55.0/km | Elong 8.27%
+  • 13/03: CVm 12.08 | Neps 46.5/km (Neps ↓8.5)
+  👉 ESTADO: 🟡 CONDICIONAL – Tenacidad y CVm% promedio en umbral de precaución, con fluctuaciones diarias.
+
+Ne 10/1 (Urdimbre):
+  • 09/03: CVm 11.97 | Tenac 16.25 | Neps 35.6/km | Elong 8.91%
+  • 10/03: CVm 11.95 | Tenac 16.30 | Neps 27.6/km (Neps ↓8.0) | Elong 8.98%
+  • 11/03: CVm 11.92 | Tenac 15.96 (Tenac ↓0.34 ⚠️) | Neps 27.1/km | Elong 9.07%
+  • 12/03: CVm 12.72 (CVm ↑0.80 ⚠️) | Tenac 16.19 | Neps 55.8/km (Neps ↑28.7) | Elong 9.58%
+  👉 ESTADO: 🟢 APROBADO – Con deterioro del CVm% significativo el 12/03 que requiere monitoreo activo.
+
+Ne 9/1 (Trama):
+  • 10/03: CVm 11.41 | Tenac 16.31 | Neps 11.3/km | Elong 9.05%
+  • 11/03: CVm 10.93 | Tenac 16.24 | Neps 6.3/km (Neps ↓5.0) | Elong 10.15%
+  • 12/03: CVm 11.55 (CVm ↑0.62 ⚠️) | Neps 9.7/km | Neps 325.8/km
+  👉 ESTADO: 🟢 APROBADO – Con un aumento de CVm% el 12/03 que necesita atención.
+
+Ne 7/1 (Trama):
+  • 11/03: CVm 10.60 | Tenac 16.03 | Neps 1.4/km | Elong 8.89%
+  • 12/03: CVm 11.16 (CVm ↑0.56 ⚠️) | Tenac 16.80 | Neps 5.6/km | Elong 10.12%
+  👉 ESTADO: 🟢 APROBADO – Con un aumento de CVm% el 12/03 que debe investigarse.
+
+─────────────────────────────────────────
+📊 COMPARATIVA TÉCNICA DETALLADA:
+
+1️⃣ STR (Resistencia de la Fibra):
+   • LOTE_FIAC 110 (Actual): 27.37 g/tex
+   👉 Impacto: La fibra es ÓPTIMA (>27), va sobrado de fuerza, lo que debería facilitar un buen desempeño en hilatura y tejido.
+
+2️⃣ Tenacidad del Hilo:
+   • Ne 7/1: 16.42 cN/tex | Ne 9/1: 16.27 cN/tex | Ne 10/1: 16.18 cN/tex | Ne 12.5/1: 15.99 cN/tex
+   👉 Impacto: Todos los títulos cumplen o están muy cerca del mínimo óptimo. Ne 12.5/1 está en el límite de "PRECAUCIÓN", lo que puede generar roturas en urdidora.
+
+3️⃣ Neps+200% del Hilo (Impurezas Grandes):
+   • Ne 7/1: 3.5/km | Ne 9/1: 9.1/km | Ne 10/1: 31.7/km | Ne 12.5/1: 56.1/km
+   👉 Impacto: Todos los valores están muy por debajo de los umbrales de riesgo para Índigo (700/km), lo que asegura una buena absorción de colorante.
+
+4️⃣ CVm% del Hilo (Irregularidad de Masa):
+   • Ne 7/1: 10.88 | Ne 9/1: 11.29 | Ne 10/1: 11.99 | Ne 12.5/1: 12.21
+   👉 Impacto: Ne 12.5/1 está en umbral de "PRECAUCIÓN" (>11.5), y los picos de deterioro el 12/03 en otros títulos son preocupantes para la uniformidad y el barreado en telar.
+
+5️⃣ Elongación del Hilo:
+   • Ne 7/1: 9.51% | Ne 9/1: 9.60% | Ne 10/1: 9.07% | Ne 12.5/1: 8.26%
+   👉 Impacto: Todos los valores superan el umbral de riesgo de urdidora (>7.5%), lo cual es positivo para la capacidad de elongación y absorción de tensión en el proceso.
+
+📦 ANÁLISIS POR PROVEEDOR — Lote FIAC 110:
+*   VICENTIN: 242 fardos (43.7%) STR=27.40 SCI=119.0 MIC=4.455 UHML=26.92
+*   CARAM: 161 fardos (29.1%) STR=27.43 SCI=107.6 MIC=4.424 UHML=26.71
+*   CZYRUK: 48 fardos (8.7%) STR=30.90 SCI=124.0 MIC=4.650 UHML=27.89 (va sobrado de fuerza)
+*   ALAL: 37 fardos (6.7%) STR=26.27 SCI=95.7 MIC=4.844 UHML=25.90 (cargado al grueso)
+*   NASICH: 24 fardos (4.3%) STR=26.10 SCI=96.0 MIC=4.330 UHML=25.82
+*   ZORIAN: 21 fardos (3.8%) STR=27.10 SCI=103.0 MIC=4.733 UHML=26.94 (cargado al grueso)
+*   LANGELLOTTI: 12 fardos (2.2%) STR=26.60 SCI=98.0 MIC=4.370 UHML=25.89
+*   DEPELER: 9 fardos (1.6%) STR=28.50 SCI=104.0 MIC=4.680 UHML=26.72
+
+🔬 DIAGNÓSTICO MECÁNICO — Paradoja de la Fibra:
+La fibra principal (promedio STR 27.37 g/tex) es premium, no siendo el origen de los desvíos observados en CVm%. La recurrencia de CVm% elevado o su deterioro significativo en múltiples títulos, especialmente el 12/03, sugiere que la falla se encuentra en el proceso de hilatura (manuar/OE), más que en la materia prima.
+
+🔍 AUDITORÍA DE APTITUD POR PROCESO — Lote FIAC 110:
+
+*   Ne 7/1 [Trama] → TELAR ✅ → Aprobado
+    💬 Resistencia y uniformidad adecuadas para trama.
+*   Ne 9/1 [Trama] → TELAR ✅ → Aprobado
+    💬 Buena estabilidad de masa y tenacidad para su aplicación.
+*   Ne 10/1 [Urdimbre] → URDIDORA ✅ → ÍNDIGO ✅ → TELAR ✅ → Aprobado
+    💬 Calidad robusta para urdimbre, aunque se debe monitorear el repunte del CVm% del 12/03.
+*   Ne 12.5/1 [Urdimbre] → URDIDORA ⚠️ → ÍNDIGO ✅ → TELAR ✅ → Condicional
+    💬 La tenacidad y el CVm% están en el límite de precaución. Requiere monitoreo estricto en urdidora para prevenir roturas.
+
+⚠️ PUNTOS CLAVE PARA PRODUCCIÓN:
+*   Ne 12.5/1 | ⚠️ CVm% y Tenacidad limítrofes, con riesgo de roturas en urdidora. | 🔸 Revisar manuar (presión, cots) y Open End III (rotores, purga de aire).
+*   Ne 10/1 | ⚠️ Deterioro del CVm% el 12/03. | 🔸 Investigar causas del aumento de irregularidad en OE 7 y 10.
+*   Ne 9/1 y Ne 7/1 | ⚠️ Aumento de CVm% el 12/03. | 🔸 Considerando que no pasan por manuar, verificar la consistencia del sliver de carda y el estado de los rotores en OE 8 y OE 9.
+*   Ne 7/1 | 🔴 Eficiencia de OE 9 extremadamente baja el 12/03 (53.77%). | 🔸 ¡Urgente intervención y mantenimiento correctivo en OE 9!
+
+🚀 ESTADO OPERATIVO: PRECAUCIÓN - REVISAR
+Es fundamental actuar sobre los deterioros de CVm% observados el 12/03 y las eficiencias críticas de OE para asegurar la continuidad de una producción estable y de alta calidad.

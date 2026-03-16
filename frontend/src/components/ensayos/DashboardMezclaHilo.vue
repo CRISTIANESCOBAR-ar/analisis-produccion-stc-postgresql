@@ -3,41 +3,42 @@
 
     <!-- ══════════════════════ HEADER ══════════════════════ -->
     <div class="shrink-0 bg-white border-b border-slate-200 px-6 py-4">
-      <div class="flex items-center justify-between mb-3">
-        <div>
+      <div class="flex items-start justify-between gap-4 flex-wrap">
+        <div class="min-w-72">
           <h1 class="text-lg font-bold text-slate-800 flex items-center gap-2">
             <span class="p-1.5 bg-emerald-100 text-emerald-600 rounded-lg text-base">🏭</span>
             Dashboard Mezcla → Hilo
           </h1>
           <p class="text-xs text-slate-400 mt-0.5">Comparativa de calidad entre lotes — Semáforo de aptitud para Tejeduría</p>
         </div>
-        <div v-if="rows.length > 0" class="text-xs text-slate-400 bg-slate-100 px-3 py-1.5 rounded-lg font-mono">
-          {{ lotesList.length }} lotes · {{ allNes.length }} título{{allNes.length !== 1 ? 's' : ''}}
+        <div class="flex items-end gap-3 flex-wrap ml-auto w-full sm:w-auto">
+          <div class="flex-1 min-w-56 sm:w-80">
+            <label class="text-[10px] uppercase font-bold text-slate-500 tracking-widest block mb-1">
+              Lote o lotes a comparar <span class="text-slate-400 normal-case font-normal">(separados por coma)</span>
+            </label>
+            <input v-model="lotesInput" type="text" placeholder="ej: 107, 108, 109"
+              class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300 transition-all"
+              @keyup.enter="analizar" />
+          </div>
+          <div class="w-36">
+            <label class="text-[10px] uppercase font-bold text-slate-500 tracking-widest block mb-1">Día dashboard</label>
+            <CustomDatepicker
+              v-model="fechaCorte"
+              :showButtons="false"
+              placeholder="Fecha"
+            />
+          </div>
+          <button @click="analizar" :disabled="loading || !lotesInput.trim()"
+            class="px-6 py-2.5 rounded-xl font-bold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+            :class="loading ? 'bg-slate-200 text-slate-500' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md hover:shadow-lg'">
+            <span v-if="loading" class="animate-spin inline-block">⟳</span>
+            <span v-else>📊</span>
+            {{ loading ? 'Consultando...' : 'Comparar' }}
+          </button>
+          <div v-if="rows.length > 0" class="text-xs text-slate-400 bg-slate-100 px-3 py-1.5 rounded-lg font-mono whitespace-nowrap">
+            {{ lotesList.length }} lotes · {{ allNes.length }} título{{allNes.length !== 1 ? 's' : ''}}
+          </div>
         </div>
-      </div>
-
-      <!-- Inputs -->
-      <div class="flex gap-3 items-end flex-wrap">
-        <div class="flex-1 min-w-48">
-          <label class="text-[10px] uppercase font-bold text-slate-500 tracking-widest block mb-1">
-            Lotes a comparar <span class="text-slate-400 normal-case font-normal">(separados por coma)</span>
-          </label>
-          <input v-model="lotesInput" type="text" placeholder="ej: 107, 108, 109"
-            class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300 transition-all"
-            @keyup.enter="analizar" />
-        </div>
-        <div class="w-36">
-          <label class="text-[10px] uppercase font-bold text-slate-500 tracking-widest block mb-1">Ne (opc.)</label>
-          <input v-model="neFilter" type="text" placeholder="ej: 10/1"
-            class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300 transition-all" />
-        </div>
-        <button @click="analizar" :disabled="loading || !lotesInput.trim()"
-          class="px-6 py-2.5 rounded-xl font-bold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
-          :class="loading ? 'bg-slate-200 text-slate-500' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md hover:shadow-lg'">
-          <span v-if="loading" class="animate-spin inline-block">⟳</span>
-          <span v-else>📊</span>
-          {{ loading ? 'Consultando...' : 'Comparar' }}
-        </button>
       </div>
     </div>
 
@@ -151,6 +152,210 @@
               <span>🧺 {{ getHVI(mistura, 'n_fardos') ?? '–' }} fardos consumidos</span>
               <span>🔄 {{ getHVI(mistura, 'n_secuencias') ?? '–' }} secuencias blendomat</span>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="hasData && aptitudUrdimbreActual.length" class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h2 class="font-bold text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wide">
+              <span>🚫</span> Aptitud de Urdimbre
+            </h2>
+            <p class="text-[10px] text-slate-400 mt-0.5">Bloqueo Benninger por Tenacidad + Trabajo B y control de eta contra ventana comparable</p>
+          </div>
+          <span class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-slate-100 text-slate-600">
+            Matriz {{ QUALITY_MATRIX_VERSION }}
+          </span>
+        </div>
+
+        <div class="p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div
+            v-for="item in aptitudUrdimbreActual"
+            :key="`warp-${item.neDisplay}`"
+            class="rounded-xl border p-4"
+            :class="item.meta.className">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <div class="text-xs font-bold uppercase tracking-wide">Ne {{ item.neDisplay }}</div>
+                <div class="text-sm font-bold mt-1">{{ item.meta.icon }} {{ item.meta.label }}</div>
+              </div>
+              <span v-if="item.blocked" class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-white/70 text-red-700 border border-red-200">
+                Bloqueado
+              </span>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2 mt-4 text-[11px]">
+              <div class="bg-white/70 rounded-lg p-2">
+                <div class="text-[9px] uppercase tracking-wider text-slate-400">Tenacidad</div>
+                <div class="font-bold">{{ item.tenacidad != null ? item.tenacidad.toFixed(2) : '–' }}</div>
+              </div>
+              <div class="bg-white/70 rounded-lg p-2">
+                <div class="text-[9px] uppercase tracking-wider text-slate-400">Trabajo B</div>
+                <div class="font-bold">{{ item.trabajoB != null ? item.trabajoB.toFixed(2) : '–' }}</div>
+              </div>
+              <div class="bg-white/70 rounded-lg p-2">
+                <div class="text-[9px] uppercase tracking-wider text-slate-400">eta</div>
+                <div class="font-bold">{{ item.eta != null ? item.eta.toFixed(1) + '%' : '–' }}</div>
+              </div>
+            </div>
+
+            <div class="mt-3 text-[11px] leading-relaxed">
+              <div v-if="item.baselineEta != null">Ref comparable eta: {{ item.baselineEta.toFixed(1) }}%</div>
+              <div v-if="item.reasons.includes('trabajo_b')">Trabajo B por debajo de banda de urdimbre.</div>
+              <div v-if="item.reasons.includes('tenacidad')">Tenacidad debajo de la reserva mecanica esperada.</div>
+              <div v-if="item.reasons.includes('eta')">La fibra rinde peor que la ventana comparable para este Ne.</div>
+              <div v-if="!item.reasons.length">Sin desvios relevantes para urdimbre.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="hasData && sideImbalanceActual.length" class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h2 class="font-bold text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wide">
+              <span>↔️</span> Balance LI/LP Diario
+            </h2>
+            <p class="text-[10px] text-slate-400 mt-0.5">Comparación por título en thin -30% para detectar lado dominante y desbalance de proceso</p>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <span v-if="sideImbalanceCritCount > 0"
+              class="text-[10px] px-2.5 py-1 rounded-full font-bold bg-red-100 text-red-700 animate-pulse">
+              🔴 {{ sideImbalanceCritCount }} CRÍTICO{{ sideImbalanceCritCount > 1 ? 'S' : '' }}
+            </span>
+            <span class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-slate-100 text-slate-600">
+              Corte {{ fmtDateDdMm(fechaCorte) }}
+            </span>
+          </div>
+        </div>
+
+        <div class="p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div
+            v-for="item in sideImbalanceActual"
+            :key="`side-${item.neKey}`"
+            class="rounded-xl border p-4"
+            :class="item.evaluation.state === 'crit'
+              ? 'border-red-300 bg-red-50 text-red-800 ring-2 ring-red-400/50 ring-offset-1'
+              : item.evaluation.state === 'warn'
+                ? 'border-amber-200 bg-amber-50 text-amber-800'
+                : item.evaluation.state === 'ok'
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                  : 'border-slate-200 bg-slate-50 text-slate-500'">
+            <div class="flex items-start justify-between gap-2">
+              <div>
+                <div class="text-xs font-bold uppercase tracking-wide">Ne {{ item.neDisplay }}</div>
+                <div class="text-[10px] mt-1">Fecha {{ fmtDateDdMm(item.dateKey) }}</div>
+              </div>
+              <div class="text-sm font-bold">
+                {{ item.evaluation.state === 'crit' ? '🔴 Crítico' : item.evaluation.state === 'warn' ? '⚠️ Revisar' : item.evaluation.state === 'ok' ? '✅ Balanceado' : '— Sin dato' }}
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 mt-4 text-[11px]">
+              <!-- LP box – resaltado si LP es el lado dominante y no está OK -->
+              <div class="rounded-lg p-2"
+                :class="item.evaluation.dominantSide === 'LP' && item.evaluation.state !== 'ok' && item.evaluation.state !== 'sin-dato'
+                  ? (item.evaluation.state === 'crit' ? 'bg-red-200 ring-1 ring-red-500/60' : 'bg-amber-100 ring-1 ring-amber-400/60')
+                  : 'bg-white/70'">
+                <div class="text-[9px] uppercase tracking-wider font-semibold"
+                  :class="item.evaluation.dominantSide === 'LP' && item.evaluation.state !== 'ok' && item.evaluation.state !== 'sin-dato' ? 'opacity-100' : 'text-slate-400'">
+                  LP thin-30{{ item.evaluation.dominantSide === 'LP' && item.evaluation.state !== 'ok' && item.evaluation.state !== 'sin-dato' ? ' ▲' : '' }}
+                </div>
+                <div class="font-bold">{{ item.evaluation.lpThin30 != null ? item.evaluation.lpThin30.toFixed(1) : '–' }}</div>
+              </div>
+              <!-- LI box – resaltado si LI es el lado dominante y no está OK -->
+              <div class="rounded-lg p-2"
+                :class="item.evaluation.dominantSide === 'LI' && item.evaluation.state !== 'ok' && item.evaluation.state !== 'sin-dato'
+                  ? (item.evaluation.state === 'crit' ? 'bg-red-200 ring-1 ring-red-500/60' : 'bg-amber-100 ring-1 ring-amber-400/60')
+                  : 'bg-white/70'">
+                <div class="text-[9px] uppercase tracking-wider font-semibold"
+                  :class="item.evaluation.dominantSide === 'LI' && item.evaluation.state !== 'ok' && item.evaluation.state !== 'sin-dato' ? 'opacity-100' : 'text-slate-400'">
+                  LI thin-30{{ item.evaluation.dominantSide === 'LI' && item.evaluation.state !== 'ok' && item.evaluation.state !== 'sin-dato' ? ' ▲' : '' }}
+                </div>
+                <div class="font-bold">{{ item.evaluation.liThin30 != null ? item.evaluation.liThin30.toFixed(1) : '–' }}</div>
+              </div>
+            </div>
+
+            <div class="mt-3 text-[11px] leading-relaxed">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span>Δ thin-30: {{ item.evaluation.deltaPct != null ? item.evaluation.deltaPct.toFixed(1) + '%' : 'S/D' }}</span>
+                <!-- Badge lado dominante prominente -->
+                <span v-if="item.evaluation.dominantSide && item.evaluation.dominantSide !== 'EQ'"
+                  class="text-[11px] font-black px-2 py-0.5 rounded-md tracking-widest leading-tight"
+                  :class="item.evaluation.state === 'crit' ? 'bg-red-600 text-white' : item.evaluation.state === 'warn' ? 'bg-amber-500 text-white' : 'bg-emerald-500 text-white'">
+                  {{ item.evaluation.dominantSide }}
+                </span>
+                <span v-else-if="item.evaluation.dominantSide === 'EQ'" class="text-[11px] font-medium text-emerald-600">↔ EQ</span>
+              </div>
+              <div v-if="item.evaluation.neps140DeltaPct != null" class="mt-1">Δ Neps+140: {{ item.evaluation.neps140DeltaPct.toFixed(1) }}%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── NARRATIVA IA ── -->
+      <div v-if="hasData" class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h2 class="font-bold text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wide">
+              <span>✨</span> Informe con IA
+            </h2>
+            <p class="text-[10px] text-slate-400 mt-0.5">Análisis predictivo en lenguaje natural • Gemini 2.5 Flash con fallback local</p>
+            <p v-if="modoLocalAutomatico" class="text-[10px] text-amber-600 mt-1 font-semibold">
+              {{ geminiCuotaDiariaAgotada ? 'Modo local activo: límite diario de Gemini alcanzado (20/día).' : 'Modo local activo por indisponibilidad de Gemini.' }}
+            </p>
+          </div>
+          <div class="flex items-end gap-2">
+            <span v-if="narrativaFuente" class="text-[10px] px-2 py-0.5 rounded-full font-bold"
+              :class="narrativaFuente === 'gemini' ? 'bg-purple-100 text-purple-700' : narrativaFuente === 'cache' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'">
+              {{ narrativaFuente === 'gemini' ? '✨ Gemini' : narrativaFuente === 'cache' ? '💾 Caché' : '⚡ Local' }}
+            </span>
+            <button @click="generarNarrativa(true)" :disabled="loadingNarrativa || !hasData"
+              class="px-3 py-2 rounded-xl font-bold text-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-600">
+              ⚡ Local
+            </button>
+            <button v-if="modoLocalAutomatico" @click="probarGemini" :disabled="loadingNarrativa"
+              class="px-3 py-2 rounded-xl font-bold text-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 bg-amber-100 hover:bg-amber-200 text-amber-700">
+              ✨ Probar Gemini
+            </button>
+            <button @click="generarNarrativa(false, narrativa ? true : false)" :disabled="loadingNarrativa"
+              class="px-5 py-2 rounded-xl font-bold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm hover:shadow-md"
+              :class="loadingNarrativa ? 'bg-slate-200 text-slate-500' : modoLocalAutomatico ? 'bg-slate-500 hover:bg-slate-600 text-white' : narrativa ? 'bg-slate-700 hover:bg-slate-800 text-white' : 'bg-indigo-600 hover:bg-indigo-700 text-white'">
+              <span v-if="loadingNarrativa" class="animate-spin inline-block">⟳</span>
+              <span v-else>{{ modoLocalAutomatico ? '⚡' : (narrativa ? '↺' : '✨') }}</span>
+              {{ loadingNarrativa ? 'Analizando...' : modoLocalAutomatico ? (narrativa ? 'Regenerar Local' : 'Generar Local') : (narrativa ? 'Regenerar' : 'Generar Informe') }}
+            </button>
+          </div>
+        </div>
+
+        <div class="p-6">
+          <div v-if="!narrativa && !loadingNarrativa" class="text-center py-6 text-slate-400">
+            <div class="text-3xl mb-2">✨</div>
+            <p class="text-sm">Generá un resumen en lenguaje natural con análisis predictivo para producción</p>
+            <p class="text-xs mt-1 text-slate-300">✨ Gemini — si hay cuota disponible • ⚡ Local — siempre disponible, instantáneo</p>
+          </div>
+          <div v-if="loadingNarrativa" class="flex items-center gap-3 text-slate-500 py-4">
+            <span class="animate-spin text-xl inline-block">⟳</span>
+            <span class="text-sm">Analizando datos...</span>
+          </div>
+          <div v-if="narrativaAviso && narrativa" class="text-amber-700 text-xs bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 mb-3 flex items-center gap-2">
+            <span>⚠️</span> {{ narrativaAviso }}
+          </div>
+          <div v-if="narrativa && !loadingNarrativa" class="relative group">
+            <button @click="copiarNarrativa"
+              class="absolute top-3 right-3 z-10 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 opacity-0 group-hover:opacity-100"
+              :class="narrativaCopiada ? 'bg-green-100 text-green-700' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 shadow-sm'">
+              <span>{{ narrativaCopiada ? '✓' : '📋' }}</span>
+              {{ narrativaCopiada ? '¡Copiado!' : 'Copiar' }}
+            </button>
+            <div
+              class="bg-slate-50 rounded-xl border border-slate-100 p-5 text-sm text-slate-700 whitespace-pre-wrap leading-relaxed font-mono">
+              {{ narrativa }}
+            </div>
+          </div>
+          <div v-if="narrativaError" class="text-red-600 text-sm bg-red-50 rounded-xl p-4 mt-3">
+            ⚠️ {{ narrativaError }}
           </div>
         </div>
       </div>
@@ -354,80 +559,6 @@
         </div>
       </div>
 
-      <!-- ── NARRATIVA IA ── -->
-      <div v-if="hasData" class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-          <div>
-            <h2 class="font-bold text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wide">
-              <span>✨</span> Informe con IA
-            </h2>
-            <p class="text-[10px] text-slate-400 mt-0.5">Análisis predictivo en lenguaje natural • Gemini 2.5 Flash con fallback local</p>
-            <p v-if="modoLocalAutomatico" class="text-[10px] text-amber-600 mt-1 font-semibold">
-              {{ geminiCuotaDiariaAgotada ? 'Modo local activo: límite diario de Gemini alcanzado (20/día).' : 'Modo local activo por indisponibilidad de Gemini.' }}
-            </p>
-          </div>
-          <div class="flex items-end gap-2">
-            <div class="flex flex-col">
-              <label class="text-[9px] uppercase font-bold text-slate-400 tracking-widest mb-1">Día</label>
-              <CustomDatepicker
-                v-model="fechaCorte"
-                :showButtons="false"
-                placeholder="Selecciona una fecha"
-              />
-            </div>
-            <span v-if="narrativaFuente" class="text-[10px] px-2 py-0.5 rounded-full font-bold"
-              :class="narrativaFuente === 'gemini' ? 'bg-purple-100 text-purple-700' : narrativaFuente === 'cache' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'">
-              {{ narrativaFuente === 'gemini' ? '✨ Gemini' : narrativaFuente === 'cache' ? '💾 Caché' : '⚡ Local' }}
-            </span>
-            <button @click="generarNarrativa(true)" :disabled="loadingNarrativa || !hasData"
-              class="px-3 py-2 rounded-xl font-bold text-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-600">
-              ⚡ Local
-            </button>
-            <button v-if="modoLocalAutomatico" @click="probarGemini" :disabled="loadingNarrativa"
-              class="px-3 py-2 rounded-xl font-bold text-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 bg-amber-100 hover:bg-amber-200 text-amber-700">
-              ✨ Probar Gemini
-            </button>
-            <button @click="generarNarrativa(false, narrativa ? true : false)" :disabled="loadingNarrativa"
-              class="px-5 py-2 rounded-xl font-bold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm hover:shadow-md"
-              :class="loadingNarrativa ? 'bg-slate-200 text-slate-500' : modoLocalAutomatico ? 'bg-slate-500 hover:bg-slate-600 text-white' : narrativa ? 'bg-slate-700 hover:bg-slate-800 text-white' : 'bg-indigo-600 hover:bg-indigo-700 text-white'">
-              <span v-if="loadingNarrativa" class="animate-spin inline-block">⟳</span>
-              <span v-else>{{ modoLocalAutomatico ? '⚡' : (narrativa ? '↺' : '✨') }}</span>
-              {{ loadingNarrativa ? 'Analizando...' : modoLocalAutomatico ? (narrativa ? 'Regenerar Local' : 'Generar Local') : (narrativa ? 'Regenerar' : 'Generar Informe') }}
-            </button>
-          </div>
-        </div>
-
-        <div class="p-6">
-          <div v-if="!narrativa && !loadingNarrativa" class="text-center py-6 text-slate-400">
-            <div class="text-3xl mb-2">✨</div>
-            <p class="text-sm">Generá un resumen en lenguaje natural con análisis predictivo para producción</p>
-            <p class="text-xs mt-1 text-slate-300">✨ Gemini — si hay cuota disponible • ⚡ Local — siempre disponible, instantáneo</p>
-          </div>
-          <div v-if="loadingNarrativa" class="flex items-center gap-3 text-slate-500 py-4">
-            <span class="animate-spin text-xl inline-block">⟳</span>
-            <span class="text-sm">Analizando datos...</span>
-          </div>
-          <div v-if="narrativaAviso && narrativa" class="text-amber-700 text-xs bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 mb-3 flex items-center gap-2">
-            <span>⚠️</span> {{ narrativaAviso }}
-          </div>
-          <div v-if="narrativa && !loadingNarrativa" class="relative group">
-            <button @click="copiarNarrativa"
-              class="absolute top-3 right-3 z-10 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 opacity-0 group-hover:opacity-100"
-              :class="narrativaCopiada ? 'bg-green-100 text-green-700' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 shadow-sm'">
-              <span>{{ narrativaCopiada ? '✓' : '📋' }}</span>
-              {{ narrativaCopiada ? '¡Copiado!' : 'Copiar' }}
-            </button>
-            <div
-              class="bg-slate-50 rounded-xl border border-slate-100 p-5 text-sm text-slate-700 whitespace-pre-wrap leading-relaxed font-mono">
-              {{ narrativa }}
-            </div>
-          </div>
-          <div v-if="narrativaError" class="text-red-600 text-sm bg-red-50 rounded-xl p-4 mt-3">
-            ⚠️ {{ narrativaError }}
-          </div>
-        </div>
-      </div>
-
       <!-- ══════════════════════ AUDITORÍA DE APTITUD POR PROCESO ══════════════════════ -->
       <div v-if="tablaAptitud.length > 0" class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
         <div class="px-6 py-4 border-b border-slate-100">
@@ -464,6 +595,7 @@
                 <th class="text-center px-2 py-1.5 font-bold border-l border-slate-200" colspan="5">Variables de Hilo</th>
                 <th class="text-center px-2 py-1.5 font-bold border-l border-r border-slate-200" colspan="3">Aptitud por Proceso</th>
                 <th class="text-center px-3 py-2.5 font-bold" rowspan="2">Pasador</th>
+                <th class="text-center px-3 py-2.5 font-bold" rowspan="2">LI/LP día</th>
                 <th class="text-left px-3 py-2.5 font-bold" rowspan="2">Desvío Crítico</th>
               </tr>
               <tr class="bg-slate-50 text-[9px] text-slate-400 border-b border-slate-100">
@@ -526,14 +658,27 @@
                     {{ row.pasador === 'aprobado' ? 'Sí ✓' : row.pasador === 'condicional' ? 'Revisar' : 'No ✗' }}
                   </span>
                 </td>
+                <td class="px-3 py-3 text-center text-[10px]">
+                  <template v-if="row.sideEval && row.sideEval.state !== 'sin-dato'">
+                    <div class="flex flex-col items-center gap-0.5">
+                      <span class="text-[10px] font-black px-1.5 py-0.5 rounded tracking-wider leading-tight"
+                        :class="row.sideEval.state === 'crit' ? 'bg-red-600 text-white' : row.sideEval.state === 'warn' ? 'bg-amber-500 text-white' : 'bg-emerald-500 text-white'">
+                        {{ row.sideEval.dominantSide === 'EQ' ? 'EQ' : row.sideEval.dominantSide || 'S/D' }}
+                      </span>
+                      <div class="text-[10px] text-slate-500">Δ {{ row.sideEval.deltaPct != null ? row.sideEval.deltaPct.toFixed(1) + '%' : 'S/D' }}</div>
+                    </div>
+                  </template>
+                  <span v-else class="text-slate-300">N/D</span>
+                </td>
                 <!-- Desvío crítico -->
                 <td class="px-3 py-3 text-[10px] max-w-52">
-                  <template v-if="row.desvios.length || row.hviAlerts.length">
+                  <template v-if="row.desvios.length || row.hviAlerts.length || row.sideAlerts.length">
                     <div v-for="d in row.desvios" :key="d.key" class="text-red-600 font-medium">
                       {{ aptDesvioLabel(d.key) }}: {{ d.val != null ? d.val.toFixed(1) : '?' }}
                       {{ d.tipo === 'min' ? '↓ mín' : '↑ máx' }} {{ d.req }}
                     </div>
                     <div v-for="a in row.hviAlerts" :key="a" class="text-amber-600">🌿 {{ a }}</div>
+                    <div v-for="a in row.sideAlerts" :key="a" class="text-indigo-600">↔️ {{ a }}</div>
                   </template>
                   <span v-else class="text-emerald-500 font-medium">✓ Sin desvíos</span>
                 </td>
@@ -623,22 +768,6 @@
           </div>
         </div>
 
-        <!-- Comentarios de Planta -->
-        <div v-if="tablaAptitud.some(r => r.comentarios.length > 0)" class="px-6 py-4 border-t border-slate-100 space-y-1.5">
-          <h3 class="text-xs font-bold text-slate-600 uppercase tracking-wide flex items-center gap-1.5 mb-2">
-            💬 Comentarios de Planta
-            <span class="text-[9px] font-normal text-slate-400 normal-case">(vocabulario de hilandería)</span>
-          </h3>
-          <div v-for="row in tablaAptitud" :key="`com-${row.neKey}`">
-            <div v-if="row.comentarios.length" class="text-xs text-slate-600 bg-slate-50 rounded-lg px-3 py-2 flex items-start gap-3">
-              <span class="font-bold text-slate-500 shrink-0 font-mono inline-block" :style="{ width: `${comentarioTituloWidthCh}ch` }">Ne {{ row.neDisplay }}:</span>
-              <div class="min-w-0 flex-1 space-y-0.5">
-                <div v-for="(com, ci) in row.comentarios" :key="ci">{{ com }}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
         <!-- Botón Alerta WhatsApp -->
         <div class="px-6 py-4 border-t border-slate-100 flex items-center gap-3">
           <button @click="copiarAlertaWhatsApp"
@@ -663,6 +792,18 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import CustomDatepicker from '@/components/CustomDatepicker.vue'
+import {
+  QUALITY_MATRIX_VERSION,
+  HVI_ROW_DEFS as SHARED_HVI_ROW_DEFS,
+  HILO_ROW_DEFS as SHARED_HILO_ROW_DEFS,
+  PROC_VARS,
+  getProcVarsForRow,
+  getMatrizRequisitos,
+  evalUmbral,
+  computeEta,
+  evaluateBenningerAptitude,
+  evaluateSideImbalance,
+} from '@shared/qualityMatrix.js'
 
 function defaultYesterdayISO() {
   const d = new Date()
@@ -685,10 +826,11 @@ function hashPayload(obj) {
 const LS_KEY        = 'dmh_lotesInput'
 const lotesInput    = ref(localStorage.getItem(LS_KEY) ?? '107, 108, 109')
 watch(lotesInput, v => localStorage.setItem(LS_KEY, v))
-const neFilter      = ref('')
+const LS_KEY_FECHA  = 'dmh_fechaCorte'
 const loading       = ref(false)
 const rows          = ref([])
 const proveedores   = ref([])
+const sideDaily     = ref([])
 const cardasContext = ref(null)
 const narrativa     = ref('')
 const narrativaError= ref('')
@@ -699,14 +841,20 @@ const modoLocalAutomatico = ref(false)
 const geminiCuotaDiariaAgotada = ref(false)
 const whatsappCopiado = ref(false)
 const narrativaCopiada = ref(false)
-const fechaCorte = ref(defaultYesterdayISO())
+const fechaCorte = ref(localStorage.getItem(LS_KEY_FECHA) ?? defaultYesterdayISO())
 
-watch(fechaCorte, () => {
+watch(fechaCorte, async () => {
+  localStorage.setItem(LS_KEY_FECHA, fechaCorte.value)
   narrativa.value = ''
   narrativaError.value = ''
   narrativaFuente.value = ''
   narrativaAviso.value = ''
   geminiCuotaDiariaAgotada.value = false
+
+  // El datepicker en header gobierna el dashboard completo.
+  if (rows.value.length > 0 && !loading.value) {
+    await analizar()
+  }
 })
 
 async function copiarNarrativa() {
@@ -728,98 +876,8 @@ async function copiarNarrativa() {
 }
 
 // ── Definición de filas de tabla ──────────────────────────────────────────
-const HVI_ROWS = [
-  { key: 'str',       label: 'STR — Tenacidad Fibra', unit: 'g/tex',   dec: 2, thresholds: [27, 25],   inverse: false },
-  { key: 'sci',       label: 'SCI — Índice Hilabilidad', unit: '',      dec: 1, thresholds: [145, 130], inverse: false },
-  { key: 'mic',       label: 'MIC — Finura / Madurez', unit: 'mic',    dec: 3, thresholds: null,       inverse: false },
-  { key: 'uhml',      label: 'UHML — Longitud', unit: 'mm',            dec: 2, thresholds: null,       inverse: false },
-  { key: 'ui',        label: 'UI — Uniformidad Fibra', unit: '%',      dec: 2, thresholds: [84, 82],   inverse: false },
-  { key: 'elg_fibra', label: 'ELG — Elong. Fibra', unit: '%',          dec: 2, thresholds: null,       inverse: false },
-  { key: 'n_fardos',  label: 'Fardos analizados', unit: '',            dec: 0, thresholds: null,       inverse: false },
-]
-
-const HILO_ROWS = [
-  { key: 'tenacidad',  label: 'Tenacidad', unit: 'cN/tex', dec: 2, thresholds: [16, 14.5],  inverse: false },
-  { key: 'elongacion', label: 'Elongación', unit: '%',     dec: 2, thresholds: [8, 7.5],    inverse: false },
-  { key: 'cvm',        label: 'CVm% — Irregularidad', unit: '%', dec: 2, thresholds: [12, 13], inverse: true },
-  { key: 'vellosidad', label: 'H — Vellosidad', unit: '',  dec: 2, thresholds: null,         inverse: true },
-  { key: 'neps_200',   label: 'Neps +200%', unit: '/km',  dec: 1, thresholds: [500, 700],   inverse: true },
-  { key: 'thin_50',    label: 'Puntos Delgados −50%', unit: '/km', dec: 1, thresholds: null, inverse: true },
-  { key: 'thick_50',   label: 'Puntos Gruesos +50%', unit: '/km', dec: 1, thresholds: null,  inverse: true },
-  { key: 'n_uster',      label: 'Ensayos Uster (por Ne)', unit: '', dec: 0, thresholds: null, inverse: false },
-]
-
-// ── Matriz de Requisitos Mínimos — Denim ──────────────────────────────────
-// ok = umbral bueno (verde), w = umbral precaución (amarillo); fuera de w = crítico (rojo)
-// t: 'min' → valor mayor = mejor; 'max' → valor menor = mejor
-const MATRIZ_REQUISITOS = {
-  '7':    { app: 'Trama',    dest: ['TELAR'], sciMin: 115, strMin: 24,  umb: { tenacidad: { ok: 14.0, w: 13.0, t: 'min' }, elongacion: { ok: 7.0, w: 6.0, t: 'min' }, cvm: { ok: 13.5, w: 14.5, t: 'max' }, neps_200: { ok: 700, w: 850, t: 'max' }, vellosidad: { ok: 7.0, w: 8.0, t: 'max' } } },
-  '9':    { app: 'Trama',    dest: ['TELAR'], sciMin: 120, strMin: 25,  umb: { tenacidad: { ok: 14.5, w: 13.5, t: 'min' }, elongacion: { ok: 7.0, w: 6.5, t: 'min' }, cvm: { ok: 13.0, w: 14.0, t: 'max' }, neps_200: { ok: 600, w: 750, t: 'max' }, vellosidad: { ok: 6.5, w: 7.5, t: 'max' } } },
-  '10':   { app: 'Urdimbre', dest: ['URDIDORA','INDIGO','TELAR'], sciMin: 130, strMin: 26, umb: { tenacidad: { ok: 16.0, w: 15.0, t: 'min' }, elongacion: { ok: 8.0, w: 7.5, t: 'min' }, cvm: { ok: 12.0, w: 13.0, t: 'max' }, neps_200: { ok: 500, w: 650, t: 'max' }, vellosidad: { ok: 6.0, w: 7.0, t: 'max' } } },
-  '12.5': { app: 'Urdimbre', dest: ['URDIDORA','INDIGO','TELAR'], sciMin: 135, strMin: 27, umb: { tenacidad: { ok: 16.5, w: 15.5, t: 'min' }, elongacion: { ok: 8.0, w: 7.5, t: 'min' }, cvm: { ok: 11.5, w: 12.5, t: 'max' }, neps_200: { ok: 450, w: 600, t: 'max' }, vellosidad: { ok: 5.5, w: 6.5, t: 'max' } } },
-  '14':   { app: 'Urdimbre', dest: ['URDIDORA','INDIGO','TELAR'], sciMin: 140, strMin: 28, umb: { tenacidad: { ok: 17.0, w: 16.0, t: 'min' }, elongacion: { ok: 8.5, w: 8.0, t: 'min' }, cvm: { ok: 11.0, w: 12.0, t: 'max' }, neps_200: { ok: 400, w: 550, t: 'max' }, vellosidad: { ok: 5.0, w: 6.0, t: 'max' } } },
-}
-
-const FLAME_UMB_AJUSTES = {
-  cvm: { ok: 18.0, w: 20.0, t: 'max' },
-  neps_200: { ok: 700, w: 850, t: 'max' },
-}
-
-function resolveMatrizBaseByNe(neValue) {
-  if (!Number.isFinite(neValue)) return null
-  let bestKey = null
-  let bestNum = null
-  let bestDist = Number.POSITIVE_INFINITY
-
-  for (const key of Object.keys(MATRIZ_REQUISITOS)) {
-    const num = parseFloat(key)
-    if (!Number.isFinite(num)) continue
-    const dist = Math.abs(num - neValue)
-    if (dist < bestDist || (Math.abs(dist - bestDist) < 1e-9 && num > (bestNum ?? -Infinity))) {
-      bestDist = dist
-      bestNum = num
-      bestKey = key
-    }
-  }
-
-  return bestDist <= 2 ? bestKey : null
-}
-
-function getMatrizRequisitos(neValue, isFlame = false) {
-  const key = resolveMatrizBaseByNe(neValue)
-  if (!key) return null
-
-  const base = MATRIZ_REQUISITOS[key]
-  if (!base || !isFlame || neValue < 9) return base
-
-  return {
-    ...base,
-    app: 'Urdimbre Flame',
-    umb: {
-      ...base.umb,
-      ...FLAME_UMB_AJUSTES,
-    },
-  }
-}
-// Variables críticas por proceso productivo
-const PROC_VARS = {
-  URDIDORA: { label: '🏭 Urdidora',   vars: ['elongacion', 'tenacidad', 'thin_50'], tip: 'Tensión de urdido — elongación y resistencia críticas' },
-  INDIGO:   { label: '🎨 Índigo',      vars: ['neps_200', 'cvm', 'vellosidad'],      tip: 'Teñido en manta — neps y uniformidad de masa' },
-  TELAR:    { label: '🔧 Telar aire',  vars: ['tenacidad', 'elongacion', 'cvm', 'neps_200'], tip: 'Alta velocidad — exige tenacidad, CVm% y limpieza' },
-}
-
-function getProcVarsForRow(proc, isFlame = false) {
-  const base = PROC_VARS[proc]
-  if (!base || !isFlame) return base
-
-  if (proc === 'INDIGO') {
-    return { ...base, vars: ['neps_200', 'vellosidad'] }
-  }
-  if (proc === 'TELAR') {
-    return { ...base, vars: ['tenacidad', 'elongacion', 'neps_200'] }
-  }
-  return base
-}
+const HVI_ROWS = SHARED_HVI_ROW_DEFS
+const HILO_ROWS = SHARED_HILO_ROW_DEFS
 
 // ── Computed ───────────────────────────────────────────────────────────────
 const hasData     = computed(() => rows.value.length > 0)
@@ -839,6 +897,33 @@ function buildNeKey(ne, isFlame) {
 
 function formatNeDisplay(ne, isFlame) {
   return `${String(ne)}${isFlame ? ' FLAME' : ''}`
+}
+
+function toDateKey(value) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10)
+  }
+  const raw = String(value ?? '').trim()
+  if (!raw) return null
+  const iso = raw.match(/^(\d{4}-\d{2}-\d{2})/)
+  if (iso) return iso[1]
+  const br = raw.match(/^([0-3]?\d)\/([0-1]?\d)\/(\d{2}|\d{4})/)
+  if (br) {
+    const dd = br[1].padStart(2, '0')
+    const mm = br[2].padStart(2, '0')
+    const yy = br[3].length === 2
+      ? String((Number(br[3]) >= 70 ? 1900 : 2000) + Number(br[3]))
+      : br[3]
+    return `${yy}-${mm}-${dd}`
+  }
+  const parsed = new Date(raw)
+  if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10)
+  return null
+}
+
+function fmtDateDdMm(value) {
+  const key = toDateKey(value)
+  return key ? `${key.slice(8, 10)}/${key.slice(5, 7)}` : 'S/D'
 }
 
 const allNes      = computed(() => {
@@ -901,6 +986,152 @@ function getHiloCount(mistura) {
   return neRows.reduce((acc, r) => acc + (Number(r.n_uster) || 0), 0) || '–'
 }
 
+const aptitudUrdimbreActual = computed(() => {
+  if (!hasData.value || !loteActual.value) return []
+  const actual = Number(loteActual.value)
+  const hviActual = rows.value.find(r => Number(r.mistura) === actual) || {}
+  const strFibraActual = hviActual?.str != null ? parseFloat(hviActual.str) : null
+  const urdimbresActuales = rows.value.filter(r => Number(r.mistura) === actual && r.ne != null && parseFloat(r.ne) >= 10)
+
+  return urdimbresActuales.map((row) => {
+    const isFlame = parseFlameFlag(row.is_flame)
+    const neValue = parseFloat(row.ne)
+    const referenceEtas = rows.value
+      .filter(r => Number(r.mistura) !== actual && String(r.ne) === String(row.ne) && parseFlameFlag(r.is_flame) === isFlame)
+      .map(r => {
+        const refHvi = rows.value.find(h => Number(h.mistura) === Number(r.mistura))
+        return computeEta(refHvi?.str, r.tenacidad)
+      })
+      .filter(v => v != null)
+
+    const evaluation = evaluateBenningerAptitude({
+      neValue,
+      isFlame,
+      tenacidad: row.tenacidad,
+      trabajoB: row.trabajo_b,
+      strFibra: strFibraActual,
+      referenceEtas,
+    })
+
+    const stateMeta = {
+      ok: {
+        label: 'Apto urdimbre',
+        icon: '✅',
+        className: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+      },
+      warn: {
+        label: 'Revisar Benninger',
+        icon: '⚠️',
+        className: 'border-amber-200 bg-amber-50 text-amber-800',
+      },
+      crit: {
+        label: evaluation.blocked ? 'Bloqueo Benninger' : 'Riesgo alto',
+        icon: evaluation.blocked ? '🚫' : '🔴',
+        className: 'border-red-200 bg-red-50 text-red-800',
+      },
+      na: {
+        label: 'No aplica',
+        icon: '—',
+        className: 'border-slate-200 bg-slate-50 text-slate-500',
+      },
+    }[evaluation.state] || {
+      label: 'Sin dato',
+      icon: '?',
+      className: 'border-slate-200 bg-slate-50 text-slate-500',
+    }
+
+    return {
+      neDisplay: formatNeDisplay(row.ne, isFlame),
+      tenacidad: row.tenacidad != null ? parseFloat(row.tenacidad) : null,
+      trabajoB: row.trabajo_b != null ? parseFloat(row.trabajo_b) : null,
+      eta: evaluation.eta,
+      baselineEta: evaluation.baselineEta,
+      blocked: evaluation.blocked,
+      state: evaluation.state,
+      reasons: evaluation.reasons,
+      meta: stateMeta,
+    }
+  })
+})
+
+const sideImbalanceActual = computed(() => {
+  if (!hasData.value || !loteActual.value || !sideDaily.value.length) return []
+
+  const actual = Number(loteActual.value)
+  const corteKey = toDateKey(fechaCorte.value)
+  const grouped = new Map()
+
+  for (const row of sideDaily.value) {
+    if (Number(row.mistura) !== actual) continue
+    const side = String(row.side || '').trim().toUpperCase()
+    if (side !== 'LI' && side !== 'LP') continue
+
+    const isFlame = parseFlameFlag(row.is_flame)
+    const neKey = buildNeKey(row.ne, isFlame)
+    const dateKey = toDateKey(row.fecha) || toDateKey(row.fecha_txt)
+    if (!dateKey) continue
+
+    const mapKey = `${neKey}|${dateKey}`
+    if (!grouped.has(mapKey)) {
+      grouped.set(mapKey, {
+        neKey,
+        ne: row.ne,
+        isFlame,
+        dateKey,
+        fechaTxt: row.fecha_txt || fmtDateDdMm(row.fecha),
+        LI: null,
+        LP: null,
+      })
+    }
+    grouped.get(mapKey)[side] = row
+  }
+
+  const byNe = new Map()
+  for (const item of grouped.values()) {
+    if (!byNe.has(item.neKey)) byNe.set(item.neKey, [])
+    byNe.get(item.neKey).push(item)
+  }
+
+  const sideRows = []
+  for (const [neKey, entries] of byNe.entries()) {
+    entries.sort((a, b) => a.dateKey.localeCompare(b.dateKey))
+    const chosen = (() => {
+      if (!corteKey) return entries[entries.length - 1]
+      const prevOrEqual = entries.filter(x => x.dateKey <= corteKey)
+      return (prevOrEqual.length ? prevOrEqual[prevOrEqual.length - 1] : entries[entries.length - 1])
+    })()
+    if (!chosen) continue
+
+    const evaluation = evaluateSideImbalance({ left: chosen.LI, right: chosen.LP })
+    sideRows.push({
+      neKey,
+      neDisplay: formatNeDisplay(chosen.ne, chosen.isFlame),
+      dateKey: chosen.dateKey,
+      fechaTxt: chosen.fechaTxt || fmtDateDdMm(chosen.dateKey),
+      evaluation,
+      left: chosen.LI,
+      right: chosen.LP,
+    })
+  }
+
+  const severity = { crit: 3, warn: 2, ok: 1, 'sin-dato': 0 }
+  return sideRows.sort((a, b) => {
+    const d = (severity[b.evaluation?.state] ?? 0) - (severity[a.evaluation?.state] ?? 0)
+    if (d !== 0) return d
+    return parseFloat(String(b.neDisplay)) - parseFloat(String(a.neDisplay))
+  })
+})
+
+const sideImbalanceByNeKey = computed(() => {
+  const map = new Map()
+  for (const item of sideImbalanceActual.value) map.set(item.neKey, item)
+  return map
+})
+
+const sideImbalanceCritCount = computed(() =>
+  sideImbalanceActual.value.filter(i => i.evaluation?.state === 'crit').length
+)
+
 function fmt(val, dec = 2) {
   if (val == null || isNaN(val)) return '–'
   return Number(val).toFixed(dec)
@@ -921,11 +1152,28 @@ function semaforo(mistura) {
     const elo = r.elongacion != null ? parseFloat(r.elongacion) : null
     const nps = r.neps_200 != null ? parseFloat(r.neps_200) : null
     const cvm = r.cvm != null ? parseFloat(r.cvm) : null
+    const trabajoB = r.trabajo_b != null ? parseFloat(r.trabajo_b) : null
+    const strFibra = getHVI(mistura, 'str')
     const neTxt = formatNeDisplay(r.ne, rowIsFlame)
     const cvmWarn = mat?.umb?.cvm?.w ?? (rowIsFlame ? 20.0 : 12.5)
     const cvmCrit = cvmWarn + (rowIsFlame ? 0.8 : 0.6)
     const tenEval = evalUmbral(ten, mat?.umb?.tenacidad)
     const eloEval = evalUmbral(elo, mat?.umb?.elongacion)
+    const referenceEtas = rows.value
+      .filter(other => Number(other.mistura) !== Number(mistura) && String(other.ne) === String(r.ne) && parseFlameFlag(other.is_flame) === rowIsFlame)
+      .map(other => {
+        const refStr = getHVI(other.mistura, 'str')
+        return computeEta(refStr, other.tenacidad)
+      })
+      .filter(v => v != null)
+    const benningerEval = evaluateBenningerAptitude({
+      neValue: neNum,
+      isFlame: rowIsFlame,
+      tenacidad: ten,
+      trabajoB,
+      strFibra,
+      referenceEtas,
+    })
 
     if (ten != null) {
       if (app.startsWith('Urdimbre') && ten < 16.0) {
@@ -983,6 +1231,20 @@ function semaforo(mistura) {
         if (level === 'verde') level = 'amarillo'
         issues.push(`Ne ${neTxt}: CVm% ${cvm.toFixed(2)} sobre estándar (${cvmWarn.toFixed(2)}) — ${rowIsFlame ? 'controlar estabilidad visual flame' : 'masa irregular en teñido'}.`)
       }
+    }
+
+    if (benningerEval.state === 'crit') {
+      level = 'rojo'
+      if (benningerEval.blocked) {
+        issues.push(`Ne ${neTxt}: bloqueo Benninger por Tenacidad/Trabajo B fuera de banda.`)
+      } else if (benningerEval.reasons.includes('trabajo_b')) {
+        issues.push(`Ne ${neTxt}: Trabajo B comprometido para urdimbre/Benninger.`)
+      } else if (benningerEval.reasons.includes('eta')) {
+        issues.push(`Ne ${neTxt}: eta por debajo de la ventana comparable.`)
+      }
+    } else if (benningerEval.state === 'warn') {
+      if (level === 'verde') level = 'amarillo'
+      issues.push(`Ne ${neTxt}: aptitud Benninger en observacion (${benningerEval.reasons.join(', ')}).`)
     }
   }
 
@@ -1063,13 +1325,6 @@ function trendClass(base, current, inverse = false) {
   return better ? 'text-emerald-500' : 'text-red-400'
 }
 
-// ── Auditoría de Aptitud por Proceso ──────────────────────────────────────
-function evalUmbral(val, umbral) {
-  if (val == null || !umbral) return 'sin-dato'
-  if (umbral.t === 'min') return val >= umbral.ok ? 'ok' : val >= umbral.w ? 'warn' : 'crit'
-  return val <= umbral.ok ? 'ok' : val <= umbral.w ? 'warn' : 'crit'
-}
-
 function aptCellClass(estado) {
   return {
     'ok':       'bg-emerald-50 text-emerald-700 font-bold',
@@ -1097,79 +1352,14 @@ function aptPasadorClass(p) {
 }
 
 function aptDesvioLabel(key) {
-  return { cvm: 'CVm%', neps_200: 'Neps +200%', tenacidad: 'Tenac.', elongacion: 'Elong.', vellosidad: 'Vell. H' }[key] || key
-}
-
-function generarComentarioPlanta(ne, app, vals, hvi, isFlame = false) {
-  const coms = []
-  const neNum = parseFloat(String(ne).replace(',', '.'))
-  const mat = getMatrizRequisitos(neNum, isFlame)
-  const cvmWarn = mat?.umb?.cvm?.w ?? (isFlame ? 20.0 : 12.5)
-
-  // Tenacidad — vocabulario de planta
-  if (vals.tenacidad != null) {
-    if (app.startsWith('Urdimbre') && vals.tenacidad < 16.0) {
-      coms.push(`⚠️ Tenacidad ${vals.tenacidad.toFixed(1)} cN/tex (<16) en urdimbre. Se esperan paradas por rotura de cabos en batea.`)
-    } else if (vals.tenacidad >= 18) {
-      coms.push(`Va sobrado de fuerza (${vals.tenacidad.toFixed(1)} cN/tex). Hilo robusto para alta exigencia.`)
-    } else if (vals.tenacidad >= 16) {
-      coms.push(`Tenacidad sólida (${vals.tenacidad.toFixed(1)} cN/tex). Margen razonable para línea Benninger.`)
-    } else if (vals.tenacidad >= 14.5) {
-      coms.push(`Tenacidad justa (${vals.tenacidad.toFixed(1)} cN/tex). Sin reserva ante picos de tensión.`)
-    } else {
-      coms.push(`⚠️ Tenacidad crítica (${vals.tenacidad.toFixed(1)} cN/tex). Alta probabilidad de rotura.`)
-    }
-  }
-
-  // CVm% para Trama — barreado
-  if (app === 'Trama' && vals.cvm != null) {
-    if (vals.cvm > cvmWarn + 0.6) coms.push(`CVm ${vals.cvm.toFixed(1)}% muy por encima del estándar (${cvmWarn.toFixed(1)}%). Barreado visible con índigo.`)
-    else if (vals.cvm > cvmWarn) coms.push(`CVm ${vals.cvm.toFixed(1)}% sobre estándar (${cvmWarn.toFixed(1)}%). Ojo con barreado si se acelera la corrida.`)
-    else coms.push(`Masa estable (CVm ${vals.cvm.toFixed(1)}%). Sin riesgo de barreado.`)
-  }
-
-  // CVm% para Urdimbre — uniformidad
-  if (app.startsWith('Urdimbre') && vals.cvm != null) {
-    if (isFlame) {
-      if (vals.cvm > 20) coms.push(`CVm ${vals.cvm.toFixed(1)}% — variación flame fuera de banda. Revisar receta y estiraje de fantasía.`)
-      else if (vals.cvm > 18) coms.push(`CVm ${vals.cvm.toFixed(1)}% — efecto flame intenso; monitorear estabilidad visual entre partidas.`)
-      else coms.push(`CVm ${vals.cvm.toFixed(1)}% — variación consistente con hilo flame, sin impacto estructural relevante.`)
-    } else if (vals.cvm > cvmWarn + 0.6) {
-      coms.push(`CVm ${vals.cvm.toFixed(1)}% — fuera de estándar de título (${cvmWarn.toFixed(1)}%). Alto riesgo de barreado en índigo.`)
-    } else if (vals.cvm > cvmWarn) {
-      coms.push(`CVm ${vals.cvm.toFixed(1)}% — por encima del estándar (${cvmWarn.toFixed(1)}%). Vigilar uniformidad en slashing.`)
-    }
-  }
-
-  // Elongación para Urdimbre
-  if (app.startsWith('Urdimbre') && vals.elongacion != null) {
-    if (vals.elongacion >= 8.5) coms.push(`Elongación ${vals.elongacion.toFixed(1)}%: buena reserva elástica para stretch programado.`)
-    else if (vals.elongacion >= 8.0) coms.push(`Elongación ${vals.elongacion.toFixed(1)}%: cumple mínimo operativo para control de tensión Benninger.`)
-    else if (vals.elongacion >= 7.5) coms.push(`Elongación ${vals.elongacion.toFixed(1)}% (<8): riesgo en rodillos exprimidores y cajas de oxidación.`)
-    else coms.push(`⚠️ Elongación ${vals.elongacion.toFixed(1)}% muy baja: alto riesgo de rotura bajo tensión constante de manta.`)
-  }
-
-  // Neps para Índigo
-  if (app.startsWith('Urdimbre') && vals.neps_200 != null) {
-    if (vals.neps_200 < 200) coms.push(`Hilo muy limpio para Índigo (Neps ${vals.neps_200.toFixed(0)}/km). Teñido uniforme.`)
-    else if (vals.neps_200 < 500) coms.push(`Neps aceptables para Índigo (${vals.neps_200.toFixed(0)}/km).`)
-    else if (vals.neps_200 < (isFlame ? 850 : 700)) coms.push(`Neps en zona de riesgo para Índigo (${vals.neps_200.toFixed(0)}/km). Posibles puntos claros en teñido.`)
-    else coms.push(`⚠️ Neps muy altos (${vals.neps_200.toFixed(0)}/km). Van a saltar en el Índigo — colorante desparejo.`)
-  }
-  // MIC — fibra
-  const mic = hvi.mic != null ? parseFloat(hvi.mic) : null
-  if (mic != null && !isNaN(mic)) {
-    if (mic > 4.5) coms.push(`MIC ${mic.toFixed(2)} (>4.5): menor superficie específica. Riesgo de teñido anular por pobre penetración en cajas Benninger.`)
-    else if (mic < 3.8) coms.push(`MIC ${mic.toFixed(2)} (<3.8): riesgo de neps de color y puntos claros en índigo.`)
-  }
-
-  // STR fibra
-  const str = hvi.str != null ? parseFloat(hvi.str) : null
-  if (str != null && !isNaN(str)) {
-    if (str > 32) coms.push(`Fibra con STR ${str.toFixed(1)} g/tex — va sobrada de fuerza. Impacto positivo directo en tenacidad.`)
-    else if (str < 25) coms.push(`STR ${str.toFixed(1)} g/tex — fibra débil. Limita la tenacidad que se puede lograr con cualquier título.`)
-  }
-  return coms
+  return {
+    cvm: 'CVm%',
+    neps_200: 'Neps +200%',
+    tenacidad: 'Tenac.',
+    elongacion: 'Elong.',
+    vellosidad: 'Vell. H',
+    side_imbalance: 'Δ LI/LP thin-30',
+  }[key] || key
 }
 
 const tablaAptitud = computed(() => {
@@ -1177,6 +1367,7 @@ const tablaAptitud = computed(() => {
   const actual = Number(loteActual.value)
   const hilos = rows.value.filter(r => Number(r.mistura) === actual && r.ne != null)
   const hvi = rows.value.find(r => Number(r.mistura) === actual) || {}
+  const sideMap = sideImbalanceByNeKey.value
 
   return hilos.map(h => {
     const ne = String(h.ne)
@@ -1188,6 +1379,8 @@ const tablaAptitud = computed(() => {
     const app = mat?.app || (nNum <= 9 ? 'Trama' : (isFlame ? 'Urdimbre Flame' : 'Urdimbre'))
     const dest = mat?.dest || (nNum <= 9 ? ['TELAR'] : ['URDIDORA', 'INDIGO', 'TELAR'])
     const umb = mat?.umb || {}
+    const sideRow = sideMap.get(neKey) || null
+    const sideEval = sideRow?.evaluation || null
 
     const pf = (v) => v != null ? parseFloat(v) : null
     const vals = {
@@ -1222,22 +1415,41 @@ const tablaAptitud = computed(() => {
       procesos[proc] = results.includes('crit') ? 'crit' : results.includes('warn') ? 'warn' : 'ok'
     }
 
+    const sideAlerts = []
+    if (app.startsWith('Urdimbre') && sideEval && sideEval.state !== 'sin-dato') {
+      const dom = sideEval.dominantSide === 'EQ' ? 'equilibrado' : `${sideEval.dominantSide} dominante`
+      if (sideEval.state === 'crit') {
+        procesos.URDIDORA = 'crit'
+        desvios.push({ key: 'side_imbalance', val: sideEval.deltaPct, req: 15, tipo: 'max' })
+        sideAlerts.push(`Desbalance crítico ${dom} (Δ ${sideEval.deltaPct?.toFixed(1) || 'S/D'}%).`)
+      } else if (sideEval.state === 'warn') {
+        if (procesos.URDIDORA !== 'crit') procesos.URDIDORA = 'warn'
+        sideAlerts.push(`Desbalance LI/LP en vigilancia ${dom} (Δ ${sideEval.deltaPct?.toFixed(1) || 'S/D'}%).`)
+      }
+    }
+
     // Estado global
     const allP = Object.values(procesos)
     const pasador = allP.includes('crit') ? 'rechazado' : (allP.includes('warn') || hviAlerts.length > 0) ? 'condicional' : 'aprobado'
 
-    const comentarios = generarComentarioPlanta(neDisplay, app, vals, hvi, isFlame)
-
-    return { ne, neDisplay, neKey, isFlame, app, dest, vals, ev, procesos, pasador, desvios, hviAlerts, comentarios, nota: mat?.nota || '' }
+    return {
+      ne,
+      neDisplay,
+      neKey,
+      isFlame,
+      app,
+      dest,
+      vals,
+      ev,
+      procesos,
+      pasador,
+      desvios,
+      hviAlerts,
+      sideEval,
+      sideAlerts,
+      nota: mat?.nota || '',
+    }
   })
-})
-
-const comentarioTituloWidthCh = computed(() => {
-  const maxLen = tablaAptitud.value
-    .filter(r => r.comentarios.length > 0)
-    .map(r => `Ne ${r.neDisplay}:`.length)
-    .reduce((m, len) => Math.max(m, len), 0)
-  return Math.max(8, maxLen)
 })
 
 // ── Alerta WhatsApp — clipboard ───────────────────────────────────────────
@@ -1380,6 +1592,7 @@ async function analizar() {
   if (!lotesInput.value.trim() || loading.value) return
   loading.value = true
   rows.value = []
+  sideDaily.value = []
   cardasContext.value = null
   narrativa.value = ''
   narrativaError.value = ''
@@ -1387,17 +1600,19 @@ async function analizar() {
   try {
     const lotesClean = lotesInput.value.replace(/[^0-9,]/g, '').replace(/,+/g, ',').replace(/^,|,$/g, '')
     const params = new URLSearchParams({ lotes: lotesClean })
-    if (neFilter.value.trim()) params.set('ne', neFilter.value.trim())
+    if (fechaCorte.value) params.set('fecha', fechaCorte.value)
 
     const res = await fetch(`/api/dashboard/mezcla-lotes?${params}`)
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || 'Error al obtener datos')
     rows.value = data.rows || []
     proveedores.value = data.proveedores || []
+    sideDaily.value = data.sideDaily || []
     cardasContext.value = data.cardas || null
   } catch (err) {
     console.error('[DashboardMezclaHilo]', err)
     rows.value = []
+    sideDaily.value = []
     cardasContext.value = null
   } finally {
     loading.value = false
@@ -1412,6 +1627,7 @@ async function generarNarrativa(soloLocal = false, forzar = false) {
   const cachePayload = {
     rows: rows.value,
     proveedores: proveedores.value,
+    sideDaily: sideDaily.value,
     loteActual: loteActual.value,
     fechaCorte: fechaCorte.value,
     modo: usarLocal ? 'local' : 'gemini'
@@ -1447,6 +1663,7 @@ async function generarNarrativa(soloLocal = false, forzar = false) {
       body: JSON.stringify({
         rows: rows.value,
         proveedores: proveedores.value,
+        sideDaily: sideDaily.value,
         loteActual: loteActual.value,
         fechaCorte: fechaCorte.value,
         modo: usarLocal ? 'local' : undefined

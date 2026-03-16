@@ -11,6 +11,15 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getImportStatus, importCSV, importAll, importSpecificTables, importForceAll, renameduplicateHeaders, getTableColumns, compareColumns, addColumnsToTable } from './import-manager.js'
 import configStandardsRouter from './config-standards.js';
 import { optimizeBlend } from './services/blendomat-optimizer.js';
+import {
+  getMatrizRequisitos,
+  evalUmbral,
+  computeEta,
+  evaluateBenningerAptitude,
+  evaluateSideImbalance,
+  buildNarrativaMatrixPromptBlock,
+  buildBenningerPromptBlock,
+} from '../shared/qualityMatrix.js';
 
 const { Pool } = pg
 const app = express()
@@ -9277,12 +9286,17 @@ REGLAS:
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/dashboard/mezcla-lotes
 // Comparativa HVI + Uster + Tensorapid por lotes de mezcla
-// Query: lotes (ej: "107,108,109"), ne (opcional, ej: "10/1")
+// Query: lotes (ej: "107,108,109"), ne (opcional, ej: "10/1"), fecha (opcional, YYYY-MM-DD)
 // ─────────────────────────────────────────────────────────────────────────────
 app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
   try {
-    const { lotes, ne } = req.query;
+    const { lotes, ne, fecha } = req.query;
     if (!lotes) return res.status(400).json({ error: 'Se requiere parámetro lotes (ej: 107,108,109)' });
+
+    const fechaCardas = typeof fecha === 'string' ? fecha.trim() : '';
+    if (fechaCardas && !/^\d{4}-\d{2}-\d{2}$/.test(fechaCardas)) {
+      return res.status(400).json({ error: 'Parámetro fecha inválido. Formato esperado: YYYY-MM-DD' });
+    }
 
     const loteList = [...new Set(
       lotes.split(',').map(l => parseInt(l.trim(), 10)).filter(n => !isNaN(n) && n > 0)
@@ -9435,6 +9449,89 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
     `;
     const provResult = await query(sqlProv, [loteList], 'dashboard/mezcla-lotes/proveedores');
 
+    let sideDaily = [];
+    try {
+      const sqlSideDaily = `
+        WITH side_daily AS (
+          SELECT
+            DATE(COALESCE(
+              CASE WHEN trim(u.time_stamp) ~ '^\\d{2}/\\d{2}/\\d{4}' THEN TO_TIMESTAMP(trim(u.time_stamp), 'DD/MM/YYYY HH24:MI') ELSE NULL END,
+              u.created_at
+            )) AS fecha,
+            COALESCE(
+              (regexp_match(u.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1],
+              (regexp_match(u.lote, '(\\d+)'))[1]
+            )::integer AS mistura,
+            u.nomcount AS ne,
+            CASE WHEN lower(trim(COALESCE(u.matclass, ''))) = 'hilo de fantasia' THEN true ELSE false END AS is_flame,
+            CASE
+              WHEN upper(trim(COALESCE(u.maschnr, ''))) ~ '(^|[[:space:]])LP($|[[:space:]])' THEN 'LP'
+              WHEN upper(trim(COALESCE(u.maschnr, ''))) ~ '(^|[[:space:]])(LI|LIM)($|[[:space:]])' THEN 'LI'
+              ELSE NULL
+            END AS side,
+            ROUND(AVG(t.delg_minus30_km)::numeric, 1) AS thin_30,
+            ROUND(AVG(t.neps_140_km)::numeric, 1) AS neps_140,
+            ROUND(AVG(tt.tenacidad)::numeric, 2) AS tenacidad,
+            ROUND(AVG(tt.elongacion)::numeric, 2) AS elongacion,
+            ROUND(AVG(tt.trabajo)::numeric, 2) AS trabajo_b,
+            COUNT(DISTINCT u.testnr) AS n_tests,
+            string_agg(DISTINCT trim(u.maschnr), ', ' ORDER BY trim(u.maschnr))
+              FILTER (WHERE u.maschnr IS NOT NULL AND trim(u.maschnr) <> '') AS maquinas
+          FROM tb_uster_par u
+          JOIN tb_uster_tbl t ON t.testnr = u.testnr
+          LEFT JOIN tb_tensorapid_par tp ON tp.uster_testnr = u.testnr
+          LEFT JOIN tb_tensorapid_tbl tt ON tt.testnr = tp.testnr
+          WHERE COALESCE(
+              CASE WHEN trim(u.time_stamp) ~ '^\\d{2}/\\d{2}/\\d{4}' THEN TO_TIMESTAMP(trim(u.time_stamp), 'DD/MM/YYYY HH24:MI') ELSE NULL END,
+              u.created_at
+            ) IS NOT NULL
+            AND COALESCE(
+              (regexp_match(u.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1],
+              (regexp_match(u.lote, '(\\d+)'))[1]
+            ) ~ '^\\d+$'
+            AND COALESCE(
+              (regexp_match(u.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1],
+              (regexp_match(u.lote, '(\\d+)'))[1]
+            )::integer = ANY($1::integer[])
+            AND ($2::text IS NULL OR u.nomcount = SPLIT_PART($2, '/', 1) OR u.nomcount::text ILIKE $2)
+          GROUP BY
+            DATE(COALESCE(
+              CASE WHEN trim(u.time_stamp) ~ '^\\d{2}/\\d{2}/\\d{4}' THEN TO_TIMESTAMP(trim(u.time_stamp), 'DD/MM/YYYY HH24:MI') ELSE NULL END,
+              u.created_at
+            )),
+            COALESCE((regexp_match(u.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1], (regexp_match(u.lote, '(\\d+)'))[1])::integer,
+            u.nomcount,
+            CASE WHEN lower(trim(COALESCE(u.matclass, ''))) = 'hilo de fantasia' THEN true ELSE false END,
+            CASE
+              WHEN upper(trim(COALESCE(u.maschnr, ''))) ~ '(^|[[:space:]])LP($|[[:space:]])' THEN 'LP'
+              WHEN upper(trim(COALESCE(u.maschnr, ''))) ~ '(^|[[:space:]])(LI|LIM)($|[[:space:]])' THEN 'LI'
+              ELSE NULL
+            END
+        )
+        SELECT
+          fecha,
+          to_char(fecha, 'DD/MM/YYYY') AS fecha_txt,
+          mistura,
+          ne,
+          is_flame,
+          side,
+          thin_30,
+          neps_140,
+          tenacidad,
+          elongacion,
+          trabajo_b,
+          n_tests,
+          maquinas
+        FROM side_daily
+        WHERE side IS NOT NULL
+        ORDER BY mistura ASC, fecha ASC, ne::numeric ASC NULLS LAST, side ASC`;
+      const sideResult = await query(sqlSideDaily, [loteList, ne || null], 'dashboard/mezcla-lotes/side-daily');
+      sideDaily = sideResult.rows || [];
+    } catch (sideErr) {
+      console.warn('dashboard/mezcla-lotes: sideDaily no disponible:', sideErr.message?.slice(0, 120) || sideErr.message);
+      sideDaily = [];
+    }
+
     // ── Contexto operativo Cardas (última fecha disponible) ──────────────────
     let cardas = {
       disponible: false,
@@ -9473,7 +9570,12 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
           FROM tb_PRODUCCION_CARDA
         ),
         dmax AS (
-          SELECT MAX(data_date) AS data_ref FROM carda_raw
+          SELECT
+            CASE
+              WHEN $1::date IS NULL THEN MAX(data_date)
+              ELSE MAX(data_date) FILTER (WHERE data_date <= $1::date)
+            END AS data_ref
+          FROM carda_raw
         ),
         base AS (
           SELECT cr.*
@@ -9494,7 +9596,7 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
           ROUND(SUM(b.prod_inform)::numeric, 2) AS prod_inform_total,
           ROUND(AVG(b.rpm)::numeric, 2) AS rpm_avg
         FROM dmax d
-        LEFT JOIN base b ON true`, [], 'dashboard/mezcla-lotes/carda-resumen');
+        LEFT JOIN base b ON true`, [fechaCardas || null], 'dashboard/mezcla-lotes/carda-resumen');
 
       const rTurnos = await query(`${cteCarda}
         SELECT
@@ -9506,7 +9608,7 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
           ROUND(SUM(prod_inform)::numeric, 2) AS prod_inform_total
         FROM base
         GROUP BY COALESCE(turno, 'S/D')
-        ORDER BY CASE COALESCE(turno, 'S/D') WHEN 'A' THEN 1 WHEN 'B' THEN 2 WHEN 'C' THEN 3 ELSE 9 END`, [], 'dashboard/mezcla-lotes/carda-turnos');
+        ORDER BY CASE COALESCE(turno, 'S/D') WHEN 'A' THEN 1 WHEN 'B' THEN 2 WHEN 'C' THEN 3 ELSE 9 END`, [fechaCardas || null], 'dashboard/mezcla-lotes/carda-turnos');
 
       const rMaq = await query(`${cteCarda}
         SELECT
@@ -9518,7 +9620,7 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
         FROM base
         GROUP BY COALESCE(maquina, 'S/D')
         ORDER BY AVG(efic_calc) ASC NULLS LAST
-        LIMIT 8`, [], 'dashboard/mezcla-lotes/carda-maquinas-criticas');
+        LIMIT 8`, [fechaCardas || null], 'dashboard/mezcla-lotes/carda-maquinas-criticas');
 
       const rCalidadDato = await query(`${cteCarda}
         SELECT
@@ -9527,7 +9629,7 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
           COUNT(*) FILTER (WHERE COALESCE(efic_calc, 0) = 0)::int AS efic_calc_cero,
           COUNT(*) FILTER (WHERE COALESCE(rpm, 0) = 0)::int AS rpm_cero,
           COUNT(*) FILTER (WHERE maquina IS NULL OR maquina = '')::int AS maquina_sin_dato
-        FROM base`, [], 'dashboard/mezcla-lotes/carda-calidad-dato');
+        FROM base`, [fechaCardas || null], 'dashboard/mezcla-lotes/carda-calidad-dato');
 
       const resumen = rResumen.rows?.[0] || null;
       if (resumen?.data_ref) {
@@ -9551,7 +9653,7 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
       };
     }
 
-    res.json({ success: true, rows: result.rows, proveedores: provResult.rows, lotes: loteList, cardas });
+    res.json({ success: true, rows: result.rows, proveedores: provResult.rows, lotes: loteList, cardas, sideDaily });
   } catch (err) {
     console.error('Error /api/dashboard/mezcla-lotes:', err.message);
     res.status(500).json({ error: err.message });
@@ -9561,7 +9663,7 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Genera el informe de forma local (sin IA externa) — siempre disponible
 // ─────────────────────────────────────────────────────────────────────────────
-function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha = [], rowsMaquinas = [], rowsProduccionOe = [], fechaCorte = null) {
+function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha = [], rowsMaquinas = [], rowsProduccionOe = [], fechaCorte = null, sideDaily = []) {
   const lotesSorted = [...new Set(rows.map(r => Number(r.mistura)))].sort((a, b) => a - b);
   const actual = loteActual ? Number(loteActual) : Math.max(...lotesSorted);
   const refs   = lotesSorted.filter(l => l !== actual);
@@ -9573,57 +9675,7 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
     return t === 'true' || t === '1' || t === 't' || t === 'yes';
   };
   const neLabel = (r) => `${r?.ne}${isFlame(r) ? ' FLAME' : ''}`;
-  const MATRIZ_BASE = {
-    '7':    { app: 'Trama',    dest: ['TELAR'],                     sciMin: 115, strMin: 24, umb: { tenacidad: { ok: 14.0, w: 13.0, t: 'min' }, elongacion: { ok: 7.0, w: 6.0, t: 'min' }, cvm: { ok: 13.5, w: 14.5, t: 'max' }, neps_200: { ok: 700, w: 850, t: 'max' } } },
-    '9':    { app: 'Trama',    dest: ['TELAR'],                     sciMin: 120, strMin: 25, umb: { tenacidad: { ok: 14.5, w: 13.5, t: 'min' }, elongacion: { ok: 7.0, w: 6.5, t: 'min' }, cvm: { ok: 13.0, w: 14.0, t: 'max' }, neps_200: { ok: 600, w: 750, t: 'max' } } },
-    '10':   { app: 'Urdimbre', dest: ['URDIDORA','INDIGO','TELAR'], sciMin: 130, strMin: 26, umb: { tenacidad: { ok: 16.0, w: 15.0, t: 'min' }, elongacion: { ok: 8.0, w: 7.5, t: 'min' }, cvm: { ok: 12.0, w: 13.0, t: 'max' }, neps_200: { ok: 500, w: 650, t: 'max' } } },
-    '12.5': { app: 'Urdimbre', dest: ['URDIDORA','INDIGO','TELAR'], sciMin: 135, strMin: 27, umb: { tenacidad: { ok: 16.5, w: 15.5, t: 'min' }, elongacion: { ok: 8.0, w: 7.5, t: 'min' }, cvm: { ok: 11.5, w: 12.5, t: 'max' }, neps_200: { ok: 450, w: 600, t: 'max' } } },
-    '14':   { app: 'Urdimbre', dest: ['URDIDORA','INDIGO','TELAR'], sciMin: 140, strMin: 28, umb: { tenacidad: { ok: 17.0, w: 16.0, t: 'min' }, elongacion: { ok: 8.5, w: 8.0, t: 'min' }, cvm: { ok: 11.0, w: 12.0, t: 'max' }, neps_200: { ok: 400, w: 550, t: 'max' } } },
-  };
-  const resolveMatrizKey = (neValue) => {
-    if (!Number.isFinite(neValue)) return null;
-    let bestKey = null;
-    let bestNum = null;
-    let bestDist = Number.POSITIVE_INFINITY;
-    for (const key of Object.keys(MATRIZ_BASE)) {
-      const num = parseFloat(key);
-      if (!Number.isFinite(num)) continue;
-      const dist = Math.abs(num - neValue);
-      if (dist < bestDist || (Math.abs(dist - bestDist) < 1e-9 && num > (bestNum ?? -Infinity))) {
-        bestDist = dist;
-        bestNum = num;
-        bestKey = key;
-      }
-    }
-    return bestDist <= 2 ? bestKey : null;
-  };
-  const getMatriz = (neValue, flame) => {
-    const key = resolveMatrizKey(neValue);
-    if (!key) return null;
-    const base = MATRIZ_BASE[key];
-    if (!base || !flame || neValue < 9) return base;
-    return {
-      ...base,
-      app: 'Urdimbre Flame',
-      umb: {
-        ...base.umb,
-        cvm: { ok: 18.0, w: 20.0, t: 'max' },
-        neps_200: { ok: 700, w: 850, t: 'max' },
-      },
-    };
-  };
-  const evalUmbral = (value, umbral) => {
-    if (value == null || !Number.isFinite(value) || !umbral) return 'sin-dato';
-    const warn = Number.isFinite(umbral.w) ? umbral.w : umbral.ok;
-    if (umbral.t === 'min') {
-      if (value >= umbral.ok) return 'ok';
-      if (value >= warn) return 'warn';
-      return 'crit';
-    }
-    if (value <= umbral.ok) return 'ok';
-    if (value <= warn) return 'warn';
-    return 'crit';
-  };
+  const getMatriz = (neValue, flame) => getMatrizRequisitos(neValue, flame);
   const pct = (a, b) => {
     if (a == null || b == null) return '';
     const d = parseFloat(b) - parseFloat(a);
@@ -9735,7 +9787,22 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
     const elo = parseFloat(h.elongacion);
     const nps = parseFloat(h.neps_200);
     const cvm = parseFloat(h.cvm);
+    const trabajoB = parseFloat(h.trabajo_b);
     const neTxt = neLabel(h);
+    const refEtas = dataRefs
+      .map((ref) => {
+        const sameNe = ref.hilos.find((candidate) => String(candidate.ne) === String(h.ne) && isFlame(candidate) === flame);
+        return sameNe ? computeEta(ref.hvi?.str, sameNe.tenacidad) : null;
+      })
+      .filter((value) => Number.isFinite(value));
+    const benningerEval = evaluateBenningerAptitude({
+      neValue: parseFloat(h.ne),
+      isFlame: flame,
+      tenacidad: ten,
+      trabajoB,
+      strFibra: dataActual.hvi?.str,
+      referenceEtas: refEtas,
+    });
     if (!isNaN(ten) && ten < 14.5) { nivelGlobal = 'ROJO'; alertas.push(`Ne${neTxt}: Tenacidad crítica (${f(ten)} cN/tex < 14.5)`); }
     else if (!isNaN(ten) && ten < 16.0) { if (nivelGlobal === 'VERDE') nivelGlobal = 'AMARILLO'; alertas.push(`Ne${neTxt}: Tenacidad en zona de precaución (${f(ten)} cN/tex)`); }
     if (!isNaN(elo) && elo < 7.5) { if (nivelGlobal === 'VERDE') nivelGlobal = 'AMARILLO'; alertas.push(`Ne${neTxt}: Elongación ${f(elo)}% – riesgo rotura en Urdidora`); }
@@ -9756,6 +9823,19 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
         if (nivelGlobal === 'VERDE') nivelGlobal = 'AMARILLO';
         alertas.push(`Ne${neTxt}: CVm% ${f(cvm)} – ${flame ? 'controlar efecto flame' : 'masa irregular'}`);
       }
+    }
+    if (benningerEval.state === 'crit') {
+      nivelGlobal = 'ROJO';
+      if (benningerEval.blocked) {
+        alertas.push(`Ne${neTxt}: Bloqueo Benninger por Tenacidad + Trabajo B fuera de banda`);
+      } else if (benningerEval.reasons.includes('trabajo_b')) {
+        alertas.push(`Ne${neTxt}: Trabajo B crítico para urdimbre/Benninger (${f(trabajoB)})`);
+      } else if (benningerEval.reasons.includes('eta')) {
+        alertas.push(`Ne${neTxt}: eta por debajo de la ventana comparable (${f(benningerEval.eta, 1)}%)`);
+      }
+    } else if (benningerEval.state === 'warn') {
+      if (nivelGlobal === 'VERDE') nivelGlobal = 'AMARILLO';
+      alertas.push(`Ne${neTxt}: Aptitud Benninger en observación (${benningerEval.reasons.join(', ')})`);
     }
   }
 
@@ -9933,6 +10013,46 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
     const k = toDateKey(r.fecha);
     return k && k > fechaCorteAplicadaKey;
   });
+
+  const sideRowsActual = (sideDaily || []).filter(r => Number(r.mistura) === actual);
+  const sideGroupsByNe = new Map();
+  for (const r of sideRowsActual) {
+    const side = String(r.side || '').trim().toUpperCase();
+    if (side !== 'LI' && side !== 'LP') continue;
+    const dateKey = toDateKey(r.fecha) || toDateKey(r.fecha_txt);
+    if (!dateKey) continue;
+    const flame = isFlame(r);
+    const neKey = `${r.ne}|${flame}`;
+    const mapKey = `${neKey}|${dateKey}`;
+    if (!sideGroupsByNe.has(neKey)) sideGroupsByNe.set(neKey, new Map());
+    if (!sideGroupsByNe.get(neKey).has(mapKey)) {
+      sideGroupsByNe.get(neKey).set(mapKey, {
+        ne: r.ne,
+        flame,
+        dateKey,
+        LI: null,
+        LP: null,
+      });
+    }
+    sideGroupsByNe.get(neKey).get(mapKey)[side] = r;
+  }
+
+  const sideSnapshotByNe = new Map();
+  for (const [neKey, entriesMap] of sideGroupsByNe.entries()) {
+    const entries = [...entriesMap.values()].sort((a, b) => a.dateKey.localeCompare(b.dateKey));
+    if (!entries.length) continue;
+    const prevOrEqual = entries.filter(e => e.dateKey <= fechaCorteAplicadaKey);
+    const selected = prevOrEqual.length ? prevOrEqual[prevOrEqual.length - 1] : entries[entries.length - 1];
+    const evaluation = evaluateSideImbalance({ left: selected.LI, right: selected.LP });
+    sideSnapshotByNe.set(neKey, {
+      ne: selected.ne,
+      flame: selected.flame,
+      dateKey: selected.dateKey,
+      evaluation,
+      left: selected.LI,
+      right: selected.LP,
+    });
+  }
 
   // ── Evolución diaria por título (rowsPorFecha) ─────────────────────────
   const bloqueEvolucion = [];
@@ -10644,6 +10764,21 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
     .pop() || null;
   const corteTxt = corteDateKey ? `${corteDateKey.slice(8, 10)}/${corteDateKey.slice(5, 7)}` : 'S/D';
   const fmtSigned = (v, d = 2) => `${v >= 0 ? '+' : '-'}${Math.abs(v).toFixed(d)}`;
+  const sideNovedadForHilo = (h) => {
+    const key = `${h.ne}|${isFlame(h)}`;
+    const side = sideSnapshotByNe.get(key);
+    if (!side || side.evaluation?.state === 'sin-dato') return null;
+    const evalState = side.evaluation;
+    const dominant = evalState.dominantSide === 'EQ'
+      ? 'equilibrado'
+      : `${evalState.dominantSide || 'S/D'} dominante`;
+    const estadoTxt = evalState.state === 'crit'
+      ? 'crítico'
+      : evalState.state === 'warn'
+        ? 'en vigilancia'
+        : 'controlado';
+    return `    - LI/LP ${fmtFechaCorta(side.dateKey)}: Δ thin-30 ${evalState.deltaPct != null ? evalState.deltaPct.toFixed(1) + '%' : 'S/D'} (${dominant}, ${estadoTxt}).`;
+  };
 
   for (const h of focoList.slice(0, 4)) {
     const key = `${h.ne}|${isFlame(h)}`;
@@ -10651,6 +10786,8 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
     novedades.push(`Título analizado: Ne ${neLabel(h)}`);
     if (!dias.length) {
       novedades.push(`    - Sin dato para la fecha analizada ${corteTxt}.`);
+      const sideNovedad = sideNovedadForHilo(h);
+      if (sideNovedad) novedades.push(sideNovedad);
       novedades.push('');
       continue;
     }
@@ -10660,6 +10797,8 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
     if (!diaCorte) {
       const ultimo = dias[dias.length - 1];
       novedades.push(`    - Sin dato en fecha analizada ${corteTxt}; último disponible ${fmtFechaCorta(ultimo.fecha)}.`);
+      const sideNovedad = sideNovedadForHilo(h);
+      if (sideNovedad) novedades.push(sideNovedad);
       novedades.push('');
       continue;
     }
@@ -10687,15 +10826,21 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
     novedades.push(`    - Fecha analizada: ${fechaTxt}${prev ? ` (vs ${fmtFechaCorta(prev.fecha)})` : ''}.`);
     if (!prev) {
       novedades.push(`    - Sin base de comparación diaria.`);
+      const sideNovedad = sideNovedadForHilo(h);
+      if (sideNovedad) novedades.push(sideNovedad);
       novedades.push('');
       continue;
     }
     if (!cambios.length) {
       novedades.push(`    - Sin variaciones relevantes en fecha analizada.`);
+      const sideNovedad = sideNovedadForHilo(h);
+      if (sideNovedad) novedades.push(sideNovedad);
       novedades.push('');
       continue;
     }
     for (const c of cambios) novedades.push(`    - ${c}.`);
+    const sideNovedad = sideNovedadForHilo(h);
+    if (sideNovedad) novedades.push(sideNovedad);
     novedades.push('');
   }
   if (!novedades.length) novedades.push('Sin variaciones diarias relevantes para los títulos foco.');
@@ -10746,10 +10891,20 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
     const maq = getMaqInfo(h);
     const oeTxt = maq?.maquinas ? formatOeList(maq.maquinas) : 'OE S/D';
     const sev = severityForHilo(h);
-    const objetivo = sev >= 2
+    const sideInfo = sideSnapshotByNe.get(`${h.ne}|${isFlame(h)}`);
+    const sideEval = sideInfo?.evaluation;
+    const objetivoBase = sev >= 2
       ? 'bajar irregularidad y recuperar estabilidad del título crítico'
       : 'estabilizar variación y evitar escalamiento en el siguiente turno';
-    planAccion.push(`- ${oeTxt} (Ne ${neLabel(h)}): ajustar limpieza/estiraje y verificar alimentación; objetivo: ${objetivo}.`);
+    const objetivo = sideEval?.state === 'crit'
+      ? `${objetivoBase}; corregir desbalance LI/LP (thin-30) con foco en ${sideEval.dominantSide || 'lado crítico'}`
+      : sideEval?.state === 'warn'
+        ? `${objetivoBase}; contener deriva LI/LP antes de que escale`
+        : objetivoBase;
+    const sideTxt = sideEval && sideEval.state !== 'sin-dato'
+      ? ` | LI/LP Δ ${sideEval.deltaPct != null ? sideEval.deltaPct.toFixed(1) + '%' : 'S/D'} (${sideEval.dominantSide === 'EQ' ? 'equilibrado' : (sideEval.dominantSide || 'S/D')})`
+      : '';
+    planAccion.push(`- ${oeTxt} (Ne ${neLabel(h)}${sideTxt}): ajustar limpieza/estiraje y verificar alimentación; objetivo: ${objetivo}.`);
   }
   if (!planAccion.length) {
     planAccion.push('- OE foco del lote actual: mantener parámetros y verificar consistencia por turno.');
@@ -10770,13 +10925,19 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
     }
     if (toNum(h.neps_140) != null && toNum(h.neps_140) > 600) problemas.push(`Neps+140 ${f(h.neps_140, 1)}/km`);
     const maq = getMaqInfo(h);
+    const sideInfo = sideSnapshotByNe.get(`${h.ne}|${isFlame(h)}`);
+    const sideEval = sideInfo?.evaluation;
     const proceso = maq
       ? `${formatOeList(maq.maquinas)} | ${maq.pasador === 'SI' ? 'Con pasador' : maq.pasador === 'NO' ? 'Sin pasador' : 'Pasador S/D'} | Estiraje ${formatEstirajeBySide(maq)}`
       : 'Sin datos de máquina';
+    const sideTxt = sideEval && sideEval.state !== 'sin-dato'
+      ? `Fecha ${fmtFechaCorta(sideInfo.dateKey)} | LI ${sideEval.liThin30 != null ? sideEval.liThin30.toFixed(1) : 'S/D'} | LP ${sideEval.lpThin30 != null ? sideEval.lpThin30.toFixed(1) : 'S/D'} | Δ ${sideEval.deltaPct != null ? sideEval.deltaPct.toFixed(1) + '%' : 'S/D'} | ${sideEval.dominantSide === 'EQ' ? 'equilibrado' : `${sideEval.dominantSide || 'S/D'} dominante`}`
+      : 'Sin datos LI/LP comparables';
     detalleNe.push(`Ne ${neLabel(h)} (${m?.app || 'Proceso'}):`);
     detalleNe.push(`    Estado: ${estado}`);
     detalleNe.push(`    Problemas: ${problemas.length ? problemas.join(' | ') : 'sin desvíos críticos en corte actual'}`);
     detalleNe.push(`    Proceso: ${proceso}`);
+    detalleNe.push(`    LI/LP día: ${sideTxt}`);
     detalleNe.push(`    Riesgo: ${severityForHilo(h) >= 2 ? 'alto impacto en continuidad de urdido/telar' : severityForHilo(h) === 1 ? 'riesgo moderado; vigilar siguiente turno' : 'bajo'}`);
   }
 
@@ -10921,7 +11082,7 @@ function generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha 
 // ─────────────────────────────────────────────────────────────────────────────
 app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
   try {
-    const { rows, loteActual, model: modelReq, modo, proveedores, fechaCorte } = req.body;
+    const { rows, loteActual, model: modelReq, modo, proveedores, fechaCorte, sideDaily } = req.body;
     if (!rows || rows.length === 0) return res.status(400).json({ error: 'Sin datos para analizar' });
 
     const dateKey = (value) => {
@@ -11327,7 +11488,7 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
       } catch (e) {
         console.warn('narrativa-lotes: contexto OE no disponible:', e.message?.slice(0, 80));
       }
-      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], rowsPorFecha, rowsMaquinas, rowsProduccionOe, fechaCorte);
+      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], rowsPorFecha, rowsMaquinas, rowsProduccionOe, fechaCorte, sideDaily || []);
       const narrativaLocal = normalizeNarrativaGemini(narrativa);
       const fuenteLocal = `⚡ Fuente: Generador local (sin IA externa) · ${formatTimestampEsAr24()}\n\n`;
       return res.json({ success: true, narrativa: fuenteLocal + narrativaLocal, fuente: 'local' });
@@ -11564,6 +11725,59 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
       return `\nDATOS DE PROCESO (máquinas OE, pasador, estiraje — Lote ${actual}):\n` + lines.join('\n');
     })();
 
+    const sideDailyStr = (() => {
+      const sideRows = (sideDaily || [])
+        .filter(r => Number(r.mistura) === actual)
+        .filter(r => {
+          const side = String(r.side || '').trim().toUpperCase();
+          return side === 'LI' || side === 'LP';
+        });
+      if (!sideRows.length) return '';
+
+      const grouped = new Map();
+      for (const row of sideRows) {
+        const side = String(row.side || '').trim().toUpperCase();
+        const dateK = dateKey(row.fecha) || dateKey(row.fecha_txt);
+        if (!dateK) continue;
+        const flame = row.is_flame === true || String(row.is_flame).trim() === 'true' || String(row.is_flame).trim() === '1';
+        const neKey = `${row.ne}|${flame}`;
+        const mapKey = `${neKey}|${dateK}`;
+        if (!grouped.has(mapKey)) {
+          grouped.set(mapKey, {
+            ne: row.ne,
+            flame,
+            dateK,
+            LI: null,
+            LP: null,
+          });
+        }
+        grouped.get(mapKey)[side] = row;
+      }
+
+      const byNe = new Map();
+      for (const entry of grouped.values()) {
+        const neKey = `${entry.ne}|${entry.flame}`;
+        if (!byNe.has(neKey)) byNe.set(neKey, []);
+        byNe.get(neKey).push(entry);
+      }
+
+      const lines = [];
+      for (const entries of byNe.values()) {
+        entries.sort((a, b) => a.dateK.localeCompare(b.dateK));
+        const prevOrEqual = entries.filter(e => e.dateK <= fechaCorteGeminiKey);
+        const selected = prevOrEqual.length ? prevOrEqual[prevOrEqual.length - 1] : entries[entries.length - 1];
+        const evalSide = evaluateSideImbalance({ left: selected.LI, right: selected.LP });
+        const neTxt = `${selected.ne}${selected.flame ? ' FLAME' : '/1'}`;
+        const estado = evalSide.state === 'crit' ? 'CRITICO' : evalSide.state === 'warn' ? 'WARN' : evalSide.state === 'ok' ? 'OK' : 'SIN_DATO';
+        lines.push(
+          `  Ne ${neTxt} | Fecha=${selected.dateK} | LP_thin30=${evalSide.lpThin30 ?? 'S/D'} | LI_thin30=${evalSide.liThin30 ?? 'S/D'} | Delta%=${evalSide.deltaPct != null ? evalSide.deltaPct.toFixed(1) : 'S/D'} | Dominante=${evalSide.dominantSide || 'S/D'} | Estado=${estado}`
+        );
+      }
+
+      if (!lines.length) return '';
+      return `\nDATA LI/LP DIARIA (thin-30 por lado, usar para detectar lado crítico):\n` + lines.join('\n');
+    })();
+
     const oeProduccionStr = (() => {
       const oeActualBase = rowsProduccionOeGemini
         .filter(r => Number(r.mistura) === actual)
@@ -11671,19 +11885,17 @@ DATOS COMPARATIVOS:
 ${resumenLotes}
 FECHA_ANALIZADA_SOLICITADA: ${fechaCorteReqKey ? fmtDateDdMm(fechaCorteReqKey) : 'No informada (usa corte por defecto)'}. FECHA_ANALIZADA_EFECTIVA: ${fmtDateDdMm(fechaCorteGeminiKey)}.
 Regla de cálculo obligatoria: todo análisis principal debe usar SOLO datos con fecha <= FECHA_ANALIZADA_EFECTIVA.
-${evolucionDiariaStr}${datosActualesPosterioresStr}${maquinasStr}${oeProduccionStr}
+${evolucionDiariaStr}${datosActualesPosterioresStr}${maquinasStr}${sideDailyStr}${oeProduccionStr}
 
 NOTA SOBRE NEPS: Neps+200% = impurezas grandes que afectan absorción del colorante en Índigo. Neps+140% = conteo total de neps incluyendo pequeños, indicador de agresividad del proceso de apertura y cardado. Los umbrales de decisión aplican a Neps+200%; usar Neps+140% como indicador complementario de proceso.
 
 UMBRALES GENERALES: Tenacidad hilo >16.0=APTO, 14.5-16.0=PRECAUCIÓN, <14.5=CRÍTICO | Elongación <7.5%=RIESGO URDIDORA | Neps+200% >700=RIESGO ÍNDIGO (liso) / >850 (FLAME)=CRÍTICO | CVm% >13=IRREGULAR (liso) / >18 (FLAME)=ALERTA | STR fibra >27=ÓPTIMO
 
 MATRIZ DE REQUISITOS MÍNIMOS POR TÍTULO:
-Ne 7 (Trama): Tenac ok≥14.0 (warn 13.0), CVm ok≤13.5 (warn 14.5), Neps ok≤700 (warn 850) -> solo TELAR
-Ne 9 (Trama): Tenac ok≥14.5 (warn 13.5), CVm ok≤13.0 (warn 14.0), Neps ok≤600 (warn 750) -> solo TELAR
-Ne 10 (Urdimbre): Tenac ok≥16.0 (warn 15.0), Elong ok≥8.0 (warn 7.5), CVm ok≤12.0 (warn 13.0), Neps ok≤500 (warn 650) -> URDIDORA->INDIGO->TELAR
-Ne 10 FLAME (Urdimbre Flame): Tenac ok≥16.0 (warn 15.0), Elong ok≥8.0 (warn 7.5), CVm ok≤18.0 (warn 20.0), Neps ok≤700 (warn 850) -> URDIDORA->INDIGO->TELAR
-Ne 12.5 (Urdimbre): Tenac ok≥16.5 (warn 15.5), Elong ok≥8.0 (warn 7.5), CVm ok≤11.5 (warn 12.5), Neps ok≤450 (warn 600) -> URDIDORA->INDIGO->TELAR
-Ne 14 (Urdimbre): Tenac ok≥17.0 (warn 16.0), Elong ok≥8.5 (warn 8.0), CVm ok≤11.0 (warn 12.0), Neps ok≤400 (warn 550) -> URDIDORA->INDIGO->TELAR
+${buildNarrativaMatrixPromptBlock()}
+
+REGLAS BENNINGER / URDIMBRE:
+${buildBenningerPromptBlock()}
 
 REGLAS DE AUDITORÍA (OBLIGATORIAS):
 - Si es Urdimbre (Ne>=10): priorizar Elongación y CVm%.
@@ -11710,6 +11922,7 @@ INSTRUCCIÓN SOBRE DATOS DE PROCESO:
 - Si hay datos de máquina para un Ne, incluir explícitamente OE/pasador/estiraje.
 - Si Pasador=SI y hay desvío, aclarar que pasó por manuar y buscar falla de ajuste.
 - Si Pasador=NO y hay desvío, aclarar "sin doblez previo" como riesgo de irregularidad.
+- Si DATA LI/LP reporta Estado=CRITICO en un Ne, elevar prioridad operativa de ese título y describir el lado dominante (LP o LI).
 
 INSTRUCCIÓN SOBRE DATA OE:
 - Sintetizar por Ne en máximo 2 líneas: operación (turno/lado/horario, rpm/alfa/fusos, producción/eficiencia) y calidad (CVP/CVM, defectología, CORT NAT, %ROB).
@@ -11792,7 +12005,7 @@ Generá exactamente este formato en español (máximo 650 palabras), priorizando
     } catch (geminiErr) {
       // Fallback local ante cualquier error de Gemini (quota, red, etc.)
       console.warn('Gemini no disponible, usando generación local:', geminiErr.message?.slice(0, 120));
-      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], rowsPorFechaGemini, rowsMaquinasGemini, rowsProduccionOeGemini, fechaCorteGeminiKey);
+      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], rowsPorFechaGemini, rowsMaquinasGemini, rowsProduccionOeGemini, fechaCorteGeminiKey, sideDaily || []);
       const narrativaLocal = normalizeNarrativaGemini(narrativa);
       const fuenteFallback = `⚡ Fuente: Generador local (Gemini no disponible) · ${formatTimestampEsAr24()}\n\n`;
       const geminiErrText = String(geminiErr?.message || '');

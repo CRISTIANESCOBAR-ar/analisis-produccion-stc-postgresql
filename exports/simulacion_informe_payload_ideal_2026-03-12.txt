@@ -1,0 +1,202 @@
+SIMULACION - INFORME CON PAYLOAD IDEAL (VALIDACION OPERACIONES + CALIDAD)
+Fecha analizada: 12/03/2026
+Lote FIAC actual: 110
+Objetivo: acordar formato y evidencia minima antes de escribir codigo.
+
+====================================================================
+1) CONTRATO DE PAYLOAD IDEAL (CAMPOS OBLIGATORIOS POR CAPA)
+====================================================================
+
+CAPA 1 - RESUMEN EJECUTIVO (estado global)
+Campos obligatorios:
+- lote_actual
+- lotes_referencia
+- fecha_analizada_efectiva
+- fecha_anterior_comparable
+- hvi_resumen: str, sci, mic, uhml, ui, elg, n_fardos, n_secuencias
+- ne_resumen[] por Ne: ne, is_flame, cvm_avg, neps_140_avg, neps_200_avg, tenacidad_avg, elongacion_avg, n_tests, estado
+- estado_global_lote
+
+CAPA 2 - EVENTOS CRITICOS (worst-case trazable)
+Campos obligatorios por evento:
+- evento_id
+- severidad (ALTA/MEDIA/BAJA)
+- variable (ej: neps_140, cvm, tenacidad)
+- valor_evento
+- umbral
+- ne
+- fecha_hora_evento
+- oe_evento
+- turno
+- lado
+- operador
+- testnr_uster
+- testnr_tensorapid (si aplica)
+- impacto_operativo
+
+CAPA 3 - PROCESO OE (causalidad operativa)
+Campos obligatorios por Ne + fecha:
+- ne
+- fecha
+- oe_lista
+- rpm_rotor_avg
+- rpm_card_avg
+- estiraje_avg
+- pasador
+- efic_calc_oe
+- efic_oe
+- prod_oe
+- cvm_oe
+- cvp_oe
+- defectologia: n_total, s_total, l_total, t_total, cort_nat_total
+
+CAPA 4 - CONTEXTO MATERIA PRIMA + CARDAS
+Campos obligatorios:
+- proveedores[]: produtor, participacion_pct, str, sci, mic, uhml, elg, fardos_consumidos
+- cardas_contexto (ideal): fecha_ref, maquina, rpm, efic_calc, prod_inform, observacion
+
+Regla clave de integridad temporal:
+- TODAS las capas deben usar fecha <= fecha_analizada_efectiva.
+- Eventos posteriores se muestran aparte como NOVEDADES POSTERIORES, sin mezclar dictamen.
+
+
+====================================================================
+2) EJEMPLO DE PAYLOAD IDEAL (RESUMEN SIMULADO)
+====================================================================
+
+payload_ideal_resumen:
+- lote_actual: 110
+- lotes_referencia: [108, 109]
+- fecha_analizada_efectiva: 2026-03-12
+- fecha_anterior_comparable: 2026-03-11
+- hvi_resumen:
+  str=27.82, sci=113.76, mic=4.50, uhml=26.95, ui=81.22, elg=7.27, n_fardos=554, n_secuencias=12
+- ne_resumen:
+  Ne 7.0  -> cvm_avg=11.16, neps_140_avg=142, tenacidad_avg=16.80, elongacion_avg=10.12, estado=APROBADO
+  Ne 9.0  -> cvm_avg=11.54, neps_140_avg=326, tenacidad_avg=16.24, elongacion_avg=10.15, estado=APROBADO
+  Ne 10.0 -> cvm_avg=12.72, neps_140_avg=890, tenacidad_avg=16.19, elongacion_avg=9.58,  estado=CONDICIONAL
+  Ne 12.5 -> cvm_avg=12.30, neps_140_avg=704, tenacidad_avg=15.93, elongacion_avg=8.27,  estado=CONDICIONAL
+
+eventos_criticos (muestra):
+- EVT-001 | ALTA  | variable=neps_140 | valor=890 | umbral=600 | ne=10.0
+  fecha_hora=12/03/2026 14:00-22:00 | oe=OE 10 | turno=B | lado=U | operador=MUNIZ ALICIA
+  testnr_uster=5890 | testnr_tensorapid=002183
+  impacto=riesgo de inestabilidad en Indigo y aumento de defectologia
+
+- EVT-002 | MEDIA | variable=tenacidad | valor=15.90 | umbral=16.50 | ne=12.5
+  fecha_hora=12/03/2026 14:00-22:00 | oe=OE 3 LI | turno=B | lado=LI | operador=GARCIA ARIEL
+  testnr_uster=5888 | testnr_tensorapid=002182
+  impacto=menor margen de rotura en urdidora/telar
+
+proceso_oe (muestra):
+- Ne 10.0 | fecha=12/03 | OEs=OE 10
+  rpm_rotor_avg=80000 | rpm_card_avg=9500 | estiraje_avg=4.26 | pasador=SI
+  efic_calc_oe=89.40 | efic_oe=88.60 | prod_oe=10388
+  cvm_oe=11.88 | cvp_oe=2.05
+  defectologia: N=14 S=8 L=22 T=17 CORT_NAT=6
+
+- Ne 12.5 | fecha=12/03 | OEs=OE 3 LI + OE 3 LP
+  rpm_rotor_avg=90000 | rpm_card_avg=9500 | estiraje_avg=4.18 | pasador=SI
+  efic_calc_oe=86.20 | efic_oe=85.70 | prod_oe=3822
+  cvm_oe=12.05 | cvp_oe=2.21
+  defectologia: N=9 S=5 L=16 T=12 CORT_NAT=4
+
+proveedores_clave (muestra):
+- VICENTIN | 43.7% | STR 27.40 | SCI 119.0 | MIC 4.455 | UHML 26.92 | ELG 7.63 | favorable
+- CARAM    | 29.1% | STR 27.43 | SCI 107.6 | MIC 4.424 | UHML 26.71 | ELG 6.82 | favorable parcial
+- ALAL     | 6.7%  | STR 26.27 | SCI 95.7  | MIC 4.844 | UHML 25.90 | ELG 6.36 | riesgo (STR bajo + MIC alto)
+
+cardas_contexto (ideal - no implementado aun en narrativa):
+- fecha_ref=12/03/2026 | rpm=... | efic_calc=... | prod_inform=... | observacion=pendiente integrar
+
+
+====================================================================
+3) SALIDA TXT SIMULADA DEL INFORME (FORMATO OBJETIVO)
+====================================================================
+
+REPORTE DE ALERTA OPERATIVA - LOTE FIAC 110
+Fecha analizada efectiva: 12/03/2026
+Fecha comparada: 11/03/2026
+Estado global: PRECAUCION - REVISAR
+
+------------------------------------------------------------
+A) RESUMEN EJECUTIVO
+------------------------------------------------------------
+1. El lote 110 mantiene buena base de fibra (STR 27.82, UI 81.22), pero presenta desvio operativo en Ne 10 y Ne 12.5.
+2. Ne 10 sube a Neps+140=890 (evento alto) y supera banda de vigilancia de proceso.
+3. Ne 12.5 queda con tenacidad promedio 15.93 (debajo de objetivo 16.50 para urdimbre), con riesgo de rotura.
+4. Recomendacion: continuar condicionado, intervenir OE 10 y OE 3 (LI/LP) en 24h y revalidar con nueva muestra.
+
+------------------------------------------------------------
+B) ALERTAS FEHACIENTES (EVIDENCIA DIRECTA)
+------------------------------------------------------------
+[EVT-001][ALTA] Ne 10 - Neps+140 fuera de banda
+- Valor: 890 /km (umbral de vigilancia: 600 /km)
+- Fecha/Hora: 12/03/2026 14:00-22:00
+- Equipo: OE 10 | Turno B | Operador MUNIZ ALICIA
+- Traza ensayo: USTER 5890 | TENSORAPID 002183
+- Impacto: mayor riesgo de inestabilidad en Indigo y ajuste de proceso
+
+[EVT-002][MEDIA] Ne 12.5 - Tenacidad por debajo del objetivo
+- Valor: 15.90 cN/tex (objetivo: 16.50 cN/tex)
+- Fecha/Hora: 12/03/2026 14:00-22:00
+- Equipo: OE 3 LI | Turno B | Operador GARCIA ARIEL
+- Traza ensayo: USTER 5888 | TENSORAPID 002182
+- Impacto: menor margen ante picos de tension en urdido/telar
+
+------------------------------------------------------------
+C) EVOLUCION DIARIA (11/03 -> 12/03)
+------------------------------------------------------------
+Ne 10:
+- CVm: 11.92 -> 12.72  (Delta +0.80)
+- Neps+140: 552 -> 890 (Delta +338)
+- Tenacidad: 15.97 -> 16.19 (Delta +0.22)
+Lectura: mejora leve de tenacidad, pero empeora fuerte limpieza/regularidad.
+
+Ne 12.5:
+- CVm: 12.09 -> 12.30  (Delta +0.21)
+- Neps+140: 619 -> 704 (Delta +85)
+- Tenacidad: 16.44 -> 15.93 (Delta -0.51)
+Lectura: deterioro de margen mecanico y aumento moderado de carga de neps.
+
+------------------------------------------------------------
+D) PROCESO OE (HIPOTESIS CAUSAL)
+------------------------------------------------------------
+Ne 10 (OE 10):
+- rpm_rotor=80000 | rpm_card=9500 | pasador=SI | estiraje=4.26
+- OE-CVm=11.88 | OE-Efic=88.60% | Defectologia L=22 T=17 CORT_NAT=6
+Hipotesis probable: desvio de limpieza/regularidad de proceso, no de fibra.
+
+Ne 12.5 (OE 3 LI/LP):
+- rpm_rotor=90000 | rpm_card=9500 | pasador=SI | estiraje=4.18
+- OE-CVm=12.05 | OE-Efic=85.70% | Defectologia L=16 T=12 CORT_NAT=4
+Hipotesis probable: ajuste de estiraje/tension con impacto en tenacidad final.
+
+------------------------------------------------------------
+E) MATERIA PRIMA Y PROVEEDORES
+------------------------------------------------------------
+Base HVI del lote:
+- STR 27.82 | SCI 113.76 | MIC 4.50 | UHML 26.95 | UI 81.22
+Lectura: fibra base apta; la desviacion principal luce operativa.
+
+Proveedor con riesgo relativo:
+- ALAL: STR 26.27 y MIC 4.844 (perfil menos favorable)
+Accion sugerida: monitorear participacion de mezcla y su efecto en Ne 12.5.
+
+------------------------------------------------------------
+F) PLAN DE ACCION PRIORIZADO (24H)
+------------------------------------------------------------
+1) URGENTE - OE 10 (Ne 10): revisar limpieza/condicion de cardina y setpoint de tension; objetivo bajar Neps+140 por debajo de 700.
+2) IMPORTANTE - OE 3 LI/LP (Ne 12.5): recalibrar estiraje y verificar estabilidad de tenacidad por turno; objetivo >=16.30 cN/tex.
+3) MONITOREO - Calidad: repetir muestreo post-ajuste y confirmar tendencia diaria (CVm, Neps+140, Tenacidad).
+
+------------------------------------------------------------
+G) CRITERIO DE APROBACION DE ESTA SALIDA (CHECK OPERACIONES + CALIDAD)
+------------------------------------------------------------
+[ ] Cada alerta tiene valor, umbral, fecha, OE, turno, operador y traza de ensayo.
+[ ] No hay conclusiones sin evidencia numerica.
+[ ] Se separa promedio de evento critico (no se diluye el worst-case).
+[ ] La fecha de analisis es unica y consistente en todas las capas.
+[ ] El plan de accion indica responsable operativo y objetivo medible.
+
+Fin de simulacion.

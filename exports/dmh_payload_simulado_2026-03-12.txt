@@ -1,0 +1,408 @@
+DashboardMezclaHilo - Simulacion de payload al analizador local
+Fecha simulada: 12/03/2026
+Archivo: ejemplo didactico para ver exactamente que se envia
+
+====================================================================
+0) RESUMEN RAPIDO
+====================================================================
+
+El generador local recibe esta firma:
+generarNarrativaLocal(rows, loteActual, proveedores, rowsPorFecha, rowsMaquinas, rowsProduccionOe, fechaCorte)
+
+En este ejemplo:
+- fechaCorte = "2026-03-12"
+- loteActual = 110
+- modo = "local" (si es fallback Gemini, cambia solo el origen de rowsPorFecha/rowsMaquinas/rowsProduccionOe)
+
+
+====================================================================
+1) REQUEST FRONTEND -> POST /api/dashboard/narrativa-lotes
+====================================================================
+
+{
+  "rows": [
+    {
+      "mistura": 110,
+      "mistura_real": "162",
+      "str": "27.37",
+      "sci": "108.2",
+      "mic": "4.525",
+      "uhml": "26.63",
+      "ui": "80.25",
+      "elg_fibra": "6.94",
+      "n_fardos": "554",
+      "n_secuencias": "12",
+      "ne": "7",
+      "is_flame": false,
+      "cvm": "10.88",
+      "vellosidad": null,
+      "neps_200": "3.5",
+      "thin_30": "273.3",
+      "thin_40": "3.6",
+      "thin_50": "0.0",
+      "thick_35": "77.4",
+      "thick_50": "1.7",
+      "neps_140": "107.7",
+      "neps_280": "0.3",
+      "n_uster": "2",
+      "tenacidad": "16.42",
+      "elongacion": "9.51",
+      "fuerza_b": "1384.90",
+      "trabajo_b": "29.33"
+    },
+    {
+      "mistura": 110,
+      "mistura_real": "162",
+      "str": "27.37",
+      "sci": "108.2",
+      "mic": "4.525",
+      "uhml": "26.63",
+      "ui": "80.25",
+      "elg_fibra": "6.94",
+      "n_fardos": "554",
+      "n_secuencias": "12",
+      "ne": "9",
+      "is_flame": false,
+      "cvm": "11.29",
+      "vellosidad": null,
+      "neps_200": "9.1",
+      "thin_30": "523.1",
+      "thin_40": "10.1",
+      "thin_50": "0.0",
+      "thick_35": "112.1",
+      "thick_50": "2.9",
+      "neps_140": "315.6",
+      "neps_280": "0.5",
+      "n_uster": "3",
+      "tenacidad": "16.27",
+      "elongacion": "9.60",
+      "fuerza_b": "1067.77",
+      "trabajo_b": "22.77"
+    },
+    {
+      "mistura": 110,
+      "mistura_real": "162",
+      "str": "27.37",
+      "sci": "108.2",
+      "mic": "4.525",
+      "uhml": "26.63",
+      "ui": "80.25",
+      "elg_fibra": "6.94",
+      "n_fardos": "554",
+      "n_secuencias": "12",
+      "ne": "10",
+      "is_flame": false,
+      "cvm": "11.99",
+      "vellosidad": null,
+      "neps_200": "31.7",
+      "thin_30": "774.0",
+      "thin_40": "22.5",
+      "thin_50": "0.1",
+      "thick_35": "196.3",
+      "thick_50": "8.2",
+      "neps_140": "639.5",
+      "neps_280": "1.8",
+      "n_uster": "7",
+      "tenacidad": "16.18",
+      "elongacion": "9.07",
+      "fuerza_b": "955.20",
+      "trabajo_b": "19.46"
+    },
+    {
+      "mistura": 110,
+      "mistura_real": "162",
+      "str": "27.37",
+      "sci": "108.2",
+      "mic": "4.525",
+      "uhml": "26.63",
+      "ui": "80.25",
+      "elg_fibra": "6.94",
+      "n_fardos": "554",
+      "n_secuencias": "12",
+      "ne": "12.5",
+      "is_flame": false,
+      "cvm": "12.21",
+      "vellosidad": null,
+      "neps_200": "56.1",
+      "thin_30": "864.1",
+      "thin_40": "30.8",
+      "thin_50": "0.3",
+      "thick_35": "235.7",
+      "thick_50": "13.1",
+      "neps_140": "670.7",
+      "neps_280": "4.4",
+      "n_uster": "10",
+      "tenacidad": "15.99",
+      "elongacion": "8.26",
+      "fuerza_b": "755.59",
+      "trabajo_b": "14.70"
+    }
+  ],
+  "proveedores": [
+    {
+      "mistura": 110,
+      "produtor": "VICENTIN",
+      "str": "27.40",
+      "sci": "119.0",
+      "mic": "4.455",
+      "uhml": "26.92",
+      "elg": "7.63",
+      "fardos_consumidos": "242",
+      "secuencias": "12"
+    },
+    {
+      "mistura": 110,
+      "produtor": "CARAM",
+      "str": "27.43",
+      "sci": "107.6",
+      "mic": "4.424",
+      "uhml": "26.71",
+      "elg": "6.82",
+      "fardos_consumidos": "161",
+      "secuencias": "12"
+    },
+    {
+      "mistura": 110,
+      "produtor": "ALAL",
+      "str": "26.27",
+      "sci": "95.7",
+      "mic": "4.844",
+      "uhml": "25.90",
+      "elg": "6.36",
+      "fardos_consumidos": "37",
+      "secuencias": "12"
+    }
+  ],
+  "loteActual": 110,
+  "fechaCorte": "2026-03-12",
+  "modo": "local"
+}
+
+
+====================================================================
+2) DATOS ENRIQUECIDOS QUE TAMBIEN ENTRAN AL ANALIZADOR LOCAL
+====================================================================
+
+2.1) rowsPorFecha (USTER + Tensorapid por fecha)
+
+[
+  {
+    "fecha": "2026-03-10",
+    "mistura": 110,
+    "ne": "10",
+    "is_flame": false,
+    "cvm": "12.28",
+    "neps_200": "38.0",
+    "neps_140": "690.0",
+    "tenacidad": "16.02",
+    "elongacion": "8.95",
+    "n_tests": 6
+  },
+  {
+    "fecha": "2026-03-11",
+    "mistura": 110,
+    "ne": "10",
+    "is_flame": false,
+    "cvm": "12.10",
+    "neps_200": "34.2",
+    "neps_140": "661.0",
+    "tenacidad": "16.10",
+    "elongacion": "9.01",
+    "n_tests": 7
+  },
+  {
+    "fecha": "2026-03-12",
+    "mistura": 110,
+    "ne": "10",
+    "is_flame": false,
+    "cvm": "11.99",
+    "neps_200": "31.7",
+    "neps_140": "639.5",
+    "tenacidad": "16.18",
+    "elongacion": "9.07",
+    "n_tests": 7
+  },
+  {
+    "fecha": "2026-03-12",
+    "mistura": 110,
+    "ne": "12.5",
+    "is_flame": false,
+    "cvm": "12.21",
+    "neps_200": "56.1",
+    "neps_140": "670.7",
+    "tenacidad": "15.99",
+    "elongacion": "8.26",
+    "n_tests": 10
+  }
+]
+
+2.2) rowsMaquinas (proceso por Ne)
+
+[
+  {
+    "mistura": 110,
+    "ne": "10",
+    "is_flame": false,
+    "maquinas": "050409, 050410",
+    "pasador": "SI",
+    "estiraje_avg": "4.26",
+    "estiraje_min": "4.20",
+    "estiraje_max": "4.33",
+    "estiraje_lp_avg": "4.28",
+    "estiraje_lp_min": "4.23",
+    "estiraje_lp_max": "4.33",
+    "estiraje_li_avg": "4.24",
+    "estiraje_li_min": "4.20",
+    "estiraje_li_max": "4.28"
+  },
+  {
+    "mistura": 110,
+    "ne": "12.5",
+    "is_flame": false,
+    "maquinas": "050411",
+    "pasador": "SI",
+    "estiraje_avg": "4.18",
+    "estiraje_min": "4.14",
+    "estiraje_max": "4.22",
+    "estiraje_lp_avg": "4.19",
+    "estiraje_lp_min": "4.15",
+    "estiraje_lp_max": "4.22",
+    "estiraje_li_avg": "4.17",
+    "estiraje_li_min": "4.14",
+    "estiraje_li_max": "4.20"
+  }
+]
+
+2.3) rowsProduccionOe (contexto OE normalizado)
+
+[
+  {
+    "mistura": 110,
+    "fecha": "2026-03-12",
+    "fecha_txt": "12/03/2026",
+    "ne": "10.00",
+    "filiales": "STC",
+    "loc_fisicos": "OPEN END",
+    "maquinas_oe": "050409, 050410",
+    "nomes_maquina": "OE-09 | OE-10",
+    "turnos": "A, B",
+    "lados": "LP, LI",
+    "itens": "HILO DENIM NE10/1",
+    "desc_itens": "ALGODON CARDADO",
+    "operadores": "OPER_01, OPER_02",
+    "hora_inicial_min": "06:00",
+    "hora_final_max": "14:00",
+    "rpm_avg": "92000",
+    "num_fusos_avg": "480",
+    "alfa_avg": "4.20",
+    "tempo_avg": "480",
+    "torcao_p_poleg_avg": "16.20",
+    "torcao_p_metro_avg": "638.00",
+    "prod_mt_min_avg": "126.40",
+    "prod_kg_hr_avg": "540.20",
+    "prod_calc_total": "10804.00",
+    "cvm_oe": "11.88",
+    "cvp_oe": "2.05",
+    "efic_calc_oe": "89.40",
+    "efic_oe": "88.60",
+    "prod_oe": "10388.00",
+    "t_bob_avg": "2.830",
+    "rpm_card_avg": "390",
+    "n_total": "14",
+    "s_total": "8",
+    "l_total": "22",
+    "t_total": "17",
+    "mo_total": "3",
+    "cp_v_sl_total": "5",
+    "cm_v_sl_total": "4",
+    "ccp_c_total": "2",
+    "ccm_c_total": "1",
+    "jp_p_total": "0",
+    "jm_p_total": "0",
+    "cort_nat_total": "6",
+    "rob_01_avg": "97.5",
+    "rob_02_avg": "96.9",
+    "rob_03_avg": "97.1",
+    "filas": 12,
+    "maquinas_total": 2,
+    "maquinas_activas": 2,
+    "filas_activas": 12
+  },
+  {
+    "mistura": 110,
+    "fecha": "2026-03-12",
+    "fecha_txt": "12/03/2026",
+    "ne": "12.50",
+    "filiales": "STC",
+    "loc_fisicos": "OPEN END",
+    "maquinas_oe": "050411",
+    "nomes_maquina": "OE-11",
+    "turnos": "B",
+    "lados": "LP",
+    "itens": "HILO DENIM NE12.5/1",
+    "desc_itens": "ALGODON CARDADO",
+    "operadores": "OPER_05",
+    "hora_inicial_min": "14:00",
+    "hora_final_max": "22:00",
+    "rpm_avg": "90500",
+    "num_fusos_avg": "480",
+    "alfa_avg": "4.15",
+    "tempo_avg": "470",
+    "torcao_p_poleg_avg": "16.80",
+    "torcao_p_metro_avg": "661.00",
+    "prod_mt_min_avg": "118.30",
+    "prod_kg_hr_avg": "501.40",
+    "prod_calc_total": "4011.00",
+    "cvm_oe": "12.05",
+    "cvp_oe": "2.21",
+    "efic_calc_oe": "86.20",
+    "efic_oe": "85.70",
+    "prod_oe": "3822.00",
+    "t_bob_avg": "2.910",
+    "rpm_card_avg": "386",
+    "n_total": "9",
+    "s_total": "5",
+    "l_total": "16",
+    "t_total": "12",
+    "mo_total": "2",
+    "cp_v_sl_total": "3",
+    "cm_v_sl_total": "3",
+    "ccp_c_total": "1",
+    "ccm_c_total": "1",
+    "jp_p_total": "0",
+    "jm_p_total": "0",
+    "cort_nat_total": "4",
+    "rob_01_avg": "96.8",
+    "rob_02_avg": "96.1",
+    "rob_03_avg": "96.4",
+    "filas": 6,
+    "maquinas_total": 1,
+    "maquinas_activas": 1,
+    "filas_activas": 6
+  }
+]
+
+
+====================================================================
+3) CARDAS
+====================================================================
+
+No se envia al analizador local.
+
+cardasContext existe para UI en GET /api/dashboard/mezcla-lotes,
+pero NO entra en POST /api/dashboard/narrativa-lotes ni en generarNarrativaLocal(...).
+
+
+====================================================================
+4) LLAMADA FINAL QUE OCURRE EN BACKEND
+====================================================================
+
+generarNarrativaLocal(
+  rows,
+  110,
+  proveedores,
+  rowsPorFecha,
+  rowsMaquinas,
+  rowsProduccionOe,
+  "2026-03-12"
+)

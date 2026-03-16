@@ -1,0 +1,46 @@
+[
+  {
+    "par": {
+      "TESTNR": "CARDA-12-03-26_000-050202-A-0001",
+      "NOMCOUNT": 0.1,
+      "MASCHNR": "050202",
+      "LOTE": "CARDA 12/03/26 0:00",
+      "LABORANT": "SIMULADO",
+      "TIME_STAMP": "12/03/26 0:00 06:00",
+      "MATCLASS": "CINTA DE CARDAS",
+      "ESTIRAJE": null,
+      "PASADOR": "NO",
+      "OBS": "SIMULADO DESDE rptProducaoCarda.csv ITEM 0872606"
+    },
+    "tbl": [
+      {
+        "NO_": 1,
+        "U_PERCENT": null,
+        "CVM_PERCENT": 3.96,
+        "INDICE_PERCENT": null,
+        "CVM_1M_PERCENT": null,
+        "CVM_3M_PERCENT": null,
+        "CVM_10M_PERCENT": null,
+        "TITULO": 0.1,
+        "TITULO_REL_PERC": null,
+        "H": null,
+        "SH": null,
+        "SH_1M": null,
+        "SH_3M": null,
+        "SH_10M": null,
+        "DELG_MINUS30_KM": null,
+        "DELG_MINUS40_KM": null,
+        "DELG_MINUS50_KM": null,
+        "DELG_MINUS60_KM": null,
+        "GRUE_35_KM": null,
+        "GRUE_50_KM": null,
+        "GRUE_70_KM": null,
+        "GRUE_100_KM": null,
+        "NEPS_140_KM": 277,
+        "NEPS_200_KM": 144,
+        "NEPS_280_KM": 69,
+        "NEPS_400_KM": 28
+      }
+    ]
+  }
+]

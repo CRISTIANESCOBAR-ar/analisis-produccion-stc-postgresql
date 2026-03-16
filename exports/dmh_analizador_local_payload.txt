@@ -1,0 +1,253 @@
+DashboardMezclaHilo - Datos que se pasan al analizador local
+Fecha de referencia: 2026-03-15
+
+============================================================
+1) FLUJO DE ENVIO (Informe IA local y fallback)
+============================================================
+
+Frontend (DashboardMezclaHilo.vue) envia a POST /api/dashboard/narrativa-lotes:
+
+body JSON:
+- rows: array con comparativa HVI + Uster + Tensorapid por lote
+- proveedores: array con resumen HVI por proveedor del lote
+- loteActual: numero de lote actual
+- fechaCorte: string YYYY-MM-DD
+- modo: "local" (solo cuando se fuerza Local desde UI); en Gemini va undefined
+
+Backend (server.js) decide:
+
+A) Modo local directo:
+- Se activa si modo === "local" o si no hay GOOGLE_API_KEY.
+- Construye datasets adicionales (rowsPorFecha, rowsMaquinas, rowsProduccionOe).
+- Llama:
+  generarNarrativaLocal(rows, loteActual, proveedores, rowsPorFecha, rowsMaquinas, rowsProduccionOe, fechaCorte)
+
+B) Camino Gemini y fallback local:
+- Construye datasets Gemini (rowsPorFechaGemini, rowsMaquinasGemini, rowsProduccionOeGemini).
+- Intenta generar con Gemini.
+- Si Gemini falla (cuota/red/etc), fallback:
+  generarNarrativaLocal(rows, loteActual, proveedores, rowsPorFechaGemini, rowsMaquinasGemini, rowsProduccionOeGemini, fechaCorteGeminiKey)
+
+Nota importante:
+- En fallback, fechaCorteGeminiKey puede ajustarse automaticamente a una fecha efectiva disponible.
+- El generador local es el mismo en ambos caminos.
+
+
+============================================================
+2) SECCION HVI (dentro de rows)
+============================================================
+
+Campos HVI por registro de rows (lote):
+- mistura
+- mistura_real
+- str
+- sci
+- mic
+- uhml
+- ui
+- elg_fibra
+- n_fardos
+- n_secuencias
+
+Uso en analizador local:
+- Diagnostico de fibra (STR/SCI/MIC/UI/ELG)
+- Semaforo global
+- Comparativa contra lotes referencia
+- Reglas de aptitud por matriz
+
+
+============================================================
+3) SECCION USTER + TENSORAPID (dentro de rows)
+============================================================
+
+Campos por Ne en rows:
+- ne
+- is_flame
+- cvm
+- vellosidad
+- neps_200
+- thin_30
+- thin_40
+- thin_50
+- thick_35
+- thick_50
+- neps_140
+- neps_280
+- n_uster
+- tenacidad
+- elongacion
+- fuerza_b
+- trabajo_b
+
+Uso en analizador local:
+- Evaluacion de umbrales por titulo (Ne)
+- Clasificacion Aprobado/Condicional/Rechazado
+- Tendencias y alertas por Ne
+- Plan de accion por proceso
+
+
+============================================================
+4) SECCION USTER + TENSORAPID DIARIO (rowsPorFecha)
+============================================================
+
+4.1) Camino local directo (query narrativa-lotes/diario)
+Campos:
+- fecha
+- mistura
+- ne
+- is_flame
+- cvm
+- neps_200
+- neps_140
+- tenacidad
+- elongacion
+- n_tests
+
+4.2) Camino Gemini/fallback (query narrativa-lotes-gemini/diario)
+Campos:
+- fecha
+- mistura
+- ne
+- is_flame
+- cvm
+- neps_200
+- neps_140
+- tenacidad
+- elongacion
+
+Diferencia relevante:
+- En el camino Gemini/fallback no se incluye n_tests.
+
+
+============================================================
+5) SECCION PROCESO USTER (rowsMaquinas)
+============================================================
+
+Campos (narrativa-lotes/maquinas o narrativa-lotes-gemini/maquinas):
+- mistura
+- ne
+- is_flame
+- maquinas
+- pasador
+- estiraje_avg
+- estiraje_min
+- estiraje_max
+- estiraje_lp_avg
+- estiraje_lp_min
+- estiraje_lp_max
+- estiraje_li_avg
+- estiraje_li_min
+- estiraje_li_max
+
+Uso:
+- Relacionar desvio de calidad con OE/pasador/estiraje por Ne.
+
+
+============================================================
+6) SECCION PRODUCCION OE (rowsProduccionOe)
+============================================================
+
+Contexto:
+- Se arma con cargarContextoOe(...) desde tb_PRODUCCION_OE.
+- Columnas de origen se detectan dinamicamente; salida normalizada usa aliases fijos.
+
+Campos normalizados que se envian al generador local:
+- mistura
+- fecha
+- fecha_txt
+- ne
+- filiales
+- loc_fisicos
+- maquinas_oe
+- nomes_maquina
+- turnos
+- lados
+- itens
+- desc_itens
+- operadores
+- hora_inicial_min
+- hora_final_max
+- rpm_avg
+- num_fusos_avg
+- alfa_avg
+- tempo_avg
+- torcao_p_poleg_avg
+- torcao_p_metro_avg
+- prod_mt_min_avg
+- prod_kg_hr_avg
+- prod_calc_total
+- cvm_oe
+- cvp_oe
+- efic_calc_oe
+- efic_oe
+- prod_oe
+- t_bob_avg
+- rpm_card_avg
+- n_total
+- s_total
+- l_total
+- t_total
+- mo_total
+- cp_v_sl_total
+- cm_v_sl_total
+- ccp_c_total
+- ccm_c_total
+- jp_p_total
+- jm_p_total
+- cort_nat_total
+- rob_01_avg
+- rob_02_avg
+- rob_03_avg
+- filas
+- maquinas_total
+- maquinas_activas
+- filas_activas
+
+Uso:
+- Correlacion Ne+fecha entre calidad de ensayo y desempeno de OE.
+- Evidencia operativa para hipotesis de causa de proceso.
+
+
+============================================================
+7) SECCION PROVEEDORES (proveedores)
+============================================================
+
+Campos:
+- mistura
+- produtor
+- str
+- sci
+- mic
+- uhml
+- elg
+- fardos_consumidos
+- secuencias
+
+Uso:
+- Lectura de riesgo por proveedor para lote actual.
+
+
+============================================================
+8) SECCION CARDAS (aun no implementado en analizador local)
+============================================================
+
+Estado actual:
+- El analizador local NO recibe ni usa cardasContext.
+- cardasContext se obtiene en GET /api/dashboard/mezcla-lotes para visualizacion del dashboard,
+  pero no se incluye en POST /api/dashboard/narrativa-lotes ni en generarNarrativaLocal(...).
+
+Resumen:
+- Cardas esta disponible para UI del dashboard.
+- Cardas aun no forma parte del payload del analizador local (ni local directo ni fallback).
+
+
+============================================================
+9) FIRMA FINAL DE LLAMADA AL ANALIZADOR LOCAL
+============================================================
+
+Firma exacta:
+generarNarrativaLocal(rows, loteActual, proveedores = [], rowsPorFecha = [], rowsMaquinas = [], rowsProduccionOe = [], fechaCorte = null)
+
+Misma firma para:
+- Informe IA en modo local
+- Fallback local cuando Gemini no esta disponible

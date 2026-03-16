@@ -1,0 +1,274 @@
+🧵 REPORTE OPERATIVO DE CALIDAD — LOTE FIAC 110
+Simulacion de salida objetivo (payload ideal — v3 con trazabilidad FIAC/M separada)
+Fecha analizada efectiva: 12/03/2026
+Base de comparacion: 11/03/2026
+
+Convencion de trazabilidad v3:
+- 🏷️ FIAC xxx = lote interno de negocio
+- 🧪 Mxxx = mistura real de fibra en payload/HVI
+- 🔗 Formato comparativo usado en todo el informe: FIACxxx | Mxxx
+
+====================================================================
+1) RESUMEN EJECUTIVO ⚠️
+====================================================================
+
+Estado global sugerido: ⚠️ PRECAUCION — REVISAR
+
+- 🌾 Base de fibra solida: HVI <=12/03 STR ~27.8, SCI ~113.8, MIC ~4.5, UI ~81.2. Sin señal de degradacion de materia prima en el corte.
+- 🔴 Riesgo principal del dia: Ne 10 con Neps+140=890 /km y CVm 12.72 en OE 10 — agresividad de proceso critica.
+- 🔴 Ne 12.5 en zona condicional: tenacidad 15.90-15.96 cN/tex (objetivo urdimbre >=16.5), Neps+140 hasta 791, y Trabajo B persistentemente bajo en toda la ventana comparable FIAC108 | M160 → FIAC110 | M162 (riesgo para Benninger — ver Sec. 7).
+- ↔️ Desbalanceo OE 3 LP>LI confirmado: 23.8% mas puntos delgados en lado Derecho del 12/03 (ver Sec. 5).
+- 📉 Eficiencia de transformacion fibra→hilo (η) para Ne 12.5 el 12/03: ~57.3%, levemente por debajo de la ventana comparable FIAC108 | M160 → FIAC110 | M162 (ver Sec. 6).
+- 🚦 Recomendacion: continuar condicionado; intervenir OE 10 y OE 3 LI/LP; bloquear preventivamente envio a Benninger hasta recuperar Trabajo B y tenacidad en Ne 12.5.
+
+====================================================================
+2) ALERTAS FEHACIENTES (EVIDENCIA DIRECTA DEL 12/03) 🚨
+====================================================================
+
+ALERTA A1 | Severidad: 🔴 ALTA
+Variable: Neps+140 /km (agresividad de proceso)
+Ne: 10
+Valor del dia: 890 /km
+Umbral interno de vigilancia: 600 /km
+📋 Evidencia: 12/03/2026 | OE 10 | Pasador SI | Operador Uster: Muniz Alicia | Test Uster 5890 | Test Tensorapid 002183
+⚡ Impacto: riesgo de inestabilidad de tintura y regularidad en procesos posteriores.
+
+ALERTA A2 | Severidad: 🔴 MEDIA-ALTA
+Variable: Tenacidad de hilo (cN/tex)
+Ne: 12.5
+Valores del dia: 15.90 y 15.96 cN/tex
+Objetivo operativo urdimbre: >=16.5 cN/tex
+📋 Evidencia: 12/03/2026 | OE 3 LI (Uster 5888, Tensorapid 002182) y OE 3 LP (Uster 5887, Tensorapid 002181) | Operador Uster: Garcia Ariel
+⚡ Impacto: menor margen mecanico frente a picos de tension en urdido/telar. Compuesto con Trabajo B bajo -> riesgo de corte en Benninger.
+
+ALERTA A3 | Severidad: 🟡 MEDIA
+Variable: Consistencia operativa por turno (produccion OE)
+Ne: 7 — OE 9 turno C
+📋 Evidencia: 12/03/2026 | PROD INFORMADA=0 y EFIC INFORMADA=0 en turno C; turnos A/B del mismo dia si produjeron.
+⚡ Impacto: discontinuidad operativa; confirmar causa (paro planificado, falta material, incidencia mecanica).
+
+ALERTA A4 | Severidad: 🔴 ALTA — NUEVA
+Variable: Trabajo de Rotura B (cN·%) — resiliencia del hilo bajo fatiga
+Ne: 12.5
+Ventana comparable FIAC disponible en payload especifico:
+  FIAC108 | M160: 12.88 cN·% 🔴 | FIAC109 | M161: 13.62 cN·% 🔴 | FIAC110 | M162: 14.70 cN·% 🔴
+Umbral critico propuesto para engomado OE (Benninger): >=15.0 cN·%
+📋 Base: Tensorapid acumulado del payload comparativo especifico FIAC108 | M160, FIAC109 | M161 y FIAC110 | M162.
+   Toda la ventana comparable disponible queda por debajo del umbral propuesto.
+⚡ Impacto: riesgo persistente de corte por fatiga en Benninger. No es solo un evento puntual del 12/03; ya aparece en FIAC108 | M160, FIAC109 | M161 y FIAC110 | M162. Requiere revision de torsion/alfa o ajuste de parametros de engomado.
+⚠️ NOTA: umbral >=15 cN·% es una referencia propuesta como punto de partida tecnico. Debe ser calibrada por Calidad con ensayos de correlacion propios en Benninger antes de usarse como criterio formal de bloqueo.
+
+====================================================================
+3) COMPARATIVA DEL DIA (12/03) POR NE 📊
+====================================================================
+
+Ne 7 ✅:
+- CVm:       11.16
+- Neps+140:  142 /km
+- Tenacidad: 16.80 cN/tex
+- Elongacion: 10.12 %
+- Trabajo B (ref. FIAC108 | M160 -> FIAC110 | M162): 26.80-29.33 cN·% ✅
+Lectura: ✅ en rango tecnico favorable para continuidad.
+
+Ne 9 ⚠️ (dato parcial):
+- CVm:       11.54
+- Neps+140:  326 /km
+- Tenacidad/Elongacion/Trabajo B: sin dato Tensorapid visible en registro 12/03
+Lectura: ⚠️ regularidad controlada; completar con ensayo Tensorapid pendiente.
+
+Ne 10 🟡:
+- CVm:       12.72 📈 (suba desde 11.66-12.17 del 11/03)
+- Neps+140:  890 /km 🔴 (suba critica desde 370-734 del 11/03)
+- Tenacidad: 16.19 cN/tex ✅
+- Elongacion: 9.58 %
+- Trabajo B (ref. FIAC108 | M160 -> FIAC110 | M162): 17.37 — 19.46 cN·% ✅
+Lectura: 🟡 resistencia del dia aceptable; regularidad y neps comprometidos en proceso.
+
+Ne 12.5 (LI+LP del 12/03) 🔴:
+- CVm:       ~12.30 (LI: 12.15 | LP: 12.44)
+- Neps+140:  ~704 /km 🔴 (LI: 616 | LP: 791 — desbalanceo LP>LI)
+- Tenacidad: ~15.93 cN/tex 🔴 (LI: 15.96 | LP: 15.90 — bajo objetivo urdimbre)
+- Elongacion: ~8.27 %
+- Trabajo B (ref. FIAC108 | M160 -> FIAC110 | M162): 12.88 — 14.70 cN·% 🔴 SISTEMATICAMENTE BAJO
+Lectura: 🔴 condicion de riesgo compuesto: baja tenacidad + desbalanceo LP>LI + Trabajo B critico.
+
+====================================================================
+4) EVOLUCION 11/03 → 12/03 (FOCOS) 📈📉
+====================================================================
+
+Ne 10:
+- CVm:      11.66-12.17 → 12.72 📈 suba relevante
+- Neps+140: 370-734 → 890 🔴 suba critica en el peor evento
+- Tenacidad: 15.65-16.28 → 16.19 ✅ estable/ligera mejora
+Diagnostico: 🔧 empeora limpieza/regularidad; la resistencia se mantiene.
+
+Ne 12.5:
+- CVm:      12.01-12.16 → 12.15-12.44 📈 leve deterioro
+- Neps+140: 580-658 → 616-791 📈 deterioro con pico alto en lado LP
+- Tenacidad: 16.41-16.47 → 15.90-15.96 📉 baja relevante en ambos lados
+Diagnostico: 🔴 tendencia negativa simultanea en dos variables; baja de margen mecanico + mayor carga de neps.
+
+====================================================================
+5) CORRELACION CON OE + DESBALANCEO LI/LP 🏭
+====================================================================
+
+Ne 10 (OE 10):
+⚙️ Parametros: rpm rotor 80000 | alfa 5.3 | pasador SI | cardina 9500
+📊 Produccion: efic turnos ~90.6-96.7% | produccion total dia ~5163
+🔧 Hipotesis: desvio de limpieza/proceso en OE -> pico de neps. Sin evidencia de falla de fibra.
+🎯 Verificar: bajar Neps+140 a <=700 y CVm a <12.5 en siguiente muestreo.
+
+Ne 12.5 (OE 3 — DESBALANCEO LI vs LP) 🔍:
+⚙️ Parametros: rpm rotor 90000 | alfa 5.3 | pasador SI | cardina 9500
+📊 Produccion: efic variable ~77.9-99.0% | produccion total dia ~4584
+🏷️ Trazabilidad del foco del dia: FIAC110 | M162
+
+  DESBALANCEO LP > LI (datos 12/03):
+  ┌─────────────────────────────────────────────────────┐
+  │ Lado    │ Delgados -30%  │ Neps+140  │ Tenacidad    │
+  │ LI      │      825       │   616     │  15.96 cN/tex│
+  │ LP      │     1021 🔴    │   791 🔴  │  15.90 cN/tex│
+  │ Dif.    │   +23.8% LP    │  +28.4%   │   -0.06      │
+  └─────────────────────────────────────────────────────┘
+  Umbral de alerta propuesto para desbalanceo LI/LP: >15% de diferencia.
+
+⚡ Diagnostico diferencial (hipotesis — requiere verificacion en planta):
+  H1 🔧 Mecanica: diferencia de presion/desgaste en rodillos de estiraje lado LP.
+  H2 📦 Alimentacion: asimetria de carga de material entre lados.
+  H3 🌡️ Microambiente: diferencia de temperatura LP vs LI (menos probable si mismo turno).
+  NO diagnostico conclusivo hasta inspeccion fisica del lado LP.
+
+🎯 Verificar: inspeccionar rodillos lado LP; igualar condicion de alimentacion LI=LP.
+   Objetivo: diferencia LI/LP en delgados < 10% en siguiente ensayo.
+
+====================================================================
+6) INDICE DE CASTIGO DE FIBRA 🔬
+====================================================================
+
+Definicion: η = (Tenacidad hilo cN/tex) / (STR fibra g/tex) × 100
+Interpreta que porcentaje de la resistencia potencial de la fibra se transforma en resistencia de hilo.
+
+Ventana comparable disponible para FIAC 110 en payload especifico:
+  FIAC108 | M160, FIAC109 | M161 y FIAC110 | M162
+  Ne 7  liso:    59.9% (FIAC108 | M160) | 61.2% (FIAC109 | M161) | 60.0% (FIAC110 | M162) | linea base ~60.4%
+  Ne 10 liso:   58.2% (FIAC108 | M160) | 59.7% (FIAC109 | M161) | 58.2% (FIAC110 | M162) | linea base ~58.7%
+  Ne 12.5 liso: 57.5% (FIAC108 | M160) | 58.8% (FIAC109 | M161) | 58.4% (FIAC110 | M162) | linea base ~58.2%
+
+Calculo el dia 12/03 (STR fibra FIAC110 | M162 ~27.82 segun HVI del lote):
+  Ne 10:  η = 16.19 / 27.82 × 100 = 58.2% ✅ alineado con FIAC108 | M160 y FIAC110 | M162 historico
+  Ne 12.5: η = 15.93 / 27.82 × 100 = 57.3% ⚠️ por debajo de FIAC110 | M162 historico (58.4%) y de la linea base comparable
+
+⚠️ Lectura critica: la baja de tenacidad en Ne 12.5 NO proviene de fibra degradada (STR estable
+en el lote). El proceso esta transformando la fibra apenas por debajo de la ventana comparable
+FIAC108 | M160 → FIAC110 | M162. Combinado con Trabajo B critico, el margen total para uso en Benninger es insuficiente.
+
+📋 NOTA METODOLOGICA: el valor teorico "esperado" de un proceso idealizado (~63% eficiencia)
+NO es el baseline aplicable. Lo operativamente relevante es η del dia vs la ventana comparable
+especifica disponible para FIAC110 | M162. Esa ventana para Ne 12.5 es 57.5-58.8%, y el 57.3% del
+12/03 queda apenas por debajo. El problema no es solo la fibra: se acumulan factores de proceso
+como torsion, geometria de estiraje, asimetria LI/LP y desgaste de componentes.
+
+====================================================================
+7) SEMAFORO BENNINGER — TRABAJO B 🚦
+====================================================================
+
+⚡ Campo: trabajo_b (cN·%) = energia absorbida hasta rotura. Indicador de resiliencia bajo
+fatiga ciclica (frenado/tension en Benninger).
+
+Valores reales de la ventana comparable por LOTE_FIAC interno y mistura real (Ne liso):
+  ┌────────────┬────────────┬──────────────┬──────────────┬──────────────┬──────────────────┐
+  │ Ne         │ Tipo llave │ FIAC108      │ FIAC109      │ FIAC110      │ Estado           │
+  ├────────────┼────────────┼──────────────┼──────────────┼──────────────┼──────────────────┤
+  │            │ Mistura    │ M160         │ M161         │ M162         │                  │
+  │ Ne 7  liso │ Trabajo B  │ 26.80        │ 28.42        │ 29.33        │ ✅ VERDE         │
+  │ Ne 9  liso │ Trabajo B  │ 19.82        │ nd           │ 22.77        │ ✅ VERDE parcial │
+  │ Ne 10 liso │ Trabajo B  │ 17.37        │ 18.35        │ 19.46        │ ✅ VERDE         │
+  │ Ne 12.5 l. │ Trabajo B  │ 12.88 🔴     │ 13.62 🔴     │ 14.70 🔴     │ 🔴 ROJO          │
+  └────────────┴────────────┴──────────────┴──────────────┴──────────────┴──────────────────┘
+  Umbral critico propuesto: >=15.0 cN·%
+
+🚦 Semaforo por Ne:
+  Ne 7:   ✅ VERDE — margen amplio en todo el lote
+  Ne 9:   ✅ VERDE — dato parcial; FIAC108 | M160 y FIAC110 | M162 por encima del umbral
+  Ne 10:  ✅ VERDE — toda la ventana comparable FIAC108 | M160 -> FIAC110 | M162 por encima del umbral
+  Ne 12.5: 🔴 ROJO — toda la ventana comparable disponible por debajo del umbral propuesto
+
+📢 Implicacion practica: el Trabajo B bajo en Ne 12.5 ya aparece en toda la ventana comparable
+disponible FIAC108 | M160 -> FIAC110 | M162. No es solo un evento del 12/03.
+Esto implica que el riesgo de corte en Benninger viene persistiendo en la secuencia comparable
+disponible y puede no haber sido cuantificado hasta ahora. Acciones sugeridas:
+  🔧 Revisar alfa/torsion en OE 3 para evaluar si incrementarla mejora Trabajo B sin penalizar CVm.
+  🔧 Ajustar parametros de tension en Benninger si el hilo ya esta en produccion con estos valores.
+  📋 Definir con el equipo de Benninger el umbral operativo real de la planta antes de formalizar
+     el criterio de bloqueo en el sistema.
+
+⚠️ IMPORTANTE: el umbral >=15 cN·% es una referencia propuesta. Debe ser validado con
+ensayos de correlacion propios en Benninger antes de usarse como criterio formal de bloqueo.
+
+====================================================================
+8) PROVEEDORES CLAVE (LECTURA CORTA) 🌾
+====================================================================
+
+✅ VICENTIN (mayor participacion): STR 27.40 | SCI 119.0 | MIC 4.455 — perfil favorable
+🟡 CARAM: STR 27.43 | SCI 107.6 — perfil intermedio favorable parcial
+⚠️ ALAL: STR 26.27 | MIC 4.844 — riesgo relativo (STR menor + MIC alto = fibra mas gruesa/corta)
+
+Lectura global: 🌾 la materia prima no muestra deterioro severo en el corte.
+El desvio principal observado es de PROCESO, no de fibra. El η (Castigo de Fibra) del
+12/03 queda apenas por debajo de la ventana comparable FIAC108 | M160 -> FIAC110 | M162 — la fibra no es la causa directa.
+
+====================================================================
+9) PLAN DE ACCION PRIORIZADO (24H) 🔧
+====================================================================
+
+1. 🚨 URGENTE — OE 10 (Ne 10):
+   Revisar limpieza y condicion de cardina/rotor; confirmar setpoint de tension.
+   🎯 Objetivo: Neps+140 <=700 /km y CVm <12.5 en siguiente muestreo.
+
+2. 🔴 CRITICO — OE 3 LP (Ne 12.5 — desbalanceo LI/LP):
+   Inspeccionar rodillos lado LP; igualar condicion de alimentacion LI=LP.
+   Recalibrar estiraje/tension para reducir desbalanceo a < 10%.
+   🎯 Objetivo: diferencia delgados LP/LI < 10% y tenacidad >=16.30 sin subir CVm.
+
+3. 🔴 CRITICO — Revision de torsion/alfa en OE 3 (Ne 12.5 — Trabajo B sistemico):
+  El Trabajo B bajo ya aparece en toda la ventana comparable FIAC108 | M160 -> FIAC110 | M162. Evaluar si subir alfa
+   incrementa tenacidad y Trabajo B sin penalizar CVm/neps. Consultar con Benninger el
+   umbral operativo real antes de formalizar criterio de bloqueo.
+   🎯 Objetivo: llevar Trabajo B a >=15 cN·% o definir umbral validado con Benninger.
+
+4. 🔴 BLOQUEO PREVENTIVO — Ne 12.5 a Benninger:
+   No enviar hasta confirmar Trabajo B y tenacidad en rango en al menos 2 ensayos
+   consecutivos post-ajuste.
+
+5. 📊 MONITOREO — Calidad/Produccion:
+   Repetir ensayo Uster+Tensorapid post-ajuste. No cerrar A2/A4 hasta dos lecturas
+   consecutivas dentro de rango. Confirmar y documentar causa del paro OE 9 turno C (A3).
+
+====================================================================
+10) ESTADO OPERATIVO PROPUESTO 🚦
+====================================================================
+
+⚠️ PRECAUCION — REVISAR
+
+Plan inmediato:
+  🔴 Bloqueo preventivo para Benninger hasta recuperar Trabajo B y tenacidad en Ne 12.5.
+  🔧 Intervenir OE 10 (limpieza/cardina/rotor) y OE 3 LP (rodillos/alimentacion/alfa).
+  📋 Verificar y documentar causa del paro OE 9 turno C (A3).
+
+Validacion para levantar estado:
+  ✅ Dos lecturas consecutivas de Ne 12.5 con tenacidad >=16.30 y Neps+140 <650.
+  ✅ Diferencia LI/LP en delgados <10% en ensayo post-ajuste.
+  ✅ Trabajo B Ne 12.5 en camino ascendente o umbral confirmado con Benninger.
+
+====================================================================
+11) NOTA DE ALCANCE (TRANSPARENCIA) 📋
+====================================================================
+
+- 📅 Este reporte usa data cruda del 12/03/2026 y ventana comparable especifica FIAC108 | M160 -> FIAC110 | M162 del payload dedicado.
+- 📌 El mapeo de negocio informado por planta incluye M159 -> FIAC108; esa mistura real no aparece en el payload exportado usado para este informe, por lo que la comparacion trazable disponible aqui es FIAC108 | M160, FIAC109 | M161 y FIAC110 | M162.
+- 📊 El indice de Castigo de Fibra (η) usa la ventana comparable especifica FIAC108 | M160 -> FIAC110 | M162 como baseline — NO un valor teorico externo de eficiencia ideal.
+- 🚦 El umbral Trabajo B (>=15 cN·%) es referencia propuesta para discusion con Benninger; no es criterio de bloqueo validado hasta calibracion en planta.
+- ↔️ El desbalanceo LI/LP se declara como hipotesis diferencial, no diagnostico conclusivo; requiere inspeccion fisica.
+- ⚠️ Donde faltan datos del dia (Tensorapid Ne 9, Trabajo B individual 12/03), se declara explicitamente en lugar de inferir.
+- ✅ Formato pensado para aprobacion de Operaciones + Calidad previo a implementacion en codigo.
+- 🔬 Mejoras incorporadas v3: separacion explicita LOTE_FIAC interno vs mistura real en referencias comparativas y tablas; Indice de Castigo de Fibra (Sec. 6), Desbalanceo LI/LP (Sec. 5), Semaforo Benninger / Trabajo B (Sec. 7, Alerta A4).
