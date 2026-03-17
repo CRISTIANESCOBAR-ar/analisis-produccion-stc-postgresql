@@ -10,6 +10,11 @@ const routes = [
     component: () => import('./components/ensayos/Uster.vue'), 
     meta: { title: 'Uster' } 
   },
+  {
+    path: '/uster-cardas',
+    component: () => import('./components/ensayos/UsterCardas.vue'),
+    meta: { title: 'Uster Cardas' }
+  },
   { 
     path: '/tenso', 
     component: () => import('./components/ensayos/TensoRapid.vue'), 
@@ -29,6 +34,11 @@ const routes = [
     path: '/resumen', 
     component: () => import('./components/ensayos/ResumenEnsayos.vue'), 
     meta: { title: 'Resumen Ensayos' } 
+  },
+  {
+    path: '/resumen-cardas',
+    component: () => import('./components/ensayos/ResumenEnsayosCardas.vue'),
+    meta: { title: 'Resumen Ensayos Cardas' }
   },
   {
     path: '/resumen-semanal-hilanderia',
@@ -54,6 +64,11 @@ const routes = [
     path: '/hvi',
     component: () => import('./components/ensayos/HVI.vue'),
     meta: { title: 'Carga HVI' }
+  },
+  {
+    path: '/resumen-hvi-datos',
+    component: () => import('./components/ensayos/ResumenHVIDatos.vue'),
+    meta: { title: 'Resumen Datos HVI' }
   },
   {
     path: '/detalle-mistura-lote',

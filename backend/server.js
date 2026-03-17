@@ -8714,6 +8714,52 @@ app.post('/api/hvi/predecir-hilatura', async (req, res) => {
   }
 });
 
+// GET /api/hvi/ensayos-detalles - Obtener datos combinados HVI (ensayos + detalles)
+app.get('/api/hvi/ensayos-detalles', async (req, res) => {
+  try {
+    const sql = `
+      SELECT
+        e.id AS ensayo_id,
+        e.tipo AS ensayo_tipo,
+        e.lote AS lote,
+        e.proveedor AS proveedor,
+        e.grado AS grado,
+        e.fecha AS fecha,
+        e.muestra AS muestra,
+        e.cantidad AS cantidad,
+        e.color AS color,
+        e.cort AS cort,
+        e.obs AS obs,
+        d.id AS detalle_id,
+        d.fardo AS fardo,
+        d.sci AS sci,
+        d.mst AS mst,
+        d.mic AS mic,
+        d.mat AS mat,
+        d.uhml AS uhml,
+        d.ui AS ui,
+        d.sf AS sf,
+        d.str AS str,
+        d.elg AS elg,
+        d.rd AS rd,
+        d.plus_b AS plus_b,
+        d.tipo AS detalle_tipo,
+        d.tr_cnt AS tr_cnt,
+        d.tr_ar AS tr_ar,
+        d.trid AS trid
+      FROM tb_hvi_ensayos e
+      LEFT JOIN tb_hvi_detalles d ON e.id = d.ensayo_id
+      ORDER BY e.id DESC, d.fardo ASC
+    `;
+
+    const result = await query(sql, [], 'hvi/ensayos-detalles');
+    res.json({ rows: result.rows || [] });
+  } catch (err) {
+    console.error('Error en /api/hvi/ensayos-detalles:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // =====================================================
 // CORRELACIÓN MEZCLA (HVI) → HILO (USTER + TENSORAPID)
 // =====================================================

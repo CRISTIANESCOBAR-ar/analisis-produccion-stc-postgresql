@@ -65,6 +65,14 @@
             </router-link>
 
             <router-link
+              to="/resumen-cardas"
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm"
+              :class="{ 'bg-blue-600': $route.path === '/resumen-cardas' }"
+            >
+              <span>🧾</span> Resumen Cardas
+            </router-link>
+
+            <router-link
               to="/resumen-semanal-hilanderia"
               class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm"
               :class="{ 'bg-blue-600': $route.path === '/resumen-semanal-hilanderia' }"
@@ -118,6 +126,14 @@
               :class="{ 'bg-blue-600': $route.path === '/uster' }"
             >
               <span>🧩</span> Uster
+            </router-link>
+
+            <router-link
+              to="/uster-cardas"
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm"
+              :class="{ 'bg-blue-600': $route.path === '/uster-cardas' }"
+            >
+              <span>🧺</span> Uster Cardas
             </router-link>
             
             <router-link 
@@ -429,6 +445,13 @@
               <span>🧬</span> Carga HVI (Mistura)
             </router-link>
             <router-link 
+              to="/resumen-hvi-datos" 
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
+              :class="{ 'bg-blue-600': $route.path === '/resumen-hvi-datos' }"
+            >
+              <span>📊</span> Resumen Datos HVI
+            </router-link>
+            <router-link 
               to="/correlacion-mezcla-hilo" 
               class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
               :class="{ 'bg-blue-600': $route.path === '/correlacion-mezcla-hilo' }"
@@ -496,7 +519,7 @@ const indigoMenuOpen = ref(localStorage.getItem('indigoMenuOpen') !== 'false')
 const configMenuOpen = ref(localStorage.getItem('configMenuOpen') !== 'false')
 const inventoryMenuOpen = ref(localStorage.getItem('inventoryMenuOpen') !== 'false')
 
-const labRoutes = ['/resumen', '/resumen-semanal-hilanderia', '/analisis-calidad-fibra', '/golden-batch', '/informe-auditoria-lote', '/resumen-diario', '/stats', '/uster', '/tenso', '/benninger-rtf', '/benninger-impacto']
+const labRoutes = ['/resumen', '/resumen-cardas', '/resumen-semanal-hilanderia', '/analisis-calidad-fibra', '/golden-batch', '/informe-auditoria-lote', '/resumen-diario', '/stats', '/uster', '/uster-cardas', '/tenso', '/benninger-rtf', '/benninger-impacto']
 const isLabRouteActive = computed(() => labRoutes.includes(route.path))
 
 const prodRoutes = ['/import-control', '/informe-diario']
