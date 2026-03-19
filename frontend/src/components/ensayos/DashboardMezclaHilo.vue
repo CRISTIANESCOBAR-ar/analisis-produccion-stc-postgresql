@@ -342,30 +342,121 @@
           <div v-if="narrativaAviso && narrativa" class="text-amber-700 text-xs bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 mb-3 flex items-center gap-2">
             <span>⚠️</span> {{ narrativaAviso }}
           </div>
-          <div v-if="narrativa && !loadingNarrativa" class="relative group">
-            <div class="absolute top-3 right-3 z-10 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
-              <button v-if="ultimoPromptGemini" @click="copiarPromptGemini"
-                class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5"
-                :class="promptGeminiCopiado ? 'bg-cyan-100 text-cyan-700' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 shadow-sm'">
-                <span>{{ promptGeminiCopiado ? '✓' : '🧠' }}</span>
-                {{ promptGeminiCopiado ? 'Prompt copiado' : 'Copiar Prompt' }}
-              </button>
-              <button v-if="ultimoPayloadNarrativa" @click="copiarPayloadNarrativa"
-                class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5"
-                :class="payloadNarrativaCopiado ? 'bg-emerald-100 text-emerald-700' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 shadow-sm'">
-                <span>{{ payloadNarrativaCopiado ? '✓' : '{}' }}</span>
-                {{ payloadNarrativaCopiado ? 'JSON copiado' : 'Copiar JSON' }}
-              </button>
-              <button @click="copiarNarrativa"
-                class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5"
-                :class="narrativaCopiada ? 'bg-green-100 text-green-700' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 shadow-sm'">
-                <span>{{ narrativaCopiada ? '✓' : '📋' }}</span>
-                {{ narrativaCopiada ? '¡Copiado!' : 'Copiar' }}
-              </button>
+          <div v-if="narrativa && !loadingNarrativa" class="space-y-4">
+            <div class="rounded-xl border border-slate-200 bg-slate-50/80 p-4 space-y-4">
+              <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                  <div class="text-xs font-bold uppercase tracking-wide text-slate-600">Vista del informe</div>
+                  <p class="text-[11px] text-slate-500 mt-1 max-w-3xl">
+                    El análisis se genera completo. Los filtros sólo cambian cómo se presenta en pantalla para cada sector.
+                  </p>
+                </div>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="text-[10px] px-2 py-1 rounded-full font-bold bg-white border border-slate-200 text-slate-500">
+                    {{ narrativaVisibleSections.length }} / {{ narrativaAvailableSections.length }} bloques visibles
+                  </span>
+                  <button v-if="ultimoPromptGemini" @click="copiarPromptGemini"
+                    class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5"
+                    :class="promptGeminiCopiado ? 'bg-cyan-100 text-cyan-700' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 shadow-sm'">
+                    <span>{{ promptGeminiCopiado ? '✓' : '🧠' }}</span>
+                    {{ promptGeminiCopiado ? 'Prompt copiado' : 'Copiar Prompt' }}
+                  </button>
+                  <button v-if="ultimoPayloadNarrativa" @click="copiarPayloadNarrativa"
+                    class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5"
+                    :class="payloadNarrativaCopiado ? 'bg-emerald-100 text-emerald-700' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 shadow-sm'">
+                    <span>{{ payloadNarrativaCopiado ? '✓' : '{}' }}</span>
+                    {{ payloadNarrativaCopiado ? 'JSON copiado' : 'Copiar JSON' }}
+                  </button>
+                  <button @click="copiarNarrativa"
+                    class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5"
+                    :class="narrativaCopiada ? 'bg-green-100 text-green-700' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 shadow-sm'">
+                    <span>{{ narrativaCopiada ? '✓' : '📋' }}</span>
+                    {{ narrativaCopiada ? '¡Copiado!' : 'Copiar completo' }}
+                  </button>
+                </div>
+              </div>
+
+              <div class="flex flex-wrap gap-2">
+                <button
+                  v-for="preset in narrativaPresetOptions"
+                  :key="preset.id"
+                  @click="applyNarrativaPreset(preset.id)"
+                  class="px-3 py-2 rounded-xl text-xs font-bold transition-all border"
+                  :class="narrativaViewPreset === preset.id
+                    ? 'bg-slate-800 text-white border-slate-800 shadow-sm'
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'">
+                  {{ preset.label }}
+                </button>
+              </div>
+
+              <div class="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                <label
+                  v-for="section in narrativaAvailableSections"
+                  :key="`filter-${section.id}`"
+                  class="flex items-start gap-3 rounded-xl border px-3 py-3 cursor-pointer transition-all"
+                  :class="narrativaSelectedSectionIdSet.has(section.id)
+                    ? 'bg-white border-slate-300 shadow-sm'
+                    : 'bg-slate-100/70 border-slate-200 text-slate-400'">
+                  <input
+                    type="checkbox"
+                    class="mt-0.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-400"
+                    :checked="narrativaSelectedSectionIdSet.has(section.id)"
+                    @change="toggleNarrativaSection(section.id, $event.target.checked)" />
+                  <div class="min-w-0">
+                    <div class="text-xs font-bold text-slate-700 flex items-center gap-2">
+                      <span>{{ section.icon }}</span>
+                      <span>{{ section.title }}</span>
+                    </div>
+                    <p class="text-[10px] mt-1 text-slate-400">{{ section.description }}</p>
+                    <div class="flex flex-wrap gap-1 mt-2">
+                      <span
+                        v-for="audience in section.audiences"
+                        :key="`${section.id}-${audience}`"
+                        class="text-[9px] px-2 py-0.5 rounded-full font-bold"
+                        :class="getNarrativaAudienceMeta(audience).className">
+                        {{ getNarrativaAudienceMeta(audience).label }}
+                      </span>
+                    </div>
+                  </div>
+                </label>
+              </div>
             </div>
-            <div
-              class="bg-slate-50 rounded-xl border border-slate-100 p-5 text-sm text-slate-700 whitespace-pre-wrap leading-relaxed font-mono">
-              {{ narrativa }}
+
+            <div v-if="narrativaIntro" class="bg-slate-900 text-slate-100 rounded-xl border border-slate-800 p-5 whitespace-pre-wrap leading-relaxed font-mono text-sm">
+              {{ narrativaIntro }}
+            </div>
+
+            <div v-if="!narrativaVisibleSections.length" class="text-center py-6 text-slate-400 bg-slate-50 rounded-xl border border-slate-200">
+              No hay bloques seleccionados para mostrar.
+            </div>
+
+            <div v-else class="space-y-3">
+              <div
+                v-for="section in narrativaVisibleSections"
+                :key="section.id"
+                class="rounded-xl border border-slate-200 overflow-hidden bg-white shadow-sm">
+                <div class="px-5 py-3 border-b border-slate-100 flex items-start justify-between gap-3 flex-wrap">
+                  <div>
+                    <div class="text-sm font-bold text-slate-700 flex items-center gap-2">
+                      <span>{{ section.icon }}</span>
+                      <span>{{ section.title }}</span>
+                    </div>
+                    <p v-if="section.description" class="text-[10px] text-slate-400 mt-1">{{ section.description }}</p>
+                  </div>
+                  <div class="flex flex-wrap gap-1">
+                    <span
+                      v-for="audience in section.audiences"
+                      :key="`badge-${section.id}-${audience}`"
+                      class="text-[9px] px-2 py-0.5 rounded-full font-bold"
+                      :class="getNarrativaAudienceMeta(audience).className">
+                      {{ getNarrativaAudienceMeta(audience).label }}
+                    </span>
+                  </div>
+                </div>
+                <div class="bg-slate-50 p-5 text-sm text-slate-700 whitespace-pre-wrap leading-relaxed font-mono">
+                  {{ section.content || section.text }}
+                </div>
+              </div>
             </div>
           </div>
           <div v-if="narrativaError" class="text-red-600 text-sm bg-red-50 rounded-xl p-4 mt-3">
@@ -818,6 +909,13 @@ import {
   evaluateBenningerAptitude,
   evaluateSideImbalance,
 } from '@shared/qualityMatrix.js'
+import {
+  NARRATIVA_VIEW_PRESETS,
+  NARRATIVA_SECTION_DEFS,
+  parseNarrativaStructure,
+  getNarrativaPresetSectionIds,
+  findNarrativaPresetBySectionIds,
+} from '@shared/narrativaSections.js'
 
 function defaultYesterdayISO() {
   const d = new Date()
@@ -836,23 +934,68 @@ function hashPayload(obj) {
   return h.toString(36)
 }
 
+function readStoredJson(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return fallback
+    return JSON.parse(raw)
+  } catch {
+    return fallback
+  }
+}
+
+function writeStoredJson(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    // noop
+  }
+}
+
+const NARRATIVA_AUDIENCE_META = {
+  produccion: {
+    label: 'Producción',
+    className: 'bg-emerald-100 text-emerald-700',
+  },
+  mecanica: {
+    label: 'Mecánica',
+    className: 'bg-amber-100 text-amber-700',
+  },
+  calidad: {
+    label: 'Calidad',
+    className: 'bg-cyan-100 text-cyan-700',
+  },
+}
+
+const ALL_NARRATIVA_SECTION_IDS = NARRATIVA_SECTION_DEFS.map((section) => section.id)
+
 // ── State ──────────────────────────────────────────────────────────────────
 const LS_KEY        = 'dmh_lotesInput'
 const lotesInput    = ref(localStorage.getItem(LS_KEY) ?? '107, 108, 109')
 watch(lotesInput, v => localStorage.setItem(LS_KEY, v))
 const LS_KEY_FECHA  = 'dmh_fechaCorte'
+const LS_KEY_NARRATIVA_PRESET = 'dmh_narrativaPreset'
+const LS_KEY_NARRATIVA_SECTIONS = 'dmh_narrativaSections'
 const loading       = ref(false)
 const rows          = ref([])
 const proveedores   = ref([])
 const sideDaily     = ref([])
 const cardasContext = ref(null)
 const narrativa     = ref('')
+const narrativaIntro = ref('')
+const narrativaSections = ref([])
 const narrativaError= ref('')
 const narrativaFuente = ref('')   // 'gemini' | 'local'
 const narrativaAviso  = ref('')
 const loadingNarrativa = ref(false)
 const modoLocalAutomatico = ref(false)
 const geminiCuotaDiariaAgotada = ref(false)
+const narrativaViewPreset = ref(localStorage.getItem(LS_KEY_NARRATIVA_PRESET) ?? 'completo')
+const narrativaSelectedSectionIds = ref((() => {
+  const stored = readStoredJson(LS_KEY_NARRATIVA_SECTIONS, [])
+  if (!Array.isArray(stored) || !stored.length) return [...ALL_NARRATIVA_SECTION_IDS]
+  return stored.filter((id) => ALL_NARRATIVA_SECTION_IDS.includes(id))
+})())
 const whatsappCopiado = ref(false)
 const narrativaCopiada = ref(false)
 const promptGeminiCopiado = ref(false)
@@ -861,9 +1004,23 @@ const ultimoPromptGemini = ref('')
 const ultimoPayloadNarrativa = ref(null)
 const fechaCorte = ref(localStorage.getItem(LS_KEY_FECHA) ?? defaultYesterdayISO())
 
+watch(narrativaViewPreset, (value) => {
+  try {
+    localStorage.setItem(LS_KEY_NARRATIVA_PRESET, value)
+  } catch {
+    // noop
+  }
+})
+
+watch(narrativaSelectedSectionIds, (value) => {
+  writeStoredJson(LS_KEY_NARRATIVA_SECTIONS, [...new Set(value)])
+}, { deep: true })
+
 watch(fechaCorte, async () => {
   localStorage.setItem(LS_KEY_FECHA, fechaCorte.value)
   narrativa.value = ''
+  narrativaIntro.value = ''
+  narrativaSections.value = []
   narrativaError.value = ''
   narrativaFuente.value = ''
   narrativaAviso.value = ''
@@ -946,12 +1103,103 @@ function buildNarrativaPayload(modo) {
   }
 }
 
+function getNarrativaAudienceMeta(audience) {
+  return NARRATIVA_AUDIENCE_META[audience] || {
+    label: String(audience || 'General'),
+    className: 'bg-slate-100 text-slate-600',
+  }
+}
+
+function normalizeNarrativaSections(sections = []) {
+  return sections
+    .map((section) => {
+      const base = NARRATIVA_SECTION_DEFS.find((item) => item.id === section.id)
+      return {
+        id: section.id || base?.id || `section-${Math.random().toString(36).slice(2, 7)}`,
+        heading: section.heading || base?.heading || '',
+        title: section.title || base?.title || 'Bloque',
+        icon: section.icon || base?.icon || '📄',
+        description: section.description || base?.description || '',
+        audiences: Array.isArray(section.audiences) && section.audiences.length
+          ? section.audiences
+          : (base?.audiences || ['produccion', 'mecanica', 'calidad']),
+        content: String(section.content || '').trim(),
+        text: String(section.text || section.content || '').trim(),
+      }
+    })
+    .filter((section) => section.content || section.text)
+}
+
+function getNarrativaSectionOrder(sectionId) {
+  const availableIndex = narrativaSections.value.findIndex((section) => section.id === sectionId)
+  if (availableIndex >= 0) return availableIndex
+  const baseIndex = NARRATIVA_SECTION_DEFS.findIndex((section) => section.id === sectionId)
+  return baseIndex >= 0 ? baseIndex : Number.MAX_SAFE_INTEGER
+}
+
+function sortNarrativaSectionIds(sectionIds = []) {
+  return [...new Set(sectionIds)].sort((a, b) => getNarrativaSectionOrder(a) - getNarrativaSectionOrder(b))
+}
+
+function hydrateNarrativaStructure(payload = {}) {
+  const fallback = parseNarrativaStructure(payload.narrativa || '')
+  const nextIntro = typeof payload.narrativaIntro === 'string' ? payload.narrativaIntro : fallback.intro
+  const nextSections = Array.isArray(payload.narrativaSections) && payload.narrativaSections.length
+    ? payload.narrativaSections
+    : fallback.sections
+
+  narrativaIntro.value = String(nextIntro || '').trim()
+  narrativaSections.value = normalizeNarrativaSections(nextSections)
+  syncNarrativaSelectionWithAvailableSections()
+}
+
+function applyNarrativaPreset(presetId) {
+  const safePreset = presetId === 'custom' ? 'completo' : presetId
+  const sourceSections = narrativaSections.value.length ? narrativaSections.value : NARRATIVA_SECTION_DEFS
+  narrativaSelectedSectionIds.value = sortNarrativaSectionIds(getNarrativaPresetSectionIds(safePreset, sourceSections))
+  narrativaViewPreset.value = presetId
+}
+
+function syncNarrativaSelectionWithAvailableSections() {
+  const availableIds = narrativaSections.value.map((section) => section.id)
+  if (!availableIds.length) {
+    narrativaSelectedSectionIds.value = []
+    return
+  }
+
+  const selected = narrativaSelectedSectionIds.value.filter((id) => availableIds.includes(id))
+  if (selected.length) {
+    narrativaSelectedSectionIds.value = sortNarrativaSectionIds(selected)
+    narrativaViewPreset.value = findNarrativaPresetBySectionIds(narrativaSelectedSectionIds.value, narrativaSections.value)
+    return
+  }
+
+  applyNarrativaPreset(narrativaViewPreset.value === 'custom' ? 'completo' : narrativaViewPreset.value)
+}
+
+function toggleNarrativaSection(sectionId, checked) {
+  const current = new Set(narrativaSelectedSectionIds.value)
+  if (checked) current.add(sectionId)
+  else current.delete(sectionId)
+
+  narrativaSelectedSectionIds.value = sortNarrativaSectionIds([...current])
+  narrativaViewPreset.value = findNarrativaPresetBySectionIds(narrativaSelectedSectionIds.value, narrativaSections.value)
+}
+
 // ── Definición de filas de tabla ──────────────────────────────────────────
 const HVI_ROWS = SHARED_HVI_ROW_DEFS
 const HILO_ROWS = SHARED_HILO_ROW_DEFS
 
 // ── Computed ───────────────────────────────────────────────────────────────
 const hasData     = computed(() => rows.value.length > 0)
+const narrativaPresetOptions = computed(() =>
+  NARRATIVA_VIEW_PRESETS.filter((preset) => preset.id !== 'custom' || narrativaViewPreset.value === 'custom')
+)
+const narrativaAvailableSections = computed(() => narrativaSections.value)
+const narrativaSelectedSectionIdSet = computed(() => new Set(narrativaSelectedSectionIds.value))
+const narrativaVisibleSections = computed(() =>
+  narrativaAvailableSections.value.filter((section) => narrativaSelectedSectionIdSet.value.has(section.id))
+)
 const lotesList   = computed(() => [...new Set(rows.value.map(r => r.mistura))].sort((a, b) => Number(a) - Number(b)))
 const loteActual  = computed(() => lotesList.value.length ? lotesList.value[lotesList.value.length - 1] : null)
 
@@ -1666,6 +1914,8 @@ async function analizar() {
   sideDaily.value = []
   cardasContext.value = null
   narrativa.value = ''
+  narrativaIntro.value = ''
+  narrativaSections.value = []
   narrativaError.value = ''
   ultimoPromptGemini.value = ''
   promptGeminiCopiado.value = false
@@ -1713,6 +1963,7 @@ async function generarNarrativa(soloLocal = false, forzar = false) {
       if (cached) {
         const c = JSON.parse(cached)
         narrativa.value       = c.narrativa
+        hydrateNarrativaStructure(c)
         narrativaFuente.value = 'cache'
         narrativaAviso.value  = ''
         narrativaError.value  = ''
@@ -1726,6 +1977,8 @@ async function generarNarrativa(soloLocal = false, forzar = false) {
 
   loadingNarrativa.value = true
   narrativa.value = ''
+  narrativaIntro.value = ''
+  narrativaSections.value = []
   narrativaError.value = ''
   narrativaFuente.value = ''
   narrativaAviso.value = ''
@@ -1740,6 +1993,7 @@ async function generarNarrativa(soloLocal = false, forzar = false) {
     const data = await res.json()
     if (!data.success) throw new Error(data.error || 'Error al generar')
     narrativa.value = data.narrativa
+    hydrateNarrativaStructure(data)
     narrativaFuente.value = data.fuente || 'local'
     narrativaAviso.value = data.aviso || ''
     ultimoPromptGemini.value = typeof data.promptGemini === 'string' ? data.promptGemini : ''
@@ -1757,11 +2011,15 @@ async function generarNarrativa(soloLocal = false, forzar = false) {
       try {
         localStorage.setItem(cacheKey, JSON.stringify({
           narrativa: data.narrativa,
+          narrativaIntro: data.narrativaIntro,
+          narrativaSections: data.narrativaSections,
           promptGemini: ultimoPromptGemini.value,
         }))
       } catch { /* cuota LS */ }
     }
   } catch (err) {
+    narrativaIntro.value = ''
+    narrativaSections.value = []
     narrativaError.value = err.message
     if (/quota|429|gemini/i.test(err.message || '')) {
       modoLocalAutomatico.value = true

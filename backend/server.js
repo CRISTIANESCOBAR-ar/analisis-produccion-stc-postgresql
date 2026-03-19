@@ -20,6 +20,7 @@ import {
   buildNarrativaMatrixPromptBlock,
   buildBenningerPromptBlock,
 } from '../shared/qualityMatrix.js';
+import { parseNarrativaStructure } from '../shared/narrativaSections.js';
 
 const { Pool } = pg
 const app = express()
@@ -259,6 +260,14 @@ function normalizeNarrativaGemini(text) {
   out = out.replace(/\n{3,}/g, '\n\n')
 
   return out
+}
+
+function buildNarrativaStructuredFields(narrativaText) {
+  const parsed = parseNarrativaStructure(narrativaText)
+  return {
+    narrativaIntro: parsed.intro || '',
+    narrativaSections: Array.isArray(parsed.sections) ? parsed.sections : [],
+  }
 }
 
 // Helpers SQL (PostgreSQL): parseo robusto de fechas/números desde TEXT
@@ -11863,12 +11872,14 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
       const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], rowsPorFecha, rowsMaquinas, rowsProduccionOe, fechaCorte, sideDaily || [], cardas || null);
       const narrativaLocal = normalizeNarrativaGemini(narrativa);
       const fuenteLocal = `⚡ Fuente: Generador local (sin IA externa) · ${formatTimestampEsAr24()}\n\n`;
+      const narrativaCompleta = fuenteLocal + narrativaLocal;
       return res.json({
         success: true,
-        narrativa: fuenteLocal + narrativaLocal,
+        narrativa: narrativaCompleta,
         fuente: 'local',
         promptGemini: '',
         modeloGemini: null,
+        ...buildNarrativaStructuredFields(narrativaCompleta),
       });
     }
 
@@ -12424,12 +12435,14 @@ Generá exactamente este formato en español (máximo 650 palabras), priorizando
       const result = await model.generateContent(prompt);
       const narrativaGemini = normalizeNarrativaGemini(result.response.text());
       const fuenteGemini = `✨ Fuente: Gemini Flash 2.5 · ${formatTimestampEsAr24()}\n\n`;
+      const narrativaCompleta = fuenteGemini + narrativaGemini;
       return res.json({
         success: true,
-        narrativa: fuenteGemini + narrativaGemini,
+        narrativa: narrativaCompleta,
         fuente: 'gemini',
         promptGemini: prompt,
         modeloGemini: modelName,
+        ...buildNarrativaStructuredFields(narrativaCompleta),
       });
     } catch (geminiErr) {
       // Fallback local ante cualquier error de Gemini (quota, red, etc.)
@@ -12437,6 +12450,7 @@ Generá exactamente este formato en español (máximo 650 palabras), priorizando
       const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], rowsPorFechaGemini, rowsMaquinasGemini, rowsProduccionOeGemini, fechaCorteGeminiKey, sideDaily || [], cardas || null);
       const narrativaLocal = normalizeNarrativaGemini(narrativa);
       const fuenteFallback = `⚡ Fuente: Generador local (Gemini no disponible) · ${formatTimestampEsAr24()}\n\n`;
+      const narrativaCompleta = fuenteFallback + narrativaLocal;
       const geminiErrText = String(geminiErr?.message || '');
       const cuotaDiariaAgotada = /generate_content_free_tier_requests|GenerateRequestsPerDayPerProjectPerModel-FreeTier|quota exceeded|429 Too Many Requests/i.test(geminiErrText);
       const aviso = cuotaDiariaAgotada
@@ -12444,12 +12458,13 @@ Generá exactamente este formato en español (máximo 650 palabras), priorizando
         : 'Gemini no disponible – informe generado localmente.';
       return res.json({
         success: true,
-        narrativa: fuenteFallback + narrativaLocal,
+        narrativa: narrativaCompleta,
         fuente: 'local',
         aviso,
         geminiEstado: cuotaDiariaAgotada ? 'quota-daily' : 'unavailable',
         promptGemini: prompt,
         modeloGemini: modelName,
+        ...buildNarrativaStructuredFields(narrativaCompleta),
       });
     }
 
