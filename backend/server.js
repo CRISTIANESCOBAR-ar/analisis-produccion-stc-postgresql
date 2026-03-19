@@ -6404,11 +6404,21 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
             LEFT JOIN tb_uster_carda_tbl t ON t.testnr = p.testnr
             WHERE DATE(p.created_at AT TIME ZONE 'America/Buenos_Aires') = (SELECT dia FROM ultimo_dia)
             GROUP BY p.testnr, p.maschnr, p.machine_family, p.nomcount, p.lote
+          ),
+          maq_resumen AS (
+            SELECT
+              maschnr,
+              MAX(machine_family) AS machine_family,
+              MAX(nomcount) AS nomcount,
+              ROUND(AVG(cvm_avg)::numeric, 2) AS cvm_avg,
+              COUNT(*) AS ensayos_maq
+            FROM ensayos
+            GROUP BY maschnr
           )
           SELECT
             TO_CHAR((SELECT dia FROM ultimo_dia), 'DD/MM/YYYY') AS fecha,
-            COUNT(*) AS ensayos,
-            COUNT(DISTINCT maschnr) AS maquinas,
+            (SELECT COUNT(*) FROM ensayos) AS ensayos,
+            COUNT(*) AS maquinas,
             ROUND(AVG(cvm_avg)::numeric, 2) AS cvm_avg_global,
             ROUND(MAX(cvm_avg)::numeric, 2) AS cvm_max,
             ROUND(MIN(cvm_avg)::numeric, 2) AS cvm_min,
@@ -6418,27 +6428,15 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
                 'machine_family', COALESCE(machine_family, 'N/D'),
                 'nomcount', nomcount,
                 'cvm_avg', cvm_avg,
-                'ensayos', COUNT(*) OVER (PARTITION BY maschnr)
-              ) ORDER BY machine_family, maschnr::numeric NULLS LAST
+                'ensayos', ensayos_maq
+              ) ORDER BY COALESCE(machine_family, 'N/D'), maschnr::numeric NULLS LAST
             ) AS maquinas_detalle
-          FROM ensayos
+          FROM maq_resumen
         `
         const resCardas = await query(sqlCardas, [], 'cardas-context')
         const row = resCardas.rows[0]
         if (row?.fecha) {
-          // Deduplicar maquinas_detalle agrupando por maschnr
-          const maqMap = {}
-          for (const m of (row.maquinas_detalle || [])) {
-            const k = String(m.maschnr || '')
-            if (!maqMap[k] || (m.cvm_avg != null && maqMap[k].cvm_avg == null)) {
-              maqMap[k] = m
-            }
-          }
-          const maquinas = Object.values(maqMap).sort((a, b) => {
-            const af = String(a.machine_family || ''), bf = String(b.machine_family || '')
-            if (af !== bf) return af.localeCompare(bf)
-            return (Number(a.maschnr) || 0) - (Number(b.maschnr) || 0)
-          })
+          const maquinas = (row.maquinas_detalle || [])
           cardasCtx = {
             disponible: true,
             fecha: row.fecha,
