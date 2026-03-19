@@ -6198,7 +6198,7 @@ app.post('/api/correlacion/narrativa', async (req, res) => {
       return res.status(500).json({ success: false, error: 'GOOGLE_API_KEY no configurada' });
     }
 
-    const modelName = modelReq || 'gemini-2.0-flash';
+    const modelName = modelReq || 'gemini-2.5-flash';
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: modelName });
 
@@ -6803,7 +6803,7 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
   Hilo:\n${hilos || '   (sin datos)'}${provStr}`;
     }).join('\n\n');
 
-    const modelName = modelReq || 'gemini-2.0-flash';
+    const modelName = modelReq || 'gemini-2.5-flash';
     const genAI  = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
     const model  = genAI.getGenerativeModel({ model: modelName });
 
