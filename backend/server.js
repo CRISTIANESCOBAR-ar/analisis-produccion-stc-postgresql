@@ -10,6 +10,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getImportStatus, importCSV, importAll, importSpecificTables, importForceAll, renameduplicateHeaders, getTableColumns, compareColumns, addColumnsToTable } from './import-manager.js'
 import configStandardsRouter from './config-standards.js';
 import { optimizeBlend } from './services/blendomat-optimizer.js';
+import { parseNarrativaStructure } from '../shared/narrativaSections.js';
 
 const { Pool } = pg
 const app = express()
@@ -27,6 +28,14 @@ function looksLikeWindowsPath(p) {
   if (!p) return false
   // Drive letter (C:\...) or UNC (\\server\share)
   return /^[a-zA-Z]:[\\/]/.test(p) || /^\\\\/.test(p)
+}
+
+function buildNarrativaStructuredFields(narrativaText) {
+  const parsed = parseNarrativaStructure(narrativaText)
+  return {
+    narrativaIntro: parsed.intro || '',
+    narrativaSections: Array.isArray(parsed.sections) ? parsed.sections : [],
+  }
 }
 
 function sanitizeCsvFolder(raw) {
@@ -6764,7 +6773,7 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
     // Si piden explícitamente local, o no hay API key → generación local directa
     if (modo === 'local' || !process.env.GOOGLE_API_KEY) {
       const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || []);
-      return res.json({ success: true, narrativa, fuente: 'local' });
+      return res.json({ success: true, narrativa, fuente: 'local', ...buildNarrativaStructuredFields(narrativa) });
     }
 
     const lotesSorted = [...new Set(rows.map(r => Number(r.mistura)))].sort((a, b) => a - b);
@@ -6845,13 +6854,13 @@ Análisis Comparativo Fibra ↔️ Hilo
 [oración de cierre]`;
 
     try {
-      const result = await model.generateContent(prompt);
-      return res.json({ success: true, narrativa: result.response.text(), fuente: 'gemini' });
+      const narrativaCompleta = result.response.text();
+      return res.json({ success: true, narrativa: narrativaCompleta, fuente: 'gemini', ...buildNarrativaStructuredFields(narrativaCompleta) });
     } catch (geminiErr) {
       // Fallback local ante cualquier error de Gemini (quota, red, etc.)
       console.warn('Gemini no disponible, usando generación local:', geminiErr.message?.slice(0, 120));
       const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || []);
-      return res.json({ success: true, narrativa, fuente: 'local', aviso: 'Gemini no disponible – informe generado localmente.' });
+      return res.json({ success: true, narrativa, fuente: 'local', aviso: 'Gemini no disponible – informe generado localmente.', ...buildNarrativaStructuredFields(narrativa) });
     }
 
   } catch (err) {
