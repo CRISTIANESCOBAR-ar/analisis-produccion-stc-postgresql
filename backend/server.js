@@ -6664,7 +6664,7 @@ function generarNarrativaLocal(rows, loteActual, proveedores = []) {
     }
 
     bloqueProveedores = [
-      `📦 ANÁLISIS POR PROVEEDOR — Lote FIAC ${actual}:`,
+      `📦 PROVEEDORES CLAVE`,
       ...provActual.map(p => {
         const fardos = Number(p.fardos_consumidos) || 0;
         const pct    = totalFardos > 0 ? ((fardos / totalFardos) * 100).toFixed(1) : '–';
@@ -6692,7 +6692,7 @@ function generarNarrativaLocal(rows, loteActual, proveedores = []) {
   };
   const bloqueAuditoria = [];
   if (dataActual.hilos.length > 0) {
-    bloqueAuditoria.push(`🔍 AUDITORÍA DE APTITUD POR PROCESO — Lote FIAC ${actual}:`);
+    bloqueAuditoria.push(`🧵 DETALLE TÉCNICO POR NE:`);
     for (const h of dataActual.hilos) {
       const ne = String(h.ne);
       const nN = parseFloat(ne);
@@ -6730,21 +6730,22 @@ function generarNarrativaLocal(rows, loteActual, proveedores = []) {
     `📋 INFORME DE DESEMPEÑO: LOTE FIAC ${actual} vs ${refStr}`,
     `Análisis Comparativo Fibra ↔️ Hilo`,
     ``,
-    `✅ CONCLUSIÓN GENERAL:`,
+    `🚦 RESUMEN EJECUTIVO:`,
     conclusionBase,
     ``,
-    `📊 COMPARATIVA TÉCNICA (Promedios):`,
+    `📊 COMPARATIVA CONSOLIDADA:`,
     ``,
     ...bloques.flatMap(b => [b, '']),
     ...bloqueProveedores,
     ...bloqueAuditoria,
-    `⚠️ PUNTOS CLAVE PARA PRODUCCIÓN:`,
+    `🛠 PLAN DE ACCIÓN PRIORIZADO (24h):`,
     ...(alertas.length
       ? alertas.map(a => `  ⚠️ ${a}`)
       : ['  ✓ Sin alertas críticas en el lote actual.']),
     ...(puntosNe.length ? puntosNe : []),
     ``,
-    `🚀 ESTADO: ${estadoLabel}`,
+    `🚀 ESTADO OPERATIVO:`,
+    estadoLabel,
     (() => {
       const lf = actual;
       const mr = dataActual.hvi.n_fardos != null ? `${dataActual.hvi.n_fardos} fardos consumidos` : '– fardos';
@@ -6831,26 +6832,27 @@ Generá exactamente este formato en español (500 palabras máx, cuantificá cam
 📋 INFORME DE DESEMPEÑO: LOTE FIAC ${actual} vs ${refs.join('/') || 'sin referencia'}
 Análisis Comparativo Fibra ↔️ Hilo
 
-✅ CONCLUSIÓN GENERAL:
+🚦 RESUMEN EJECUTIVO:
 [veredicto 1-2 oraciones]
 
-📊 COMPARATIVA TÉCNICA (Promedios):
+📊 COMPARATIVA CONSOLIDADA:
 [bloques numerados 1️⃣ 2️⃣ 3️⃣ para STR, Tenacidad, Neps, CVm%, Elongación con valores por lote y 👉 Impacto]
 
-📦 ANÁLISIS POR PROVEEDOR — Lote FIAC ${actual}:
+📦 PROVEEDORES CLAVE
 [Para cada proveedor: nombre, fardos consumidos, % participación, STR, SCI, MIC, UHML.]
 
   📌 Observaciones:
 [Identificar proveedor con 🏆 mejor STR, 🏆 mejor SCI, 🏆 MIC más cercano a rango 3.5-4.9, 🏆 UHML más largo. Señalar con ⚠️ el peor en cada variable con impacto práctico.]
 
-🔍 AUDITORÍA DE APTITUD POR PROCESO — Lote FIAC ${actual}:
+🧵 DETALLE TÉCNICO POR NE:
 [Para cada Ne: Ne X [Aplicación] → Proceso1 ✅/⚠️ → Proceso2 ✅/⚠️ — Estado (Aprobado/Rechazado) — Desvío si hay.]
 [Agregar 💬 comentario de planta con vocabulario de hilandería para cada Ne.]
 
-⚠️ PUNTOS CLAVE PARA PRODUCCIÓN:
+🛠 PLAN DE ACCIÓN PRIORIZADO (24h):
 [2-3 bullets accionables]
 
-🚀 ESTADO: [APROBADO PARA CONTINUIDAD / PRECAUCIÓN - REVISAR / CRÍTICO - DETENER]
+🚀 ESTADO OPERATIVO:
+[APROBADO PARA CONTINUIDAD / PRECAUCIÓN - REVISAR / CRÍTICO - DETENER]
 [oración de cierre]`;
 
     try {
