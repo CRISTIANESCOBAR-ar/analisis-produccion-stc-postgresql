@@ -6827,6 +6827,8 @@ REGLAS DE AUDITORÍA:
 - Si MIC > 4.7: advertir "cargado al grueso". Si STR supera la matriz por mucho: decir "va sobrado de fuerza".
 - Usar vocabulario natural de hilandería.
 
+IMPORTANTE: NO uses markdown. NO uses **, *, ## ni ningún símbolo de formato. Solo texto plano con los emojis indicados.
+
 Generá exactamente este formato en español (500 palabras máx, cuantificá cambios con %):
 
 📋 INFORME DE DESEMPEÑO: LOTE FIAC ${actual} vs ${refs.join('/') || 'sin referencia'}

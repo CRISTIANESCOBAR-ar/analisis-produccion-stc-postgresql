@@ -132,8 +132,18 @@ function cloneSectionMeta(def) {
   }
 }
 
+function stripMarkdown(line) {
+  return String(line || '')
+    .trim()
+    .replace(/^#{1,4}\s*/, '')       // ## headings
+    .replace(/^\*{1,3}(.+?)\*{1,3}$/, '$1') // **bold** / ***bold***
+    .replace(/^\*{1,3}/, '')          // leading *
+    .replace(/\*{1,3}$/, '')          // trailing *
+    .trim()
+}
+
 function matchSectionDefinition(line) {
-  const trimmed = String(line || '').trim()
+  const trimmed = stripMarkdown(line)
   return NARRATIVA_SECTION_DEFS.find((section) => trimmed === section.heading || trimmed.startsWith(section.heading)) || null
 }
 
