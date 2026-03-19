@@ -6856,6 +6856,7 @@ Análisis Comparativo Fibra ↔️ Hilo
 [oración de cierre]`;
 
     try {
+      const result = await model.generateContent(prompt);
       const narrativaCompleta = result.response.text();
       return res.json({ success: true, narrativa: narrativaCompleta, fuente: 'gemini', ...buildNarrativaStructuredFields(narrativaCompleta) });
     } catch (geminiErr) {
