@@ -443,7 +443,7 @@
                     </div>
                     <p v-if="section.description" class="text-[10px] text-slate-400 mt-1">{{ section.description }}</p>
                   </div>
-                  <div class="flex flex-wrap gap-1">
+                  <div class="flex items-center gap-2 flex-wrap">
                     <span
                       v-for="audience in section.audiences"
                       :key="`badge-${section.id}-${audience}`"
@@ -451,6 +451,26 @@
                       :class="getNarrativaAudienceMeta(audience).className">
                       {{ getNarrativaAudienceMeta(audience).label }}
                     </span>
+                    <button
+                      @click="copiarSeccionTexto(section)"
+                      class="px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-all flex items-center gap-1"
+                      :class="copiedSectionId === section.id + ':txt'
+                        ? 'bg-emerald-100 text-emerald-700'
+                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'"
+                      title="Copiar para Word / Correo">
+                      <span>{{ copiedSectionId === section.id + ':txt' ? '✓' : '📄' }}</span>
+                      {{ copiedSectionId === section.id + ':txt' ? '¡Copiado!' : 'Copiar' }}
+                    </button>
+                    <button
+                      @click="copiarSeccionWhatsApp(section)"
+                      class="px-2.5 py-1 rounded-lg text-[10px] font-semibold transition-all flex items-center gap-1"
+                      :class="copiedSectionId === section.id + ':wa'
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-slate-100 text-slate-500 hover:bg-slate-200'"
+                      title="Copiar formato WhatsApp">
+                      <span>{{ copiedSectionId === section.id + ':wa' ? '✓' : '💬' }}</span>
+                      {{ copiedSectionId === section.id + ':wa' ? '¡Copiado!' : 'WhatsApp' }}
+                    </button>
                   </div>
                 </div>
                 <div class="bg-slate-50 p-5 text-sm text-slate-700 whitespace-pre-wrap leading-relaxed font-mono">
@@ -465,102 +485,83 @@
         </div>
       </div>
 
-      <!-- ── CONTEXTO OPERATIVO CARDAS ── -->
+      <!-- ── CONTEXTO OPERATIVO CARDAS (fuente: Uster Cardas) ── -->
       <div v-if="hasData && cardasContext" class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2">
           <div>
             <h2 class="font-bold text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wide">
               <span>🧺</span> Contexto Operativo Cardas
             </h2>
-            <p class="text-[10px] text-slate-400 mt-0.5">Resumen del último día importado de producción de cardas</p>
+            <p class="text-[10px] text-slate-400 mt-0.5">Último día con ensayos Uster Cardas importados</p>
           </div>
           <span v-if="cardasContext.disponible" class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-700">
-            {{ cardasContext.resumen?.data_ref || 'S/D' }}
+            {{ cardasContext.fecha || 'S/D' }}
           </span>
           <span v-else class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-700">
-            Sin datos vinculables
+            Sin ensayos importados
           </span>
         </div>
 
         <div v-if="cardasContext.disponible" class="p-6 space-y-4">
-          <div class="grid grid-cols-1 md:grid-cols-5 gap-3 text-xs">
+          <!-- Resumen numérico -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+            <div class="bg-slate-50 rounded-lg p-3">
+              <div class="text-[10px] text-slate-400 uppercase tracking-wider">Ensayos</div>
+              <div class="font-bold text-slate-700 text-base">{{ cardasContext.resumen?.ensayos ?? '–' }}</div>
+            </div>
             <div class="bg-slate-50 rounded-lg p-3">
               <div class="text-[10px] text-slate-400 uppercase tracking-wider">Máquinas</div>
               <div class="font-bold text-slate-700 text-base">{{ cardasContext.resumen?.maquinas ?? '–' }}</div>
             </div>
             <div class="bg-slate-50 rounded-lg p-3">
-              <div class="text-[10px] text-slate-400 uppercase tracking-wider">Filas activas</div>
-              <div class="font-bold text-slate-700 text-base">{{ cardasContext.resumen?.filas_activas ?? '–' }} / {{ cardasContext.resumen?.filas ?? '–' }}</div>
+              <div class="text-[10px] text-slate-400 uppercase tracking-wider">CVm% Prom.</div>
+              <div class="font-bold text-base" :class="Number(cardasContext.resumen?.cvm_avg) > 3 ? 'text-amber-600' : 'text-emerald-600'">
+                {{ fmt(cardasContext.resumen?.cvm_avg, 2) }}%
+              </div>
             </div>
             <div class="bg-slate-50 rounded-lg p-3">
-              <div class="text-[10px] text-slate-400 uppercase tracking-wider">Efic. Calc Prom</div>
-              <div class="font-bold text-slate-700 text-base">{{ fmt(cardasContext.resumen?.efic_calc_avg, 2) }}%</div>
-            </div>
-            <div class="bg-slate-50 rounded-lg p-3">
-              <div class="text-[10px] text-slate-400 uppercase tracking-wider">Prod. Informada</div>
-              <div class="font-bold text-slate-700 text-base">{{ fmt(cardasContext.resumen?.prod_inform_total, 0) }} kg</div>
-            </div>
-            <div class="bg-slate-50 rounded-lg p-3">
-              <div class="text-[10px] text-slate-400 uppercase tracking-wider">Cobertura dato</div>
-              <div class="font-bold text-slate-700 text-base">{{ fmt(cardasContext.resumen?.cobertura_prod_pct, 1) }}%</div>
+              <div class="text-[10px] text-slate-400 uppercase tracking-wider">CVm% Máx.</div>
+              <div class="font-bold text-base" :class="Number(cardasContext.resumen?.cvm_max) > 4 ? 'text-red-600' : Number(cardasContext.resumen?.cvm_max) > 3 ? 'text-amber-600' : 'text-slate-700'">
+                {{ fmt(cardasContext.resumen?.cvm_max, 2) }}%
+              </div>
             </div>
           </div>
 
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div class="border border-slate-100 rounded-xl overflow-hidden">
-              <div class="px-3 py-2 bg-slate-50 text-[10px] font-bold uppercase tracking-widest text-slate-500">Turnos</div>
-              <table class="w-full text-[11px]">
-                <thead class="text-slate-400 border-b border-slate-100">
-                  <tr>
-                    <th class="text-left px-3 py-2">Turno</th>
-                    <th class="text-right px-3 py-2">Efic Calc%</th>
-                    <th class="text-right px-3 py-2">Prod Inform</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="t in (cardasContext.turnos || [])" :key="`carda-turno-${t.turno}`" class="border-t border-slate-50">
-                    <td class="px-3 py-2 font-bold text-slate-600">{{ t.turno }}</td>
-                    <td class="px-3 py-2 text-right font-mono" :class="Number(t.efic_calc_avg) < 85 ? 'text-red-600' : 'text-slate-700'">
-                      {{ fmt(t.efic_calc_avg, 2) }}
-                    </td>
-                    <td class="px-3 py-2 text-right font-mono text-slate-600">{{ fmt(t.prod_inform_total, 0) }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            <div class="border border-slate-100 rounded-xl overflow-hidden">
-              <div class="px-3 py-2 bg-slate-50 text-[10px] font-bold uppercase tracking-widest text-slate-500">Máquinas más inestables</div>
-              <table class="w-full text-[11px]">
-                <thead class="text-slate-400 border-b border-slate-100">
-                  <tr>
-                    <th class="text-left px-3 py-2">Máquina</th>
-                    <th class="text-right px-3 py-2">Efic Calc%</th>
-                    <th class="text-right px-3 py-2">Prod Inform</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="m in (cardasContext.maquinasCriticas || [])" :key="`carda-maq-${m.maquina}`" class="border-t border-slate-50">
-                    <td class="px-3 py-2 font-bold text-slate-600">{{ m.maquina }}</td>
-                    <td class="px-3 py-2 text-right font-mono" :class="Number(m.efic_calc_avg) < 85 ? 'text-red-600' : 'text-slate-700'">
-                      {{ fmt(m.efic_calc_avg, 2) }}
-                    </td>
-                    <td class="px-3 py-2 text-right font-mono text-slate-600">{{ fmt(m.prod_inform_total, 0) }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div v-if="cardasContext.calidadDato" class="text-[10px] text-slate-500 bg-slate-50 rounded-lg px-3 py-2">
-            Calidad de dato: {{ cardasContext.calidadDato.prod_inform_cero || 0 }} filas con producción 0 ·
-            {{ cardasContext.calidadDato.efic_calc_cero || 0 }} filas con eficiencia 0 ·
-            {{ cardasContext.calidadDato.rpm_cero || 0 }} filas con RPM 0.
+          <!-- Tabla por máquina -->
+          <div class="border border-slate-100 rounded-xl overflow-hidden">
+            <div class="px-3 py-2 bg-slate-50 text-[10px] font-bold uppercase tracking-widest text-slate-500">Detalle por máquina</div>
+            <table class="w-full text-[11px]">
+              <thead class="text-slate-400 border-b border-slate-100 bg-slate-50">
+                <tr>
+                  <th class="text-left px-3 py-2">Maq.</th>
+                  <th class="text-left px-3 py-2">Tipo</th>
+                  <th class="text-right px-3 py-2">Título</th>
+                  <th class="text-right px-3 py-2">CVm%</th>
+                  <th class="text-center px-3 py-2">Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="m in (cardasContext.maquinas || [])" :key="`cm-${m.maschnr}`" class="border-t border-slate-50 hover:bg-slate-50">
+                  <td class="px-3 py-2 font-bold text-slate-700">{{ m.maschnr }}</td>
+                  <td class="px-3 py-2 text-slate-500 text-[10px]">{{ m.machine_family }}</td>
+                  <td class="px-3 py-2 text-right font-mono text-slate-600">{{ m.nomcount ?? '–' }}</td>
+                  <td class="px-3 py-2 text-right font-mono font-bold"
+                    :class="Number(m.cvm_avg) > 4 ? 'text-red-600' : Number(m.cvm_avg) > 3 ? 'text-amber-600' : 'text-emerald-600'">
+                    {{ fmt(m.cvm_avg, 2) }}%
+                  </td>
+                  <td class="px-3 py-2 text-center">
+                    <span v-if="Number(m.cvm_avg) > 4" class="text-[9px] px-2 py-0.5 rounded-full font-bold bg-red-100 text-red-700">⚠ Alto</span>
+                    <span v-else-if="Number(m.cvm_avg) > 3" class="text-[9px] px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-700">Precaución</span>
+                    <span v-else class="text-[9px] px-2 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-700">OK</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
 
-        <div v-else class="p-6 text-xs text-amber-700 bg-amber-50 border-t border-amber-100">
-          ⚠️ {{ cardasContext.motivo || 'No se pudo construir contexto de cardas con los datos importados.' }}
+        <div v-else class="p-6 text-xs text-slate-500 bg-slate-50 border-t border-slate-100">
+          {{ cardasContext.motivo || 'No hay ensayos Uster Cardas importados aún. Usa la sección Uster Cardas para importar archivos .PAR y .TBL.' }}
         </div>
       </div>
 
@@ -997,6 +998,7 @@ const narrativaSelectedSectionIds = ref((() => {
   return stored.filter((id) => ALL_NARRATIVA_SECTION_IDS.includes(id))
 })())
 const whatsappCopiado = ref(false)
+const copiedSectionId = ref('')
 const narrativaCopiada = ref(false)
 const promptGeminiCopiado = ref(false)
 const payloadNarrativaCopiado = ref(false)
@@ -1035,6 +1037,44 @@ watch(fechaCorte, async () => {
     await analizar()
   }
 })
+
+async function copiarSeccionTexto(section) {
+  const titulo = `${section.icon || ''} ${section.title || ''}`.trim()
+  const cuerpo = String(section.content || section.text || '').trim()
+  const texto = `${titulo}\n${'-'.repeat(titulo.length)}\n${cuerpo}`
+  const key = section.id + ':txt'
+  try { await navigator.clipboard.writeText(texto) } catch {
+    const el = document.createElement('textarea')
+    el.value = texto; document.body.appendChild(el); el.select()
+    document.execCommand('copy'); document.body.removeChild(el)
+  }
+  copiedSectionId.value = key
+  setTimeout(() => { if (copiedSectionId.value === key) copiedSectionId.value = '' }, 2500)
+}
+
+async function copiarSeccionWhatsApp(section) {
+  const titulo = `*${section.icon || ''} ${section.title || ''}*`.trim()
+  const cuerpo = String(section.content || section.text || '')
+    .trim()
+    .split('\n')
+    .map((line) => {
+      // Líneas que empiezan con guión las dejamos como punto de lista
+      const l = line.trimStart()
+      if (l.startsWith('- ')) return '• ' + l.slice(2)
+      // Líneas con patrón «Clave: valor» → *Clave:* valor
+      return line.replace(/^(\s*)([A-ZÁÉÍÓÚÑÜ][^:]{1,40}):/u, '$1*$2:*')
+    })
+    .join('\n')
+  const texto = `${titulo}\n\n${cuerpo}`
+  const key = section.id + ':wa'
+  try { await navigator.clipboard.writeText(texto) } catch {
+    const el = document.createElement('textarea')
+    el.value = texto; document.body.appendChild(el); el.select()
+    document.execCommand('copy'); document.body.removeChild(el)
+  }
+  copiedSectionId.value = key
+  setTimeout(() => { if (copiedSectionId.value === key) copiedSectionId.value = '' }, 2500)
+}
 
 async function copiarNarrativa() {
   try {

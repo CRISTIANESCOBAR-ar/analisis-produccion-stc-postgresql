@@ -35,6 +35,16 @@
             Actualizar
           </button>
 
+          <button
+            v-if="pendingBatchCount > 0"
+            @click="batchImportPending"
+            :disabled="batchImporting"
+            class="inline-flex items-center gap-2 px-3 py-1 border border-emerald-400 bg-emerald-50 text-emerald-800 rounded-md text-sm font-semibold hover:bg-emerald-100 transition-colors duration-150 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <span v-if="batchImporting">Importando {{ batchProgress }}/{{ batchTotal }}...</span>
+            <span v-else>⬆ Importar en lote ({{ pendingBatchCount }})</span>
+          </button>
+
           <input ref="folderInput" type="file" webkitdirectory directory multiple class="hidden" @change="onFolderInputChange" />
         </div>
       </div>
@@ -265,6 +275,9 @@ const saveButton = ref(null)
 
 const isSaving = ref(false)
 const isDeleting = ref(false)
+const batchImporting = ref(false)
+const batchProgress = ref(0)
+const batchTotal = ref(0)
 
 function getTestnrFromName(name) {
   if (!name) return null
@@ -466,6 +479,10 @@ const filteredScanList = computed(() => {
   if (filterMode.value === 'saved') return list.filter((i) => i.imp === true)
   return list.filter((i) => i.imp !== true)
 })
+
+const pendingBatchCount = computed(() =>
+  scanList.value.filter((i) => !i.imp && i.hasPar && i.hasTbl).length
+)
 
 const isTestSaved = computed(() => {
   const item = scanList.value.find((x) => x.testnr === selectedTestnr.value)
@@ -811,6 +828,88 @@ async function deleteCurrentTest() {
     await Swal.fire({ icon: 'error', title: 'Error al eliminar', text: String(err?.message || err) })
   } finally {
     isDeleting.value = false
+  }
+}
+
+async function batchImportPending() {
+  const pending = scanList.value.filter((i) => !i.imp && i.hasPar && i.hasTbl)
+  if (!pending.length) {
+    await Swal.fire({ icon: 'info', title: 'Sin pendientes', text: 'No hay ensayos con PAR y TBL sin guardar.' })
+    return
+  }
+
+  const confirm = await Swal.fire({
+    title: `Importar ${pending.length} ensayo(s) en lote`,
+    text: 'Se guardarán los datos de cada archivo .PAR y .TBL. Los títulos manuales se pueden agregar después.',
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Importar',
+    cancelButtonText: 'Cancelar',
+  })
+  if (!confirm.isConfirmed) return
+
+  batchImporting.value = true
+  batchProgress.value = 0
+  batchTotal.value = pending.length
+  const errors = []
+
+  for (const item of pending) {
+    try {
+      const parText = item.parHandle ? await readFileFromHandle(item.parHandle) : ''
+      const tblText = item.tblHandle ? await readFileFromHandle(item.tblHandle) : ''
+      const parsedPar = parseParText(parText, item.parHandle?.name || '')
+      const parsedTbl = parseTblText(tblText, item.testnr)
+
+      const par = {
+        TESTNR: item.testnr,
+        SOURCE_PREFIX: parsedPar.SOURCE_PREFIX || getPrefixFromName(item.parHandle?.name || ''),
+        CATALOG: parsedPar.CATALOG || null,
+        SORTIMENT: parsedPar.SORTIMENT || null,
+        STYLE: parsedPar.STYLE || null,
+        MACHINE_FAMILY: parsedPar.MACHINE_FAMILY || item.machineFamily || null,
+        NOMCOUNT: parsedPar.NOMCOUNT || null,
+        MASCHNR: parsedPar.MASCHNR || null,
+        LOTE: parsedPar.LOTE || null,
+        LABORANT: parsedPar.LABORANT || null,
+        TIME_STAMP: parsedPar.TIME || null,
+        MATCLASS: parsedPar.MATCLASS || null,
+        OBS: parsedPar.OBS || null,
+      }
+
+      const resp = await fetch('/api/uster-cardas/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ par, tbl: parsedTbl }),
+        credentials: 'include',
+      })
+      const data = await resp.json()
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`)
+      item.imp = true
+    } catch (err) {
+      errors.push({ testnr: item.testnr, error: String(err?.message || err) })
+    }
+    batchProgress.value++
+  }
+
+  batchImporting.value = false
+
+  if (errors.length) {
+    const errorList = errors.map((e) => `${e.testnr}: ${e.error}`).join('\n')
+    await Swal.fire({
+      icon: 'warning',
+      title: `${pending.length - errors.length} importado(s), ${errors.length} con error`,
+      text: errorList,
+    })
+  } else {
+    await Swal.fire({
+      toast: true,
+      position: 'top-end',
+      icon: 'success',
+      title: `${pending.length} ensayo(s) importados correctamente`,
+      showConfirmButton: false,
+      timer: 3000,
+      timerProgressBar: true,
+    })
   }
 }
 
