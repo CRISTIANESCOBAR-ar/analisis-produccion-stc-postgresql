@@ -766,6 +766,225 @@ app.get('/api/produccion/calidad/revision-cq', async (req, res) => {
   }
 })
 
+// GET /api/produccion/calidad/revision-cq-ia - Base por rollo para analisis IA de revision
+app.get('/api/produccion/calidad/revision-cq-ia', async (req, res) => {
+  try {
+    const t0 = hrMs()
+    const { startDate, endDate } = req.query
+    const tramas = req.query.tramas || 'Todas'
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({ error: 'Se requieren startDate y endDate' })
+    }
+
+    let tramasFilter = ''
+    if (tramas === 'ALG 100%') tramasFilter = `AND left("ARTIGO", 1) = 'A'`
+    else if (tramas === 'P + E') tramasFilter = `AND left("ARTIGO", 1) = 'Y'`
+    else if (tramas === 'POL 100%') tramasFilter = `AND left("ARTIGO", 1) = 'P'`
+
+    const calDatProdDate = sqlParseDate('"DAT_PROD"')
+    const calMetragemNum = sqlParseNumberIntl('"METRAGEM"')
+    const calPontuacaoNum = sqlParseNumber('"PONTUACAO"')
+
+    const sameDay = String(startDate) === String(endDate)
+    const dateFilterSql = sameDay
+      ? '"DAT_PROD" = ANY($1::text[])'
+      : `${calDatProdDate} BETWEEN $1::date AND $2::date`
+    const params = sameDay ? [dateTextCandidates(startDate)] : [startDate, endDate]
+
+    const sql = `
+      WITH RAW AS (
+        SELECT
+          "REVISOR FINAL" AS REVISOR,
+          "HORA" AS HORA,
+          "PEÇA" AS PECA,
+          "ETIQUETA" AS ETIQUETA,
+          ${calMetragemNum} AS METRAGEM,
+          ${calPontuacaoNum} AS PONTUACAO,
+          btrim("QUALIDADE") AS QUALIDADE
+        FROM tb_calidad
+        WHERE
+          "EMP" = 'STC'
+          AND ${dateFilterSql}
+          AND "QUALIDADE" NOT ILIKE '%RETALHO%'
+          AND btrim("QUALIDADE") ILIKE 'PRIMEIRA%'
+          ${tramasFilter}
+      )
+      SELECT
+        REVISOR AS "Revisor",
+        HORA AS "HoraSalida",
+        ROUND(SUM(METRAGEM)::numeric, 3) AS "MetrosRollo",
+        ROUND(AVG(PONTUACAO)::numeric, 3) AS "PontuacaoRollo"
+      FROM RAW
+      WHERE REVISOR IS NOT NULL
+        AND btrim(REVISOR) <> ''
+      GROUP BY REVISOR, HORA, PECA, ETIQUETA
+      ORDER BY REVISOR, HORA
+    `
+
+    const result = await query(sql, params, 'calidad/revision-cq-ia')
+    res.json(result.rows)
+    console.log(
+      `[PERF] GET /calidad/revision-cq-ia ${startDate}..${endDate} tramas=${tramas} total=${(hrMs() - t0).toFixed(1)}ms`
+    )
+  } catch (err) {
+    console.error('Error en calidad/revision-cq-ia:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/produccion/calidad/desempeno-piezas?fecha=YYYY-MM-DD&revisor=Nombre
+// Devuelve piezas (rollos) en secuencia horaria para el grafico de desempeno del revisor.
+app.get('/api/produccion/calidad/desempeno-piezas', async (req, res) => {
+  try {
+    const t0 = hrMs()
+    const { fecha, revisor } = req.query
+
+    if (!fecha || !revisor) {
+      return res.status(400).json({ error: 'Se requieren fecha y revisor' })
+    }
+
+    const calMetragemNum = sqlParseNumberIntl('C."METRAGEM"')
+    const calPontuacaoNum = sqlParseNumber('C."PONTUACAO"')
+    const calLarguraNum = sqlParseNumber('C."LARGURA"')
+    const prodPtsLidosNum = sqlParseNumber('P."PONTOS_LIDOS"')
+    const prodPts100Num = sqlParseNumber('P."PONTOS_100%"')
+    const prodParTraNum = sqlParseNumber('P."PARADA TEC TRAMA"')
+    const prodParUrdNum = sqlParseNumber('P."PARADA TEC URDUME"')
+
+    const sql = `
+      WITH RAW AS (
+        SELECT
+          C."NM MERC" AS "NombreArticulo",
+          C."PARTIDA" AS "Partida",
+          C."HORA" AS "Hora",
+          C."PEÇA" AS "Peca",
+          C."ETIQUETA" AS "Etiqueta",
+          btrim(C."QUALIDADE") AS "Qualidade",
+          ${calMetragemNum} AS "Metragem",
+          ${calPontuacaoNum} AS "Pontuacao",
+          ${calLarguraNum} AS "Largura"
+        FROM tb_calidad C
+        WHERE
+          C."EMP" = 'STC'
+          AND C."DAT_PROD" = ANY($1::text[])
+          AND C."REVISOR FINAL" = $2
+          AND C."QUALIDADE" NOT ILIKE '%RETALHO%'
+      ),
+      POR_ROLLO AS (
+        SELECT
+          "NombreArticulo",
+          "Partida",
+          "Hora",
+          "Peca",
+          "Etiqueta",
+          "Qualidade",
+          -- En tb_calidad puede haber varias filas del mismo rollo por defecto;
+          -- usar MAX evita inflar metros/puntos por sumatoria duplicada.
+          ROUND(MAX("Metragem")::numeric, 3) AS "Metragem",
+          ROUND(MAX("Pontuacao")::numeric, 3) AS "Pontuacao",
+          ROUND(MAX("Largura")::numeric, 2) AS "Largura"
+        FROM RAW
+        GROUP BY "NombreArticulo", "Partida", "Hora", "Peca", "Etiqueta", "Qualidade"
+      ),
+      PartidaVars AS (
+        SELECT
+          R.*,
+          R."Partida" AS "Var0",
+          CASE
+            WHEN length(R."Partida") > 1 AND left(R."Partida", 1) ~ '^[0-9]$' AND left(R."Partida", 1)::int > 0
+              THEN (left(R."Partida", 1)::int - 1)::text || substring(R."Partida" from 2)
+          END AS "Var1",
+          CASE
+            WHEN length(R."Partida") > 1 AND left(R."Partida", 1) ~ '^[0-9]$' AND left(R."Partida", 1)::int > 1
+              THEN (left(R."Partida", 1)::int - 2)::text || substring(R."Partida" from 2)
+          END AS "Var2",
+          CASE
+            WHEN length(R."Partida") > 1 AND left(R."Partida", 1) ~ '^[0-9]$' AND left(R."Partida", 1)::int > 2
+              THEN (left(R."Partida", 1)::int - 3)::text || substring(R."Partida" from 2)
+          END AS "Var3",
+          CASE
+            WHEN length(R."Partida") > 1 THEN '0' || substring(R."Partida" from 2)
+          END AS "Var4"
+        FROM POR_ROLLO R
+      ),
+      TejPorPartida AS (
+        SELECT
+          PV."Partida" AS "CalPartida",
+          TEJ.*
+        FROM PartidaVars PV
+        LEFT JOIN LATERAL (
+          SELECT
+            P."PARTIDA" AS "PARTIDA",
+            MAX(
+              CASE
+                WHEN right(P."MAQUINA", 2) ~ '^[0-9]{2}$' THEN right(P."MAQUINA", 2)::int
+                ELSE NULL
+              END
+            ) AS "Telar",
+            SUM(COALESCE(${prodPtsLidosNum}, 0)) AS "PtsLei",
+            SUM(COALESCE(${prodPts100Num}, 0)) AS "Pts100",
+            SUM(COALESCE(${prodParTraNum}, 0)) AS "ParTra",
+            SUM(COALESCE(${prodParUrdNum}, 0)) AS "ParUrd"
+          FROM tb_produccion P
+          WHERE
+            P."FILIAL" = '05'
+            AND P."SELETOR" = 'TECELAGEM'
+            AND P."PARTIDA" IN (PV."Var0", PV."Var1", PV."Var2", PV."Var3", PV."Var4")
+          GROUP BY P."PARTIDA"
+          ORDER BY CASE P."PARTIDA"
+            WHEN PV."Var0" THEN 0
+            WHEN PV."Var1" THEN 1
+            WHEN PV."Var2" THEN 2
+            WHEN PV."Var3" THEN 3
+            WHEN PV."Var4" THEN 4
+            ELSE 9
+          END ASC
+          LIMIT 1
+        ) TEJ ON true
+      )
+      SELECT
+        DISTINCT
+        PV."NombreArticulo" AS "NombreArticulo",
+        PV."Partida" AS "Partida",
+        PV."Hora" AS "Hora",
+        PV."Qualidade" AS "Qualidade",
+        PV."Metragem" AS "Metragem",
+        PV."Pontuacao" AS "Pontuacao",
+        CASE
+          WHEN TEJ."PtsLei" IS NULL OR TEJ."PtsLei" = 0 THEN NULL
+          ELSE ROUND((TEJ."PtsLei" / NULLIF(TEJ."Pts100", 0)) * 100, 1)
+        END AS "EficienciaPct",
+        CASE
+          WHEN TEJ."PtsLei" IS NULL OR TEJ."PtsLei" = 0 THEN NULL
+          ELSE ROUND((TEJ."ParUrd" * 100000)::numeric / NULLIF((TEJ."PtsLei" * 1000), 0)::numeric, 1)
+        END AS "RU105",
+        CASE
+          WHEN TEJ."PtsLei" IS NULL OR TEJ."PtsLei" = 0 THEN NULL
+          ELSE ROUND((TEJ."ParTra" * 100000)::numeric / NULLIF((TEJ."PtsLei" * 1000), 0)::numeric, 1)
+        END AS "RT105",
+        COALESCE(TEJ."Telar", 0) AS "Telar",
+        CASE
+          WHEN PV."Pontuacao" IS NULL OR PV."Pontuacao" = 0 THEN NULL
+          WHEN PV."Largura" IS NULL OR PV."Largura" = 0 THEN NULL
+          ELSE ROUND((PV."Pontuacao" * 100) / (PV."Metragem" * PV."Largura" / 100), 1)
+        END AS "Pts100m2"
+      FROM PartidaVars PV
+      LEFT JOIN TejPorPartida TEJ ON TEJ."CalPartida" = PV."Partida"
+      ORDER BY PV."Hora" ASC
+    `
+
+    const result = await query(sql, [dateTextCandidates(fecha), revisor], 'calidad/desempeno-piezas')
+    res.json(result.rows)
+    console.log(
+      `[PERF] GET /calidad/desempeno-piezas fecha=${fecha} revisor=${revisor} rows=${result.rows.length} total=${(hrMs() - t0).toFixed(1)}ms`
+    )
+  } catch (err) {
+    console.error('Error en calidad/desempeno-piezas:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // GET /api/produccion/calidad/revisor-detalle - Detalle por revisor (con partidas)
 app.get('/api/produccion/calidad/revisor-detalle', async (req, res) => {
   try {

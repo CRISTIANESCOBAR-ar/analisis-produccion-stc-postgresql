@@ -122,8 +122,8 @@
       <div v-if="loadingAnalisisIA" class="text-xs text-indigo-700">Analizando desempeno de revisores...</div>
       <div v-else-if="analisisIARevisores.length === 0" class="text-xs text-slate-500">Sin datos PRIMEIRA para construir analisis.</div>
       <div v-else class="space-y-3">
-        <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">
-          <div class="bg-white/80 border border-indigo-100 rounded-lg p-2.5">
+        <div class="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)] gap-3">
+          <div class="bg-white/80 border border-indigo-100 rounded-lg p-2.5 self-start">
             <div class="text-[11px] font-bold text-indigo-800 mb-1">Resumen ejecutivo</div>
             <div class="text-xs text-slate-700 space-y-1">
               <div v-for="(linea, idx) in analisisIAResumen" :key="`ia-res-${idx}`">{{ linea }}</div>
@@ -131,8 +131,8 @@
           </div>
 
           <div class="bg-white/80 border border-indigo-100 rounded-lg p-2.5 overflow-auto">
-            <div class="text-[11px] font-bold text-indigo-800 mb-1">Desempeno por revisor</div>
-            <table class="w-full text-[11px]">
+            <div class="text-sm md:text-base font-bold text-indigo-800 mb-1">Desempeno por revisor</div>
+            <table class="w-full text-xs md:text-[13px]">
               <thead>
                 <tr class="text-slate-500 border-b border-slate-200">
                   <th class="text-left py-1 pr-2">Revisor</th>
@@ -145,27 +145,116 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="row in analisisIARevisores" :key="`ia-row-${row.revisor}`" class="border-b border-slate-100 text-slate-700">
-                  <td class="py-1 pr-2 font-semibold">{{ row.revisor }}</td>
-                  <td class="py-1 px-2 text-center">{{ row.turno }} ({{ row.turnoInicio }})</td>
-                  <td class="py-1 px-2 text-center">{{ row.primerRollo }} (+{{ row.minDesdeInicio }} min)</td>
+                <tr
+                  v-for="row in analisisIARevisores"
+                  :key="`ia-row-${row.revisor}`"
+                  class="border-b border-slate-100 text-slate-700 hover:bg-indigo-50/40 cursor-pointer"
+                  @click="openDesempenoModal(row)"
+                >
+                  <td class="py-1 pr-2 font-semibold whitespace-nowrap">{{ row.revisor }}</td>
+                  <td class="py-1 px-2 text-center whitespace-nowrap">{{ row.turno }} ({{ row.turnoInicio }})</td>
+                  <td class="py-1 px-2 text-center whitespace-nowrap">{{ row.primerRollo }} (+{{ row.minDesdeInicio }} min)</td>
                   <td class="py-1 px-2 text-center">
-                    <div class="font-semibold">{{ formatNumber(row.ritmoPromMMin) }}</div>
-                    <div class="text-[10px] text-slate-500">entre salidas {{ formatNumber(row.ritmoEntreSalidasMMin) }}</div>
-                    <span class="inline-flex mt-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold" :class="row.ritmoTagClass">{{ row.ritmoTag }}</span>
+                    <div class="inline-flex items-center gap-1 whitespace-nowrap">
+                      <span class="font-semibold">{{ formatNumber(row.ritmoPromMMin) }}</span>
+                      <span class="text-[11px] md:text-xs text-slate-500">salidas {{ formatNumber(row.ritmoEntreSalidasMMin) }}</span>
+                      <span class="inline-flex px-1.5 py-0.5 rounded-full text-[11px] md:text-xs font-bold" :class="row.ritmoTagClass">{{ row.ritmoTag }}</span>
+                    </div>
                   </td>
-                  <td class="py-1 px-2 text-center">{{ row.pts100m2 != null ? formatNumber(row.pts100m2) : '-' }}</td>
+                  <td class="py-1 px-2 text-center whitespace-nowrap">{{ row.pts100m2 != null ? formatNumber(row.pts100m2) : '-' }}</td>
                   <td class="py-1 px-2 text-center">
-                    <div>{{ row.rollosSinPts }}/{{ row.rollos }} ({{ formatNumber(row.pctSinPts) }}%)</div>
-                    <span class="inline-flex mt-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold" :class="row.sinPtsTagClass">{{ row.sinPtsTag }}</span>
+                    <div class="inline-flex items-center gap-1 whitespace-nowrap">
+                      <span>{{ row.rollosSinPts }}/{{ row.rollos }} ({{ formatNumber(row.pctSinPts) }}%)</span>
+                      <span class="inline-flex px-1.5 py-0.5 rounded-full text-[11px] md:text-xs font-bold" :class="row.sinPtsTagClass">{{ row.sinPtsTag }}</span>
+                    </div>
                   </td>
-                  <td class="py-1 pl-2 text-center font-semibold">{{ formatInteger(row.metrosTotales) }}</td>
+                  <td class="py-1 pl-2 text-center font-semibold whitespace-nowrap">{{ formatInteger(row.metrosTotales) }}</td>
                 </tr>
               </tbody>
             </table>
-            <div class="text-[10px] text-slate-500 mt-1">Las etiquetas del revisor se calculan solo con % de rollos sin puntos y ritmo (m/min).</div>
+            <div class="text-[11px] md:text-xs text-slate-500 mt-1">Las etiquetas del revisor se calculan solo con % de rollos sin puntos y ritmo (m/min).</div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Modal: Desempeno por revisor (grafico por hora) -->
+    <div v-if="showDesempenoModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/55 p-4" @click.self="closeDesempenoModal">
+      <div class="w-[98vw] max-w-[1500px] h-[88vh] bg-white rounded-xl border border-slate-200 shadow-2xl flex flex-col overflow-hidden">
+        <div class="px-4 py-2 border-b border-slate-200 flex items-center justify-between gap-2 bg-slate-50">
+          <div class="flex items-center gap-2 min-w-0 overflow-x-auto whitespace-nowrap">
+            <img src="/LogoSantana.jpg" alt="Logo Santana" class="h-6 w-auto object-contain shrink-0" />
+            <div class="inline-flex items-center gap-1.5 border border-slate-200 bg-white rounded-md px-2 py-1 text-xs text-slate-700 shrink-0">
+              <span class="font-semibold">Fecha:</span>
+              <input
+                type="date"
+                v-model="modalFecha"
+                @change="onModalFechaInput"
+                class="border border-slate-200 rounded px-1.5 py-0.5 text-xs text-slate-700 bg-white"
+              />
+              <span class="text-slate-500">📅</span>
+            </div>
+            <div class="flex items-center gap-1 shrink-0">
+              <button
+                class="inline-flex items-center justify-center px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-md text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm"
+                @click="cambiarFechaModal(-1)"
+                :disabled="loading"
+              >&lt;</button>
+              <button
+                class="inline-flex items-center justify-center px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-md text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm"
+                @click="cambiarFechaModal(1)"
+                :disabled="loading"
+              >&gt;</button>
+            </div>
+            <div class="inline-flex items-center gap-1.5 shrink-0">
+              <span class="text-sm md:text-base font-semibold text-slate-700 whitespace-nowrap">Desempeño de</span>
+              <select
+                v-model="selectedIARevisorName"
+                class="min-w-[170px] max-w-[240px] border border-slate-200 bg-white text-slate-700 rounded-md px-2 py-1 text-sm font-medium"
+                :disabled="loadingModalRevisores"
+              >
+                <option value="" disabled>Selecciona revisor</option>
+                <option v-for="revisor in modalRevisores" :key="`modal-r-${revisor}`" :value="revisor">{{ revisor }}</option>
+              </select>
+            </div>
+            <div v-if="modalSelectedRevisor" class="flex items-center gap-2 text-xs text-slate-600 divide-x divide-slate-200 shrink-0">
+              <span class="pr-3">
+                <span class="text-slate-400">Metros Día</span>
+                <span class="ml-1 font-bold text-slate-800">{{ formatInteger(modalSelectedRevisor.Mts_Total) }}</span>
+              </span>
+              <span class="px-3">
+                <span class="text-slate-400">Calidad %</span>
+                <span class="ml-1 font-semibold" :class="Number(modalSelectedRevisor.Calidad_Perc) >= 97 ? 'text-emerald-600' : Number(modalSelectedRevisor.Calidad_Perc) >= 93 ? 'text-amber-600' : 'text-red-600'">
+                  {{ formatNumber(modalSelectedRevisor.Calidad_Perc) }}
+                </span>
+              </span>
+              <span class="px-3">
+                <span class="text-slate-400">Pts 100 m²</span>
+                <span class="ml-1 font-semibold text-slate-700">{{ formatNumber(modalSelectedRevisor.Pts_100m2) }}</span>
+              </span>
+              <span class="px-3">
+                <span class="text-slate-400">Rollos 1era</span>
+                <span class="ml-1 font-semibold text-slate-700">{{ modalSelectedRevisor.Rollos_1era }}</span>
+              </span>
+              <span class="px-3">
+                <span class="text-slate-400">Sin Pts</span>
+                <span class="ml-1 font-semibold text-slate-700">{{ modalSelectedRevisor.Rollos_Sin_Pts }}</span>
+                <span class="ml-1 text-slate-400">/</span>
+                <span class="ml-1 font-semibold" :class="Number(modalSelectedRevisor.Perc_Sin_Pts) >= 20 ? 'text-red-600' : Number(modalSelectedRevisor.Perc_Sin_Pts) >= 10 ? 'text-amber-600' : 'text-slate-700'">
+                  {{ formatNumber(modalSelectedRevisor.Perc_Sin_Pts) }}%
+                </span>
+              </span>
+            </div>
+          </div>
+          <button @click="closeDesempenoModal" class="inline-flex items-center gap-1 px-2.5 py-1 border border-slate-200 bg-white text-slate-700 rounded-md text-xs font-medium hover:bg-slate-50 transition-colors shrink-0">
+            Cerrar
+          </button>
+        </div>
+        <iframe
+          :src="desempenoIframeSrc"
+          class="w-full flex-1 border-0"
+          title="Desempeno por revisor"
+        ></iframe>
       </div>
     </div>
 
@@ -493,6 +582,32 @@ const selectedPieza = ref(null)
 const selectedPiezaIndex = ref(-1)
 const defectosDetalle = ref([])
 const loadingDefectos = ref(false)
+const showDesempenoModal = ref(false)
+const selectedIARevisorName = ref('')
+const modalFecha = ref('')
+const modalRevisores = ref([])
+const modalRevisorRows = ref([])
+const loadingModalRevisores = ref(false)
+
+const modalSelectedRevisor = computed(() => {
+  if (!selectedIARevisorName.value) return null
+  return modalRevisorRows.value.find((row) => String(row?.Revisor || '').trim() === selectedIARevisorName.value) || null
+})
+
+const desempenoIframeSrc = computed(() => {
+  const fecha = modalFecha.value || filters.value.fecha
+  if (!fecha) return '/desempeno-revisores?embed=1'
+  const params = new URLSearchParams({
+    fecha,
+    mode: 'cronologico',
+    hour: '1',
+    embed: '1'
+  })
+  if (selectedIARevisorName.value) {
+    params.set('revisor', selectedIARevisorName.value)
+  }
+  return `/desempeno-revisores?${params.toString()}`
+})
 
 // Totales del detalle
 const totalesDetalle = computed(() => {
@@ -1019,6 +1134,72 @@ async function loadData() {
 
 function applyFilters() {
   loadData()
+}
+
+async function openDesempenoModal(row) {
+  if (!row?.revisor) return
+  selectedIARevisorName.value = row.revisor
+  modalFecha.value = filters.value.fecha
+  showDesempenoModal.value = true
+  await loadModalRevisores()
+}
+
+function closeDesempenoModal() {
+  showDesempenoModal.value = false
+}
+
+async function cambiarFechaModal(dias) {
+  if (!modalFecha.value) return
+  const [year, month, day] = modalFecha.value.split('-').map(Number)
+  const fecha = new Date(year, month - 1, day)
+  fecha.setDate(fecha.getDate() + dias)
+  const y = fecha.getFullYear()
+  const m = String(fecha.getMonth() + 1).padStart(2, '0')
+  const d = String(fecha.getDate()).padStart(2, '0')
+  modalFecha.value = `${y}-${m}-${d}`
+  await loadModalRevisores()
+}
+
+async function onModalFechaInput() {
+  await loadModalRevisores()
+}
+
+async function loadModalRevisores() {
+  if (!modalFecha.value) {
+    modalRevisores.value = []
+    modalRevisorRows.value = []
+    selectedIARevisorName.value = ''
+    return
+  }
+
+  loadingModalRevisores.value = true
+  const result = await tryCatch(async () => {
+    const params = {
+      startDate: modalFecha.value,
+      endDate: modalFecha.value,
+      tramas: filters.value.tramas
+    }
+    return await db.getRevisionCQ(params)
+  }, 'Cargar revisores del modal', { toast: false })
+
+  const names = []
+  const rows = []
+  const seen = new Set()
+  for (const row of (result || [])) {
+    const name = String(row?.Revisor || '').trim()
+    if (!name || name.toUpperCase() === 'RETALHO' || seen.has(name)) continue
+    seen.add(name)
+    rows.push(row)
+    names.push(name)
+  }
+  modalRevisorRows.value = rows
+  modalRevisores.value = names
+
+  if (!selectedIARevisorName.value || !names.includes(selectedIARevisorName.value)) {
+    selectedIARevisorName.value = names[0] || ''
+  }
+
+  loadingModalRevisores.value = false
 }
 
 // Función para seleccionar un revisor y cargar su detalle

@@ -8,7 +8,7 @@
     <main class="w-full flex-1 min-h-0 bg-white rounded-2xl shadow-xl px-4 py-3 border border-slate-200 flex flex-col overflow-hidden">
 
       <!-- ── Header ─────────────────────────────────────────── -->
-      <div class="flex items-center justify-between gap-4 mb-3 shrink-0">
+      <div v-if="!isEmbeddedMode" class="flex items-center justify-between gap-4 mb-3 shrink-0">
         <div class="flex items-center gap-4 flex-wrap">
           <img src="/LogoSantana.jpg" alt="Logo Santana" class="h-8 w-auto object-contain shrink-0" />
 
@@ -90,12 +90,12 @@
       <!-- ── Two-panel layout ────────────────────────────────── -->
       <div
         class="flex-1 min-h-0 overflow-hidden grid gap-2"
-        :class="sidebarCollapsed ? 'grid-cols-[32px_1fr]' : 'grid-cols-1 lg:grid-cols-[420px_1fr]'"
+        :class="isEmbeddedMode ? 'grid-cols-1' : (sidebarCollapsed ? 'grid-cols-[32px_1fr]' : 'grid-cols-1 lg:grid-cols-[420px_1fr]')"
         style="transition: grid-template-columns 0.2s ease;"
       >
 
         <!-- ── Left: summary table ──────────────────────────── -->
-        <div class="flex flex-col gap-2 min-h-0 overflow-hidden">
+        <div v-if="!isEmbeddedMode" class="flex flex-col gap-2 min-h-0 overflow-hidden">
 
           <!-- Collapsed strip -->
           <div
@@ -207,11 +207,11 @@
             <!-- Chart header / stats bar -->
             <div class="shrink-0 flex items-center justify-between flex-wrap gap-2">
               <div class="flex items-center flex-wrap gap-x-4 gap-y-1">
-                <span class="text-sm font-semibold text-slate-700">
+                <span v-if="!isEmbeddedMode" class="text-sm font-semibold text-slate-700">
                   {{ selectedRevisor.Revisor }}
                   <span class="ml-1 text-xs font-normal text-slate-500">— {{ displayDate }}</span>
                 </span>
-                <div class="flex items-center gap-3 text-xs text-slate-600 divide-x divide-slate-200">
+                <div v-if="!isEmbeddedMode" class="flex items-center gap-3 text-xs text-slate-600 divide-x divide-slate-200">
                   <span class="pr-3">
                     <span class="text-slate-400">Metros Día</span>
                     <span class="ml-1 font-bold text-slate-800">{{ formatInteger(selectedRevisor.Mts_Total) }}</span>
@@ -242,48 +242,74 @@
               </div>
               <div class="flex items-center gap-2 shrink-0">
                 <span v-if="loadingChart" class="text-xs text-slate-400 animate-pulse">Cargando piezas...</span>
-                <button
-                  v-if="piezasProcesadas.length > 0 && !loadingChart"
-                  @click="toggleChartMode"
-                  class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border text-xs font-medium transition-colors"
-                  :class="chartMode === 'cronologico' ? 'border-indigo-300 bg-indigo-50 text-indigo-700 hover:bg-indigo-100' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'"
-                >{{ chartMode === 'velocidad' ? '🕐 Cronológico' : '📊 Velocidad' }}</button>
               </div>
             </div>
 
             <!-- Stats chips -->
-            <div v-if="chartStats && !loadingChart" class="shrink-0 flex flex-wrap gap-2 text-xs">
-              <span class="px-2 py-0.5 bg-indigo-50 border border-indigo-200 rounded-full text-indigo-700 font-medium">
+            <div v-if="chartStats && !loadingChart && chartMode !== 'cronologico'" class="shrink-0 flex items-center gap-2 text-xs overflow-x-auto whitespace-nowrap">
+              <span class="px-2 py-0.5 bg-indigo-50 border border-indigo-200 rounded-full text-indigo-700 font-medium shrink-0">
                 Turno {{ chartStats.turno }} (ini. {{ chartStats.turnoLabel }})
               </span>
-              <span class="px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-full text-slate-700">
+              <span class="px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-full text-slate-700 shrink-0">
                 1ª pieza: {{ chartStats.primerPiezaHora }}
               </span>
-              <span class="px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-full text-slate-700">
+              <span class="px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-full text-slate-700 shrink-0">
                 Total: <b>{{ formatInteger(chartStats.totalMetros) }}</b> m
               </span>
-              <span class="px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-full text-slate-700">
+              <span class="px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-full text-slate-700 shrink-0">
                 Piezas: <b>{{ chartStats.totalPiezas }}</b>
               </span>
-              <span class="px-2 py-0.5 bg-emerald-50 border border-emerald-200 rounded-full text-emerald-700 font-medium">
+              <span class="px-2 py-0.5 bg-emerald-50 border border-emerald-200 rounded-full text-emerald-700 font-medium shrink-0">
                 m/min jornada: <b>{{ formatNumber(chartStats.mminJornada) }}</b>
               </span>
-              <span class="px-2 py-0.5 bg-blue-50 border border-blue-200 rounded-full text-blue-700 font-medium">
+              <span class="px-2 py-0.5 bg-blue-50 border border-blue-200 rounded-full text-blue-700 font-medium shrink-0">
                 m/min entre piezas: <b>{{ formatNumber(chartStats.mminEntrePiezas) }}</b>
               </span>
+              <button
+                v-if="piezasProcesadas.length > 0"
+                @click="toggleChartMode"
+                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border text-xs font-medium transition-colors border-slate-200 bg-white text-slate-600 hover:bg-slate-50 shrink-0 ml-auto"
+              >🕐 Cronológico</button>
             </div>
 
             <!-- Cronologico navigation -->
-            <div v-if="chartMode === 'cronologico' && piezasProcesadas.length > 0 && !loadingChart" class="shrink-0 flex items-center gap-2 text-xs">
-              <button @click="shiftCronoWindow(-1)" class="px-2 py-0.5 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors">◀ −1h</button>
-              <button @click="resetCronoWindow()" class="px-2 py-0.5 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors">Turno completo</button>
-              <button
-                @click="toggleHourMode()"
-                class="px-2 py-0.5 rounded border transition-colors"
-                :class="cronoHourMode ? 'border-indigo-300 bg-indigo-50 text-indigo-700 font-semibold' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'"
-              >{{ cronoHourMode ? '🔍 1h activo' : 'Ver por Hora' }}</button>
-              <button @click="shiftCronoWindow(1)" class="px-2 py-0.5 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors">+1h ▶</button>
-              <span class="text-slate-400 ml-1 font-mono">{{ formatMinutos(cronoWindowComputed.start) }} – {{ formatMinutos(cronoWindowComputed.end) }}</span>
+            <div v-if="chartMode === 'cronologico' && piezasProcesadas.length > 0 && !loadingChart" class="shrink-0 flex items-center justify-between gap-3 text-xs">
+              <div class="flex items-center gap-2 shrink-0">
+                <button @click="shiftCronoWindow(-1)" class="px-2 py-0.5 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors">◀ −1h</button>
+                <button @click="resetCronoWindow()" class="px-2 py-0.5 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors">Turno</button>
+                <button
+                  @click="toggleHourMode()"
+                  class="px-2 py-0.5 rounded border transition-colors"
+                  :class="cronoHourMode ? 'border-indigo-300 bg-indigo-50 text-indigo-700 font-semibold' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'"
+                >Hora</button>
+                <button @click="shiftCronoWindow(1)" class="px-2 py-0.5 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors">+1h ▶</button>
+                <span class="text-slate-400 ml-1 font-mono">{{ formatMinutos(cronoWindowComputed.start) }} – {{ formatMinutos(cronoWindowComputed.end) }}</span>
+              </div>
+
+              <div v-if="chartStats" class="flex items-center gap-2 text-xs text-slate-600 min-w-0 overflow-x-auto whitespace-nowrap">
+                <span class="px-2 py-0.5 bg-indigo-50 border border-indigo-200 rounded-full text-indigo-700 font-medium">
+                  Turno {{ chartStats.turno }} (ini. {{ chartStats.turnoLabel }})
+                </span>
+                <span class="px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-full text-slate-700">
+                  1ª pieza: {{ chartStats.primerPiezaHora }}
+                </span>
+                <span class="px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-full text-slate-700">
+                  Total: <b>{{ formatInteger(chartStats.totalMetros) }}</b> m
+                </span>
+                <span class="px-2 py-0.5 bg-slate-50 border border-slate-200 rounded-full text-slate-700">
+                  Piezas: <b>{{ chartStats.totalPiezas }}</b>
+                </span>
+                <span class="px-2 py-0.5 bg-emerald-50 border border-emerald-200 rounded-full text-emerald-700 font-medium">
+                  m/min jornada: <b>{{ formatNumber(chartStats.mminJornada) }}</b>
+                </span>
+                <span class="px-2 py-0.5 bg-blue-50 border border-blue-200 rounded-full text-blue-700 font-medium">
+                  m/min entre piezas: <b>{{ formatNumber(chartStats.mminEntrePiezas) }}</b>
+                </span>
+                <button
+                  @click="toggleChartMode"
+                  class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border text-xs font-medium transition-colors border-slate-200 bg-white text-slate-600 hover:bg-slate-50 shrink-0"
+                >📊 Velocidad</button>
+              </div>
             </div>
 
             <!-- Canvas wrapper -->
@@ -325,15 +351,18 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick, onUnmounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { Chart, registerables } from 'chart.js'
 import { useDatabase } from '@/composables/useDatabase'
 
 Chart.register(...registerables)
 
 const db = useDatabase()
+const route = useRoute()
 const containerRef = ref(null)
 const datepickerRef = ref(null)
-const sidebarCollapsed = ref(false)
+const sidebarCollapsed = ref(true)
+const isEmbeddedMode = computed(() => String(route.query.embed || '') === '1')
 
 // ── Date state ─────────────────────────────────────────────────────
 const selectedDate = ref('')
@@ -496,6 +525,16 @@ const chartMode = ref('velocidad') // 'velocidad' | 'cronologico'
 const cronoWindow = ref(null)      // { start: mins, end: mins } | null = turno completo
 const cronoHourMode = ref(false)   // true = ventana fija de 60 min
 
+function getInitialQueryState() {
+  const params = new URLSearchParams(window.location.search)
+  return {
+    fecha: params.get('fecha') || '',
+    revisor: params.get('revisor') || '',
+    mode: params.get('mode') || '',
+    hour: params.get('hour') || ''
+  }
+}
+
 const chartStats = computed(() => {
   const piezas = piezasProcesadas.value
   if (!piezas.length) return null
@@ -642,6 +681,29 @@ function renderChart() {
   }
 }
 
+// Helper: Generate point styling arrays to highlight "PRIMEIRA Sin Pts" pieces
+function getPointStyleArrays(piezas) {
+  const pointRadius = piezas.map(p => {
+    const isFirst = String(p.Qualidade || '').toUpperCase().includes('PRIMEIRA')
+    const hasPts = p.Pontuacao != null && Number(p.Pontuacao) !== 0
+    return isFirst && !hasPts ? 8 : 6  // Larger radius only for PRIMEIRA Sin Pts
+  })
+  
+  const pointBorderColor = piezas.map(p => {
+    const isFirst = String(p.Qualidade || '').toUpperCase().includes('PRIMEIRA')
+    const hasPts = p.Pontuacao != null && Number(p.Pontuacao) !== 0
+    return isFirst && !hasPts ? 'rgba(220,38,38,0.7)' : 'white'  // Red glow only for PRIMEIRA Sin Pts
+  })
+  
+  const pointBorderWidth = piezas.map(p => {
+    const isFirst = String(p.Qualidade || '').toUpperCase().includes('PRIMEIRA')
+    const hasPts = p.Pontuacao != null && Number(p.Pontuacao) !== 0
+    return isFirst && !hasPts ? 3.5 : 1.5  // Thicker border only for PRIMEIRA Sin Pts
+  })
+  
+  return { pointRadius, pointBorderColor, pointBorderWidth }
+}
+
 function renderVelocidadChart() {
   const piezas = piezasProcesadas.value
   if (!piezas.length || !chartCanvas.value) return
@@ -662,6 +724,8 @@ function renderVelocidadChart() {
   })
 
   const ctx = chartCanvas.value.getContext('2d')
+
+  const { pointRadius: prRadius, pointBorderColor: prBorder, pointBorderWidth: prBorderWidth } = getPointStyleArrays(piezas)
 
   chartInstance = new Chart(ctx, {
     type: 'bar',
@@ -685,11 +749,11 @@ function renderVelocidadChart() {
           borderColor: 'rgb(99,102,241)',
           backgroundColor: 'rgba(99,102,241,0.15)',
           borderWidth: 2,
-          pointRadius: 4,
-          pointHoverRadius: 7,
+          pointRadius: prRadius,
+          pointHoverRadius: 9,
           pointBackgroundColor: 'rgb(99,102,241)',
-          pointBorderColor: 'white',
-          pointBorderWidth: 1.5,
+          pointBorderColor: prBorder,
+          pointBorderWidth: prBorderWidth,
           fill: false,
           tension: 0.25,
           yAxisID: 'yVelocidad',
@@ -737,7 +801,14 @@ function renderVelocidadChart() {
               const idx = items[0].dataIndex
               const p = piezas[idx]
               const lines = ['  ─────────────────────────']
-              if (p.Pts100m2 != null)      lines.push(`  Pts/100m²:     ${p.Pts100m2}`)
+              if (p.Pts100m2 != null) {
+                lines.push(`  Pts/100m²:     ${p.Pts100m2}`)
+              } else {
+                lines.push('  Pts/100m²:     s/d')
+              }
+              if (p.Pontuacao == null || Number(p.Pontuacao) === 0) {
+                lines.push('  Sin puntos en la pieza')
+              }
               if (p.EficienciaPct != null)  lines.push(`  Efic. telar:   ${p.EficienciaPct}%`)
               if (p.RT105 != null)          lines.push(`  RT/105:         ${p.RT105}`)
               if (p.RU105 != null)          lines.push(`  RU/105:         ${p.RU105}`)
@@ -808,15 +879,29 @@ function renderCronologicoChart() {
   const BREAK_INI = 690
   const BREAK_FIN = 720
 
-  const pointColors = piezas.map(p =>
-    String(p.Qualidade || '').toUpperCase().includes('PRIMEIRA')
-      ? 'rgba(34,197,94,0.9)'
-      : 'rgba(249,115,22,0.9)'
-  )
-  const pointBorders = piezas.map(p =>
-    String(p.Qualidade || '').toUpperCase().includes('PRIMEIRA')
-      ? 'rgb(22,163,74)' : 'rgb(234,88,12)'
-  )
+  const pointColors = piezas.map(p => {
+    const isFirst = String(p.Qualidade || '').toUpperCase().includes('PRIMEIRA')
+    return isFirst ? 'rgba(34,197,94,0.9)' : 'rgba(249,115,22,0.9)'
+  })
+  const pointBorders = piezas.map(p => {
+    const isFirst = String(p.Qualidade || '').toUpperCase().includes('PRIMEIRA')
+    const hasPts = p.Pontuacao != null && Number(p.Pontuacao) !== 0
+    // Red border ONLY for PRIMEIRA without points
+    if (isFirst && !hasPts) {
+      return 'rgba(220,38,38,0.7)'  // Red glow for PRIMEIRA Sin Pts
+    }
+    return isFirst ? 'rgb(22,163,74)' : 'rgb(234,88,12)'
+  })
+  const pointRadii = piezas.map(p => {
+    const isFirst = String(p.Qualidade || '').toUpperCase().includes('PRIMEIRA')
+    const hasPts = p.Pontuacao != null && Number(p.Pontuacao) !== 0
+    return isFirst && !hasPts ? 9 : 6  // Larger only for PRIMEIRA Sin Pts
+  })
+  const pointBorderWidths = piezas.map(p => {
+    const isFirst = String(p.Qualidade || '').toUpperCase().includes('PRIMEIRA')
+    const hasPts = p.Pontuacao != null && Number(p.Pontuacao) !== 0
+    return isFirst && !hasPts ? 3.5 : 1.5  // Thicker only for PRIMEIRA Sin Pts
+  })
 
   const ctx = chartCanvas.value.getContext('2d')
 
@@ -907,9 +992,9 @@ function renderCronologicoChart() {
           borderDash: [5, 4],
           pointBackgroundColor: pointColors,
           pointBorderColor: pointBorders,
-          pointBorderWidth: 1.5,
-          pointRadius: 6,
-          pointHoverRadius: 9,
+          pointBorderWidth: pointBorderWidths,
+          pointRadius: pointRadii,
+          pointHoverRadius: 10,
           fill: false,
           tension: 0
         }
@@ -945,7 +1030,14 @@ function renderCronologicoChart() {
               const idx = items[0].dataIndex
               const p = piezas[idx]
               const lines = ['  ─────────────────────────']
-              if (p.Pts100m2 != null)     lines.push(`  Pts/100m²:    ${p.Pts100m2}`)
+              if (p.Pts100m2 != null) {
+                lines.push(`  Pts/100m²:    ${p.Pts100m2}`)
+              } else {
+                lines.push('  Pts/100m²:    s/d')
+              }
+              if (p.Pontuacao == null || Number(p.Pontuacao) === 0) {
+                lines.push('  Sin puntos en la pieza')
+              }
               if (p.EficienciaPct != null) lines.push(`  Efic. telar:  ${p.EficienciaPct}%`)
               if (p.RT105 != null)         lines.push(`  RT/105:        ${p.RT105}`)
               if (p.RU105 != null)         lines.push(`  RU/105:        ${p.RU105}`)
@@ -1067,16 +1159,38 @@ function formatMinutos(mins) {
 
 // ── Lifecycle ──────────────────────────────────────────────────────
 
-onMounted(() => {
-  const today = new Date()
-  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1)
-  const y = yesterday.getFullYear()
-  const m = String(yesterday.getMonth() + 1).padStart(2, '0')
-  const d = String(yesterday.getDate()).padStart(2, '0')
-  selectedDate.value = `${y}-${m}-${d}`
+onMounted(async () => {
+  const q = getInitialQueryState()
+  if (q.fecha) {
+    selectedDate.value = q.fecha
+  } else {
+    const today = new Date()
+    const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1)
+    const y = yesterday.getFullYear()
+    const m = String(yesterday.getMonth() + 1).padStart(2, '0')
+    const d = String(yesterday.getDate()).padStart(2, '0')
+    selectedDate.value = `${y}-${m}-${d}`
+  }
 
   if (containerRef.value) containerRef.value.focus()
-  loadData()
+  await loadData()
+
+  if (q.revisor) {
+    const row = calidadData.value.find(r => String(r?.Revisor || '').trim().toLowerCase() === q.revisor.trim().toLowerCase())
+    if (row) {
+      if (q.mode === 'cronologico') chartMode.value = 'cronologico'
+      await selectRevisor(row)
+      if (q.mode === 'cronologico' && q.hour === '1' && piezasProcesadas.value.length) {
+        cronoHourMode.value = true
+        const firstMins = piezasProcesadas.value[0]._effectiveMins
+        const snapStart = Math.floor(firstMins / 60) * 60
+        cronoWindow.value = { start: snapStart, end: snapStart + 60 }
+        destroyChart()
+        await nextTick()
+        renderCronologicoChart()
+      }
+    }
+  }
 })
 
 onUnmounted(() => {

@@ -1,7 +1,7 @@
 <template>
   <div class="h-screen flex flex-col bg-gray-50">
     <!-- Backdrop -->
-    <Transition name="fade">
+    <Transition v-if="!isEmbeddedMode" name="fade">
       <div 
         v-if="sidebarOpen" 
         class="fixed inset-0 bg-black/30 z-40 transition-opacity"
@@ -10,7 +10,8 @@
     </Transition>
 
     <!-- Sidebar Overlay -->
-    <aside 
+    <aside
+      v-if="!isEmbeddedMode"
       :class="[
         'fixed top-0 left-0 h-full w-64 bg-blue-800 text-white z-50 transition-transform duration-300 flex flex-col shadow-2xl',
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
@@ -485,8 +486,8 @@
     </aside>
 
     <!-- Floating Toggle Button -->
-    <button 
-      v-show="!sidebarOpen"
+    <button
+      v-if="!isEmbeddedMode && !sidebarOpen"
       @click="openSidebar"
       class="fixed top-3 left-3 z-30 bg-transparent text-white p-2 rounded-lg shadow-lg hover:bg-blue-800 transition-all duration-200 hover:shadow-xl active:scale-95"
       v-tippy="{ content: 'Abrir menú de navegación', placement: 'bottom' }"
@@ -510,6 +511,7 @@ import { useRoute } from 'vue-router'
 
 const route = useRoute()
 const sidebarOpen = ref(false)
+const isEmbeddedMode = computed(() => String(route.query.embed || '') === '1')
 
 // Menu group states (persisted in localStorage)
 const labMenuOpen = ref(localStorage.getItem('labMenuOpen') !== 'false')
