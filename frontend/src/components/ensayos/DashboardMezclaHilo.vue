@@ -306,11 +306,26 @@
               {{ geminiCuotaDiariaAgotada ? 'Modo local activo: límite diario de Gemini alcanzado (20/día).' : 'Modo local activo por indisponibilidad de Gemini.' }}
             </p>
           </div>
-          <div class="flex items-end gap-2">
+          <div class="flex items-end gap-2 flex-wrap justify-end">
             <span v-if="narrativaFuente" class="text-[10px] px-2 py-0.5 rounded-full font-bold"
               :class="narrativaFuente === 'gemini' ? 'bg-purple-100 text-purple-700' : narrativaFuente === 'cache' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'">
               {{ narrativaFuente === 'gemini' ? '✨ Gemini' : narrativaFuente === 'cache' ? '💾 Caché' : '⚡ Local' }}
             </span>
+            <div class="px-3 py-2 rounded-xl border border-slate-200 bg-slate-50">
+              <div class="text-[9px] font-bold uppercase tracking-wider text-slate-500 mb-1">Formato</div>
+              <div class="flex items-center gap-3 text-[11px] font-semibold text-slate-600">
+                <label class="flex items-center gap-1 cursor-pointer">
+                  <input v-model="narrativaFormato" type="radio" value="actual"
+                    class="text-emerald-600 focus:ring-emerald-400" />
+                  <span>Actual</span>
+                </label>
+                <label class="flex items-center gap-1 cursor-pointer">
+                  <input v-model="narrativaFormato" type="radio" value="estrategico"
+                    class="text-emerald-600 focus:ring-emerald-400" />
+                  <span>Técnico estratégico</span>
+                </label>
+              </div>
+            </div>
             <button @click="generarNarrativa(true)" :disabled="loadingNarrativa || !hasData"
               class="px-3 py-2 rounded-xl font-bold text-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 bg-slate-100 hover:bg-slate-200 text-slate-600">
               ⚡ Local
@@ -333,6 +348,7 @@
           <div v-if="!narrativa && !loadingNarrativa" class="text-center py-6 text-slate-400">
             <div class="text-3xl mb-2">✨</div>
             <p class="text-sm">Generá un resumen en lenguaje natural con análisis predictivo para producción</p>
+            <p class="text-xs mt-1 text-slate-400">Formato seleccionado: {{ narrativaFormato === 'estrategico' ? 'Técnico estratégico' : 'Actual' }}</p>
             <p class="text-xs mt-1 text-slate-300">✨ Gemini — si hay cuota disponible • ⚡ Local — siempre disponible, instantáneo</p>
           </div>
           <div v-if="loadingNarrativa" class="flex items-center gap-3 text-slate-500 py-4">
@@ -977,6 +993,7 @@ watch(lotesInput, v => localStorage.setItem(LS_KEY, v))
 const LS_KEY_FECHA  = 'dmh_fechaCorte'
 const LS_KEY_NARRATIVA_PRESET = 'dmh_narrativaPreset'
 const LS_KEY_NARRATIVA_SECTIONS = 'dmh_narrativaSections'
+const LS_KEY_NARRATIVA_FORMATO = 'dmh_narrativaFormato'
 const loading       = ref(false)
 const rows          = ref([])
 const proveedores   = ref([])
@@ -992,6 +1009,7 @@ const loadingNarrativa = ref(false)
 const modoLocalAutomatico = ref(false)
 const geminiCuotaDiariaAgotada = ref(false)
 const narrativaViewPreset = ref(localStorage.getItem(LS_KEY_NARRATIVA_PRESET) ?? 'completo')
+const narrativaFormato = ref(localStorage.getItem(LS_KEY_NARRATIVA_FORMATO) ?? 'actual')
 const narrativaSelectedSectionIds = ref((() => {
   const stored = readStoredJson(LS_KEY_NARRATIVA_SECTIONS, [])
   if (!Array.isArray(stored) || !stored.length) return [...ALL_NARRATIVA_SECTION_IDS]
@@ -1009,6 +1027,14 @@ const fechaCorte = ref(localStorage.getItem(LS_KEY_FECHA) ?? defaultYesterdayISO
 watch(narrativaViewPreset, (value) => {
   try {
     localStorage.setItem(LS_KEY_NARRATIVA_PRESET, value)
+  } catch {
+    // noop
+  }
+})
+
+watch(narrativaFormato, (value) => {
+  try {
+    localStorage.setItem(LS_KEY_NARRATIVA_FORMATO, value)
   } catch {
     // noop
   }
@@ -1139,6 +1165,7 @@ function buildNarrativaPayload(modo) {
     cardas: cardasContext.value,
     loteActual: loteActual.value,
     fechaCorte: fechaCorte.value,
+    formato: narrativaFormato.value,
     modo,
   }
 }
@@ -2053,6 +2080,7 @@ async function generarNarrativa(soloLocal = false, forzar = false) {
           narrativa: data.narrativa,
           narrativaIntro: data.narrativaIntro,
           narrativaSections: data.narrativaSections,
+          formato: narrativaFormato.value,
           promptGemini: ultimoPromptGemini.value,
         }))
       } catch { /* cuota LS */ }

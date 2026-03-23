@@ -38,6 +38,97 @@ function buildNarrativaStructuredFields(narrativaText) {
   }
 }
 
+const OE_TITULO_HARDCODE_CONTEXT = {
+  '14/1': {
+    proceso_origen: 'Directo de Carda',
+    usa_manuar: false,
+    observacion_proceso: 'Título de trama sin manuar',
+  },
+}
+
+function normalizeTituloNeConfig(rawTitulo) {
+  const txt = String(rawTitulo || '').trim().replace(/\s+/g, ' ')
+  if (!txt) return ''
+  const m = txt.match(/(\d+(?:\.\d+)?)\s*\/\s*1\s*(flame)?/i)
+  if (!m) return txt.toUpperCase()
+  const base = `${m[1]}/1`
+  return m[2] ? `${base} Flame` : base
+}
+
+function buildTituloKeyFromNe(neValue, isFlame) {
+  if (neValue == null || neValue === '') return ''
+  const ne = String(neValue).trim()
+  if (!ne) return ''
+  return isFlame ? `${ne}/1 Flame` : `${ne}/1`
+}
+
+function classifyDestinoFromAplicacion(aplicacionRaw) {
+  const txt = String(aplicacionRaw || '').trim().toLowerCase()
+  if (!txt) return null
+  if (txt.includes('trama')) return 'TRAMA'
+  if (txt.includes('urdimbre')) return 'URDIMBRE'
+  return null
+}
+
+async function loadTituloContextMap() {
+  try {
+    const versionRes = await query(
+      `SELECT version_nombre
+         FROM tb_config_hilos
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [],
+      'dashboard/mezcla-lotes/config-version'
+    )
+
+    const version = versionRes.rows?.[0]?.version_nombre
+    if (!version) return new Map()
+
+    const rowsRes = await query(
+      `SELECT titulo_ne, aplicacion
+         FROM tb_config_hilos
+        WHERE version_nombre = $1`,
+      [version],
+      'dashboard/mezcla-lotes/config-hilos'
+    )
+
+    const map = new Map()
+    for (const row of rowsRes.rows || []) {
+      const key = normalizeTituloNeConfig(row.titulo_ne)
+      if (!key) continue
+      const destino_hilo = classifyDestinoFromAplicacion(row.aplicacion)
+      map.set(key, {
+        titulo_ne_config: key,
+        aplicacion_hilo: row.aplicacion || null,
+        destino_hilo,
+      })
+    }
+    return map
+  } catch (err) {
+    console.warn('No se pudo cargar tb_config_hilos para contexto de títulos:', err.message)
+    return new Map()
+  }
+}
+
+function enrichRowsWithTituloContext(rows = [], tituloCtxMap = new Map()) {
+  return rows.map((row) => {
+    const isFlame = row.is_flame === true || row.is_flame === 1 || String(row.is_flame || '').toLowerCase() === 'true'
+    const tituloKey = buildTituloKeyFromNe(row.ne, isFlame)
+    const cfg = tituloCtxMap.get(tituloKey) || null
+    const hard = OE_TITULO_HARDCODE_CONTEXT[tituloKey] || null
+
+    return {
+      ...row,
+      titulo_ne_config: cfg?.titulo_ne_config || tituloKey || null,
+      aplicacion_hilo: cfg?.aplicacion_hilo || null,
+      destino_hilo: cfg?.destino_hilo || null,
+      proceso_origen: hard?.proceso_origen || null,
+      usa_manuar: hard?.usa_manuar ?? null,
+      observacion_proceso: hard?.observacion_proceso || null,
+    }
+  })
+}
+
 function sanitizeCsvFolder(raw) {
   const value = String(raw ?? '').trim()
   if (!value) return ''
@@ -6711,7 +6802,9 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
       ORDER BY mistura, fardos_consumidos DESC
     `;
     const provResult = await query(sqlProv, [loteList], 'dashboard/mezcla-lotes/proveedores');
-    res.json({ success: true, rows: result.rows, proveedores: provResult.rows, lotes: loteList, cardas: cardasCtx });
+    const tituloCtxMap = await loadTituloContextMap();
+    const enrichedRows = enrichRowsWithTituloContext(result.rows, tituloCtxMap);
+    res.json({ success: true, rows: enrichedRows, proveedores: provResult.rows, lotes: loteList, cardas: cardasCtx });
   } catch (err) {
     console.error('Error /api/dashboard/mezcla-lotes:', err.message);
     res.status(500).json({ error: err.message });
@@ -6721,7 +6814,9 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Genera el informe de forma local (sin IA externa) — siempre disponible
 // ─────────────────────────────────────────────────────────────────────────────
-function generarNarrativaLocal(rows, loteActual, proveedores = []) {
+function generarNarrativaLocal(rows, loteActual, proveedores = [], formato = 'actual', context = {}) {
+  const cardas = context?.cardas || null;
+  const fechaCorte = context?.fechaCorte || null;
   const lotesSorted = [...new Set(rows.map(r => Number(r.mistura)))].sort((a, b) => a - b);
   const actual = loteActual ? Number(loteActual) : Math.max(...lotesSorted);
   const refs   = lotesSorted.filter(l => l !== actual);
@@ -6917,20 +7012,47 @@ function generarNarrativaLocal(rows, loteActual, proveedores = []) {
       const nN = parseFloat(ne);
       const mK = Object.keys(MATRIZ).find(k => Math.abs(parseFloat(k) - nN) < 0.1);
       const m = mK ? MATRIZ[mK] : null;
-      const app = m?.app || (nN <= 9 ? 'Trama' : 'Urdimbre');
-      const dest = m?.dest || (nN <= 9 ? ['TELAR'] : ['URDIDORA','INDIGO','TELAR']);
+      const appHard = String(h.aplicacion_hilo || '').trim();
+      const destinoHard = String(h.destino_hilo || '').trim().toUpperCase();
+      const app = appHard || m?.app || 'No definido';
+      const dest = destinoHard === 'TRAMA'
+        ? ['TELAR']
+        : destinoHard === 'URDIMBRE'
+          ? ['URDIDORA','INDIGO','TELAR']
+          : (m?.dest || ['TELAR']);
+      const isTramaApp = /trama/i.test(app) || (dest.length === 1 && dest[0] === 'TELAR');
+
+      const umbEfectivos = isTramaApp
+        ? {
+            cvm: { ok: 13.5, t: 'max' },
+            neps_200: { ok: 700, t: 'max' },
+          }
+        : (m?.umb || {});
+
       const desvios = [];
-      if (m?.umb) {
-        for (const [k, u] of Object.entries(m.umb)) {
+      if (umbEfectivos && Object.keys(umbEfectivos).length) {
+        for (const [k, u] of Object.entries(umbEfectivos)) {
           const v = h[k] != null ? parseFloat(h[k]) : null;
           if (v == null) continue;
           const fail = u.t === 'min' ? v < u.ok : v > u.ok;
           if (fail) desvios.push(`${k === 'cvm' ? 'CVm%' : k === 'neps_200' ? 'Neps' : k === 'tenacidad' ? 'Tenac.' : k === 'elongacion' ? 'Elong.' : k} ${f(v)} ${u.t === 'min' ? '<' : '>'} ${u.ok}`);
         }
       }
-      const estado = desvios.length ? '🔴 Rechazado' : '✅ Aprobado';
+      const tenMissing = h.tenacidad == null || isNaN(parseFloat(h.tenacidad));
+      const tensorapidPendiente = isTramaApp && tenMissing;
+      const estado = desvios.length
+        ? '🔴 Rechazado'
+        : tensorapidPendiente
+          ? '⚠️ Condicional'
+          : '✅ Aprobado';
       const procs = dest.map(p => `${p}${desvios.length ? ' ⚠️' : ' ✅'}`).join(' → ');
-      bloqueAuditoria.push(`  Ne ${ne} [${app}] → ${procs} — ${estado}${desvios.length ? ' — Desvío: ' + desvios.join(', ') : ''}`);
+      const contextoProceso = h.proceso_origen
+        ? ` | Origen: ${h.proceso_origen}${h.usa_manuar === false ? ' (sin manuar)' : h.usa_manuar === true ? ' (con manuar)' : ''}`
+        : '';
+      const notaTensorapid = tensorapidPendiente
+        ? ' — Tensorapid sin dato (ventana de acondicionamiento 24h): no bloquea si Uster está controlado.'
+        : '';
+      bloqueAuditoria.push(`  Ne ${ne} [${app}] → ${procs} — ${estado}${desvios.length ? ' — Desvío: ' + desvios.join(', ') : ''}${notaTensorapid}${contextoProceso}`);
       // Comentario de planta
       const ten = h.tenacidad != null ? parseFloat(h.tenacidad) : null;
       const cvm = h.cvm != null ? parseFloat(h.cvm) : null;
@@ -6939,10 +7061,121 @@ function generarNarrativaLocal(rows, loteActual, proveedores = []) {
         if (ten >= 18) bloqueAuditoria.push(`    💬 "Va sobrado de fuerza (${f(ten)} cN/tex). Sin drama en ningún proceso."`);
         else if (ten < 14.5) bloqueAuditoria.push(`    💬 "Tenacidad crítica. Alta probabilidad de rotura."`);
       }
-      if (app === 'Trama' && cvm != null && cvm > 13) bloqueAuditoria.push(`    💬 "La masa viene bailando (CVm ${f(cvm)}%). Riesgo de barras en tela."`);
-      if (app === 'Urdimbre' && elo != null && elo < 7.5) bloqueAuditoria.push(`    💬 "Elongación baja. El hilo no perdona en la Urdidora."`);
+      if (/trama/i.test(app) && cvm != null && cvm > 13) bloqueAuditoria.push(`    💬 "La masa viene bailando (CVm ${f(cvm)}%). Riesgo de barras en tela."`);
+      if (/urdimbre/i.test(app) && elo != null && elo < 7.5) bloqueAuditoria.push(`    💬 "Elongación baja. El hilo no perdona en la Urdidora."`);
     }
     bloqueAuditoria.push('');
+  }
+
+  if (formato === 'estrategico') {
+    const fechaTag = new Date().toLocaleDateString('es-AR')
+    const totalFardos = Number(dataActual.hvi?.n_fardos) || 0
+    const strLote = parseFloat(dataActual.hvi?.str)
+    const sciLote = parseFloat(dataActual.hvi?.sci)
+    const micLote = parseFloat(dataActual.hvi?.mic)
+    const uhmlLote = parseFloat(dataActual.hvi?.uhml)
+
+    const provRanking = [...provActual].sort((a, b) => (Number(b.fardos_consumidos) || 0) - (Number(a.fardos_consumidos) || 0))
+    const provPrincipal = provRanking[0]
+    const provMejorStr = provRanking
+      .filter((p) => p.str != null && !isNaN(parseFloat(p.str)))
+      .sort((a, b) => parseFloat(b.str) - parseFloat(a.str))[0]
+    const provMicRiesgo = provRanking
+      .filter((p) => p.mic != null && !isNaN(parseFloat(p.mic)))
+      .sort((a, b) => Math.abs(parseFloat(b.mic) - 4.2) - Math.abs(parseFloat(a.mic) - 4.2))[0]
+
+    const neResumen = dataActual.hilos.slice(0, 4).map((h) => {
+      const ne = h.ne != null ? String(h.ne) : 'S/D'
+      const ten = h.tenacidad != null ? `${f(h.tenacidad)} cN/tex` : 'S/D'
+      const cvm = h.cvm != null ? `${f(h.cvm)}%` : 'S/D'
+      const neps = h.neps_200 != null ? `${f(h.neps_200, 1)}` : 'S/D'
+      const estadoNe = (h.tenacidad != null && parseFloat(h.tenacidad) < 14.5) || (h.neps_200 != null && parseFloat(h.neps_200) > 700)
+        ? 'CRÍTICO'
+        : (h.tenacidad != null && parseFloat(h.tenacidad) < 16.0) || (h.cvm != null && parseFloat(h.cvm) > 13.0)
+          ? 'PRECAUCIÓN'
+          : 'APTO'
+      return `• Ne ${ne}: CVm ${cvm} | Neps ${neps} | Tenacidad ${ten}. Estado: ${estadoNe}.`
+    })
+
+    const acciones24h = alertas.length
+      ? alertas.slice(0, 4).map((a) => `• ${a}.`)
+      : ['• Sin alertas críticas; mantener parámetros y seguimiento por turno.']
+
+    const accionesProceso = []
+    const cardasRows = Array.isArray(cardas?.maquinas) ? cardas.maquinas : []
+    const cardasTopRiesgo = [...cardasRows]
+      .filter((m) => m?.cvm_avg != null)
+      .sort((a, b) => Number(b.cvm_avg) - Number(a.cvm_avg))
+      .slice(0, 2)
+    const cardasCriticas = cardasRows.filter((m) => Number(m?.cvm_avg) > 3.6)
+
+    if (cardasTopRiesgo.length) {
+      const topTxt = cardasTopRiesgo
+        .map((m) => `${m.maschnr || 'S/D'} (${f(m.cvm_avg)}% CVm)`)
+        .join(', ')
+      accionesProceso.push(`• P2 CARDAS: mantener velocidad de cardina en 9.500 RPM (no bajar a 9.000 RPM que eleva neps); revisar setting de reguladores de distancia (gauge 0.010" ó 0.25mm) en ${topTxt}; con neps >250 en trama, aumentar energía centrífuga de limpieza.`)
+    }
+    if (cardasCriticas.length) {
+      accionesProceso.push(`• SEGREGACIÓN INMEDIATA: cardas ${cardasCriticas.map(m => m.maschnr).join(', ')} con CVm > 3.6% → NO alimentar Ne 14/1 (Trama Fina) ni otros títulos finos. Reservar para Ne 7/1 u otros títulos gruesos.`)
+    }
+
+    const riesgoManuar = dataActual.hilos.some((h) => {
+      const esUrd = String(h.destino_hilo || '').toUpperCase() === 'URDIMBRE' || /urdimbre/i.test(String(h.aplicacion_hilo || ''))
+      const cvm = h.cvm != null ? parseFloat(h.cvm) : null
+      return esUrd && cvm != null && cvm > 11.5
+    })
+    if (riesgoManuar) {
+      accionesProceso.push('• P1 MANUAR: revisar Manuar 003 (último CVm 4.12% – crítico); verificar presión de rodillos de estiraje y estado del limpiador automático de borra. Para Ne 12.5/1 (urdimbre), asegurar doblaje de 8 cintas para diluir variabilidad de fardos. URGENTE antes de tejedoras.')
+    }
+
+    const nepsAltoTrama = dataActual.hilos.some((h) => {
+      const esTrama = String(h.destino_hilo || '').toUpperCase() === 'TRAMA' || /trama/i.test(String(h.aplicacion_hilo || ''))
+      const neps = h.neps_200 != null ? parseFloat(h.neps_200) : null
+      return esTrama && neps != null && neps > 250
+    })
+    if (nepsAltoTrama) {
+      accionesProceso.push('• P3 OE/ROTOR: Neps >250/km detectados. Aumentar limpieza de rotores de 24h → 12h; revisar canal del rotor para saturación de polvillo. Para Ne 12.5/1 (urdimbre 830 RPM), usar navel cerámica con estrías (Ceramic Spiral) para falso twist y compactación de vellosidad. Mantener Alfa en 5.3 para Ne 14/1 (trama) – NO aumentar para evitar hilo duro/quebradizo.')
+    }
+
+    accionesProceso.push('• DESFASE CRÍTICO A REGISTRAR: Tensorapid llega con ventana de 24h post-Uster (acondicionamiento normal). NO confundir "sin dato" con "fuera de control". Para trama (Ne 14/1), si CVm% y Neps Uster están OK, la ausencia de Tensorapid no detiene continuidad – vigilancia Urdidoras/Telares es preventiva.')
+
+    const estrategico = [
+      `📢 INFORME TÉCNICO ESTRATÉGICO - LOTE FIAC ${actual} (${fechaTag})`,
+      '',
+      `1️⃣ MATERIA PRIMA (HVI) Y BLEND`,
+      `• Consumo total: ${totalFardos || 'S/D'} fardos.`,
+      `• Parámetros lote: STR ${isNaN(strLote) ? 'S/D' : f(strLote)} | SCI ${isNaN(sciLote) ? 'S/D' : f(sciLote, 1)} | MIC ${isNaN(micLote) ? 'S/D' : f(micLote, 3)} | UHML ${isNaN(uhmlLote) ? 'S/D' : f(uhmlLote)}.`,
+      provPrincipal
+        ? `• Proveedor principal: ${provPrincipal.produtor} (${Number(provPrincipal.fardos_consumidos) || 0} fardos).`
+        : '• Proveedor principal: sin datos.',
+      provMejorStr
+        ? `• Mejor STR por proveedor: ${provMejorStr.produtor} (${f(provMejorStr.str)}).`
+        : '• Mejor STR por proveedor: sin datos.',
+      provMicRiesgo && parseFloat(provMicRiesgo.mic) > 4.7
+        ? `• Riesgo MIC: ${provMicRiesgo.produtor} con MIC ${f(provMicRiesgo.mic, 3)} está fuera de zona óptima para títulos finos.`
+        : '• Riesgo MIC: sin desvíos severos detectados en el corte.',
+      '',
+      `2️⃣ ANÁLISIS POR TÍTULO (USTER / TENSORAPID)`,
+      ...(neResumen.length ? neResumen : ['• Sin datos de hilo para el lote actual.']),
+      '',
+      `3️⃣ DIAGNÓSTICO DE RIESGO OPERATIVO`,
+      `• Estado global: ${estadoLabel.replace('✅ ', '').replace('⚠️ ', '').replace('🔴 ', '')}.`,
+      `• Lectura técnica: ${conclusionBase}`,
+      '',
+      `4️⃣ ACCIONES PRIORITARIAS (24H)`,
+      ...acciones24h,
+      ...accionesProceso,
+      ...(puntosNe.length ? puntosNe.slice(0, 3).map((p) => `• ${p.replace(/^🔸\s*/, '')}`) : []),
+      '',
+      `5️⃣ CIERRE`,
+      `• Referencia comparada: ${refStr}.`,
+      `• Regla temporal: Tensorapid puede llegar con desfase de 24h respecto a Uster; no confundir "sin dato" con "fuera de control".`,
+      fechaCorte ? `• Corte operativo utilizado: ${fechaCorte}.` : null,
+      `• Fuente: ${process.env.GOOGLE_API_KEY ? 'Gemini/Local con fallback' : 'Local determinístico'}.`,
+      `_Informe técnico estratégico generado localmente · ${new Date().toLocaleString('es-AR')}_`,
+    ].filter(Boolean)
+
+    return estrategico.join('\n')
   }
 
   const lines = [
@@ -6961,6 +7194,7 @@ function generarNarrativaLocal(rows, loteActual, proveedores = []) {
     ...(alertas.length
       ? alertas.map(a => `  ⚠️ ${a}`)
       : ['  ✓ Sin alertas críticas en el lote actual.']),
+    `  ℹ️ Ventana Tensorapid: los valores de tenacidad se consolidan 24h después de Uster (acondicionamiento normal). En trama (CVm% y Neps Uster controlados), ausencia de Tensorapid es transitoria – no penaliza continuidad. Use Uster como señal preventiva inmediata.`,
     ...(puntosNe.length ? puntosNe : []),
     ``,
     `🚀 ESTADO OPERATIVO:`,
@@ -6987,13 +7221,13 @@ function generarNarrativaLocal(rows, loteActual, proveedores = []) {
 // ─────────────────────────────────────────────────────────────────────────────
 app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
   try {
-    const { rows, loteActual, model: modelReq, modo, proveedores } = req.body;
+    const { rows, loteActual, model: modelReq, modo, proveedores, sideDaily, cardas, fechaCorte, formato = 'actual' } = req.body;
     if (!rows || rows.length === 0) return res.status(400).json({ error: 'Sin datos para analizar' });
 
     // Si piden explícitamente local, o no hay API key → generación local directa
     if (modo === 'local' || !process.env.GOOGLE_API_KEY) {
-      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || []);
-      return res.json({ success: true, narrativa, fuente: 'local', ...buildNarrativaStructuredFields(narrativa) });
+      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], formato, { sideDaily, cardas, fechaCorte });
+      return res.json({ success: true, narrativa, fuente: 'local', formatoNarrativa: formato, ...buildNarrativaStructuredFields(narrativa) });
     }
 
     const lotesSorted = [...new Set(rows.map(r => Number(r.mistura)))].sort((a, b) => a - b);
@@ -7005,7 +7239,12 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
       const hvi = filas[0] || {};
       const hilos = filas
         .filter(r => r.ne != null)
-        .map(r => `   • Ne ${r.ne}/1: Tenacidad=${r.tenacidad ?? '-'} cN/tex | Elongación=${r.elongacion ?? '-'}% | CVm%=${r.cvm ?? '-'} | Neps+200%=${r.neps_200 ?? '-'}/km`)
+        .map(r => {
+          const app = r.aplicacion_hilo ? ` | Aplicación=${r.aplicacion_hilo}` : ''
+          const dest = r.destino_hilo ? ` | Destino=${r.destino_hilo}` : ''
+          const origen = r.proceso_origen ? ` | Origen=${r.proceso_origen}${r.usa_manuar === false ? ' (sin manuar)' : r.usa_manuar === true ? ' (con manuar)' : ''}` : ''
+          return `   • Ne ${r.ne}/1: Tenacidad=${r.tenacidad ?? '-'} cN/tex | Elongación=${r.elongacion ?? '-'}% | CVm%=${r.cvm ?? '-'} | Neps+200%=${r.neps_200 ?? '-'}/km${app}${dest}${origen}`
+        })
         .join('\n');
       const misturaLabel = hvi.mistura_real ? `${mistura} (Mistura ${hvi.mistura_real})` : `${mistura}`;
       // Proveedores del lote
@@ -7026,12 +7265,78 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
     const genAI  = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
     const model  = genAI.getGenerativeModel({ model: modelName });
 
-    const prompt = `Actúa como Auditor de Calidad Textil y Experto en Tejeduría e Hilandería de denim de alta velocidad.
+    const prompt = formato === 'estrategico'
+      ? `Actúa como Auditor Técnico Estratégico de Hilandería y Tejeduría denim.
+
+DATOS COMPARATIVOS:
+${resumenLotes}
+
+MATRIZ Y REGLAS:
+- Mantén consistencia con matriz: estados Aprobado / Condicional / Rechazado.
+- Urdimbre (Ne>=10): priorizar Tenacidad, Elongación, CVm y Neps.
+- Trama (Ne<=9): priorizar CVm y Neps.
+- Señalar impacto operativo real en producción (roturas, barreado, teñido, paradas).
+- Si viene Aplicación/Destino/Origen por Ne en los datos, eso manda por encima de cualquier inferencia por título.
+- Si Tensorapid no está disponible aún, asumir desfase normal de 24h post-Uster y priorizar decisión preventiva con Uster (CVm, neps, delgados/gruesos).
+- Si un título viene marcado como TRAMA por la configuración del Ne (aunque sea Ne 14/1), evaluarlo con banda de trama y no con banda de urdimbre.
+
+CONTEXTO CRÍTICO DE PLANTA (NO NEGOCIABLE):
+- Esta planta es OPEN END (OE, rotor).
+- No usar ni mencionar continuas de anillos, anilleras, bobinadoras externas ni peinadoras.
+- El hilo se forma y bobina en el mismo sistema OE.
+- Riesgos de rotura: urdidoras y telares de aire Toyota 830 RPM; además paros por suciedad/partículas en rotor.
+- Si los datos indican Ne 14/1 directo de carda/sin manuar, tratarlo como TRAMA y no como urdimbre.
+- No declares “detener” salvo desvíos críticos sostenidos con impacto operativo claro.
+
+CONTEXTO OPERATIVO RECIBIDO:
+- Fecha de corte dashboard: ${fechaCorte || 'sin dato'}.
+- Cardas (último día disponible): ${cardas?.fecha || 'sin dato'}.
+- Promedio CVm cardas: ${cardas?.resumen?.cvm_avg ?? 'sin dato'}.
+- CVm máximo cardas: ${cardas?.resumen?.cvm_max ?? 'sin dato'}.
+
+IMPORTANTE: SOLO TEXTO PLANO, sin markdown.
+
+Devuelve exactamente este esquema:
+📢 INFORME TÉCNICO ESTRATÉGICO - LOTE FIAC ${actual} (${new Date().toLocaleDateString('es-AR')})
+
+1️⃣ MATERIA PRIMA (HVI) Y BLEND
+• Consumo total
+• Parámetros lote (STR, SCI, MIC, UHML)
+• Análisis de proveedores (principal, mejor calidad, riesgo)
+
+2️⃣ ANÁLISIS POR TÍTULO (USTER / TENSORAPID)
+• Un bloque por cada Ne con CVm, Delgados/Neps si están disponibles, Tenacidad y estado (Apto/Precaución/Crítico)
+
+3️⃣ DIAGNÓSTICO DE RIESGO OPERATIVO
+• Resumen técnico de impacto en planta según desvíos reales
+
+4️⃣ ACCIONES PRIORITARIAS (24H)
+• 3 a 5 acciones concretas, ejecutables y priorizadas
+
+5️⃣ CIERRE
+• Estado operativo final + recomendación de continuidad
+
+No inventes datos ausentes. Si falta un dato, indicar "sin dato".`
+      : `Actúa como Auditor de Calidad Textil y Experto en Tejeduría e Hilandería de denim de alta velocidad.
 
 DATOS COMPARATIVOS:
 ${resumenLotes}
 
 UMBRALES: Tenacidad hilo >16.0=APTO, 14.5-16.0=PRECAUCIÓN, <14.5=CRÍTICO | Elongación <7.5%=RIESGO URDIDORA | Neps+200% >700=RIESGO ÍNDIGO | CVm% >13=IRREGULAR | STR fibra >27=ÓPTIMO
+
+    CONTEXTO CRÍTICO DE PLANTA (NO NEGOCIABLE):
+    - Esta planta es OPEN END (OE, rotor).
+    - No usar ni mencionar continuas de anillos, anilleras, bobinadoras externas ni peinadoras.
+    - El hilo se forma y bobina en el mismo sistema OE.
+    - Riesgos de rotura: urdidoras y telares de aire Toyota 830 RPM; además paros por suciedad/partículas en rotor.
+    - Si los datos indican Ne 14/1 directo de carda/sin manuar, tratarlo como TRAMA y no como urdimbre.
+    - No declarar “inviable” ni “detener” salvo evidencia cuantitativa crítica.
+    - Si Tensorapid está "sin dato", tratarlo como pendiente por acondicionamiento (24h), no como falla automática.
+
+    REGLA DE FUENTE DE VERDAD:
+    - Cuando los datos incluyan Aplicación/Destino/Origen del Ne, usar esos campos como verdad operacional.
+      - Para títulos de TRAMA, si faltan datos Tensorapid pero CVm/Neps Uster están controlados, mantener evaluación preventiva sin sobrerreacción.
+    - Si el Ne está configurado como TRAMA, aplicar umbral de trama (CVm hasta 13.5 y Neps hasta 700) para decisión inmediata.
 
 MATRIZ DE REQUISITOS MÍNIMOS POR TÍTULO:
 Ne 7 (Trama):  Tenac≥14.0, CVm≤13.5%, Neps≤700/km    → solo TELAR
@@ -7071,6 +7376,7 @@ Análisis Comparativo Fibra ↔️ Hilo
 
 🛠 PLAN DE ACCIÓN PRIORIZADO (24h):
 [2-3 bullets accionables]
+[Incluir al menos 1 acción por Cardas, 1 por Manuar y 1 por OE cuando haya señales de riesgo.]
 
 🚀 ESTADO OPERATIVO:
 [APROBADO PARA CONTINUIDAD / PRECAUCIÓN - REVISAR / CRÍTICO - DETENER]
@@ -7079,12 +7385,12 @@ Análisis Comparativo Fibra ↔️ Hilo
     try {
       const result = await model.generateContent(prompt);
       const narrativaCompleta = result.response.text();
-      return res.json({ success: true, narrativa: narrativaCompleta, fuente: 'gemini', ...buildNarrativaStructuredFields(narrativaCompleta) });
+      return res.json({ success: true, narrativa: narrativaCompleta, fuente: 'gemini', formatoNarrativa: formato, promptGemini: prompt, ...buildNarrativaStructuredFields(narrativaCompleta) });
     } catch (geminiErr) {
       // Fallback local ante cualquier error de Gemini (quota, red, etc.)
       console.warn('Gemini no disponible, usando generación local:', geminiErr.message?.slice(0, 120));
-      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || []);
-      return res.json({ success: true, narrativa, fuente: 'local', aviso: 'Gemini no disponible – informe generado localmente.', ...buildNarrativaStructuredFields(narrativa) });
+      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], formato, { sideDaily, cardas, fechaCorte });
+      return res.json({ success: true, narrativa, fuente: 'local', formatoNarrativa: formato, aviso: 'Gemini no disponible – informe generado localmente.', ...buildNarrativaStructuredFields(narrativa) });
     }
 
   } catch (err) {
@@ -7092,6 +7398,174 @@ Análisis Comparativo Fibra ↔️ Hilo
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
+// =====================================================
+// ENDPOINTS EFICIENCIAS TECELAJE
+// Replica de macro VBA: calcula eficiencias por turno (A/B/C/DÍA)
+// =====================================================
+
+// GET /api/produccion/eficiencias/resumen
+// Retorna eficiencias promedio por FILIAL para TECELAGEM
+app.get('/api/produccion/eficiencias/resumen', async (req, res) => {
+  try {
+    const eficTANum = sqlParseNumber('"EFIC_TA"')
+    const eficTBNum = sqlParseNumber('"EFIC_TB"')
+    const eficTCNum = sqlParseNumber('"EFIC_TC"')
+    const eficDIANum = sqlParseNumber('"EFIC_DIA"')
+
+    const sql = `
+      SELECT
+        LEFT("FILIAL", 1) AS un,
+        ROUND(AVG(${eficTANum}), 1) AS efic_ta,
+        ROUND(AVG(${eficTBNum}), 1) AS efic_tb,
+        ROUND(AVG(${eficTCNum}), 1) AS efic_tc,
+        ROUND(AVG(${eficDIANum}), 1) AS efic_dia
+      FROM tb_proceso
+      WHERE BTRIM("PROCESSO") = 'TECELAGEM'
+      GROUP BY LEFT("FILIAL", 1)
+      LIMIT 1
+    `
+
+    const result = await query(sql, [], 'eficiencias/resumen')
+    const row = result.rows[0] || {
+      efic_ta: 0,
+      efic_tb: 0,
+      efic_tc: 0,
+      efic_dia: 0
+    }
+
+    res.json({
+      EFIC_TA: `${row.efic_ta || 0}%`,
+      EFIC_TB: `${row.efic_tb || 0}%`,
+      EFIC_TC: `${row.efic_tc || 0}%`,
+      EFIC_DIA: `${row.efic_dia || 0}%`
+    })
+  } catch (err) {
+    console.error('Error en eficiencias/resumen:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/produccion/eficiencias/detalle
+// Body: { turno: 'A' | 'B' | 'C' | 'DIA' }
+// Retorna tabla de "caídas" (piezas en tecelaje) con cálculo de tiempo
+app.post('/api/produccion/eficiencias/detalle', async (req, res) => {
+  try {
+    const turno = (String(req.body?.turno || 'DIA')).toUpperCase()
+    if (!['A', 'B', 'C', 'DIA'].includes(turno)) {
+      return res.status(400).json({ error: 'Turno debe ser A, B, C o DIA' })
+    }
+
+    const eficCol = turno === 'A' ? '"EFIC_TA"' :
+                    turno === 'B' ? '"EFIC_TB"' :
+                    turno === 'C' ? '"EFIC_TC"' :
+                    '"EFIC_DIA"'
+
+    const eficNum = sqlParseNumber(eficCol)
+    const mtPrevistaNum = sqlParseNumber('"MT_PREVISTA"')
+    const mtABaterNum = sqlParseNumber('"MT_A_BATER"')
+    const mtProx24hNum = sqlParseNumber('"MT_PROX24H"')
+    const rpmNum = sqlParseNumber('"RPM"')
+    const numFiosNum = sqlParseNumber('"NUM_FIOS"')
+    const partidaNum = sqlParseNumber('"PARTIDA"')
+    const encAcabUrdNum = sqlParseNumber('FICHAS."ENC#ACAB URD"')
+    const pasNum = sqlParseNumber('FICHAS."BATIDAS/FIO"')
+    const anchoNum = sqlParseNumber('FICHAS."LARGURA"')
+
+    const sql = `
+      SELECT
+        LEFT(PROC."ARTIGO", 1) AS tipo,
+        LEFT(PROC."ARTIGO", 10) AS artigo,
+        PROC."COR" AS color,
+        PROC."DESC_NM_MERC" AS nombre,
+        PROC."TRAMA_REDUZIDA_1" AS trama,
+        ${pasNum} AS pas,
+        ${anchoNum} AS ancho,
+        PROC."PARTIDA" AS partida,
+        ${eficNum} AS eficiencia,
+        ROUND(${mtPrevistaNum} * ((100 - COALESCE(${encAcabUrdNum}, 0)) / 100)::numeric, 0) AS metros,
+        ROUND(${mtABaterNum} * ((100 - COALESCE(${encAcabUrdNum}, 0)) / 100)::numeric, 0) AS metros_a_tejer,
+        ROUND(COALESCE(${mtProx24hNum}, 0), 0) AS m24,
+        PROC."STATUS" AS status,
+        PROC."STATUS" AS s,
+        CASE WHEN right(PROC."MAQUINA", 2) ~ '^[0-9]{2}$' THEN right(PROC."MAQUINA", 2)::int ELSE 0 END AS telar,
+        ${rpmNum} AS rpm,
+        PROC."GRUPO_TEAR" AS grupo,
+        LEFT(PROC."URDUME", 10) AS base_urdume,
+        RIGHT(PROC."URDUME", 3) AS color_urdume,
+        ${numFiosNum} AS hilos,
+        ${pasNum} AS batidas_fio,
+        FICHAS."SARJA" AS sarja,
+        ${partidaNum} AS partida_num,
+        CASE
+          WHEN LENGTH(COALESCE(PROC."PARTIDA", '')) >= 6
+            THEN NULLIF(REGEXP_REPLACE(LEFT(RIGHT(PROC."PARTIDA", 6), 4), '[^0-9]', '', 'g'), '')::int
+          ELSE NULL
+        END AS rolada,
+        ${mtABaterNum} AS mt_a_bater
+      FROM tb_proceso PROC
+      LEFT JOIN tb_fichas FICHAS ON FICHAS."ARTIGO CODIGO" = PROC."ARTIGO"
+      WHERE BTRIM(PROC."PROCESSO") = 'TECELAGEM'
+      ORDER BY
+        CASE
+          WHEN right(PROC."MAQUINA", 2) ~ '^[0-9]{2}$' THEN right(PROC."MAQUINA", 2)::int
+          ELSE 0
+        END ASC
+      LIMIT 500
+    `
+
+    const result = await query(sql, [], `eficiencias/detalle/${turno}`)
+
+    // Cálculo de "Caída" (tiempo estimado en hh:mm)
+    const rows = result.rows.map(row => {
+      const mtA = parseFloat(row.mt_a_bater) || 0
+      const rpmN = parseFloat(row.rpm) || 0
+      const batN = parseFloat(row.batidas_fio) || 0
+      const eficN = parseFloat(row.eficiencia) || 0
+      const metrosN = parseFloat(row.metros) || 0
+      const metrosATejerN = parseFloat(row.metros_a_tejer) || 0
+      const m24N = parseFloat(row.m24) || 0
+
+      let caida = '--:--'
+      if (rpmN > 0 && batN > 0) {
+        const denominador = (((rpmN * 1440) / (batN * 100)) * 0.9 / 90) * (eficN + 0.1)
+        if (denominador > 0) {
+          const horas = mtA / denominador + 0.25
+          const h = Math.floor(horas)
+          const m = Math.round((horas - h) * 60)
+          caida = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+        }
+      }
+
+      // Fórmulas Excel:
+      // Y = SI((J-W+X)>J;J;(J-W+X))
+      // Z = J-Y
+      const tejidoCalc = (metrosN - metrosATejerN + m24N) > metrosN
+        ? metrosN
+        : (metrosN - metrosATejerN + m24N)
+      const tejido = Math.max(0, tejidoCalc)
+      const resto = metrosN - tejido
+
+      return {
+        ...row,
+        turno,
+        efi: Number.isFinite(eficN) ? Number(eficN.toFixed(1)) : null,
+        tejido: Number(tejido.toFixed(0)),
+        resto: Number(resto.toFixed(0)),
+        caida
+      }
+    })
+
+    res.json({
+      turno,
+      total: rows.length,
+      data: rows
+    })
+  } catch (err) {
+    console.error('Error en eficiencias/detalle:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
 
 // =====================================================
 // INICIAR SERVIDOR

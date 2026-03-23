@@ -200,6 +200,11 @@ const routes = [
     path: '/informe-diario',
     component: () => import('./components/produccion/InformeDiario.vue'),
     meta: { title: 'Informe STC Diario' }
+  },
+  {
+    path: '/caida-telares',
+    component: () => import('./components/produccion/CaidaTelares.vue'),
+    meta: { title: 'Caida de Telares' }
   }
 ]
 
