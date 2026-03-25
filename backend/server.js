@@ -10,6 +10,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getImportStatus, importCSV, importAll, importSpecificTables, importForceAll, renameduplicateHeaders, getTableColumns, compareColumns, addColumnsToTable } from './import-manager.js'
 import configStandardsRouter from './config-standards.js';
 import { optimizeBlend } from './services/blendomat-optimizer.js';
+import { getEficienciasResumen, getEficienciasDetalle } from './routes/eficiencias-tecelaje.mjs';
 import { parseNarrativaStructure } from '../shared/narrativaSections.js';
 
 const { Pool } = pg
@@ -519,6 +520,17 @@ async function costosTablesReady() {
   await ensureCostosSchema()
   return true
 }
+
+// =====================================================
+// ENDPOINTS EFICIENCIAS TECELAJE
+// Base URL en frontend: /api/produccion/eficiencias
+// =====================================================
+
+// GET /api/produccion/eficiencias/resumen
+app.get('/api/produccion/eficiencias/resumen', (req, res) => getEficienciasResumen(req, res, query))
+
+// POST /api/produccion/eficiencias/detalle  body: { turno: 'A'|'B'|'C'|'DIA' }
+app.post('/api/produccion/eficiencias/detalle', (req, res) => getEficienciasDetalle(req, res, query))
 
 // =====================================================
 // ENDPOINTS COSTOS MENSUALES

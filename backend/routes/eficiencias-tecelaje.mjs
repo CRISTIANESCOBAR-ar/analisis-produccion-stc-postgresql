@@ -52,7 +52,7 @@ export async function getEficienciasResumen(req, res, query) {
         ROUND(AVG(${sqlParseNumber('"EFIC_TB"')}), 1) AS EFIC_TB,
         ROUND(AVG(${sqlParseNumber('"EFIC_TC"')}), 1) AS EFIC_TC,
         ROUND(AVG(${sqlParseNumber('"EFIC_DIA"')}), 1) AS EFIC_DIA
-      FROM tb_processo
+      FROM tb_proceso
       WHERE BTRIM("PROCESSO") = 'TECELAGEM'
       GROUP BY LEFT("FILIAL", 1), "PROCESSO"
       LIMIT 1
@@ -99,26 +99,33 @@ export async function getEficienciasDetalle(req, res, query) {
 
     const sql = `
       SELECT
-        LEFT("ARTIGO", 1) AS tipo,
-        LEFT("ARTIGO", 10) AS artigo,
-        "COR" AS color,
-        "DESC_NM_MERC" AS nombre,
-        "TRAMA_REDUZIDA_1" AS trama,
-        ${sqlParseNumber('"EFIC_' + turno + '"')} AS eficiencia,
-        ${sqlParseNumber('"MT_PREVISTA"')} * ((100 - COALESCE(FICHAS."ENC#ACAB URD", 0)) / 100) AS metros,
-        "STATUS" AS status,
-        RIGHT("MAQUINA", 2)::int AS telar,
-        ${sqlParseNumber('"RPM"')} AS rpm,
-        "GRUPO_TEAR" AS grupo,
-        LEFT("URDUME", 10) AS base_urdume,
-        RIGHT("URDUME", 3) AS color_urdume,
-        ${sqlParseNumber('"NUM_FIOS"')} AS hilos,
-        ${sqlParseNumber('"PARTIDA"')} AS partida,
-        ${sqlParseNumber('"MT_A_BATER"')} AS mt_a_bater
-      FROM tb_processo PROC
+        LEFT(PROC."ARTIGO", 1) AS tipo,
+        LEFT(PROC."ARTIGO", 10) AS artigo,
+        PROC."COR" AS color,
+        PROC."DESC_NM_MERC" AS nombre,
+        PROC."TRAMA_REDUZIDA_1" AS trama,
+        ${sqlParseNumber('PROC."' + eficCol + '"')} AS efi,
+        ${sqlParseNumber('PROC."MT_PREVISTA"')} * ((100 - COALESCE(NULLIF(FICHAS."ENC#ACAB URD", '')::numeric, 0)) / 100) AS metros,
+        ${sqlParseNumber('PROC."MT_PREVISTA"')} AS metros_a_tejer,
+        ${sqlParseNumber('PROC."MT_DISPONIV"')} AS tejido,
+        ${sqlParseNumber('PROC."MT_A_BATER"')} AS resto,
+        ${sqlParseNumber('PROC."MT_PROX24H"')} AS m24,
+        PROC."STATUS" AS status,
+        CASE WHEN RIGHT(PROC."MAQUINA", 2) ~ '^[0-9]+$' THEN RIGHT(PROC."MAQUINA", 2)::int ELSE NULL END AS telar,
+        ${sqlParseNumber('PROC."RPM"')} AS rpm,
+        PROC."GRUPO_TEAR" AS grupo,
+        LEFT(PROC."URDUME", 10) AS base_urdume,
+        RIGHT(PROC."URDUME", 3) AS color_urdume,
+        ${sqlParseNumber('PROC."NUM_FIOS"')} AS hilos,
+        ${sqlParseNumber('PROC."LARGURA"')} AS ancho,
+        ${sqlParseNumber('PROC."PARTIDA"')} AS partida,
+        ${sqlParseNumber('PROC."BATIDAS"')} AS batidas_fio,
+        FICHAS."SARJA" AS sarja,
+        ${sqlParseNumber('FICHAS."BATIDAS/FIO"')} AS pas
+      FROM tb_proceso PROC
       LEFT JOIN tb_fichas FICHAS ON FICHAS."ARTIGO CODIGO" = PROC."ARTIGO"
       WHERE BTRIM(PROC."PROCESSO") = 'TECELAGEM'
-      ORDER BY COALESCE(RIGHT(PROC."MAQUINA", 2)::int, 0) ASC
+      ORDER BY COALESCE(CASE WHEN RIGHT(PROC."MAQUINA", 2) ~ '^[0-9]+$' THEN RIGHT(PROC."MAQUINA", 2)::int ELSE 0 END, 0) ASC
       LIMIT 500
     `
 
@@ -128,10 +135,10 @@ export async function getEficienciasDetalle(req, res, query) {
     const rows = result.rows.map(row => ({
       ...row,
       caida: calcularCaida(
-        row.mt_a_bater,
+        row.resto,
         row.rpm,
-        row.batidas_fio, // Esta viene desde el LEFT JOIN con FICHAS
-        row.eficiencia
+        row.batidas_fio,
+        row.efi
       )
     }))
 
@@ -148,12 +155,21 @@ export async function getEficienciasDetalle(req, res, query) {
 
 /**
  * Helper SQL: parsear número desde TEXT
+ * Maneja formato brasileño con punto de miles y coma decimal: 1.809,64
  */
 function sqlParseNumber(colIdent) {
   return `(
     CASE
       WHEN ${colIdent} IS NULL OR ${colIdent} = '' THEN NULL
-      WHEN ${colIdent} ~ '^-?[0-9]+([.,][0-9]+)?$' THEN REPLACE(${colIdent}, ',', '.')::numeric
+      -- Formato brasileño con miles: 1.809,64  o  2.325,00
+      WHEN ${colIdent} ~ '^-?[0-9]{1,3}([.][0-9]{3})+(,[0-9]+)?$' THEN
+        REPLACE(REPLACE(${colIdent}, '.', ''), ',', '.')::numeric
+      -- Formato coma-decimal simple: 462,20  o  96,11
+      WHEN ${colIdent} ~ '^-?[0-9]+(,[0-9]+)?$' THEN
+        REPLACE(${colIdent}, ',', '.')::numeric
+      -- Formato punto-decimal o entero: 462.20  o  146
+      WHEN ${colIdent} ~ '^-?[0-9]+[.][0-9]+$' THEN
+        ${colIdent}::numeric
       ELSE NULL
     END
   )`
