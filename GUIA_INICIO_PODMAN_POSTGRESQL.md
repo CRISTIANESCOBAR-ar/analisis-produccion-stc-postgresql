@@ -5,6 +5,41 @@
 - Docker Compose instalado
 - Proyecto clonado en `C:\stc-produccion-v2`
 
+### Instalación rápida (PowerShell, opcional para futuras instalaciones)
+
+Si en el futuro necesitas reinstalar Podman desde PowerShell (ejecutar como Administrador):
+
+```powershell
+winget source update
+winget install -e --id RedHat.Podman-Desktop --accept-source-agreements --accept-package-agreements
+```
+
+### Verificación inmediata después de instalar
+
+Abre una terminal nueva de PowerShell y verifica que Windows ya reconoce el comando:
+
+```powershell
+podman --version
+```
+
+**Salida esperada:**
+```
+podman version x.y.z
+```
+
+Si aparece `podman no se reconoce`, cierra y vuelve a abrir PowerShell. Si sigue igual, reinicia Windows y vuelve a probar.
+
+### Requisito crítico de Windows para Podman Machine
+
+Si Podman Desktop muestra que falta **Virtual Machine Platform**, habilítalo así (PowerShell como Administrador):
+
+```powershell
+dism /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
+dism /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
+```
+
+> **Importante:** Reinicia Windows después de ejecutar estos comandos.
+
 ---
 
 ## 🔑 Credenciales de Acceso
@@ -24,6 +59,23 @@
 ---
 
 ## Pasos para Iniciar el Sistema
+
+### 0. Verificar que Podman esté disponible
+
+```powershell
+podman --version
+```
+
+Si este comando falla con `podman no se reconoce`, instala Podman Desktop:
+
+```powershell
+winget source update
+winget install -e --id RedHat.Podman-Desktop --accept-source-agreements --accept-package-agreements
+```
+
+Después, cierra PowerShell, ábrelo de nuevo y repite `podman --version` antes de continuar.
+
+---
 
 ### 1. Iniciar Podman Machine
 
@@ -265,6 +317,58 @@ podman restart stc_pgadmin
 # Si no existe, levantarlo
 podman compose up -d pgadmin
 ```
+
+---
+
+### Error: "podman no se reconoce como nombre de un cmdlet"
+
+**Causa:** Podman Desktop no está instalado o PowerShell no se ha reabierto después de la instalación.
+
+**Solución:**
+```powershell
+# 1. Verificar si el comando existe
+podman --version
+
+# 2. Si no existe, instalar Podman Desktop
+winget source update
+winget install -e --id RedHat.Podman-Desktop --accept-source-agreements --accept-package-agreements
+
+# 3. Cerrar PowerShell y abrir una terminal nueva
+
+# 4. Verificar de nuevo
+podman --version
+```
+
+Si tras reinstalar sigue fallando, reinicia Windows y vuelve a probar `podman --version` antes de ejecutar `podman machine start`.
+
+---
+
+### Error: "WSL version should be >= 1.2.5"
+
+**Causa:** WSL está desactualizado o falta el kernel de WSL 2.
+
+**Solución:**
+```powershell
+# 1. Actualizar WSL
+wsl --update
+
+# 2. Si la actualización normal no avanza, probar descarga directa
+wsl --update --web-download
+
+# 3. Verificar la versión instalada
+wsl --version
+```
+
+**Resultado esperado:** `Versión de WSL` mayor o igual a `1.2.5`.
+
+Si PowerShell indica que faltan componentes de Windows, abre una terminal como Administrador y habilita estas características:
+
+```powershell
+dism /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
+dism /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
+```
+
+Después, reinicia Windows y vuelve a validar con `wsl --version`.
 
 ---
 
