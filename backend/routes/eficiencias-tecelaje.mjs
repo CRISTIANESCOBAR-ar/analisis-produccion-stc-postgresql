@@ -18,8 +18,10 @@ function parseNumber(value) {
 }
 
 /**
- * Helper: Calcular tiempo caída en formato hh:mm
+ * Helper: Calcular fecha+hora estimada de finalización del lote
  * Fórmula: MT_A_BATER / ((((RPM * 1440) / (BATIDAS/FIO * 100) * 0.90) / 90) * (EFIC_TURNO + 0.1)) + 0.25
+ * El resultado en días fraccionarios se suma a la fecha actual → fecha proyectada de caída con hora.
+ * Retorna { caida: "28/03/2026 08:45", caida_ms: <timestamp para ordenar> }
  */
 function calcularCaida(mtABater, rpm, batidas, eficTurno) {
   const mtA = parseNumber(mtABater)
@@ -27,15 +29,25 @@ function calcularCaida(mtABater, rpm, batidas, eficTurno) {
   const batN = parseNumber(batidas)
   const eficN = parseNumber(eficTurno)
 
-  if (rpmN === 0 || batN === 0) return '--:--'
+  if (rpmN === 0 || batN === 0) return { caida: '--/--/---- --:--', caida_ms: Infinity, turno_caida: '--' }
 
   const denominador = (((rpmN * 1440) / (batN * 100)) * 0.9 / 90) * (eficN + 0.1)
-  if (denominador === 0) return '--:--'
+  if (denominador === 0) return { caida: '--/--/---- --:--', caida_ms: Infinity, turno_caida: '--' }
 
-  const horas = mtA / denominador + 0.25
-  const h = Math.floor(horas)
-  const m = Math.round((horas - h) * 60)
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+  const diasRestantes = mtA / denominador + 0.25
+  const fechaCaida = new Date(Date.now() + diasRestantes * 24 * 60 * 60 * 1000)
+
+  const dd = String(fechaCaida.getDate()).padStart(2, '0')
+  const mm = String(fechaCaida.getMonth() + 1).padStart(2, '0')
+  const yyyy = fechaCaida.getFullYear()
+  const hh = String(fechaCaida.getHours()).padStart(2, '0')
+  const min = String(fechaCaida.getMinutes()).padStart(2, '0')
+
+  const hora = fechaCaida.getHours()
+  const turno_caida = hora >= 6 && hora < 14 ? 'A' :
+                      hora >= 14 && hora < 22 ? 'B' : 'C'
+
+  return { caida: `${dd}/${mm}/${yyyy} ${hh}:${min}`, caida_ms: fechaCaida.getTime(), turno_caida }
 }
 
 /**
@@ -105,11 +117,12 @@ export async function getEficienciasDetalle(req, res, query) {
         PROC."DESC_NM_MERC" AS nombre,
         PROC."TRAMA_REDUZIDA_1" AS trama,
         ${sqlParseNumber('PROC."' + eficCol + '"')} AS efi,
-        ${sqlParseNumber('PROC."MT_PREVISTA"')} * ((100 - COALESCE(NULLIF(FICHAS."ENC#ACAB URD", '')::numeric, 0)) / 100) AS metros,
+        ${sqlParseNumber('PROC."MT_PREVISTA"')} * ((100 - COALESCE(${sqlParseNumber('FICHAS."ENC#ACAB URD"')}, 0)) / 100) AS metros,
         ${sqlParseNumber('PROC."MT_PREVISTA"')} AS metros_a_tejer,
         ${sqlParseNumber('PROC."MT_DISPONIV"')} AS tejido,
         ${sqlParseNumber('PROC."MT_A_BATER"')} AS resto,
         ${sqlParseNumber('PROC."MT_PROX24H"')} AS m24,
+        COALESCE(${sqlParseNumber('FICHAS."ENC#ACAB URD"')}, 0) AS enc_urd,
         PROC."STATUS" AS status,
         CASE WHEN RIGHT(PROC."MAQUINA", 2) ~ '^[0-9]+$' THEN RIGHT(PROC."MAQUINA", 2)::int ELSE NULL END AS telar,
         ${sqlParseNumber('PROC."RPM"')} AS rpm,
@@ -131,16 +144,27 @@ export async function getEficienciasDetalle(req, res, query) {
 
     const result = await query(sql, [], `eficiencias/detalle/${turno}`)
 
-    // Enriquecimiento: agregar columna calculada de "Caída" (tiempo estimado)
-    const rows = result.rows.map(row => ({
-      ...row,
-      caida: calcularCaida(
-        row.resto,
-        row.rpm,
-        row.batidas_fio,
-        row.efi
-      )
-    }))
+    // Enriquecimiento: agregar columna calculada de "Caída" (fecha+hora estimada) y ordenar ASC
+    const rows = result.rows
+      .map(row => {
+        const partidaStr = row.partida != null ? String(row.partida) : ''
+        const roladaStr = partidaStr.slice(-6).slice(0, 4)
+        const { caida, caida_ms, turno_caida } = calcularCaida(
+          row.resto,
+          row.rpm,
+          row.batidas_fio,
+          row.efi
+        )
+        return {
+          ...row,
+          rolada: roladaStr.length === 4 ? Number(roladaStr) : null,
+          caida,
+          caida_ms,
+          turno_caida
+        }
+      })
+      .sort((a, b) => a.caida_ms - b.caida_ms)
+      .map(({ caida_ms, ...rest }) => rest)
 
     res.json({
       turno,
