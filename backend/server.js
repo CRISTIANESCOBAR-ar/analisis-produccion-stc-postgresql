@@ -516,6 +516,77 @@ app.post('/api/inventory/blendomat', async (req, res) => {
   }
 });
 
+// GET /api/inventory/lote-fiac-reference-summary?limit=3
+// Devuelve las últimas N misturas históricas con promedios de variables de calidad
+// Ordenadas por número de MISTURA (entero) DESC para evitar problemas con fechas en texto
+app.get('/api/inventory/lote-fiac-reference-summary', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 3, 10);
+
+    // Helper para convertir texto con punto/coma a numérico
+    const parseNumCol = (col) => `
+      CASE
+        WHEN ${col} IS NULL OR TRIM(${col}::TEXT) = '' THEN NULL
+        ELSE CAST(REPLACE(REPLACE(TRIM(${col}::TEXT), '.', ''), ',', '.') AS NUMERIC)
+      END`;
+
+    // Obtener las últimas N misturas agrupando por MISTURA (número entero),
+    // ordenando por el número de MISTURA desc para obtener las más recientes correctamente.
+    const sql = `
+      SELECT
+        MAX(TRIM("LOTE_FIAC"))                     AS "lote_fiac",
+        TRIM("MISTURA")                            AS "mistura",
+        MIN("DT_ENTRADA_PROD")                     AS "primer_ingreso",
+        COUNT(*)                                   AS "seq_count",
+        SUM(${parseNumCol('"PESO"')})              AS "kg_usados",
+        AVG(${parseNumCol('"MIC"')})               AS "mic",
+        AVG(${parseNumCol('"UHML"')})              AS "uhml",
+        AVG(${parseNumCol('"STR"')})               AS "str",
+        AVG(${parseNumCol('"ELG"')})               AS "elg",
+        AVG(${parseNumCol('"RD"')})                AS "rd",
+        AVG(${parseNumCol('"PLUS_B"')})            AS "plus_b",
+        AVG(${parseNumCol('"SCI"')})               AS "sci"
+      FROM tb_calidad_fibra
+      WHERE "MISTURA" IS NOT NULL
+        AND TRIM("MISTURA") != ''
+        AND "TIPO_MOV" = 'MIST'
+      GROUP BY TRIM("MISTURA")
+      ORDER BY
+        CAST(NULLIF(regexp_replace(TRIM("MISTURA"), '[^0-9]', '', 'g'), '') AS INTEGER) DESC NULLS LAST
+      LIMIT $1
+    `;
+
+    const res2 = await query(sql, [limit], 'lote-fiac-ref-summary');
+
+    const round2 = (v) => (v !== null && v !== undefined) ? Math.round(Number(v) * 100) / 100 : null;
+    const round0 = (v) => (v !== null && v !== undefined) ? Math.round(Number(v)) : null;
+
+    // Invertir para mostrar cronológico (la más antigua de las 3 primero)
+    const rows = res2.rows.reverse();
+
+    const referencias = rows.map(row => ({
+      loteFiac: String(row.lote_fiac || '').replace(/^0+/, '') || String(row.lote_fiac),
+      mistura:  String(row.mistura  || '').replace(/^0+/, '') || String(row.mistura),
+      primerIngreso: row.primer_ingreso,
+      kgUsados: round0(row.kg_usados),
+      averages: {
+        MIC:    round2(row.mic),
+        UHML:   round2(row.uhml),
+        STR:    round2(row.str),
+        ELG:    round2(row.elg),
+        RD:     round2(row.rd),
+        PLUS_B: round2(row.plus_b),
+        SCI:    round2(row.sci)
+      }
+    }));
+
+    res.json({ referencias });
+  } catch (err) {
+    console.error('[lote-fiac-reference-summary] Error:', err.message);
+    res.status(500).json({ referencias: [], error: err.message });
+  }
+});
+
 async function costosTablesReady() {
   await ensureCostosSchema()
   return true

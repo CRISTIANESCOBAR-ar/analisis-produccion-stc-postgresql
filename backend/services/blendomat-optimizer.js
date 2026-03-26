@@ -1153,7 +1153,10 @@ function calcularEstadisticas(blends, activeRules) {
             variables: {}
         };
 
-        const paramsToCompute = [...new Set((activeRules || []).map(r => r?.parametro).filter(Boolean))];
+        // Siempre calcular LEN, MIC, STR, ELG para el informe predictivo,
+        // más los parámetros definidos en las reglas activas del estándar.
+        const coreParams = ['LEN', 'MIC', 'STR', 'ELG'];
+        const paramsToCompute = [...new Set([...coreParams, ...(activeRules || []).map(r => r?.parametro).filter(Boolean)])];
 
         paramsToCompute.forEach((ruleParam) => {
             const vKey = ruleParam === 'LEN' ? 'UHML' : (ruleParam === '+b' ? 'PLUS_B' : ruleParam);

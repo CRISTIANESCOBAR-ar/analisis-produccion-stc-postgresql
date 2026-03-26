@@ -1947,10 +1947,14 @@ const hideAlgorithmOptionTooltip = () => {
   algorithmOptionTooltipVisible.value = false;
 };
 
+let _isLoadingPrefs = false;
+
 const saveUserPreferences = () => {
+  if (_isLoadingPrefs) return;
   try {
     const prefs = {
       fardos: filters.fardos,
+      stockMode: filters.stockMode,
       groupSmallLots: !!filters.groupSmallLots,
       smallLotThreshold: filters.smallLotThreshold,
       showOnlyLargestBlendBlock: !!showOnlyLargestBlendBlock.value,
@@ -1976,6 +1980,7 @@ const saveUserPreferences = () => {
 };
 
 const loadUserPreferences = () => {
+  _isLoadingPrefs = true;
   try {
     const raw = localStorage.getItem(USER_PREFS_KEY);
     if (!raw) return;
@@ -1990,6 +1995,10 @@ const loadUserPreferences = () => {
       if (!Number.isNaN(parsedFardos) && parsedFardos > 0) {
         filters.fardos = parsedFardos;
       }
+    }
+
+    if (prefs.stockMode === 'available' || prefs.stockMode === 'total') {
+      filters.stockMode = prefs.stockMode;
     }
 
     if (typeof prefs.groupSmallLots === 'boolean') {
@@ -2048,6 +2057,8 @@ const loadUserPreferences = () => {
     }
   } catch (error) {
     console.warn('No se pudo cargar preferencias de InventoryManager:', error);
+  } finally {
+    _isLoadingPrefs = false;
   }
 };
 
@@ -2338,56 +2349,39 @@ const scheduleBlendRecalculation = () => {
   }, 300);
 };
 
-watch(() => filters.fardos, () => {
-  saveUserPreferences();
-  scheduleBlendRecalculation();
-});
+// Watcher único y robusto para persistencia de preferencias del usuario.
+// El flag _isLoadingPrefs evita que los cambios de restauración vuelvan a guardar.
+watch(
+  () => ({
+    fardos: filters.fardos,
+    stockMode: filters.stockMode,
+    groupSmallLots: filters.groupSmallLots,
+    smallLotThreshold: filters.smallLotThreshold,
+    blendAlgorithm: blendAlgorithm.value,
+    showOnlyLargestBlendBlock: showOnlyLargestBlendBlock.value,
+    purchaseProjectionTargetMixes: purchaseProjection.targetMixes,
+    purchaseProjectionSource: purchaseProjection.source,
+    selectedColumns: Array.from(selectedColumnKeys.value),
+    supervisionSettings: monitoredParams.map(p => ({
+      key: p.key,
+      ...supervisionSettings[p.key]
+    }))
+  }),
+  () => {
+    saveUserPreferences();
+    scheduleBlendRecalculation();
+  },
+  { deep: true }
+);
 
-watch(blendAlgorithm, () => {
-  saveUserPreferences();
-  scheduleBlendRecalculation();
-});
-
-watch(selectedColumnKeys, () => {
-  saveUserPreferences();
-  scheduleBlendRecalculation();
-}, { deep: true });
-
-watch(supervisionSettings, () => {
-  saveUserPreferences();
-  scheduleBlendRecalculation();
-}, { deep: true });
-
-watch(() => filters.groupSmallLots, () => {
-  saveUserPreferences();
-  scheduleBlendRecalculation();
-});
-
-watch(() => filters.smallLotThreshold, () => {
-  saveUserPreferences();
-  if (!filters.groupSmallLots) return;
-  scheduleBlendRecalculation();
-});
-
-watch(showOnlyLargestBlendBlock, () => {
-  saveUserPreferences();
-});
-
+// Watch separado para purchaseProjection.targetMixes que normaliza el valor
 watch(() => purchaseProjection.targetMixes, (value) => {
   const numericValue = Number(value);
   if (Number.isNaN(numericValue) || numericValue <= 0) return;
-
   const rounded = Math.floor(numericValue);
   if (rounded !== purchaseProjection.targetMixes) {
     purchaseProjection.targetMixes = rounded;
-    return;
   }
-
-  saveUserPreferences();
-});
-
-watch(() => purchaseProjection.source, () => {
-  saveUserPreferences();
 });
 
 onBeforeUnmount(() => {
@@ -2818,7 +2812,7 @@ const summaryComparisonColumns = computed(() => {
   const refs = (loteFiacReferenceSummary.value || []).map((item) => ({
     key: `ref-${item.loteFiac}`,
     kind: 'reference',
-    label: `LOTE_FIAC ${item.loteFiac}`,
+    label: `Lote ${item.loteFiac}`,
     data: item
   }));
 
@@ -2859,9 +2853,17 @@ const formatSummaryComparisonDate = (value) => {
   const str = String(value).trim();
   if (!str) return '—';
 
+  // ISO: YYYY-MM-DD...
   if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
     const [year, month, day] = str.slice(0, 10).split('-');
     return `${day}/${month}/${year}`;
+  }
+
+  // Formato texto del sistema: DD/MM/YY HH:MM o DD/MM/YYYY
+  const ddmmyy = str.match(/^(\d{2})\/(\d{2})\/(\d{2,4})/);
+  if (ddmmyy) {
+    // Devolver solo DD/MM/YY (sin hora)
+    return `${ddmmyy[1]}/${ddmmyy[2]}/${ddmmyy[3]}`;
   }
 
   const parsed = new Date(str);
@@ -2954,9 +2956,8 @@ const predictiveFiberAnalysis = computed(() => {
   }
 
   const targetColumn = { kind: 'block', blockId: targetBlockId, label: targetBlockId };
-  const lote109Ref = refItems.find((item) => Number(item.loteFiac) === 109) || null;
-  const fallbackRef = refItems[refItems.length - 1] || null;
-  const comparisonRef = lote109Ref || fallbackRef;
+  // Usar siempre el lote más reciente (mayor LOTE_FIAC numérico) como referencia de comparación
+  const comparisonRef = refItems[refItems.length - 1] || null;
 
   if (!comparisonRef) {
     return {
@@ -3089,9 +3090,7 @@ const predictiveFiberAnalysis = computed(() => {
     badgeLabel = '⚠️ Atención Operativa';
   }
 
-  const comparisonSubtitle = lote109Ref
-    ? `Comparativo principal: ${targetBlockId} vs Lote 109 real.`
-    : `Comparativo principal: ${targetBlockId} vs Lote ${comparisonRef.loteFiac} (no se encontró Lote 109 en referencias).`;
+  const comparisonSubtitle = `Comparativo principal: ${targetBlockId} vs Lote ${comparisonRef.loteFiac} real.`;
 
   const sectionUrdido = {
     title: '1️⃣ URDIDO — NERVIO Y TENSIÓN',

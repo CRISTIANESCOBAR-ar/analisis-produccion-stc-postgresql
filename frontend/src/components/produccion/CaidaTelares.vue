@@ -507,7 +507,7 @@ onMounted(cargarDatos)
   -moz-appearance: textfield;
 }
 .th-input::-webkit-inner-spin-button,
-.th-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.th-input::-webkit-outer-spin-button { -webkit-appearance: none; appearance: none; margin: 0; }
 .th-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.2); }
 
 .th-unit {
