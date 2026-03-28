@@ -112,8 +112,8 @@
               <td class="num">{{ formatearExcel(row.efi, 1) }}</td>
               <td class="num">{{ formatearExcel(row.metros_a_tejer, 0) }}</td>
               <td class="num">{{ formatearExcel(calcM_N(row), 0) }}</td>
-              <td class="num">{{ formatearExcel(row.tejido, 0) }}</td>
-              <td class="num">{{ formatearExcel(row.resto, 0) }}</td>
+              <td class="num">{{ formatearExcel(calcTejido(row), 0) }}</td>
+              <td class="num">{{ formatearExcel(calcResto(row), 0) }}</td>
             </tr>
             <tr v-if="filasFiltradas.length === 0">
               <td colspan="25" class="empty">
@@ -199,24 +199,45 @@ const COLS = [
   { key: 'efi',            label: 'Efi',    num: true, get: r => r.efi },
   { key: 'metros_a_tejer', label: 'Metros A Tejer', num: true, get: r => r.metros_a_tejer },
   { key: 'm24',            label: '24h',    num: true, editableHeader: true, get: r => r.m24 },
-  { key: 'tejido',         label: 'Tejido', num: true, get: r => r.tejido },
-  { key: 'resto',          label: 'Resto',  num: true, get: r => r.resto },
+  { key: 'tejido',         label: 'Tejido', num: true, get: r => calcTejido(r) },
+  { key: 'resto',          label: 'Resto',  num: true, get: r => calcResto(r) },
 ]
 
 const turnos = ['A', 'B', 'C', 'DIA']
 const turno = ref('DIA')
 const horasN = ref(24)
 
+function toNumber(value) {
+  const num = Number.parseFloat(value)
+  return Number.isFinite(num) ? num : 0
+}
+
 // Metros terminados en N horas con eficiencia real del turno
 // Fórmula: (MT_PROX24H / 24) × N × (EFIC_X / 90) × ((100 - ENC_URD) / 100)
 function calcM_N(row) {
-  const m24    = Number(row.m24)    || 0
-  const efi    = Number(row.efi)    || 0
-  const encUrd = Number(row.enc_urd) || 0
-  const n      = Number(horasN.value) || 0
+  const m24 = toNumber(row.m24)
+  const efi = toNumber(row.efi)
+  const encUrd = toNumber(row.enc_urd)
+  const n = toNumber(horasN.value)
   if (m24 === 0 || n === 0) return 0
   return (m24 / 24) * n * (efi / 90) * ((100 - encUrd) / 100)
 }
+
+// Excel Y = SI((J-W+X)>J;J;(J-W+X))
+function calcTejido(row) {
+  const j = toNumber(row.metros)
+  const w = toNumber(row.metros_a_tejer)
+  const x = calcM_N(row)
+  const y = j - w + x
+  return y > j ? j : y
+}
+
+// Excel Z = J - Y
+function calcResto(row) {
+  const j = toNumber(row.metros)
+  return j - calcTejido(row)
+}
+
 const filas = ref([])
 const loading = ref(false)
 const error = ref('')
@@ -385,12 +406,12 @@ function cambiarTurno(value) {
 const subtotales = computed(() => {
   const data = filasFiltradas.value
   const c4 = data.length
-  const j4 = data.reduce((acc, row) => acc + (Number.parseFloat(row.metros) || 0), 0)
+  const j4 = data.reduce((acc, row) => acc + toNumber(row.metros), 0)
   const v4 = data.length
-    ? data.reduce((acc, row) => acc + (Number.parseFloat(row.efi) || 0), 0) / data.length
+    ? data.reduce((acc, row) => acc + toNumber(row.efi), 0) / data.length
     : 0
-  const y4 = data.reduce((acc, row) => acc + (Number.parseFloat(row.tejido) || 0), 0)
-  const z4 = data.reduce((acc, row) => acc + (Number.parseFloat(row.resto) || 0), 0)
+  const y4 = data.reduce((acc, row) => acc + calcTejido(row), 0)
+  const z4 = data.reduce((acc, row) => acc + calcResto(row), 0)
   return { c4, j4, v4, y4, z4 }
 })
 
@@ -504,6 +525,7 @@ onMounted(cargarDatos)
   background: #ffffff;
   color: #1e293b;
   outline: none;
+  appearance: textfield;
   -moz-appearance: textfield;
 }
 .th-input::-webkit-inner-spin-button,
