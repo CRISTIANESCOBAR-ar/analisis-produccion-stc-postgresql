@@ -1,0 +1,43 @@
+﻿                    List of relations
+ Schema |             Name             | Type  |  Owner   
+--------+------------------------------+-------+----------
+ public | calidad                      | table | stc_user
+ public | import_control               | table | stc_user
+ public | produccion                   | table | stc_user
+ public | residuos_indigo              | table | stc_user
+ public | tb_calidad                   | table | stc_user
+ public | tb_calidad_fibra             | table | stc_user
+ public | tb_column_warnings_history   | table | stc_user
+ public | tb_config_hilos              | table | stc_user
+ public | tb_config_tolerancias        | table | stc_user
+ public | tb_costo_item_alias          | table | stc_user
+ public | tb_costo_items               | table | stc_user
+ public | tb_costo_mensual             | table | stc_user
+ public | tb_defectos                  | table | stc_user
+ public | tb_est_mp                    | table | stc_user
+ public | tb_fichas                    | table | stc_user
+ public | tb_historico_configuraciones | table | stc_user
+ public | tb_hvi_detalles              | table | stc_user
+ public | tb_hvi_ensayos               | table | stc_user
+ public | tb_import_metadata           | table | stc_user
+ public | tb_metas                     | table | stc_user
+ public | tb_paradas                   | table | stc_user
+ public | tb_parametros_hvi            | table | stc_user
+ public | tb_proceso                   | table | stc_user
+ public | tb_produccion                | table | stc_user
+ public | tb_produccion_carda          | table | stc_user
+ public | tb_produccion_oe             | table | stc_user
+ public | tb_residuos_indigo           | table | stc_user
+ public | tb_residuos_por_sector       | table | stc_user
+ public | tb_schema_changes_log        | table | stc_user
+ public | tb_sync_history              | table | stc_user
+ public | tb_tensorapid_par            | table | stc_user
+ public | tb_tensorapid_tbl            | table | stc_user
+ public | tb_testes                    | table | stc_user
+ public | tb_uster_carda_par           | table | stc_user
+ public | tb_uster_carda_tbl           | table | stc_user
+ public | tb_uster_carda_titulo_tbl    | table | stc_user
+ public | tb_uster_par                 | table | stc_user
+ public | tb_uster_tbl                 | table | stc_user
+(38 rows)
+

@@ -144,6 +144,11 @@ const routes = [
     path: '/caida-telares',
     component: () => import('./components/produccion/CaidaTelares.vue'),
     meta: { title: 'Caida de Telares' }
+  },
+  {
+    path: '/performance-revisores',
+    component: () => import('./components/produccion/PerformanceMensualRevisores.vue'),
+    meta: { title: 'Performance Mensual Revisores - Control de Calidad' }
   }
   ,
   {

@@ -1,0 +1,10 @@
+﻿podman : ERROR:  column "artigo" does not exist
+En línea: 1 Carácter: 1
++ podman exec stc_postgres psql -U stc_user -d stc_produccion -c $sql 2 ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (ERROR:  column "artigo" does not  
+   exist:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+LINE 1: SELECT LEFT(ARTIGO, 10) AS artigo, COR, EFIC_DIA, MT_A_BATER...
+                    ^

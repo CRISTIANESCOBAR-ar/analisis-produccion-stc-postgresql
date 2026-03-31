@@ -1,0 +1,12 @@
+﻿podman : psql:/tmp/fix_encoding.sql:33: ERROR:  relation "tb_PRODUCCION_OE" 
+does not exist
+En línea: 1 Carácter: 105
++ ... ; $result = podman exec stc_postgres psql -U stc_user -d stc_producci ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (psql:/tmp/fix_e... does not exist 
+   :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+CONTEXT:  SQL statement "ALTER TABLE "tb_PRODUCCION_OE" RENAME COLUMN 
+"TÔö£├¼TULO" TO "T├ìTULO""
+PL/pgSQL function inline_code_block line 13 at EXECUTE

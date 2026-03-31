@@ -111,6 +111,11 @@ export function useDatabase() {
     return await fetchApi(`/calidad/historico-revisores?${queryString}`)
   }
 
+  const getPerformanceMensual = async (params = {}) => {
+    const queryString = new URLSearchParams(params).toString()
+    return await fetchApi(`/calidad/performance-mensual?${queryString}`)
+  }
+
   // ===================================================================
   // MESA DE TEST
   // ===================================================================
@@ -224,6 +229,7 @@ export function useDatabase() {
     getDefectosDetalle,
     getDesempenoPiezas,
     getHistoricoRevisores,
+    getPerformanceMensual,
     getMesaTest,
     getMetrosSector,
     getCalidadFibra,

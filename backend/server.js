@@ -1061,6 +1061,90 @@ app.get('/api/produccion/calidad/desempeno-piezas', async (req, res) => {
   }
 })
 
+// GET /api/produccion/calidad/performance-mensual - Evolución mensual de revisores
+app.get('/api/produccion/calidad/performance-mensual', async (req, res) => {
+  try {
+    const t0 = hrMs()
+    const { startDate, endDate } = req.query
+    const tramas = req.query.tramas || 'Todas'
+
+    if (!startDate || !endDate) {
+      return res.status(400).json({ error: 'Se requieren startDate y endDate' })
+    }
+
+    let tramasFilter = ''
+    if (tramas === 'ALG 100%') tramasFilter = `AND left("ARTIGO", 1) = 'A'`
+    else if (tramas === 'P + E') tramasFilter = `AND left("ARTIGO", 1) = 'Y'`
+    else if (tramas === 'POL 100%') tramasFilter = `AND left("ARTIGO", 1) = 'P'`
+
+    const datProdDate = sqlParseDate('"DAT_PROD"')
+    const metragemNum = sqlParseNumberIntl('"METRAGEM"')
+    const pontuacaoNum = sqlParseNumber('"PONTUACAO"')
+    const larguraNum = sqlParseNumber('"LARGURA"')
+
+    const sql = `
+      WITH CAL AS (
+        SELECT
+          "DAT_PROD",
+          ${datProdDate} AS fecha,
+          "ARTIGO",
+          SUM(${metragemNum}) AS METRAGEM,
+          AVG(${pontuacaoNum}) AS PONTUACAO,
+          AVG(${larguraNum}) AS LARGURA,
+          "REVISOR FINAL" AS REVISOR_FINAL,
+          btrim("QUALIDADE") AS QUALIDADE
+        FROM tb_calidad
+        WHERE
+          "EMP" = 'STC'
+          AND ${datProdDate} BETWEEN $1::date AND $2::date
+          AND "QUALIDADE" NOT ILIKE '%RETALHO%'
+          ${tramasFilter}
+        GROUP BY
+          "DAT_PROD",
+          "ARTIGO",
+          "REVISOR FINAL",
+          "PEÇA",
+          "QUALIDADE",
+          "ETIQUETA"
+      )
+      SELECT
+        REVISOR_FINAL AS "Revisor",
+        to_char(date_trunc('month', fecha), 'YYYY-MM') AS "Mes",
+        CAST(SUM(METRAGEM) AS INTEGER) AS "Mts_Total",
+        COUNT(DISTINCT fecha) AS "Dias_Trabajados",
+        ROUND(SUM(METRAGEM) / NULLIF(COUNT(DISTINCT fecha), 0)) AS "Media_Diaria_Mts",
+        ROUND(
+          (SUM(CASE WHEN QUALIDADE ILIKE 'PRIMEIRA%' THEN COALESCE(PONTUACAO, 0) ELSE 0 END) * 100)
+          /
+          NULLIF(
+            (SUM(CASE WHEN QUALIDADE ILIKE 'PRIMEIRA%' THEN METRAGEM * COALESCE(LARGURA, 0) ELSE 0 END))
+            / NULLIF(SUM(CASE WHEN QUALIDADE ILIKE 'PRIMEIRA%' THEN METRAGEM ELSE 0 END), 0)
+            / 100
+            * SUM(CASE WHEN QUALIDADE ILIKE 'PRIMEIRA%' THEN METRAGEM ELSE 0 END)
+          , 0)
+        , 1) AS "Pts_100m2",
+        COUNT(CASE WHEN QUALIDADE ILIKE 'PRIMEIRA%' THEN 1 END) AS "Rollos_1era",
+        COUNT(CASE WHEN QUALIDADE ILIKE 'PRIMEIRA%' AND (PONTUACAO IS NULL OR PONTUACAO = 0) THEN 1 END) AS "Rollos_Sin_Pts",
+        ROUND(
+          (COUNT(CASE WHEN QUALIDADE ILIKE 'PRIMEIRA%' AND (PONTUACAO IS NULL OR PONTUACAO = 0) THEN 1 END)::numeric
+          / NULLIF(COUNT(CASE WHEN QUALIDADE ILIKE 'PRIMEIRA%' THEN 1 END), 0)::numeric) * 100
+        , 1) AS "Perc_Sin_Pts"
+      FROM CAL
+      GROUP BY REVISOR_FINAL, date_trunc('month', fecha)
+      ORDER BY REVISOR_FINAL, "Mes"
+    `
+
+    const result = await query(sql, [startDate, endDate], 'calidad/performance-mensual')
+    res.json(result.rows)
+    console.log(
+      `[PERF] GET /calidad/performance-mensual ${startDate}..${endDate} tramas=${tramas} rows=${result.rows.length} total=${(hrMs() - t0).toFixed(1)}ms`
+    )
+  } catch (err) {
+    console.error('Error en calidad/performance-mensual:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // GET /api/produccion/calidad/revisor-detalle - Detalle por revisor (con partidas)
 app.get('/api/produccion/calidad/revisor-detalle', async (req, res) => {
   try {
