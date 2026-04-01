@@ -1,5 +1,5 @@
 <template>
-  <div class="px-4 py-3 max-w-[1600px] mx-auto font-sans">
+  <div class="px-4 pt-3 max-w-[1600px] mx-auto font-sans h-[calc(100vh-8px)] min-h-[500px] max-h-[800px]">
 
     <!-- Header condensado -->
     <div class="flex flex-wrap items-center gap-3 mb-4 pb-3 border-b border-gray-200">
@@ -30,11 +30,11 @@
 
     <!-- Contenido principal -->
     <template v-if="!loading && rawData.length > 0">
-      <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] gap-5 mb-5">
+      <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.45fr)] gap-5 h-[calc(100vh-60px)] min-h-[400px] max-h-[760px]">
 
         <!-- Tabla resumen -->
-        <div>
-          <div class="overflow-x-auto rounded-lg border border-gray-100 h-full">
+        <div class="flex flex-col h-full">
+          <div class="overflow-x-auto overflow-y-auto rounded-lg border border-gray-100 flex-1 min-h-[250px] max-h-full">
             <table class="w-full text-xs">
               <thead>
                 <tr class="text-[10px] text-gray-400 uppercase tracking-wider border-b border-gray-100">
@@ -88,13 +88,12 @@
         </div>
 
         <!-- Gráfico -->
-        <div v-if="revisorSeleccionado" class="bg-white rounded-lg border border-gray-100 p-4 flex flex-col">
-          <p class="text-[11px] font-medium text-gray-400 uppercase tracking-wider mb-3">{{ revisorSeleccionado }}</p>
-          <div class="flex-1 min-h-[280px]">
-            <canvas ref="chartCanvas"></canvas>
+        <div v-if="revisorSeleccionado" class="bg-white rounded-lg border border-gray-100 p-4 flex flex-col h-full">
+          <div class="flex-1 min-h-[520px] max-h-[720px]">
+            <canvas ref="chartCanvas" style="height:100%;max-height:700px;"></canvas>
           </div>
         </div>
-        <div v-else class="rounded-lg border border-dashed border-gray-200 flex items-center justify-center text-gray-300 text-xs min-h-[280px]">
+        <div v-else class="rounded-lg border border-dashed border-gray-200 flex items-center justify-center text-gray-300 text-xs min-h-[520px] max-h-[720px] h-full">
           Seleccione un revisor
         </div>
       </div>
@@ -185,7 +184,7 @@ const MESES_NOMBRES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', '
 
 function formatMes(yyyymm) {
   const [y, m] = yyyymm.split('-')
-  return `${MESES_NOMBRES[parseInt(m, 10) - 1]} ${y}`
+  return `${MESES_NOMBRES[parseInt(m, 10) - 1]} ${y.slice(-2)}`
 }
 
 function formatNum(n) {
@@ -401,10 +400,21 @@ function renderChart() {
       plugins: {
         title: {
           display: true,
-          text: `Prom. gral: ${formatNum(promedioGeneral.value.mediaDiaria)} m/día  ·  Teórico 100%: ${formatNum(METROS_TEORICOS)} m`,
-          font: { size: 11, weight: '400' },
-          color: '#9ca3af',
-          padding: { bottom: 12 }
+          text: `${revisorSeleccionado.value || ''}   ·   Prom. gral: ${formatNum(promedioGeneral.value.mediaDiaria)} m/día   ·   Teórico 100%: ${formatNum(METROS_TEORICOS)} m`,
+          font: { size: 11, weight: '500' },
+          color: '#6366f1',
+          padding: { bottom: 8, top: 2 }
+        },
+        tooltip: {
+          backgroundColor: '#f3f4f6', // gris claro
+          titleColor: '#1e3a8a', // azul oscuro
+          bodyColor: '#1e3a8a',
+          borderColor: '#cbd5e1',
+          borderWidth: 1,
+          titleFont: { weight: 'bold', size: 16, family: 'inherit' },
+          bodyFont: { size: 15, family: 'inherit' },
+          displayColors: false,
+          padding: 10,
         },
         legend: {
           position: 'bottom',
