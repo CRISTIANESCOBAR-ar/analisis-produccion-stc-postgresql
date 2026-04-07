@@ -1080,10 +1080,12 @@ const excelCells = computed(() => {
     rowSpan: 1,
     text: (() => {
       // Para ENC URD %, la diferencia positiva es buena (menos encogimiento negativo)
-      const diff = acabamentoData.value.month.encUrdPct - acabamentoData.value.month.metaEncUrd
+      // Se usa day.metaEncUrd (-1.50) como referencia fija, no el promedio mensual
+      // que se distorsiona cuando días sin acabamento tienen Meta_ENC_URD = 0
+      const diff = acabamentoData.value.month.encUrdPct - acabamentoData.value.day.metaEncUrd
       return (diff >= 0 ? '+' : '') + fmtPct2(diff)
     })(),
-    color: (acabamentoData.value.month.encUrdPct - acabamentoData.value.month.metaEncUrd) >= 0 ? '#3C7D22' : '#FF0000',
+    color: (acabamentoData.value.month.encUrdPct - acabamentoData.value.day.metaEncUrd) >= 0 ? '#3C7D22' : '#FF0000',
     bgColor: '#E8D5F0',
     thickBottomBorder: true
   }
@@ -1884,9 +1886,11 @@ async function copyChartToClipboard() {
       const [year, month, day] = d.fecha.split('-')
       return `${day}-${month}-${year.slice(-2)}`
     })
-    const eficiencias = chartData.value.map(d => toNumber(d.eficiencia))
-    const rt105 = chartData.value.map(d => toNumber(d.rt105))
-    const maxRT105 = Math.max(...rt105)
+    // Convertir 0 a null para omitir días sin producción en el gráfico
+    const toNullIfZero = (value) => { const n = toNumber(value); return n === 0 ? null : n }
+    const eficiencias = chartData.value.map(d => toNullIfZero(d.eficiencia))
+    const rt105 = chartData.value.map(d => toNullIfZero(d.rt105))
+    const maxRT105 = Math.max(...rt105.map(v => v ?? 0))
     const scaleMaxY1 = maxRT105 * 1.15
     
     // Crear gráfico temporal con valores en la base
@@ -1931,6 +1935,7 @@ async function copyChartToClipboard() {
             pointHoverRadius: 4,
             pointBackgroundColor: '#f97316',
             pointBorderWidth: 0,
+            spanGaps: false,
             yAxisID: 'y1',
             order: 1,
             tension: 0,
@@ -1944,7 +1949,7 @@ async function copyChartToClipboard() {
               font: { family: 'Verdana', weight: 'bold', size: 43 },
               formatter: (value) => {
                 const num = toNumber(value)
-                return num !== 0 ? num.toFixed(1) : ''
+                return num !== null && num !== 0 ? num.toFixed(1) : ''
               }
             }
           }
@@ -2138,11 +2143,13 @@ function renderChart() {
     return Number.isFinite(num) ? num : 0
   }
 
-  const eficiencias = chartData.value.map(d => toNumber(d.eficiencia))
-  const rt105 = chartData.value.map(d => toNumber(d.rt105))
+  // Convertir 0 a null para omitir días sin producción en el gráfico
+  const toNullIfZero = (value) => { const n = toNumber(value); return n === 0 ? null : n }
+  const eficiencias = chartData.value.map(d => toNullIfZero(d.eficiencia))
+  const rt105 = chartData.value.map(d => toNullIfZero(d.rt105))
   
   // Calcular el máximo de RT105 y añadir 15% de margen para los labels
-  const maxRT105 = Math.max(...rt105)
+  const maxRT105 = Math.max(...rt105.map(v => v ?? 0))
   const scaleMaxY1 = maxRT105 * 1.15  // 15% de margen
   
   console.log(`🎨 Renderizando gráfico con ${labels.length} puntos de datos`)
@@ -2202,6 +2209,7 @@ function renderChart() {
           pointHoverRadius: 4,
           pointBackgroundColor: '#f97316',
           pointBorderWidth: 0,
+          spanGaps: false,
           yAxisID: 'y1',
           order: 1,
           tension: 0,
@@ -2219,7 +2227,7 @@ function renderChart() {
             },
             formatter: function(value) {
               const num = toNumber(value)
-              return num !== 0 ? num.toFixed(1) : ''
+              return num !== null && num !== 0 ? num.toFixed(1) : ''
             }
           }
         }

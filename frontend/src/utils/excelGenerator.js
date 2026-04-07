@@ -662,7 +662,7 @@ export async function generateExcelReport(data) {
   })
 
   ws.mergeCells('O28:Q28')
-  const acabDiffEncUrd = acabamentoData.month.encUrdPct - acabamentoData.month.metaEncUrd
+  const acabDiffEncUrd = acabamentoData.month.encUrdPct - acabamentoData.day.metaEncUrd
   styleCell(ws.getCell('O28'), {
     value: (acabDiffEncUrd >= 0 ? '+' : '') + formatPercent(acabDiffEncUrd, 2),
     bgColor: COLORS.blueLighter,

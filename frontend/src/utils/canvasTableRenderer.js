@@ -454,8 +454,8 @@ function buildCellDefinitions(data) {
     { rowIndex: 22, colIndex: 10, colSpan: 4, rowSpan: 1, text: fmtPct2(acabamentoData.month.encUrdPct), bgColor: '#E8D5F0',
       color: acabamentoData.month.encUrdPct >= acabamentoData.month.metaEncUrd ? COLORS.green : COLORS.red },
     { rowIndex: 22, colIndex: 14, colSpan: 3, rowSpan: 1, 
-      text: fmtSign(acabamentoData.month.encUrdPct - acabamentoData.month.metaEncUrd), bgColor: '#E8D5F0',
-      color: (acabamentoData.month.encUrdPct - acabamentoData.month.metaEncUrd) >= 0 ? COLORS.green : COLORS.red }
+      text: fmtSign(acabamentoData.month.encUrdPct - acabamentoData.day.metaEncUrd), bgColor: '#E8D5F0',
+      color: (acabamentoData.month.encUrdPct - acabamentoData.day.metaEncUrd) >= 0 ? COLORS.green : COLORS.red }
   ]
 }
 
