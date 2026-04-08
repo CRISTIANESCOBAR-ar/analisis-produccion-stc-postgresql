@@ -3340,6 +3340,9 @@ const getRowUsedForVisibleBlocks = (row, blocksOverride = null) => {
     return Number(row?.Usados) || 0;
   }
 
+  // Recalcula desde la receta: fardos_por_mezcla × N_mezclas del bloque.
+  // row.Usados (_usedCount del optimizer) puede inflarse por doble cuenta en
+  // smallAssignments para lotes que también aparecen en activeRecipe.rows.
   return blocks.reduce((used, blockId) => {
     const perMixCount = Number(row?.mezclas?.[blockId]) || 0;
     const mixesCount = getBlockMixCount(blockId);
@@ -5887,9 +5890,9 @@ const exportToExcel = async () => {
       formatCombinedClassifForExport(row),
       row.Estado || '',
       row.Stock !== undefined ? row.Stock : '',
-      row.Usados !== undefined ? row.Usados : '',
-      row.Sobrante !== undefined ? row.Sobrante : '',
-      getPlanMotivoLogistico(row),
+      getRowUsedForVisibleBlocks(row),
+      getRowSobranteForVisibleBlocks(row),
+      getPlanMotivoLogistico(row, getRowSobranteForVisibleBlocks(row)),
       row.MIC || '',
       row.STR || '',
       row.LEN || '',
@@ -6170,6 +6173,138 @@ const exportToExcel = async () => {
   });
 
   applyVerticalCenter(planSheet);
+
+  // ===== Hoja: Historico vs Actual =====
+  const histSheet = workbook.addWorksheet('Historico vs Actual');
+
+  // Columnas del resumen: referencias históricas + bloque activo
+  const histColumns = summaryComparisonColumns.value || [];
+
+  // ── Título ──────────────────────────────────────────────────────────────
+  const histTotalCols = 1 + histColumns.length;
+  histSheet.mergeCells(1, 1, 1, histTotalCols);
+  const histTitleCell = histSheet.getCell('A1');
+  histTitleCell.value = 'Resumen de lotes (promedios de variables activas)';
+  histTitleCell.font = { bold: true, size: 13, color: { argb: 'FF1E3A5F' } };
+  histTitleCell.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+  histTitleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9E8F5' } };
+  histSheet.getRow(1).height = 24;
+
+  // ── Cabecera de columnas ─────────────────────────────────────────────────
+  const histHeaderRow = histSheet.getRow(2);
+  histHeaderRow.getCell(1).value = 'Variable';
+  histHeaderRow.getCell(1).font = { bold: true, size: 10, color: { argb: 'FF374151' } };
+  histHeaderRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+  histHeaderRow.getCell(1).alignment = centerAlign;
+
+  histColumns.forEach((col, i) => {
+    const cell = histHeaderRow.getCell(i + 2);
+    cell.value = col.label;
+    cell.font = { bold: true, size: 10, color: { argb: col.kind === 'block' ? 'FF1D4ED8' : 'FF4338CA' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: col.kind === 'block' ? 'FFDBEAFE' : 'FFEDE9FE' } };
+    cell.alignment = centerAlign;
+    cell.border = { left: { style: 'thin', color: { argb: 'FFD1D5DB' } } };
+  });
+  histSheet.getRow(2).height = 20;
+
+  // ── Filas de datos ────────────────────────────────────────────────────────
+  const histDataRows = [
+    {
+      label: 'Fecha inicial',
+      getValue: (col) => col.kind === 'reference'
+        ? (getSummaryComparisonStartDate(col) || '—')
+        : '—'
+    },
+    {
+      label: 'Kg usados',
+      getValue: (col) => {
+        const v = getSummaryComparisonUsedKg(col);
+        return v !== null ? v : '—';
+      },
+      isNumber: true,
+      numFmt: '#,##0'
+    },
+    {
+      label: '% Residuos',
+      getValue: (col) => {
+        const v = getSummaryComparisonResiduosPct(col);
+        return v !== null ? v / 100 : '—';
+      },
+      isNumber: true,
+      numFmt: '0.00%'
+    },
+    {
+      label: 'Clase ARG',
+      getValue: (col) => {
+        const v = getSummaryComparisonClasificacion(col);
+        if (v === null) return '—';
+        const label = getClasificacionArgLabel(v);
+        return label ? `${label} (${v.toFixed(2)})` : v.toFixed(2);
+      }
+    },
+    // Variables activas de calidad
+    ...(activeBlendVariablesForSummary.value || []).map(variable => ({
+      label: variable.label,
+      getValue: (col) => {
+        const v = getSummaryComparisonValue(col, variable);
+        if (v === null || v === undefined) return '—';
+        return Number(v);
+      },
+      isNumber: true,
+      numFmt: '0.00'
+    }))
+  ];
+
+  const histBgLabel = { argb: 'FFFAFAFA' };
+  const histBgValue = { argb: 'FFFFFFFF' };
+  const histBgRef = { argb: 'FFF5F3FF' };  // violeta claro para históricos
+  const histBgBlock = { argb: 'FFEFF6FF' }; // azul claro para bloque activo
+
+  histDataRows.forEach((rowDef, rowIdx) => {
+    const excelRow = histSheet.getRow(3 + rowIdx);
+    excelRow.height = 18;
+
+    const labelCell = excelRow.getCell(1);
+    labelCell.value = rowDef.label;
+    labelCell.font = { bold: true, size: 10, color: { argb: 'FF374151' } };
+    labelCell.fill = { type: 'pattern', pattern: 'solid', fgColor: histBgLabel };
+    labelCell.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+    labelCell.border = { bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } } };
+
+    histColumns.forEach((col, colIdx) => {
+      const cell = excelRow.getCell(colIdx + 2);
+      const rawValue = rowDef.getValue(col);
+      const bgColor = col.kind === 'block' ? histBgBlock : histBgRef;
+
+      if (rawValue === '—') {
+        cell.value = '—';
+        cell.font = { size: 10, color: { argb: 'FF9CA3AF' } };
+      } else if (rowDef.isNumber && typeof rawValue === 'number') {
+        cell.value = rawValue;
+        cell.numFmt = rowDef.numFmt || '0.00';
+        cell.font = { size: 10, color: { argb: 'FF1F2937' }, bold: rowDef.label === 'Kg usados' };
+      } else {
+        cell.value = rawValue;
+        cell.font = { size: 10, color: { argb: 'FF1F2937' } };
+      }
+
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: bgColor };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = {
+        left: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+        bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } }
+      };
+    });
+  });
+
+  // ── Anchos de columna ────────────────────────────────────────────────────
+  histSheet.getColumn(1).width = 18;
+  histColumns.forEach((_, i) => {
+    histSheet.getColumn(i + 2).width = 16;
+  });
+
+  applyVerticalCenter(histSheet);
+
   // Exportación enfocada en columnas + promedios (sin hojas narrativas/adicionales)
   
   // Descargar (en navegador, usar blob)
