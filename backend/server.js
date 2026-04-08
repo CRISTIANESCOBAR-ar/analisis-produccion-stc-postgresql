@@ -530,6 +530,24 @@ app.get('/api/inventory/lote-fiac-reference-summary', async (req, res) => {
         ELSE CAST(REPLACE(REPLACE(TRIM(${col}::TEXT), '.', ''), ',', '.') AS NUMERIC)
       END`;
 
+    // Helper: valor numérico de clasificación Argentina a partir de TP + CLASSIFIC
+    // C=2.00, C1/4=2.25, C1/2=2.50, C3/4=2.75, D=3.00, D1/4=3.25, D1/2=3.50, D3/4=3.75
+    const classifNumeric = `
+      CASE
+        WHEN "TP" IS NULL OR TRIM("TP") = '' THEN NULL
+        WHEN TRIM(COALESCE("CLASSIFIC",'')) = '' OR TRIM(COALESCE("CLASSIFIC",'')) = 'null'
+          THEN CASE WHEN TRIM("TP") = 'C' THEN 2.0
+                    WHEN TRIM("TP") = 'D' THEN 3.0
+                    ELSE NULL END
+        WHEN TRIM("TP") = 'C' AND TRIM("CLASSIFIC") = '1/4' THEN 2.25
+        WHEN TRIM("TP") = 'C' AND TRIM("CLASSIFIC") = '1/2' THEN 2.50
+        WHEN TRIM("TP") = 'C' AND TRIM("CLASSIFIC") = '3/4' THEN 2.75
+        WHEN TRIM("TP") = 'D' AND TRIM("CLASSIFIC") = '1/4' THEN 3.25
+        WHEN TRIM("TP") = 'D' AND TRIM("CLASSIFIC") = '1/2' THEN 3.50
+        WHEN TRIM("TP") = 'D' AND TRIM("CLASSIFIC") = '3/4' THEN 3.75
+        ELSE NULL
+      END`;
+
     // Obtener las últimas N misturas agrupando por MISTURA (número entero),
     // ordenando por el número de MISTURA desc para obtener las más recientes correctamente.
     const sql = `
@@ -537,6 +555,7 @@ app.get('/api/inventory/lote-fiac-reference-summary', async (req, res) => {
         MAX(TRIM("LOTE_FIAC"))                     AS "lote_fiac",
         TRIM("MISTURA")                            AS "mistura",
         MIN("DT_ENTRADA_PROD")                     AS "primer_ingreso",
+        MAX("DT_ENTRADA_PROD")                     AS "ultimo_ingreso",
         COUNT(*)                                   AS "seq_count",
         SUM(${parseNumCol('"PESO"')})              AS "kg_usados",
         AVG(${parseNumCol('"MIC"')})               AS "mic",
@@ -545,7 +564,11 @@ app.get('/api/inventory/lote-fiac-reference-summary', async (req, res) => {
         AVG(${parseNumCol('"ELG"')})               AS "elg",
         AVG(${parseNumCol('"RD"')})                AS "rd",
         AVG(${parseNumCol('"PLUS_B"')})            AS "plus_b",
-        AVG(${parseNumCol('"SCI"')})               AS "sci"
+        AVG(${parseNumCol('"SCI"')})               AS "sci",
+        -- Promedio ponderado de clasificación Argentina por peso del fardo
+        SUM(${classifNumeric} * ${parseNumCol('"PESO"')})
+          / NULLIF(SUM(CASE WHEN ${classifNumeric} IS NOT NULL THEN ${parseNumCol('"PESO"')} END), 0)
+                                                   AS "classif_prom"
       FROM tb_calidad_fibra
       WHERE "MISTURA" IS NOT NULL
         AND TRIM("MISTURA") != ''
@@ -568,7 +591,11 @@ app.get('/api/inventory/lote-fiac-reference-summary', async (req, res) => {
       loteFiac: String(row.lote_fiac || '').replace(/^0+/, '') || String(row.lote_fiac),
       mistura:  String(row.mistura  || '').replace(/^0+/, '') || String(row.mistura),
       primerIngreso: row.primer_ingreso,
+      ultimoIngreso: row.ultimo_ingreso,
       kgUsados: round0(row.kg_usados),
+      clasificacionProm: row.classif_prom !== null && row.classif_prom !== undefined
+        ? Math.round(Number(row.classif_prom) * 100) / 100
+        : null,
       averages: {
         MIC:    round2(row.mic),
         UHML:   round2(row.uhml),
@@ -584,6 +611,41 @@ app.get('/api/inventory/lote-fiac-reference-summary', async (req, res) => {
   } catch (err) {
     console.error('[lote-fiac-reference-summary] Error:', err.message);
     res.status(500).json({ referencias: [], error: err.message });
+  }
+});
+
+// GET /api/inventory/residuos-lote-blendomar?fecha_inicio=YYYY-MM-DD&fecha_fin=YYYY-MM-DD
+// Suma los kg de residuos generados en un rango de fechas para los 3 subproductos del blendomat.
+// Se usa para calcular % residuos de cada lote histórico en el Resumen de lotes.
+// Subproductos: 2043336 (CASCAMEN+), 1747388 (TIERRA DE FILTRO), 2075310 (ASPIRACION DE OE)
+app.get('/api/inventory/residuos-lote-blendomar', async (req, res) => {
+  try {
+    const { fecha_inicio, fecha_fin } = req.query;
+    if (!fecha_inicio || !fecha_fin) {
+      return res.status(400).json({ error: 'Se requieren fecha_inicio y fecha_fin (YYYY-MM-DD)' });
+    }
+    const isoInicio = dateVariants(fecha_inicio).iso;
+    const isoFin   = dateVariants(fecha_fin).iso;
+    if (!isoInicio || !isoFin) {
+      return res.status(400).json({ error: 'Fechas inválidas' });
+    }
+
+    const SUBPRODUCTOS = [2043336, 1747388, 2075310];
+
+    const sql = `
+      SELECT
+        SUM(${sqlParseNumberIntl('"PESO LIQUIDO (KG)"')}) AS kg_residuos
+      FROM tb_residuos_por_sector
+      WHERE ${sqlParseDate('"DT_MOV"')} BETWEEN $1::date AND $2::date
+        AND CAST(NULLIF(regexp_replace(TRIM("SUBPRODUTO"::TEXT), '[^0-9]', '', 'g'), '') AS BIGINT) = ANY($3::bigint[])
+    `;
+
+    const result = await query(sql, [isoInicio, isoFin, SUBPRODUCTOS], 'residuos-lote-blendomar');
+    const kgResiduos = Math.round(Number(result.rows[0]?.kg_residuos || 0));
+    res.json({ kgResiduos });
+  } catch (err) {
+    console.error('[residuos-lote-blendomar] Error:', err.message);
+    res.status(500).json({ kgResiduos: 0, error: err.message });
   }
 });
 

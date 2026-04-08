@@ -694,6 +694,32 @@
                               {{ formatSummaryComparisonKg(getSummaryComparisonUsedKg(column)) }}
                             </td>
                           </tr>
+                          <tr>
+                            <td class="px-3 py-2 text-sm font-semibold text-gray-700">% Residuos</td>
+                            <td
+                              v-for="column in summaryComparisonColumns"
+                              :key="`res-inline-residuos-${column.key}`"
+                              class="px-3 py-2 text-sm text-center border-l border-gray-200"
+                              :class="getSummaryComparisonResiduosPct(column) !== null ? 'text-orange-700 font-semibold' : 'text-gray-400'"
+                            >
+                              {{ getSummaryComparisonResiduosPct(column) !== null ? getSummaryComparisonResiduosPct(column).toFixed(2) + ' %' : '—' }}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td class="px-3 py-2 text-sm font-semibold text-gray-700">Clase ARG</td>
+                            <td
+                              v-for="column in summaryComparisonColumns"
+                              :key="`res-inline-clase-${column.key}`"
+                              class="px-3 py-2 text-sm text-center border-l border-gray-200"
+                              :class="getSummaryComparisonClasificacion(column) !== null ? 'text-violet-700 font-semibold' : 'text-gray-400'"
+                            >
+                              <template v-if="getSummaryComparisonClasificacion(column) !== null">
+                                {{ getClasificacionArgLabel(getSummaryComparisonClasificacion(column)) || '—' }}
+                                <span class="text-[11px] text-violet-500 font-normal ml-1">({{ getSummaryComparisonClasificacion(column).toFixed(2) }})</span>
+                              </template>
+                              <template v-else>—</template>
+                            </td>
+                          </tr>
                           <tr v-for="variable in activeBlendVariablesForSummary" :key="`res-inline-row-${variable.uiKey}`">
                             <td class="px-3 py-2 text-sm font-semibold text-gray-700">{{ variable.label }}</td>
                             <td
@@ -2879,6 +2905,37 @@ const getSummaryComparisonStartDate = (column) => {
   return '—';
 };
 
+const getSummaryComparisonResiduosPct = (column) => {
+  if (!column || column.kind !== 'reference') return null;
+  const pct = column?.data?.pctResiduos;
+  return (pct !== null && pct !== undefined) ? Number(pct) : null;
+};
+
+// Tabla de rangos de clasificación Argentina
+const CLASSIF_ARG_RANGES = [
+  { label: 'C',    std: 2.00, min: 1.876, max: 2.125 },
+  { label: 'C 1/4', std: 2.25, min: 2.126, max: 2.375 },
+  { label: 'C 1/2', std: 2.50, min: 2.376, max: 2.625 },
+  { label: 'C 3/4', std: 2.75, min: 2.626, max: 2.875 },
+  { label: 'D',    std: 3.00, min: 2.876, max: 3.125 },
+  { label: 'D 1/4', std: 3.25, min: 3.126, max: 3.375 },
+  { label: 'D 1/2', std: 3.50, min: 3.376, max: 3.625 },
+  { label: 'D 3/4', std: 3.75, min: 3.626, max: 3.875 },
+];
+
+const getClasificacionArgLabel = (value) => {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return null;
+  const v = Number(value);
+  const match = CLASSIF_ARG_RANGES.find(r => v >= r.min && v <= r.max);
+  return match ? match.label : null;
+};
+
+const getSummaryComparisonClasificacion = (column) => {
+  if (!column || column.kind !== 'reference') return null;
+  const v = column?.data?.clasificacionProm;
+  return (v !== null && v !== undefined) ? Number(v) : null;
+};
+
 const getSummaryComparisonUsedKg = (column) => {
   if (!column) return null;
 
@@ -3313,7 +3370,7 @@ const activeBlendVariablesForSummary = computed(() => {
 
 const summaryMatrixRowspan = computed(() => {
   const variableRows = activeBlendVariablesForSummary.value.length * 5;
-  return 3 + variableRows;
+  return 5 + variableRows;
 });
 
 const getMatrixVariableLabel = (variable) => {
@@ -3353,14 +3410,58 @@ const getMatrixTolerancePctLabel = (variable) => {
 };
 
 const loadLoteFiacReferenceSummary = async () => {
+  // Convierte "DD/MM/YYYY..." o "YYYY-MM-DD..." a "YYYY-MM-DD" seguro para new Date()
+  const toIsoDate = (str) => {
+    if (!str) return null;
+    const s = String(str).trim();
+    const ddmmyyyy = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+    if (ddmmyyyy) return `${ddmmyyyy[3]}-${ddmmyyyy[2]}-${ddmmyyyy[1]}`;
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    return null;
+  };
+
   try {
     const response = await fetch('http://localhost:3001/api/inventory/lote-fiac-reference-summary?limit=3');
     if (!response.ok) throw new Error('No se pudo cargar referencias LOTE_FIAC');
 
     const data = await response.json();
     const refs = Array.isArray(data?.referencias) ? data.referencias : [];
+    const sorted = refs.sort((a, b) => Number(a.loteFiac) - Number(b.loteFiac));
 
-    loteFiacReferenceSummary.value = refs.sort((a, b) => Number(a.loteFiac) - Number(b.loteFiac));
+    // Enriquecer con % residuos para cada lote histórico
+    await Promise.all(sorted.map(async (ref, idx) => {
+      try {
+        const fechaInicio = toIsoDate(ref.primerIngreso);
+        // fechaFin = primerIngreso del siguiente lote + 1 día de solapamiento.
+        // El blendomat opera los dos lotes en paralelo durante la transición,
+        // por lo que los residuos de esos días pertenecen aún al lote saliente.
+        // Para el último lote activo se usa la fecha de hoy.
+        const nextRef = sorted[idx + 1];
+        let fechaFin = null;
+        if (nextRef?.primerIngreso) {
+          const isoNext = toIsoDate(nextRef.primerIngreso);
+          if (isoNext) {
+            const d = new Date(isoNext);
+            d.setDate(d.getDate() + 1); // +1 día de solapamiento
+            fechaFin = d.toISOString().slice(0, 10);
+          }
+        } else {
+          // Último lote: usar fecha de hoy
+          fechaFin = new Date().toISOString().slice(0, 10);
+        }
+        if (!fechaInicio || !fechaFin) { ref.pctResiduos = null; return; }
+        const r = await fetch(`http://localhost:3001/api/inventory/residuos-lote-blendomar?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`);
+        if (!r.ok) { ref.pctResiduos = null; return; }
+        const d = await r.json();
+        const kgResiduos = Number(d.kgResiduos || 0);
+        const kgUsados   = Number(ref.kgUsados || 0);
+        ref.pctResiduos = kgUsados > 0 ? Math.round((kgResiduos / kgUsados) * 10000) / 100 : null;
+      } catch {
+        ref.pctResiduos = null;
+      }
+    }));
+
+    loteFiacReferenceSummary.value = sorted;
   } catch (error) {
     console.warn('No se pudieron cargar referencias LOTE_FIAC para resumen comparativo:', error);
     loteFiacReferenceSummary.value = [];
