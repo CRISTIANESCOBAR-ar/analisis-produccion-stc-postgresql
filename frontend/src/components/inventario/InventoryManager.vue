@@ -3457,8 +3457,9 @@ const loadLoteFiacReferenceSummary = async () => {
         if (!r.ok) { ref.pctResiduos = null; return; }
         const d = await r.json();
         const kgResiduos = Number(d.kgResiduos || 0);
-        const kgUsados   = Number(ref.kgUsados || 0);
-        ref.pctResiduos = kgUsados > 0 ? Math.round((kgResiduos / kgUsados) * 10000) / 100 : null;
+        const kgCardas   = Number(d.kgCardas   || 0);
+        const total      = kgResiduos + kgCardas;
+        ref.pctResiduos = total > 0 ? Math.round((kgResiduos / total) * 10000) / 100 : null;
       } catch {
         ref.pctResiduos = null;
       }

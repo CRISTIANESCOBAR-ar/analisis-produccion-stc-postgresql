@@ -615,8 +615,9 @@ app.get('/api/inventory/lote-fiac-reference-summary', async (req, res) => {
 });
 
 // GET /api/inventory/residuos-lote-blendomar?fecha_inicio=YYYY-MM-DD&fecha_fin=YYYY-MM-DD
-// Suma los kg de residuos generados en un rango de fechas para los 3 subproductos del blendomat.
-// Se usa para calcular % residuos de cada lote histórico en el Resumen de lotes.
+// Suma los kg de residuos (tb_residuos_por_sector) y producción de cardas (tb_produccion_carda)
+// en el mismo rango de fechas del lote. El % residuos se calcula como:
+//   kgResiduos / (kgResiduos + kgCardas) * 100
 // Subproductos: 2043336 (CASCAMEN+), 1747388 (TIERRA DE FILTRO), 2075310 (ASPIRACION DE OE)
 app.get('/api/inventory/residuos-lote-blendomar', async (req, res) => {
   try {
@@ -632,7 +633,7 @@ app.get('/api/inventory/residuos-lote-blendomar', async (req, res) => {
 
     const SUBPRODUCTOS = [2043336, 1747388, 2075310];
 
-    const sql = `
+    const sqlResiduos = `
       SELECT
         SUM(${sqlParseNumberIntl('"PESO LIQUIDO (KG)"')}) AS kg_residuos
       FROM tb_residuos_por_sector
@@ -640,12 +641,25 @@ app.get('/api/inventory/residuos-lote-blendomar', async (req, res) => {
         AND CAST(NULLIF(regexp_replace(TRIM("SUBPRODUTO"::TEXT), '[^0-9]', '', 'g'), '') AS BIGINT) = ANY($3::bigint[])
     `;
 
-    const result = await query(sql, [isoInicio, isoFin, SUBPRODUCTOS], 'residuos-lote-blendomar');
-    const kgResiduos = Math.round(Number(result.rows[0]?.kg_residuos || 0));
-    res.json({ kgResiduos });
+    const sqlCardas = `
+      SELECT
+        SUM(${sqlParseNumberIntl('"PROD INFORM"')}) AS kg_cardas
+      FROM tb_produccion_carda
+      WHERE data IS NOT NULL
+        AND TO_DATE(data, 'DD/MM/YY') BETWEEN $1::date AND $2::date
+    `;
+
+    const [resResiduos, resCardas] = await Promise.all([
+      query(sqlResiduos, [isoInicio, isoFin, SUBPRODUCTOS], 'residuos-lote-blendomar'),
+      query(sqlCardas,   [isoInicio, isoFin],                'cardas-lote-blendomar')
+    ]);
+
+    const kgResiduos = Math.round(Number(resResiduos.rows[0]?.kg_residuos || 0));
+    const kgCardas   = Math.round(Number(resCardas.rows[0]?.kg_cardas   || 0));
+    res.json({ kgResiduos, kgCardas });
   } catch (err) {
     console.error('[residuos-lote-blendomar] Error:', err.message);
-    res.status(500).json({ kgResiduos: 0, error: err.message });
+    res.status(500).json({ kgResiduos: 0, kgCardas: 0, error: err.message });
   }
 });
 
