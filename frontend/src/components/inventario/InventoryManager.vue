@@ -695,7 +695,7 @@
                             </td>
                           </tr>
                           <tr>
-                            <td class="px-3 py-2 text-sm font-semibold text-gray-700">% Residuos</td>
+                            <td class="px-3 py-2 text-sm font-semibold text-gray-700">% Residuos / Prod Carda</td>
                             <td
                               v-for="column in summaryComparisonColumns"
                               :key="`res-inline-residuos-${column.key}`"
@@ -6226,7 +6226,7 @@ const exportToExcel = async () => {
       numFmt: '#,##0'
     },
     {
-      label: '% Residuos',
+      label: '% Residuos / Prod Carda',
       getValue: (col) => {
         const v = getSummaryComparisonResiduosPct(col);
         return v !== null ? v / 100 : '—';
