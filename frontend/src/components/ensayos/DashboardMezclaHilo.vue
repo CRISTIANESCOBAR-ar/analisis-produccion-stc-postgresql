@@ -2062,7 +2062,8 @@ async function generarNarrativa(soloLocal = false, forzar = false) {
     narrativa.value = data.narrativa
     hydrateNarrativaStructure(data)
     narrativaFuente.value = data.fuente || 'local'
-    narrativaAviso.value = data.aviso || ''
+    // Mostrar aviso de modelo alternativo si Gemini respondió con fallback, o error real si fue local
+    narrativaAviso.value = data.avisoModelo || data.aviso || ''
     ultimoPromptGemini.value = typeof data.promptGemini === 'string' ? data.promptGemini : ''
     promptGeminiCopiado.value = false
     geminiCuotaDiariaAgotada.value = data.geminiEstado === 'quota-daily' || /l[ií]mite diario|20\/d[ií]a/i.test(data.aviso || '')

@@ -1005,6 +1005,7 @@ app.get('/api/produccion/calidad/desempeno-piezas', async (req, res) => {
 
     const calMetragemNum = sqlParseNumberIntl('C."METRAGEM"')
     const calPontuacaoNum = sqlParseNumber('C."PONTUACAO"')
+    const calLarguraNum   = sqlParseNumber('C."LARGURA"')
     const prodPtsLidosNum = sqlParseNumber('P."PONTOS_LIDOS"')
     const prodPts100Num = sqlParseNumber('P."PONTOS_100%"')
     const prodParTraNum = sqlParseNumber('P."PARADA TEC TRAMA"')
@@ -1020,7 +1021,8 @@ app.get('/api/produccion/calidad/desempeno-piezas', async (req, res) => {
           C."ETIQUETA" AS "Etiqueta",
           btrim(C."QUALIDADE") AS "Qualidade",
           ${calMetragemNum} AS "Metragem",
-          ${calPontuacaoNum} AS "Pontuacao"
+          ${calPontuacaoNum} AS "Pontuacao",
+          ${calLarguraNum}   AS "Largura"
         FROM tb_calidad C
         WHERE
           C."EMP" = 'STC'
@@ -1039,7 +1041,8 @@ app.get('/api/produccion/calidad/desempeno-piezas', async (req, res) => {
           -- En tb_calidad puede haber varias filas del mismo rollo por defecto;
           -- usar MAX evita inflar metros/puntos por sumatoria duplicada.
           ROUND(MAX("Metragem")::numeric, 3) AS "Metragem",
-          ROUND(MAX("Pontuacao")::numeric, 3) AS "Pontuacao"
+          ROUND(MAX("Pontuacao")::numeric, 3) AS "Pontuacao",
+          MAX("Largura")                       AS "Largura"
         FROM RAW
         GROUP BY "NombreArticulo", "Partida", "Hora", "Peca", "Etiqueta", "Qualidade"
       ),
@@ -1120,7 +1123,13 @@ app.get('/api/produccion/calidad/desempeno-piezas', async (req, res) => {
           ELSE ROUND((TEJ."ParTra" * 100000)::numeric / NULLIF((TEJ."PtsLei" * 1000), 0)::numeric, 1)
         END AS "RT105",
         COALESCE(TEJ."Telar", 0) AS "Telar",
-        NULL::numeric AS "Pts100m2"
+        CASE
+          WHEN PV."Pontuacao" IS NULL OR PV."Pontuacao" = 0 THEN NULL
+          ELSE ROUND(
+            (PV."Pontuacao" * 10000)::numeric
+            / NULLIF(PV."Metragem" * COALESCE(PV."Largura", 0), 0)::numeric
+          , 1)
+        END AS "Pts100m2"
       FROM PartidaVars PV
       LEFT JOIN TejPorPartida TEJ ON TEJ."CalPartida" = PV."Partida"
       ORDER BY PV."Hora" ASC
@@ -7427,8 +7436,8 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
     }).join('\n\n');
 
     const modelName = modelReq || 'gemini-2.5-flash';
+    const FALLBACK_MODELS = [modelName, 'gemini-2.0-flash', 'gemini-1.5-flash'];
     const genAI  = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-    const model  = genAI.getGenerativeModel({ model: modelName });
 
     const prompt = `Actúa como Auditor de Calidad Textil y Experto en Tejeduría e Hilandería de denim de alta velocidad.
 
@@ -7480,16 +7489,34 @@ Análisis Comparativo Fibra ↔️ Hilo
 [APROBADO PARA CONTINUIDAD / PRECAUCIÓN - REVISAR / CRÍTICO - DETENER]
 [oración de cierre]`;
 
-    try {
-      const result = await model.generateContent(prompt);
-      const narrativaCompleta = result.response.text();
-      return res.json({ success: true, narrativa: narrativaCompleta, fuente: 'gemini', ...buildNarrativaStructuredFields(narrativaCompleta) });
-    } catch (geminiErr) {
-      // Fallback local ante cualquier error de Gemini (quota, red, etc.)
-      console.warn('Gemini no disponible, usando generación local:', geminiErr.message?.slice(0, 120));
-      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || []);
-      return res.json({ success: true, narrativa, fuente: 'local', aviso: 'Gemini no disponible – informe generado localmente.', ...buildNarrativaStructuredFields(narrativa) });
+    // Intentar con cada modelo en orden; si hay 503/sobrecarga, pasar al siguiente
+    let lastGeminiErr = null;
+    for (const mName of FALLBACK_MODELS) {
+      try {
+        const model = genAI.getGenerativeModel({ model: mName });
+        const result = await model.generateContent(prompt);
+        const narrativaCompleta = result.response.text();
+        const modelUsado = mName !== modelName ? mName : undefined;
+        return res.json({ success: true, narrativa: narrativaCompleta, fuente: 'gemini', modelo: mName, ...(modelUsado && { avisoModelo: `Gemini respondió con modelo alternativo: ${mName}` }), ...buildNarrativaStructuredFields(narrativaCompleta) });
+      } catch (geminiErr) {
+        const msg = geminiErr.message || String(geminiErr);
+        const esTransient = /503|502|overloaded|high demand|unavailable|try again/i.test(msg);
+        console.warn(`Gemini [${mName}] falló: ${msg.slice(0, 120)}`);
+        lastGeminiErr = msg;
+        if (!esTransient) break; // Error no transitorio (quota, auth): no reintenta
+        // 503 transitorio: espera 1s antes de probar el siguiente modelo
+        await new Promise(r => setTimeout(r, 1000));
+      }
     }
+
+    // Todos los modelos fallaron → fallback local
+    const geminiErrMsg = lastGeminiErr || 'Error desconocido';
+    const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || []);
+    const esQuota = /quota|429|resource.exhausted/i.test(geminiErrMsg);
+    const aviso = esQuota
+      ? 'Gemini no disponible – límite de cuota alcanzado. Informe generado localmente.'
+      : `Gemini no disponible – informe generado localmente. (${geminiErrMsg.slice(0, 120)})`;
+    return res.json({ success: true, narrativa, fuente: 'local', aviso, geminiErrRaw: geminiErrMsg.slice(0, 200), ...buildNarrativaStructuredFields(narrativa) });
 
   } catch (err) {
     console.error('Error narrativa-lotes:', err.message);

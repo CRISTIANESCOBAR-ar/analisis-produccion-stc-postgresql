@@ -275,14 +275,14 @@
             <!-- Cronologico navigation -->
             <div v-if="chartMode === 'cronologico' && piezasProcesadas.length > 0 && !loadingChart" class="shrink-0 flex items-center justify-between gap-3 text-xs">
               <div class="flex items-center gap-2 shrink-0">
-                <button @click="shiftCronoWindow(-1)" class="px-2 py-0.5 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors">◀ −1h</button>
+                <button @click="shiftCronoWindow(-1)" class="px-2 py-0.5 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors">◀ −15m</button>
                 <button @click="resetCronoWindow()" class="px-2 py-0.5 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors">Turno</button>
                 <button
                   @click="toggleHourMode()"
                   class="px-2 py-0.5 rounded border transition-colors"
                   :class="cronoHourMode ? 'border-indigo-300 bg-indigo-50 text-indigo-700 font-semibold' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'"
                 >Hora</button>
-                <button @click="shiftCronoWindow(1)" class="px-2 py-0.5 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors">+1h ▶</button>
+                <button @click="shiftCronoWindow(1)" class="px-2 py-0.5 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors">+15m ▶</button>
                 <span class="text-slate-400 ml-1 font-mono">{{ formatMinutos(cronoWindowComputed.start) }} – {{ formatMinutos(cronoWindowComputed.end) }}</span>
               </div>
 
@@ -681,27 +681,59 @@ function renderChart() {
   }
 }
 
+// Detecta gaps estadísticamente largos entre rollos (método IQR de Tukey).
+// Retorna { esGapLargo: bool[], umbral: number, mediana: number }
+function detectarGapsLargos(piezas) {
+  const empty = { esGapLargo: piezas.map(() => false), umbral: Infinity, mediana: 0 }
+  if (piezas.length < 4) return empty
+  // _durNeta de la pieza i es el tiempo transcurrido desde la pieza i-1
+  const durs = piezas.slice(1).map(p => p._durNeta).filter(d => d > 0)
+  if (!durs.length) return empty
+  const sorted = [...durs].sort((a, b) => a - b)
+  const q1 = sorted[Math.floor(sorted.length * 0.25)]
+  const q3 = sorted[Math.floor(sorted.length * 0.75)]
+  const iqr = q3 - q1
+  const mediana = sorted[Math.floor(sorted.length * 0.5)]
+  // Umbral: Q3 + 1.5×IQR, mínimo 8 minutos para no disparar en ritmos muy rápidos
+  const umbral = Math.max(q3 + 1.5 * iqr, 8)
+  const esGapLargo = piezas.map((p, i) => i > 0 && p._durNeta >= umbral)
+  return { esGapLargo, umbral, mediana }
+}
+
 // Helper: Generate point styling arrays to highlight "PRIMEIRA Sin Pts" pieces
 function getPointStyleArrays(piezas) {
-  const pointRadius = piezas.map(p => {
+  // Detectar cambio de partida respecto a la pieza anterior
+  const cambioPartida = piezas.map((p, i) => {
+    if (i === 0) return false
+    return String(p.Partida) !== String(piezas[i - 1].Partida)
+  })
+
+  const pointRadius = piezas.map((p, i) => {
     const isFirst = String(p.Qualidade || '').toUpperCase().includes('PRIMEIRA')
     const hasPts = p.Pontuacao != null && Number(p.Pontuacao) !== 0
-    return isFirst && !hasPts ? 8 : 6  // Larger radius only for PRIMEIRA Sin Pts
+    if (cambioPartida[i]) return 9  // Rombo algo más grande
+    return isFirst && !hasPts ? 8 : 6
   })
-  
-  const pointBorderColor = piezas.map(p => {
+
+  const pointBorderColor = piezas.map((p, i) => {
+    if (cambioPartida[i]) return 'rgba(168,85,247,0.9)'  // Violeta para cambio de partida
     const isFirst = String(p.Qualidade || '').toUpperCase().includes('PRIMEIRA')
     const hasPts = p.Pontuacao != null && Number(p.Pontuacao) !== 0
-    return isFirst && !hasPts ? 'rgba(220,38,38,0.7)' : 'white'  // Red glow only for PRIMEIRA Sin Pts
+    return isFirst && !hasPts ? 'rgba(220,38,38,0.7)' : 'white'
   })
-  
-  const pointBorderWidth = piezas.map(p => {
+
+  const pointBorderWidth = piezas.map((p, i) => {
+    if (cambioPartida[i]) return 3
     const isFirst = String(p.Qualidade || '').toUpperCase().includes('PRIMEIRA')
     const hasPts = p.Pontuacao != null && Number(p.Pontuacao) !== 0
-    return isFirst && !hasPts ? 3.5 : 1.5  // Thicker border only for PRIMEIRA Sin Pts
+    return isFirst && !hasPts ? 3.5 : 1.5
   })
-  
-  return { pointRadius, pointBorderColor, pointBorderWidth }
+
+  const pointStyle = piezas.map((p, i) =>
+    cambioPartida[i] ? 'rectRot' : 'circle'
+  )
+
+  return { pointRadius, pointBorderColor, pointBorderWidth, pointStyle, cambioPartida }
 }
 
 function renderVelocidadChart() {
@@ -712,20 +744,22 @@ function renderVelocidadChart() {
 
   const labels = piezas.map(p => formatHora(p.Hora))
 
-  const barColors = piezas.map(p => {
+  const { esGapLargo, umbral: gapUmbral, mediana: gapMediana } = detectarGapsLargos(piezas)
+
+  const barColors = piezas.map((p, i) => {
+    if (esGapLargo[i]) return 'rgba(245,158,11,0.80)'  // ámbar = viene después de pausa larga
     const q = String(p.Qualidade || '').toUpperCase()
-    return q.includes('PRIMEIRA')
-      ? 'rgba(34,197,94,0.75)'
-      : 'rgba(249,115,22,0.75)'
+    return q.includes('PRIMEIRA') ? 'rgba(34,197,94,0.75)' : 'rgba(249,115,22,0.75)'
   })
-  const barBorders = piezas.map(p => {
+  const barBorders = piezas.map((p, i) => {
+    if (esGapLargo[i]) return 'rgb(217,119,6)'
     const q = String(p.Qualidade || '').toUpperCase()
     return q.includes('PRIMEIRA') ? 'rgb(22,163,74)' : 'rgb(234,88,12)'
   })
 
   const ctx = chartCanvas.value.getContext('2d')
 
-  const { pointRadius: prRadius, pointBorderColor: prBorder, pointBorderWidth: prBorderWidth } = getPointStyleArrays(piezas)
+  const { pointRadius: prRadius, pointBorderColor: prBorder, pointBorderWidth: prBorderWidth, pointStyle: prStyle, cambioPartida } = getPointStyleArrays(piezas)
 
   chartInstance = new Chart(ctx, {
     type: 'bar',
@@ -751,9 +785,10 @@ function renderVelocidadChart() {
           borderWidth: 2,
           pointRadius: prRadius,
           pointHoverRadius: 9,
-          pointBackgroundColor: 'rgb(99,102,241)',
+          pointBackgroundColor: piezas.map((p, i) => esGapLargo[i] ? 'rgb(245,158,11)' : 'rgb(99,102,241)'),
           pointBorderColor: prBorder,
           pointBorderWidth: prBorderWidth,
+          pointStyle: prStyle,
           fill: false,
           tension: 0.25,
           yAxisID: 'yVelocidad',
@@ -788,7 +823,7 @@ function renderVelocidadChart() {
               const p = piezas[idx]
               return [
                 `${p.NombreArticulo || '-'}`,
-                `Partida ${p.Partida}  |  ${formatHora(p.Hora)}  |  ${p.Qualidade}`
+                `${formatHora(p.Hora)}  |  ${p.Qualidade}  |  ${formatPartida(p.Partida)}`
               ]
             },
             label(item) {
@@ -825,6 +860,13 @@ function renderVelocidadChart() {
               }
               if (p.RU105 != null && p.RU105 > 3 && p._mmin != null) {
                 lines.push('  ⚠ RU alta → más defectos esperables')
+              }
+              if (cambioPartida[idx]) {
+                lines.push(`  ◆ Nueva partida: ${formatPartida(p.Partida)}`)
+              }
+              if (esGapLargo[idx]) {
+                const veces = gapMediana > 0 ? ` (${(p._durNeta / gapMediana).toFixed(1)}× la mediana)` : ''
+                lines.push(`  ⏱ Pausa previa larga: ${p._durNeta} min${veces}`)
               }
               return lines
             }
@@ -879,29 +921,36 @@ function renderCronologicoChart() {
   const BREAK_INI = 690
   const BREAK_FIN = 720
 
-  const pointColors = piezas.map(p => {
+  // Detectar cambio de partida para el gráfico cronológico
+  const cambioPart = piezas.map((p, i) => i > 0 && String(p.Partida) !== String(piezas[i - 1].Partida))
+  const { esGapLargo: esGapLargoCrono, umbral: gapUmbralCrono, mediana: gapMedianaCrono } = detectarGapsLargos(piezas)
+
+  const pointColors = piezas.map((p, i) => {
+    if (esGapLargoCrono[i]) return 'rgba(245,158,11,0.95)'  // ámbar = viene después de pausa
     const isFirst = String(p.Qualidade || '').toUpperCase().includes('PRIMEIRA')
     return isFirst ? 'rgba(34,197,94,0.9)' : 'rgba(249,115,22,0.9)'
   })
-  const pointBorders = piezas.map(p => {
+  const pointBorders = piezas.map((p, i) => {
+    if (esGapLargoCrono[i] && !cambioPart[i]) return 'rgb(217,119,6)'  // azul oscuro si gap largo (no solapado con rombo)
+    if (cambioPart[i]) return 'rgba(168,85,247,0.9)'
     const isFirst = String(p.Qualidade || '').toUpperCase().includes('PRIMEIRA')
     const hasPts = p.Pontuacao != null && Number(p.Pontuacao) !== 0
-    // Red border ONLY for PRIMEIRA without points
-    if (isFirst && !hasPts) {
-      return 'rgba(220,38,38,0.7)'  // Red glow for PRIMEIRA Sin Pts
-    }
+    if (isFirst && !hasPts) return 'rgba(220,38,38,0.7)'
     return isFirst ? 'rgb(22,163,74)' : 'rgb(234,88,12)'
   })
-  const pointRadii = piezas.map(p => {
+  const pointRadii = piezas.map((p, i) => {
+    if (esGapLargoCrono[i] || cambioPart[i]) return 9
     const isFirst = String(p.Qualidade || '').toUpperCase().includes('PRIMEIRA')
     const hasPts = p.Pontuacao != null && Number(p.Pontuacao) !== 0
-    return isFirst && !hasPts ? 9 : 6  // Larger only for PRIMEIRA Sin Pts
+    return isFirst && !hasPts ? 9 : 6
   })
-  const pointBorderWidths = piezas.map(p => {
+  const pointBorderWidths = piezas.map((p, i) => {
+    if (esGapLargoCrono[i] || cambioPart[i]) return 3
     const isFirst = String(p.Qualidade || '').toUpperCase().includes('PRIMEIRA')
     const hasPts = p.Pontuacao != null && Number(p.Pontuacao) !== 0
-    return isFirst && !hasPts ? 3.5 : 1.5  // Thicker only for PRIMEIRA Sin Pts
+    return isFirst && !hasPts ? 3.5 : 1.5
   })
+  const pointStyles = piezas.map((p, i) => cambioPart[i] ? 'rectRot' : 'circle')
 
   const ctx = chartCanvas.value.getContext('2d')
 
@@ -912,18 +961,43 @@ function renderCronologicoChart() {
       const xScale = scales.xTime
       const yScale = scales.yMetros
       if (!xScale || !yScale) return
+      // Zona descanso (almuerzo)
       const x1 = xScale.getPixelForValue(BREAK_INI)
       const x2 = xScale.getPixelForValue(BREAK_FIN)
-      if (x2 < xScale.left || x1 > xScale.right) return
-      const y1 = yScale.top
-      const y2 = yScale.bottom
+      if (x2 >= xScale.left && x1 <= xScale.right) {
+        const y1 = yScale.top ; const y2 = yScale.bottom
+        c.save()
+        c.fillStyle = 'rgba(148,163,184,0.18)'
+        c.fillRect(Math.max(x1, xScale.left), y1, Math.min(x2, xScale.right) - Math.max(x1, xScale.left), y2 - y1)
+        if (x1 >= xScale.left) {
+          c.fillStyle = 'rgba(100,116,139,0.6)'
+          c.font = '9px sans-serif'
+          c.fillText('⏸', x1 + 3, y1 + 12)
+        }
+        c.restore()
+      }
+      // Zonas de pausa larga
       c.save()
-      c.fillStyle = 'rgba(148,163,184,0.18)'
-      c.fillRect(Math.max(x1, xScale.left), y1, Math.min(x2, xScale.right) - Math.max(x1, xScale.left), y2 - y1)
-      if (x1 >= xScale.left) {
-        c.fillStyle = 'rgba(100,116,139,0.6)'
-        c.font = '9px sans-serif'
-        c.fillText('⏸', x1 + 3, y1 + 12)
+      for (let i = 1; i < piezas.length; i++) {
+        if (!esGapLargoCrono[i]) continue
+        const prev = piezas[i - 1]._effectiveMins
+        const curr = piezas[i]._effectiveMins
+        if (curr < start || prev > end) continue
+        const gx1 = xScale.getPixelForValue(Math.max(prev, start))
+        const gx2 = xScale.getPixelForValue(Math.min(curr, end))
+        if (gx2 <= gx1) continue
+        const gy1 = yScale.top ; const gy2 = yScale.bottom
+        c.fillStyle = 'rgba(245,158,11,0.10)'
+        c.fillRect(gx1, gy1, gx2 - gx1, gy2 - gy1)
+        // Franja izquierda del gap
+        c.fillStyle = 'rgba(245,158,11,0.50)'
+        c.fillRect(gx1, gy1, 2, gy2 - gy1)
+        // Label de duración
+        const durGap = piezas[i]._durNeta
+        c.fillStyle = 'rgba(180,83,9,0.85)'
+        c.font = 'bold 9px Verdana, sans-serif'
+        c.textAlign = 'center'
+        c.fillText(`⏱ ${durGap}'`, (gx1 + gx2) / 2, gy1 + 13)
       }
       c.restore()
     }
@@ -994,6 +1068,7 @@ function renderCronologicoChart() {
           pointBorderColor: pointBorders,
           pointBorderWidth: pointBorderWidths,
           pointRadius: pointRadii,
+          pointStyle: pointStyles,
           pointHoverRadius: 10,
           fill: false,
           tension: 0
@@ -1021,7 +1096,7 @@ function renderCronologicoChart() {
             title(items) {
               const idx = items[0].dataIndex
               const p = piezas[idx]
-              return [`${p.NombreArticulo || '-'}`, `${formatHora(p.Hora)}  |  ${p.Qualidade}`]
+              return [`${p.NombreArticulo || '-'}`, `${formatHora(p.Hora)}  |  ${p.Qualidade}  |  ${formatPartida(p.Partida)}`]
             },
             label(item) {
               return `  Metros: ${item.parsed.y} m`
@@ -1043,6 +1118,13 @@ function renderCronologicoChart() {
               if (p.RU105 != null)         lines.push(`  RU/105:        ${p.RU105}`)
               if (p.Telar)                 lines.push(`  Nro telar:     ${p.Telar}`)
               lines.push(`  Duración: ${p._durNeta} min  |  ${p._mmin ?? '-'} m/min`)
+              if (cambioPart[idx]) {
+                lines.push(`  ◆ Nueva partida: ${formatPartida(p.Partida)}`)
+              }
+              if (esGapLargoCrono[idx]) {
+                const veces = gapMedianaCrono > 0 ? ` (${(p._durNeta / gapMedianaCrono).toFixed(1)}× la mediana)` : ''
+                lines.push(`  ⏱ Pausa previa larga: ${p._durNeta} min${veces}`)
+              }
               return lines
             }
           }
@@ -1093,12 +1175,12 @@ function toggleChartMode() {
 
 function shiftCronoWindow(delta) {
   const { start } = cronoWindowComputed.value
-  const newStart = start + delta * 60
+  const newStart = start + delta * 15
   if (cronoHourMode.value) {
     cronoWindow.value = { start: newStart, end: newStart + 60 }
   } else {
     const { end } = cronoWindowComputed.value
-    cronoWindow.value = { start: newStart, end: end + delta * 60 }
+    cronoWindow.value = { start: newStart, end: end + delta * 15 }
   }
   destroyChart()
   nextTick().then(() => renderCronologicoChart())
@@ -1146,6 +1228,13 @@ function formatHora(hora) {
   if (!hora) return '-'
   const s = String(hora).replace(/[^0-9]/g, '').padStart(4, '0')
   return `${s.slice(0, 2)}:${s.slice(2, 4)}`
+}
+
+// Formato partida: 0546312 → 0-5463.12
+function formatPartida(partida) {
+  const s = String(partida || '').replace(/\D/g, '')
+  if (s.length === 7) return `${s[0]}-${s.slice(1, 5)}.${s.slice(5)}`
+  return String(partida || '-')
 }
 
 function formatMinutos(mins) {
