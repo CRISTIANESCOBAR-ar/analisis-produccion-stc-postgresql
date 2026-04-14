@@ -1835,6 +1835,174 @@ app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
 // ENDPOINTS CALIDAD/PRODUCCION (Calidad Sectores)
 // =====================================================
 
+// GET /api/calidad/defectos-por-tipo - PTS TOTAIS, PTS/100M², % agrupados por tipo de defecto
+// Parámetros: date=YYYY-MM-DD, mode=month (default) | day
+app.get('/api/calidad/defectos-por-tipo', async (req, res) => {
+  try {
+    const t0 = hrMs()
+    const { date, mode } = req.query
+    if (!date) return res.status(400).json({ error: 'Se requiere parámetro "date" (YYYY-MM-DD)' })
+
+    const dateStr   = String(date).split('T')[0]
+    const isDayMode = String(mode || 'month').toLowerCase() === 'day'
+
+    // Expresión para parsear data_prod de tb_defectos (DD/MM/YYYY o YYYY-MM-DD)
+    const defDataProd     = sqlParseDate('d.data_prod')
+    // Expresión para parsear DAT_PROD de tb_calidad
+    const calDatProd      = sqlParseDate('c."DAT_PROD"')
+    // Parsers numéricos
+    const calMetragemExpr = sqlParseNumberIntl('c."METRAGEM"')
+    const calLarguraExpr  = sqlParseNumber('c."LARGURA"')
+    const defPontosExpr   = sqlParseNumber('d.pontos')
+
+    let sql
+
+    if (isDayMode) {
+      // ── MODO DÍA ──────────────────────────────────────────────────────────
+      // Numerador: defectos de las PEÇA revisadas ese día exacto (via tb_calidad.DAT_PROD).
+      // No se usa tb_defectos.data_prod porque datos históricos (<2026) solo tienen end-of-month.
+      // El DISTINCT en piezas_dia evita duplicar pontos por empalmes (misma PEÇA multi-fila).
+      sql = `
+        WITH
+        piezas_dia AS (
+          SELECT DISTINCT c."PEÇA"
+          FROM tb_calidad c
+          WHERE c."EMP" = 'STC'
+            AND c."QUALIDADE" ILIKE 'PRIMEIRA%'
+            AND ${calDatProd} = $1::date
+        ),
+        area_dia AS (
+          SELECT
+            COALESCE(SUM(${calMetragemExpr} * COALESCE(${calLarguraExpr}, 0) / 100.0), 0) AS metros2,
+            COALESCE(SUM(${calMetragemExpr}), 0) AS metros_lin
+          FROM tb_calidad c
+          WHERE c."EMP" = 'STC'
+            AND c."QUALIDADE" ILIKE 'PRIMEIRA%'
+            AND ${calDatProd} = $1::date
+        ),
+        defectos_dia AS (
+          SELECT
+            MIN(d.cod_def)          AS cod_def,
+            btrim(d.desc_defeito)   AS desc_defeito,
+            SUM(COALESCE(${defPontosExpr}, 0)) AS pts_totales
+          FROM tb_defectos d
+          INNER JOIN piezas_dia p ON p."PEÇA" = d.partida || d.peca
+          WHERE d.filial    = '05'
+            AND d.qualidade = '1'
+            AND btrim(d.desc_defeito) <> ''
+            AND btrim(d.desc_defeito) <> '--'
+          GROUP BY btrim(d.desc_defeito)
+          HAVING SUM(COALESCE(${defPontosExpr}, 0)) > 0
+        ),
+        total_pts AS (
+          SELECT COALESCE(SUM(pts_totales), 0) AS total FROM defectos_dia
+        )
+        SELECT
+          dd.cod_def                                                        AS "cod_def",
+          dd.desc_defeito                                                   AS "desc_defeito",
+          ROUND(dd.pts_totales)::integer                                    AS "pts_totales",
+          ROUND(
+            CASE WHEN (SELECT metros2 FROM area_dia) > 0
+              THEN dd.pts_totales * 100.0 / (SELECT metros2 FROM area_dia)
+              ELSE 0
+            END::numeric, 2
+          )                                                                 AS "pts_100m2",
+          ROUND(
+            CASE WHEN (SELECT total FROM total_pts) > 0
+              THEN dd.pts_totales * 100.0 / (SELECT total FROM total_pts)
+              ELSE 0
+            END::numeric, 2
+          )                                                                 AS "porcentaje",
+          (SELECT metros2   FROM area_dia)                                  AS "area_m2_total",
+          (SELECT metros_lin FROM area_dia)                                  AS "metros_lin_total"
+        FROM defectos_dia dd
+        ORDER BY dd.pts_totales DESC
+      `
+    } else {
+      // ── MODO MES ──────────────────────────────────────────────────────────
+      sql = `
+        WITH
+        area_mes AS (
+          SELECT
+            COALESCE(SUM(${calMetragemExpr} * COALESCE(${calLarguraExpr}, 0) / 100.0), 0) AS metros2,
+            COALESCE(SUM(${calMetragemExpr}), 0) AS metros_lin
+          FROM tb_calidad c
+          WHERE c."EMP" = 'STC'
+            AND c."QUALIDADE" ILIKE 'PRIMEIRA%'
+            AND to_char(${calDatProd}, 'YYYY-MM') = to_char($1::date, 'YYYY-MM')
+        ),
+        defectos_mes AS (
+          SELECT
+            btrim(d.desc_defeito)   AS desc_defeito,
+            MIN(d.cod_def)          AS cod_def,
+            SUM(COALESCE(${defPontosExpr}, 0)) AS pts_totales
+          FROM tb_defectos d
+          WHERE d.filial    = '05'
+            AND d.qualidade = '1'
+            AND to_char(${defDataProd}, 'YYYY-MM') = to_char($1::date, 'YYYY-MM')
+            AND btrim(d.desc_defeito) <> ''
+            AND btrim(d.desc_defeito) <> '--'
+          GROUP BY btrim(d.desc_defeito)
+          HAVING SUM(COALESCE(${defPontosExpr}, 0)) > 0
+        ),
+        total_pts AS (
+          SELECT COALESCE(SUM(pts_totales), 0) AS total FROM defectos_mes
+        )
+        SELECT
+          dm.cod_def                                                        AS "cod_def",
+          dm.desc_defeito                                                   AS "desc_defeito",
+          ROUND(dm.pts_totales)::integer                                    AS "pts_totales",
+          ROUND(
+            CASE WHEN (SELECT metros2 FROM area_mes) > 0
+              THEN dm.pts_totales * 100.0 / (SELECT metros2 FROM area_mes)
+              ELSE 0
+            END::numeric, 2
+          )                                                                 AS "pts_100m2",
+          ROUND(
+            CASE WHEN (SELECT total FROM total_pts) > 0
+              THEN dm.pts_totales * 100.0 / (SELECT total FROM total_pts)
+              ELSE 0
+            END::numeric, 2
+          )                                                                 AS "porcentaje",
+          (SELECT metros2   FROM area_mes)                                  AS "area_m2_total",
+          (SELECT metros_lin FROM area_mes)                                  AS "metros_lin_total"
+        FROM defectos_mes dm
+        ORDER BY dm.pts_totales DESC
+      `
+    }
+
+    const label  = isDayMode ? 'calidad/defectos-por-tipo[day]' : 'calidad/defectos-por-tipo[month]'
+    const result = await query(sql, [dateStr], label)
+    const rows   = result.rows || []
+
+    const totPts    = rows.reduce((s, r) => s + (Number(r.pts_totales) || 0), 0)
+    const areaM2    = rows.length > 0 ? (Number(rows[0].area_m2_total)   || 0) : 0
+    const metrosLin = rows.length > 0 ? (Number(rows[0].metros_lin_total) || 0) : 0
+    const totPts100 = areaM2 > 0 ? Math.round(totPts * 100 / areaM2 * 100) / 100 : 0
+
+    res.json({
+      rows: rows.map(r => ({
+        cod_def:      r.cod_def || '',
+        desc_defeito: r.desc_defeito,
+        pts_totales:  Number(r.pts_totales),
+        pts_100m2:    Number(r.pts_100m2),
+        porcentaje:   Number(r.porcentaje),
+      })),
+      total: {
+        pts_totales: totPts,
+        pts_100m2:   totPts100,
+        area_m2:     Math.round(areaM2 * 100) / 100,
+        metros_lin:  Math.round(metrosLin),
+      },
+    })
+    console.log(`[PERF] GET /calidad/defectos-por-tipo?mode=${isDayMode?'day':'month'} ${dateStr} rows=${rows.length} total=${(hrMs()-t0).toFixed(1)}ms`)
+  } catch (err) {
+    console.error('Error en /api/calidad/defectos-por-tipo:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+
 // GET /api/calidad/available-dates - Fechas disponibles en tb_calidad
 app.get('/api/calidad/available-dates', async (req, res) => {
   try {

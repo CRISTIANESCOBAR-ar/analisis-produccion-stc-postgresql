@@ -16,11 +16,10 @@
       </div>
     </div>
     
-    <div class="flex flex-col gap-2 flex-1 min-h-0">
-      <!-- Layout con Tabla y Gráfico -->
-      <div class="flex gap-3 flex-1 min-h-0">
-        <!-- Tabla fija estilo Excel -->
-        <div class="quality-card shadow border border-slate-200 rounded overflow-hidden flex flex-col relative" style="width: fit-content; flex: 0 0 auto;">
+    <div class="flex gap-3 flex-1 min-h-0">
+
+      <!-- ── COLUMNA IZQUIERDA: Tabla sectores (altura completa) ── -->
+      <div class="quality-card shadow border border-slate-200 rounded overflow-hidden flex flex-col relative flex-shrink-0" style="width: fit-content;">
         
         <div class="flex items-center justify-between bg-gray-100 text-slate-800 px-2 py-1.5 text-xs font-semibold border-b border-slate-200">
           <div class="flex items-center gap-1.5">
@@ -141,7 +140,11 @@
             </div>
           </div>
         </div>
-        </div>
+
+      </div><!-- fin columna izquierda -->
+
+      <!-- ── COLUMNA DERECHA: Gráfico + Tablas defectos ── -->
+      <div class="flex flex-col gap-2 flex-1 min-h-0 min-w-0">
 
         <!-- Gráfico de Eficiencias y Roturas -->
         <div ref="chartContainerRef" class="flex-1 min-h-0 shadow border border-slate-200 rounded bg-white flex flex-col overflow-hidden">
@@ -180,11 +183,201 @@
             <canvas ref="chartCanvas"></canvas>
           </div>
         </div>
-      </div>
-    </div>
+        <!-- fin gráfico -->
+
+        <!-- Tablas PTS/100M² POR DEFECTO — DÍA + MES side-by-side -->
+      <div
+        v-if="defectosData.rows.length > 0 || defectosDataDay.rows.length > 0 || defectosData.loading || defectosDataDay.loading"
+        class="flex gap-3 w-full"
+      >
+
+        <!-- ── TABLA DÍA ───────────────────────────────────────── -->
+        <div ref="defectosTableDayContainerRef" class="shadow border border-slate-200 rounded bg-white overflow-hidden flex-1 min-w-0">
+          <div class="flex items-center justify-between bg-blue-50 text-slate-800 px-2 py-1.5 text-xs font-semibold border-b border-blue-200 gap-2">
+            <span class="font-bold text-slate-800 whitespace-nowrap">
+              Pts/100m²
+              <span class="font-normal text-slate-500"> · DÍA — {{ displayDate }}</span>
+              <span v-if="defectosDataDay.total.metros_lin" class="font-normal text-slate-400"> · {{ Number(defectosDataDay.total.metros_lin).toLocaleString('es-AR', { maximumFractionDigits: 0 }) }} m</span>
+            </span>
+            <div class="flex items-center gap-2 flex-shrink-0">
+              <button
+                v-if="!defectosDataDay.loading && defectosDataDay.rows.length > 0"
+                @click="showAllDefectosDay = !showAllDefectosDay"
+                class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border transition-colors whitespace-nowrap"
+                :class="showAllDefectosDay
+                  ? 'bg-blue-600 border-blue-700 text-white hover:bg-blue-700'
+                  : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'"
+              >
+                <span v-if="showAllDefectosDay">▲ Top 80%</span>
+                <span v-else>▼ Todos ({{ defectosDataDay.rows.length }})</span>
+              </button>
+              <button
+                v-if="!defectosDataDay.loading && defectosDataDay.rows.length > 0"
+                ref="copyDefDayBtnRef"
+                @click="copyDefectosTable(defectosDisplayRowsDay, defectosDataDay.total, 'DÍA — ' + displayDate, 'defectos-dia')"
+                class="inline-flex items-center justify-center w-6 h-6 text-slate-500 hover:text-slate-700 hover:bg-slate-200 rounded transition-colors duration-150 flex-shrink-0"
+              >
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="overflow-y-auto" :style="showAllDefectosDay ? 'max-height:480px' : 'max-height:280px'">
+            <div v-if="defectosDataDay.loading" class="flex items-center justify-center py-6 text-xs text-slate-400 px-4">Cargando...</div>
+            <table v-else class="text-xs border-collapse w-full">
+              <thead class="sticky top-0 z-10">
+                <tr class="bg-slate-50">
+                  <th class="text-center px-2 py-1 border border-slate-200 font-semibold text-slate-500 whitespace-nowrap">COD</th>
+                  <th class="text-center px-2 py-1 border border-slate-200 font-semibold text-slate-500 whitespace-nowrap">SEC</th>
+                  <th class="text-left px-2 py-1 border border-slate-200 font-semibold text-slate-700">DEFECTO</th>
+                  <th class="text-right px-2 py-1 border border-slate-200 font-semibold text-slate-700 whitespace-nowrap">PTS/100M²</th>
+                  <th class="text-right px-2 py-1 border border-slate-200 font-semibold text-slate-700 whitespace-nowrap">TOTAL</th>
+                  <th class="text-right px-2 py-1 border border-slate-200 font-semibold text-slate-700">%</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="(row, i) in defectosDisplayRowsDay.visible"
+                  :key="row.desc_defeito"
+                  :class="i % 2 === 0 ? 'bg-white' : 'bg-slate-50'"
+                  class="hover:bg-blue-50 transition-colors"
+                >
+                  <td class="px-2 py-1 border border-slate-200 text-center tabular-nums text-slate-400 font-mono text-[10px]">{{ row.cod_def }}</td>
+                  <td class="px-2 py-1 border border-slate-200 text-center text-[10px] font-semibold whitespace-nowrap"
+                    :class="{
+                      'text-blue-600':   defectoSector(row.cod_def) === 'INDI',
+                      'text-purple-600': defectoSector(row.cod_def) === 'HILA',
+                      'text-green-700':  defectoSector(row.cod_def) === 'TEJE',
+                      'text-orange-600': defectoSector(row.cod_def) === 'ACAB',
+                      'text-slate-400':  defectoSector(row.cod_def) === '—',
+                    }">{{ defectoSector(row.cod_def) }}</td>
+                  <td class="px-2 py-1 border border-slate-200 text-slate-800 whitespace-nowrap">{{ row.desc_defeito }}</td>
+                  <td class="px-2 py-1 border border-slate-200 text-right tabular-nums text-slate-800">{{ Number(row.pts_100m2).toFixed(2) }}</td>
+                  <td class="px-2 py-1 border border-slate-200 text-right tabular-nums text-slate-800">{{ Number(row.pts_totales).toLocaleString('es-AR') }}</td>
+                  <td class="px-2 py-1 border border-slate-200 text-right tabular-nums text-slate-600">{{ Number(row.porcentaje).toFixed(2) }}%</td>
+                </tr>
+                <tr v-if="defectosDisplayRowsDay.otros" class="bg-amber-50 hover:bg-amber-100 transition-colors italic">
+                  <td class="px-2 py-1 border border-slate-200 text-center text-amber-400 font-mono text-[10px]">—</td>
+                  <td class="px-2 py-1 border border-slate-200 text-center text-amber-400 text-[10px]">—</td>
+                  <td class="px-2 py-1 border border-slate-200 text-amber-700 whitespace-nowrap">{{ defectosDisplayRowsDay.otros.desc_defeito }}</td>
+                  <td class="px-2 py-1 border border-slate-200 text-right tabular-nums text-amber-700">{{ Number(defectosDisplayRowsDay.otros.pts_100m2).toFixed(2) }}</td>
+                  <td class="px-2 py-1 border border-slate-200 text-right tabular-nums text-amber-700">{{ Number(defectosDisplayRowsDay.otros.pts_totales).toLocaleString('es-AR') }}</td>
+                  <td class="px-2 py-1 border border-slate-200 text-right tabular-nums text-amber-600">{{ Number(defectosDisplayRowsDay.otros.porcentaje).toFixed(2) }}%</td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr class="bg-slate-100 font-bold">
+                  <td class="px-2 py-1 border border-slate-300"></td>
+                  <td class="px-2 py-1 border border-slate-300"></td>
+                  <td class="px-2 py-1 border border-slate-300 text-slate-800">Total</td>
+                  <td class="px-2 py-1 border border-slate-300 text-right tabular-nums text-slate-800">{{ Number(defectosDataDay.total.pts_100m2).toFixed(2) }}</td>
+                  <td class="px-2 py-1 border border-slate-300 text-right tabular-nums text-slate-800">{{ Number(defectosDataDay.total.pts_totales).toLocaleString('es-AR') }}</td>
+                  <td class="px-2 py-1 border border-slate-300 text-right tabular-nums text-slate-600">100.00%</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+
+        <!-- ── TABLA MES ───────────────────────────────────────── -->
+        <div ref="defectosTableMonthContainerRef" class="shadow border border-slate-200 rounded bg-white overflow-hidden flex-1 min-w-0">
+          <div class="flex items-center justify-between bg-gray-100 text-slate-800 px-2 py-1.5 text-xs font-semibold border-b border-slate-200 gap-2">
+            <span class="font-bold text-slate-800 whitespace-nowrap">
+              Pts/100m²
+              <span class="font-normal text-slate-500"> · MES — {{ chartMonthYear }}</span>
+              <span v-if="defectosData.total.metros_lin" class="font-normal text-slate-400"> · {{ Number(defectosData.total.metros_lin).toLocaleString('es-AR', { maximumFractionDigits: 0 }) }} m</span>
+            </span>
+            <div class="flex items-center gap-2 flex-shrink-0">
+              <button
+                v-if="!defectosData.loading && defectosData.rows.length > 0"
+                @click="showAllDefectos = !showAllDefectos"
+                class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold border transition-colors whitespace-nowrap"
+                :class="showAllDefectos
+                  ? 'bg-blue-600 border-blue-700 text-white hover:bg-blue-700'
+                  : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'"
+              >
+                <span v-if="showAllDefectos">▲ Top 80%</span>
+                <span v-else>▼ Todos ({{ defectosData.rows.length }})</span>
+              </button>
+              <button
+                v-if="!defectosData.loading && defectosData.rows.length > 0"
+                ref="copyDefMonthBtnRef"
+                @click="copyDefectosTable(defectosDisplayRows, defectosData.total, 'MES — ' + chartMonthYear, 'defectos-mes')"
+                class="inline-flex items-center justify-center w-6 h-6 text-slate-500 hover:text-slate-700 hover:bg-slate-200 rounded transition-colors duration-150 flex-shrink-0"
+              >
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="overflow-y-auto" :style="showAllDefectos ? 'max-height:480px' : 'max-height:280px'">
+            <div v-if="defectosData.loading" class="flex items-center justify-center py-6 text-xs text-slate-400 px-4">Cargando...</div>
+            <table v-else class="text-xs border-collapse w-full">
+              <thead class="sticky top-0 z-10">
+                <tr class="bg-slate-50">
+                  <th class="text-center px-2 py-1 border border-slate-200 font-semibold text-slate-500 whitespace-nowrap">COD</th>
+                  <th class="text-center px-2 py-1 border border-slate-200 font-semibold text-slate-500 whitespace-nowrap">SEC</th>
+                  <th class="text-left px-2 py-1 border border-slate-200 font-semibold text-slate-700">DEFECTO</th>
+                  <th class="text-right px-2 py-1 border border-slate-200 font-semibold text-slate-700 whitespace-nowrap">PTS/100M²</th>
+                  <th class="text-right px-2 py-1 border border-slate-200 font-semibold text-slate-700 whitespace-nowrap">TOTAL</th>
+                  <th class="text-right px-2 py-1 border border-slate-200 font-semibold text-slate-700">%</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="(row, i) in defectosDisplayRows.visible"
+                  :key="row.desc_defeito"
+                  :class="i % 2 === 0 ? 'bg-white' : 'bg-slate-50'"
+                  class="hover:bg-blue-50 transition-colors"
+                >
+                  <td class="px-2 py-1 border border-slate-200 text-center tabular-nums text-slate-400 font-mono text-[10px]">{{ row.cod_def }}</td>
+                  <td class="px-2 py-1 border border-slate-200 text-center text-[10px] font-semibold whitespace-nowrap"
+                    :class="{
+                      'text-blue-600':   defectoSector(row.cod_def) === 'INDI',
+                      'text-purple-600': defectoSector(row.cod_def) === 'HILA',
+                      'text-green-700':  defectoSector(row.cod_def) === 'TEJE',
+                      'text-orange-600': defectoSector(row.cod_def) === 'ACAB',
+                      'text-slate-400':  defectoSector(row.cod_def) === '—',
+                    }">{{ defectoSector(row.cod_def) }}</td>
+                  <td class="px-2 py-1 border border-slate-200 text-slate-800 whitespace-nowrap">{{ row.desc_defeito }}</td>
+                  <td class="px-2 py-1 border border-slate-200 text-right tabular-nums text-slate-800">{{ Number(row.pts_100m2).toFixed(2) }}</td>
+                  <td class="px-2 py-1 border border-slate-200 text-right tabular-nums text-slate-800">{{ Number(row.pts_totales).toLocaleString('es-AR') }}</td>
+                  <td class="px-2 py-1 border border-slate-200 text-right tabular-nums text-slate-600">{{ Number(row.porcentaje).toFixed(2) }}%</td>
+                </tr>
+                <tr v-if="defectosDisplayRows.otros" class="bg-amber-50 hover:bg-amber-100 transition-colors italic">
+                  <td class="px-2 py-1 border border-slate-200 text-center text-amber-400 font-mono text-[10px]">—</td>
+                  <td class="px-2 py-1 border border-slate-200 text-center text-amber-400 text-[10px]">—</td>
+                  <td class="px-2 py-1 border border-slate-200 text-amber-700 whitespace-nowrap">{{ defectosDisplayRows.otros.desc_defeito }}</td>
+                  <td class="px-2 py-1 border border-slate-200 text-right tabular-nums text-amber-700">{{ Number(defectosDisplayRows.otros.pts_100m2).toFixed(2) }}</td>
+                  <td class="px-2 py-1 border border-slate-200 text-right tabular-nums text-amber-700">{{ Number(defectosDisplayRows.otros.pts_totales).toLocaleString('es-AR') }}</td>
+                  <td class="px-2 py-1 border border-slate-200 text-right tabular-nums text-amber-600">{{ Number(defectosDisplayRows.otros.porcentaje).toFixed(2) }}%</td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr class="bg-slate-100 font-bold">
+                  <td class="px-2 py-1 border border-slate-300"></td>
+                  <td class="px-2 py-1 border border-slate-300"></td>
+                  <td class="px-2 py-1 border border-slate-300 text-slate-800">Total</td>
+                  <td class="px-2 py-1 border border-slate-300 text-right tabular-nums text-slate-800">{{ Number(defectosData.total.pts_100m2).toFixed(2) }}</td>
+                  <td class="px-2 py-1 border border-slate-300 text-right tabular-nums text-slate-800">{{ Number(defectosData.total.pts_totales).toLocaleString('es-AR') }}</td>
+                  <td class="px-2 py-1 border border-slate-300 text-right tabular-nums text-slate-600">100.00%</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+
+      </div><!-- fin tablas defectos -->
+
+      </div><!-- fin columna derecha -->
+
+    </div><!-- fin contenedor principal flex -->
   </div>
 
   <!-- Modal de depuración de bordes -->
+
   <div
     v-if="showDebugModal"
     class="fixed inset-0 z-[999] flex items-center justify-center bg-black/40"
@@ -260,6 +453,10 @@ const prevDayBtnRef = ref(null)
 const nextDayBtnRef = ref(null)
 const copyBtnRef = ref(null)
 const copyTableBtnRef = ref(null)
+const copyDefDayBtnRef = ref(null)
+const copyDefMonthBtnRef = ref(null)
+const defectosTableDayContainerRef = ref(null)
+const defectosTableMonthContainerRef = ref(null)
 const tramaSelectRef = ref(null)
 const datepickerInputRef = ref(null)
 
@@ -463,6 +660,67 @@ const estopaAzulData = ref({
   day: { porcentaje: 0 },
   month: { porcentaje: 0 }
 })
+// Datos de DEFECTOS POR TIPO
+const defectosData = ref({
+  rows: [],
+  total: { pts_totales: 0, pts_100m2: 0, area_m2: 0 },
+  loading: false,
+})
+const defectosDataDay = ref({
+  rows: [],
+  total: { pts_totales: 0, pts_100m2: 0, area_m2: 0 },
+  loading: false,
+})
+const showAllDefectos    = ref(false)
+const showAllDefectosDay = ref(false)
+
+// Helper: aplica regla Pareto 80% a una lista de rows con su total
+function paretoRows(rows, totalPts, areaM2) {
+  if (!rows.length) return { visible: [], otros: null }
+  if (!totalPts) return { visible: rows, otros: null }
+
+  let acum = 0
+  let cutIndex = rows.length
+  for (let i = 0; i < rows.length; i++) {
+    acum += rows[i].pts_totales
+    if (acum / totalPts >= 0.80) { cutIndex = i + 1; break }
+  }
+
+  const visible = rows.slice(0, cutIndex)
+  const hidden  = rows.slice(cutIndex)
+  if (!hidden.length) return { visible, otros: null }
+
+  const otrosPts    = hidden.reduce((s, r) => s + r.pts_totales, 0)
+  const otrosPts100 = areaM2 > 0 ? Math.round(otrosPts * 100 / areaM2 * 100) / 100 : 0
+  const otrosPct    = Math.round(otrosPts * 100 / totalPts * 100) / 100
+
+  return {
+    visible,
+    otros: {
+      cod_def: '—',
+      desc_defeito: `Otros (${hidden.length})`,
+      pts_totales: otrosPts,
+      pts_100m2: otrosPts100,
+      porcentaje: otrosPct,
+      isOtros: true,
+    },
+  }
+}
+
+// Computed: Pareto 80% para tabla MES
+const defectosDisplayRows = computed(() => {
+  const d = defectosData.value
+  if (showAllDefectos.value) return { visible: d.rows, otros: null }
+  return paretoRows(d.rows, d.total.pts_totales, d.total.area_m2)
+})
+
+// Computed: Pareto 80% para tabla DÍA
+const defectosDisplayRowsDay = computed(() => {
+  const d = defectosDataDay.value
+  if (showAllDefectosDay.value) return { visible: d.rows, otros: null }
+  return paretoRows(d.rows, d.total.pts_totales, d.total.area_m2)
+})
+
 // Datos de TECELAGEM
 const tecelagemData = ref({
   day: { metros: 0, eficiencia: 0, rotTra105: 0, rotUrd105: 0, estopaAzulPct: 0, meta: 0, metaEfi: 0, metaRt105: 0, metaRu105: 0, metaEstopaAzul: 0 },
@@ -482,6 +740,43 @@ watch(selectedTrama, (newTrama, oldTrama) => {
     loadChartData()
   }
 })
+
+// Inicializar tippy en botones que aparecen con v-if (cuando llegan los datos)
+watch(
+  [() => defectosDataDay.value.rows.length, () => defectosDataDay.value.loading],
+  ([len, loading]) => {
+    if (len > 0 && !loading) {
+      nextTick(() => {
+        if (copyDefDayBtnRef.value && !copyDefDayBtnRef.value._tippy) {
+          tippy(copyDefDayBtnRef.value, {
+            content: 'Copiar tabla de defectos del día al portapapeles',
+            placement: 'bottom',
+            theme: 'light-border',
+            arrow: true
+          })
+        }
+      })
+    }
+  }
+)
+
+watch(
+  [() => defectosData.value.rows.length, () => defectosData.value.loading],
+  ([len, loading]) => {
+    if (len > 0 && !loading) {
+      nextTick(() => {
+        if (copyDefMonthBtnRef.value && !copyDefMonthBtnRef.value._tippy) {
+          tippy(copyDefMonthBtnRef.value, {
+            content: 'Copiar tabla de defectos del mes al portapapeles',
+            placement: 'bottom',
+            theme: 'light-border',
+            arrow: true
+          })
+        }
+      })
+    }
+  }
+)
 
 onMounted(() => {
   loadData()
@@ -552,6 +847,22 @@ onMounted(() => {
         theme: 'light-border',
         arrow: true,
         maxWidth: 280
+      })
+    }
+    if (copyDefDayBtnRef.value) {
+      tippy(copyDefDayBtnRef.value, {
+        content: 'Copiar tabla de defectos del día al portapapeles',
+        placement: 'bottom',
+        theme: 'light-border',
+        arrow: true
+      })
+    }
+    if (copyDefMonthBtnRef.value) {
+      tippy(copyDefMonthBtnRef.value, {
+        content: 'Copiar tabla de defectos del mes al portapapeles',
+        placement: 'bottom',
+        theme: 'light-border',
+        arrow: true
       })
     }
   })
@@ -1483,7 +1794,55 @@ async function loadData(useLastAvailable = false) {
     // Cargar tramas disponibles y luego el gráfico DESPUÉS de desactivar el flag
     await loadAvailableTramas()
     await loadChartData()
+    // Cargar defectos por tipo (no bloquea el render principal)
+    loadDefectosData()
   }
+}
+
+function defectoSector(cod) {
+  const first = String(cod || '').trim()[0]
+  if (first === '1') return 'INDI'
+  if (first === '2') return 'HILA'
+  if (first === '3') return 'TEJE'
+  if (first === '4') return 'ACAB'
+  return '—'
+}
+
+async function loadDefectosData() {
+  // Lanzar ambas peticiones en paralelo
+  defectosData.value.loading    = true
+  defectosDataDay.value.loading = true
+
+  const [resMonth, resDay] = await Promise.allSettled([
+    fetch(`${API_URL}/calidad/defectos-por-tipo?date=${selectedDate.value}&mode=month`),
+    fetch(`${API_URL}/calidad/defectos-por-tipo?date=${selectedDate.value}&mode=day`),
+  ])
+
+  // Mes
+  if (resMonth.status === 'fulfilled' && resMonth.value.ok) {
+    try {
+      const data = await resMonth.value.json()
+      defectosData.value.rows  = Array.isArray(data.rows) ? data.rows : []
+      defectosData.value.total = data.total || { pts_totales: 0, pts_100m2: 0, area_m2: 0 }
+    } catch { defectosData.value.rows = []; defectosData.value.total = { pts_totales: 0, pts_100m2: 0, area_m2: 0 } }
+  } else {
+    console.warn('⚠️ No se pudieron cargar defectos mes:', resMonth.reason?.message)
+    defectosData.value.rows = []; defectosData.value.total = { pts_totales: 0, pts_100m2: 0, area_m2: 0 }
+  }
+  defectosData.value.loading = false
+
+  // Día
+  if (resDay.status === 'fulfilled' && resDay.value.ok) {
+    try {
+      const data = await resDay.value.json()
+      defectosDataDay.value.rows  = Array.isArray(data.rows) ? data.rows : []
+      defectosDataDay.value.total = data.total || { pts_totales: 0, pts_100m2: 0, area_m2: 0 }
+    } catch { defectosDataDay.value.rows = []; defectosDataDay.value.total = { pts_totales: 0, pts_100m2: 0, area_m2: 0 } }
+  } else {
+    console.warn('⚠️ No se pudieron cargar defectos día:', resDay.reason?.message)
+    defectosDataDay.value.rows = []; defectosDataDay.value.total = { pts_totales: 0, pts_100m2: 0, area_m2: 0 }
+  }
+  defectosDataDay.value.loading = false
 }
 
 async function loadChartData() {
@@ -1664,6 +2023,174 @@ async function copyTableToClipboard() {
       icon: 'error',
       title: 'Error al copiar tabla'
     })
+  }
+}
+
+// Copiar tabla de defectos (día o mes) como imagen al portapapeles
+// Dibuja la tabla de defectos en Canvas 2D puro (sin html2canvas → sin problemas con oklch)
+async function copyDefectosTable(displayRows, total, subtitle, label) {
+  Toast.fire({ icon: 'info', title: 'Generando imagen...', timer: 1500, showConfirmButton: false })
+  try {
+    const scale = 2
+    const FONT        = '11px Verdana, sans-serif'
+    const FONT_BOLD   = 'bold 11px Verdana, sans-serif'
+    const FONT_SMALL  = '9px Verdana, sans-serif'
+    const FONT_MONO   = '10px "Courier New", monospace'
+    const ROW_H       = 22
+    const HEADER_H    = 26   // una sola línea
+    const COL_HDR_H   = 20  // fila de encabezados de columna
+    const PAD         = 6   // padding horizontal de celda
+
+    const cols = [
+      { label: 'COD',       width: 50,  align: 'center' },
+      { label: 'SEC',       width: 38,  align: 'center' },
+      { label: 'DEFECTO',   width: 188, align: 'left'   },
+      { label: 'PTS/100M²', width: 74,  align: 'right'  },
+      { label: 'TOTAL',     width: 80,  align: 'right'  },
+      { label: '%',         width: 64,  align: 'right'  },
+    ]
+
+    const allRows = [...(displayRows?.visible ?? [])]
+    if (displayRows?.otros) allRows.push(displayRows.otros)
+
+    const W = cols.reduce((s, c) => s + c.width, 0)
+    const H = HEADER_H + COL_HDR_H + allRows.length * ROW_H + ROW_H  // +ROW_H = footer
+
+    const canvas = document.createElement('canvas')
+    canvas.width  = W * scale
+    canvas.height = H * scale
+    const ctx = canvas.getContext('2d')
+    ctx.scale(scale, scale)
+
+    // helpers
+    const drawRect = (x, y, w, h, fill) => { ctx.fillStyle = fill; ctx.fillRect(x, y, w, h) }
+    const drawBorder = (x, y, w, h) => { ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 0.5; ctx.strokeRect(x + 0.25, y + 0.25, w - 0.25, h - 0.25) }
+    const textAt = (text, x, y, align, font, color) => {
+      ctx.font = font; ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'middle'
+      ctx.fillText(String(text ?? ''), x, y)
+    }
+    const sectorColor = (cod) => {
+      const f = String(cod ?? '').trim()[0]
+      if (f === '1') return '#2563eb'  // INDI blue-600
+      if (f === '2') return '#9333ea'  // HILA purple-600
+      if (f === '3') return '#15803d'  // TEJE green-700
+      if (f === '4') return '#ea580c'  // ACAB orange-600
+      return '#94a3b8'
+    }
+
+    // ── Encabezado (una sola línea) ─────────────────────────
+    drawRect(0, 0, W, HEADER_H, '#e2e8f0')
+    const midY = HEADER_H / 2
+    // Segmento 1: "Pts/100m²" en bold
+    ctx.font = FONT_BOLD; ctx.textBaseline = 'middle'
+    const w1 = ctx.measureText('Pts/100m²').width
+    ctx.fillStyle = '#1e293b'; ctx.textAlign = 'left'
+    ctx.fillText('Pts/100m²', PAD, midY)
+    // Segmento 2: " · <subtitle>" en normal
+    const sep = ' · '
+    ctx.font = FONT
+    const w2 = ctx.measureText(sep + subtitle).width
+    ctx.fillStyle = '#64748b'
+    ctx.fillText(sep + subtitle, PAD + w1, midY)
+    // Segmento 3: " · <metros>" en normal gris claro (alineado a la derecha)
+    const metrosText = total?.metros_lin
+      ? Number(total.metros_lin).toLocaleString('es-AR', { maximumFractionDigits: 0 }) + ' m'
+      : ''
+    if (metrosText) {
+      const wM = ctx.measureText(sep + metrosText).width
+      ctx.fillStyle = '#94a3b8'
+      ctx.textAlign = 'left'
+      ctx.fillText(sep + metrosText, PAD + w1 + w2, midY)
+    }
+
+    // ── Encabezados de columna ───────────────────────────────
+    let cx = 0
+    const colY = HEADER_H
+    drawRect(0, colY, W, COL_HDR_H, '#f8fafc')
+    cols.forEach(col => {
+      drawBorder(cx, colY, col.width, COL_HDR_H)
+      const tx = col.align === 'right' ? cx + col.width - PAD
+               : col.align === 'center' ? cx + col.width / 2
+               : cx + PAD
+      textAt(col.label, tx, colY + COL_HDR_H / 2, col.align, FONT_BOLD.replace('11px', '10px'), '#475569')
+      cx += col.width
+    })
+
+    // ── Filas de datos ───────────────────────────────────────
+    allRows.forEach((row, i) => {
+      const ry = HEADER_H + COL_HDR_H + i * ROW_H
+      const isOtros = row.cod_def === '—' || String(row.desc_defeito ?? '').startsWith('Otros')
+      const rowBg = isOtros ? '#fffbeb'
+                 : i % 2 === 0 ? '#ffffff' : '#f8fafc'
+      drawRect(0, ry, W, ROW_H, rowBg)
+
+      const sec    = defectoSector(row.cod_def)
+      const secClr = sectorColor(row.cod_def)
+      const textClr = isOtros ? '#92400e' : '#1e293b'
+      const italicPrefix = isOtros ? 'italic ' : ''
+
+      const cells = [
+        { v: row.cod_def,  align: 'center', font: FONT_MONO,                                       color: isOtros ? '#d97706' : '#1e293b' },
+        { v: sec,          align: 'center', font: italicPrefix + FONT_BOLD.replace('11px','10px'), color: isOtros ? '#d97706' : secClr },
+        { v: row.desc_defeito, align: 'left', font: italicPrefix + FONT,                  color: textClr },
+        { v: Number(row.pts_100m2).toFixed(2),                                align: 'right', font: FONT, color: textClr },
+        { v: Number(row.pts_totales).toLocaleString('es-AR'),                 align: 'right', font: FONT, color: textClr },
+        { v: Number(row.porcentaje).toFixed(2) + '%',                         align: 'right', font: FONT, color: isOtros ? '#b45309' : '#475569' },
+      ]
+
+      cx = 0
+      cells.forEach((cell, ci) => {
+        const col = cols[ci]
+        drawBorder(cx, ry, col.width, ROW_H)
+        const tx = cell.align === 'right'  ? cx + col.width - PAD
+                 : cell.align === 'center' ? cx + col.width / 2
+                 : cx + PAD
+        textAt(cell.v, tx, ry + ROW_H / 2, cell.align, cell.font, cell.color)
+        cx += col.width
+      })
+    })
+
+    // ── Footer total ─────────────────────────────────────────
+    const fy = HEADER_H + COL_HDR_H + allRows.length * ROW_H
+    drawRect(0, fy, W, ROW_H, '#f1f5f9')
+    const footerCells = [
+      { v: '',            align: 'center' },
+      { v: '',            align: 'center' },
+      { v: 'Total',       align: 'left'   },
+      { v: Number(total?.pts_100m2 ?? 0).toFixed(2),                       align: 'right' },
+      { v: Number(total?.pts_totales ?? 0).toLocaleString('es-AR'),        align: 'right' },
+      { v: '100.00%',     align: 'right' },
+    ]
+    cx = 0
+    footerCells.forEach((cell, ci) => {
+      const col = cols[ci]
+      drawBorder(cx, fy, col.width, ROW_H)
+      const tx = cell.align === 'right'  ? cx + col.width - PAD
+               : cell.align === 'center' ? cx + col.width / 2
+               : cx + PAD
+      textAt(cell.v, tx, fy + ROW_H / 2, cell.align, FONT_BOLD, '#1e293b')
+      cx += col.width
+    })
+
+    // ── Copiar ───────────────────────────────────────────────
+    const blob = await new Promise((resolve, reject) => {
+      canvas.toBlob((b) => b ? resolve(b) : reject(new Error('Error creando blob')), 'image/png', 1.0)
+    })
+    if (navigator.clipboard && navigator.clipboard.write) {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+      Toast.fire({ icon: 'success', title: '¡Imagen copiada!', text: 'Pega con Ctrl+V donde quieras' })
+    } else {
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${label}-${selectedDate.value}.png`
+      document.body.appendChild(a); a.click()
+      document.body.removeChild(a); URL.revokeObjectURL(url)
+      Toast.fire({ icon: 'info', title: 'Imagen descargada', text: 'Portapapeles no disponible' })
+    }
+  } catch (err) {
+    console.error('❌ Error copiando defectos:', err)
+    Toast.fire({ icon: 'error', title: 'Error al copiar imagen', text: err.message })
   }
 }
 
