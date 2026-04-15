@@ -7132,9 +7132,94 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Helper: bloque de Correlación OE para informe local
+// ─────────────────────────────────────────────────────────────────────────────
+function buildBloqueOE(oeData, lotesSorted) {
+  if (!oeData || !oeData.length) return [];
+  const numV = (v) => Number(v) || 0;
+  const tipos = [
+    { key: 'nat_total', label: 'Naturales' },
+    { key: 'n_total',   label: 'N (Neps)' },
+    { key: 's_total',   label: 'S (Cortos)' },
+    { key: 'l_total',   label: 'L (Largos)' },
+    { key: 't_total',   label: 'T (Finos)' },
+    { key: 'mo_total',  label: 'MO (Moiré)' },
+    { key: 'jp_total',  label: 'JP (P+)' },
+    { key: 'jm_total',  label: 'JM (P-)' },
+  ];
+  const machineKeys = [...new Map(
+    oeData.map(r => [`${r.maquina}|${r.item}`, { maquina: r.maquina, item: r.item, desc_item: r.desc_item }])
+  ).values()];
+  const lines = [];
+  lines.push('🔗 CORRELACIÓN CON PRODUCCIÓN OE:');
+  lines.push('Cortes de purga Open End — totales acumulados por período analizado');
+  lines.push('');
+  for (const mk of machineKeys) {
+    const maqRows = oeData.filter(r => r.maquina === mk.maquina && r.item === mk.item);
+    const lotesConDatos = lotesSorted.filter(l => maqRows.some(r => Number(r.lote) === l));
+    if (!lotesConDatos.length) continue;
+    lines.push(`  Máq. ${mk.maquina} — ${mk.desc_item || mk.item}:`);
+    const loteHeader = lotesConDatos.map(l => `L.${l}`.padStart(7)).join(' |');
+    lines.push(`    ${'Tipo'.padEnd(12)} |${loteHeader}`);
+    for (const ct of tipos) {
+      const vals = lotesConDatos.map(l => {
+        const row = maqRows.find(r => Number(r.lote) === l);
+        return row ? numV(row[ct.key]) : null;
+      });
+      if (vals.filter(v => v !== null).every(v => v === 0)) continue;
+      const valStr = vals.map(v => (v === null ? '      –' : String(v).padStart(7))).join(' |');
+      let trend = '';
+      const numericVals = vals.filter(v => v !== null);
+      if (numericVals.length >= 2) {
+        const first = numericVals[0], last = numericVals[numericVals.length - 1];
+        if (first > 0) {
+          const p = Math.round((last - first) / first * 100);
+          trend = last < first ? ` ⬇️ Mejoró (${p}%)` : last > first ? ` ⬆️ Empeoró (+${p}%)` : ' = Sin cambio';
+        }
+      }
+      lines.push(`    ${ct.label.padEnd(12)} |${valStr}${trend}`);
+    }
+    const eficStr = lotesConDatos.map(l => {
+      const row = maqRows.find(r => Number(r.lote) === l);
+      return (row && row.efic_avg != null) ? `${row.efic_avg}%`.padStart(7) : '      –';
+    }).join(' |');
+    lines.push(`    ${'Efic. Prom.'.padEnd(12)} |${eficStr}`);
+    lines.push('');
+  }
+  return lines;
+}
+
+function formatOEParaPrompt(oeData, lotesSorted) {
+  if (!oeData || !oeData.length) return '';
+  const n = (v) => Number(v) || 0;
+  const pctStr = (a, b) => n(a) === 0 ? '–' : `${Math.round((n(b) - n(a)) / n(a) * 100)}%`;
+  const machineKeys = [...new Map(
+    oeData.map(r => [`${r.maquina}|${r.item}`, { maquina: r.maquina, item: r.item, desc_item: r.desc_item }])
+  ).values()];
+  const lines = [];
+  for (const mk of machineKeys) {
+    const maqRows = oeData.filter(r => r.maquina === mk.maquina && r.item === mk.item);
+    if (maqRows.length < 2) continue;
+    const ref = maqRows.find(r => Number(r.lote) === lotesSorted[0]);
+    const act = maqRows.find(r => Number(r.lote) === lotesSorted[lotesSorted.length - 1]);
+    if (!ref || !act || ref === act) continue;
+    lines.push(
+      `  Máq.${mk.maquina} (${mk.desc_item}): ` +
+      `Nat ${n(ref.nat_total)}→${n(act.nat_total)}(${pctStr(ref.nat_total, act.nat_total)}) ` +
+      `N ${n(ref.n_total)}→${n(act.n_total)} S ${n(ref.s_total)}→${n(act.s_total)} ` +
+      `L ${n(ref.l_total)}→${n(act.l_total)} T ${n(ref.t_total)}→${n(act.t_total)} ` +
+      `MO ${n(ref.mo_total)}→${n(act.mo_total)} ` +
+      `JP ${n(ref.jp_total)}→${n(act.jp_total)} JM ${n(ref.jm_total)}→${n(act.jm_total)} ` +
+      `Efic.${act.efic_avg ?? '–'}%`
+    );
+  }
+  return lines.length ? `PRODUCCIÓN OE (cortes totales de purga):\n${lines.join('\n')}` : '';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Genera el informe de forma local (sin IA externa) — siempre disponible
 // ─────────────────────────────────────────────────────────────────────────────
-function generarNarrativaLocal(rows, loteActual, proveedores = []) {
+function generarNarrativaLocal(rows, loteActual, proveedores = [], oeData = []) {
   const lotesSorted = [...new Set(rows.map(r => Number(r.mistura)))].sort((a, b) => a - b);
   const actual = loteActual ? Number(loteActual) : Math.max(...lotesSorted);
   const refs   = lotesSorted.filter(l => l !== actual);
@@ -7358,6 +7443,8 @@ function generarNarrativaLocal(rows, loteActual, proveedores = []) {
     bloqueAuditoria.push('');
   }
 
+  const bloqueOE = buildBloqueOE(oeData, lotesSorted);
+
   const lines = [
     `📋 INFORME DE DESEMPEÑO: LOTE FIAC ${actual} vs ${refStr}`,
     `Análisis Comparativo Fibra ↔️ Hilo`,
@@ -7370,6 +7457,7 @@ function generarNarrativaLocal(rows, loteActual, proveedores = []) {
     ...bloques.flatMap(b => [b, '']),
     ...bloqueProveedores,
     ...bloqueAuditoria,
+    ...bloqueOE,
     `🛠 PLAN DE ACCIÓN PRIORIZADO (24h):`,
     ...(alertas.length
       ? alertas.map(a => `  ⚠️ ${a}`)
@@ -7403,9 +7491,40 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
     const { rows, loteActual, model: modelReq, modo, proveedores } = req.body;
     if (!rows || rows.length === 0) return res.status(400).json({ error: 'Sin datos para analizar' });
 
+    // ── Query producción OE para comparativa de cortes ───────────────────────
+    const loteNums = [...new Set(rows.map(r => Number(r.mistura)))].filter(n => !isNaN(n) && n > 0);
+    let oeData = [];
+    try {
+      const oeResult = await pool.query(`
+        SELECT
+          TRIM("LOTE PRODUC")::bigint AS lote,
+          maquina,
+          item,
+          "DESC ITEM" AS desc_item,
+          SUM(CASE WHEN "CORT NAT" ~ '^[0-9]' THEN REPLACE("CORT NAT", ',', '.')::numeric ELSE 0 END) AS nat_total,
+          SUM(CASE WHEN n ~ '^[0-9]' THEN REPLACE(n, ',', '.')::numeric ELSE 0 END) AS n_total,
+          SUM(CASE WHEN s ~ '^[0-9]' THEN REPLACE(s, ',', '.')::numeric ELSE 0 END) AS s_total,
+          SUM(CASE WHEN l ~ '^[0-9]' THEN REPLACE(l, ',', '.')::numeric ELSE 0 END) AS l_total,
+          SUM(CASE WHEN t ~ '^[0-9]' THEN REPLACE(t, ',', '.')::numeric ELSE 0 END) AS t_total,
+          SUM(CASE WHEN mo ~ '^[0-9]' THEN REPLACE(mo, ',', '.')::numeric ELSE 0 END) AS mo_total,
+          SUM(CASE WHEN "JP (P+)" ~ '^[0-9]' THEN REPLACE("JP (P+)", ',', '.')::numeric ELSE 0 END) AS jp_total,
+          SUM(CASE WHEN "JM (P-)" ~ '^[0-9]' THEN REPLACE("JM (P-)", ',', '.')::numeric ELSE 0 END) AS jm_total,
+          ROUND(AVG(CASE WHEN "EFIC CALCULADA" ~ '^[0-9]' THEN REPLACE("EFIC CALCULADA", ',', '.')::numeric END)::numeric, 1) AS efic_avg,
+          COUNT(*) AS registros
+        FROM tb_produccion_oe
+        WHERE TRIM("LOTE PRODUC") ~ '^[0-9]+\$'
+          AND TRIM("LOTE PRODUC")::bigint = ANY(\$1)
+        GROUP BY TRIM("LOTE PRODUC")::bigint, maquina, item, "DESC ITEM"
+        ORDER BY TRIM("LOTE PRODUC")::bigint, maquina
+      `, [loteNums]);
+      oeData = oeResult.rows;
+    } catch (oeErr) {
+      console.warn('OE data query failed (non-fatal):', oeErr.message);
+    }
+
     // Si piden explícitamente local, o no hay API key → generación local directa
     if (modo === 'local' || !process.env.GOOGLE_API_KEY) {
-      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || []);
+      const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], oeData);
       return res.json({ success: true, narrativa, fuente: 'local', ...buildNarrativaStructuredFields(narrativa) });
     }
 
@@ -7442,7 +7561,7 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
     const prompt = `Actúa como Auditor de Calidad Textil y Experto en Tejeduría e Hilandería de denim de alta velocidad.
 
 DATOS COMPARATIVOS:
-${resumenLotes}
+${resumenLotes}${formatOEParaPrompt(oeData, lotesSorted) ? '\n\n' + formatOEParaPrompt(oeData, lotesSorted) : ''}
 
 UMBRALES: Tenacidad hilo >16.0=APTO, 14.5-16.0=PRECAUCIÓN, <14.5=CRÍTICO | Elongación <7.5%=RIESGO URDIDORA | Neps+200% >700=RIESGO ÍNDIGO | CVm% >13=IRREGULAR | STR fibra >27=ÓPTIMO
 
@@ -7482,7 +7601,10 @@ Análisis Comparativo Fibra ↔️ Hilo
 [Para cada Ne: Ne X [Aplicación] → Proceso1 ✅/⚠️ → Proceso2 ✅/⚠️ — Estado (Aprobado/Rechazado) — Desvío si hay.]
 [Agregar 💬 comentario de planta con vocabulario de hilandería para cada Ne.]
 
-🛠 PLAN DE ACCIÓN PRIORIZADO (24h):
+� CORRELACIÓN CON PRODUCCIÓN OE:
+[Comparativa de cortes de purga (Naturales, N, S, L, T, MO) entre lotes por máquina. Destacar variaciones % del lote actual vs referencia. Relacionar impacto en urdidora y estabilidad del proceso.]
+
+�🛠 PLAN DE ACCIÓN PRIORIZADO (24h):
 [2-3 bullets accionables]
 
 🚀 ESTADO OPERATIVO:
@@ -7511,7 +7633,7 @@ Análisis Comparativo Fibra ↔️ Hilo
 
     // Todos los modelos fallaron → fallback local
     const geminiErrMsg = lastGeminiErr || 'Error desconocido';
-    const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || []);
+    const narrativa = generarNarrativaLocal(rows, loteActual, proveedores || [], oeData);
     const esQuota = /quota|429|resource.exhausted/i.test(geminiErrMsg);
     const aviso = esQuota
       ? 'Gemini no disponible – límite de cuota alcanzado. Informe generado localmente.'

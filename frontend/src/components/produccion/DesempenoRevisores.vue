@@ -323,11 +323,15 @@
             <!-- Chart legend -->
             <div class="shrink-0 flex flex-wrap gap-4 text-[11px] text-slate-600 mt-1">
               <span class="flex items-center gap-1">
-                <span class="inline-block w-3 h-3 rounded" style="background:rgba(34,197,94,0.75)"></span>
+                <span class="inline-block w-3 h-3 rounded-full border-2" style="background:rgba(34,197,94,0.75);border-color:rgb(22,163,74)"></span>
                 PRIMEIRA
               </span>
               <span class="flex items-center gap-1">
-                <span class="inline-block w-3 h-3 rounded" style="background:rgba(249,115,22,0.75)"></span>
+                <span class="inline-block w-3 h-3 rounded-full border-2" style="background:rgba(34,197,94,0.75);border-color:rgba(249,115,22,0.85)"></span>
+                PRIMEIRA sin pts
+              </span>
+              <span class="flex items-center gap-1">
+                <span class="inline-block w-3 h-3 rounded-full border-2" style="background:rgba(249,115,22,0.75);border-color:rgb(234,88,12)"></span>
                 SEGUNDA
               </span>
               <template v-if="chartMode === 'velocidad'">
@@ -925,17 +929,18 @@ function renderCronologicoChart() {
   const cambioPart = piezas.map((p, i) => i > 0 && String(p.Partida) !== String(piezas[i - 1].Partida))
   const { esGapLargo: esGapLargoCrono, umbral: gapUmbralCrono, mediana: gapMedianaCrono } = detectarGapsLargos(piezas)
 
-  const pointColors = piezas.map((p, i) => {
-    if (esGapLargoCrono[i]) return 'rgba(245,158,11,0.95)'  // ámbar = viene después de pausa
+  const pointColors = piezas.map((p) => {
+    // El fill siempre refleja la calidad de la pieza: VERDE=PRIMEIRA, NARANJA=SEGUNDA.
+    // La pausa larga se comunica por el borde, la zona sombreada y el tooltip; no cambia el fill.
     const isFirst = String(p.Qualidade || '').toUpperCase().includes('PRIMEIRA')
     return isFirst ? 'rgba(34,197,94,0.9)' : 'rgba(249,115,22,0.9)'
   })
   const pointBorders = piezas.map((p, i) => {
-    if (esGapLargoCrono[i] && !cambioPart[i]) return 'rgb(217,119,6)'  // azul oscuro si gap largo (no solapado con rombo)
-    if (cambioPart[i]) return 'rgba(168,85,247,0.9)'
+    if (cambioPart[i]) return 'rgba(168,85,247,0.9)'  // violeta = cambio de partida
+    if (esGapLargoCrono[i]) return 'rgb(217,119,6)'   // ámbar = viene después de pausa larga
     const isFirst = String(p.Qualidade || '').toUpperCase().includes('PRIMEIRA')
     const hasPts = p.Pontuacao != null && Number(p.Pontuacao) !== 0
-    if (isFirst && !hasPts) return 'rgba(220,38,38,0.7)'
+    if (isFirst && !hasPts) return 'rgba(249,115,22,0.85)'  // naranja = PRIMEIRA sin puntos informados
     return isFirst ? 'rgb(22,163,74)' : 'rgb(234,88,12)'
   })
   const pointRadii = piezas.map((p, i) => {
