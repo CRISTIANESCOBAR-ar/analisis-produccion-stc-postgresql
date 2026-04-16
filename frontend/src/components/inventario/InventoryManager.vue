@@ -1835,6 +1835,7 @@
 import { ref, computed, reactive, onMounted, onBeforeUnmount, watch } from 'vue';
 import { CottonBale } from '../../models/CottonBale';
 import ExcelJS from 'exceljs';
+import Swal from 'sweetalert2';
 
 // --- Configuración de Columnas ---
 const allColumns = [
@@ -2346,7 +2347,7 @@ const fetchData = async () => {
       });
   } catch (error) {
     console.error(error);
-    alert('No se pudieron cargar los datos del inventario. Verifica que el servidor esté corriendo.');
+    Swal.fire({ icon: 'error', title: 'Error de conexión', text: 'No se pudieron cargar los datos del inventario. Verifica que el servidor esté corriendo.', confirmButtonColor: '#1d4ed8' });
   } finally {
     loading.value = false;
   }
@@ -5649,14 +5650,14 @@ const handleMezclas = async ({ silent = false } = {}) => {
 
   if (!stockRowsForBlend.length) {
     if (!silent) {
-      alert('Selecciona al menos un lote en la tabla para calcular mezclas.');
+      Swal.fire({ icon: 'warning', title: 'Sin lotes seleccionados', text: 'Selecciona al menos un lote en la tabla para calcular mezclas.', confirmButtonColor: '#1d4ed8' });
     }
     return;
   }
 
   if (!filters.fardos || filters.fardos <= 0) {
     if (!silent) {
-      alert('Por favor, especifica la cantidad de fardos para la mezcla.');
+      Swal.fire({ icon: 'warning', title: 'Fardos no especificados', text: 'Por favor, especifica la cantidad de fardos para la mezcla.', confirmButtonColor: '#1d4ed8' });
     }
     return;
   }
@@ -5666,7 +5667,7 @@ const handleMezclas = async ({ silent = false } = {}) => {
 
   if (selectedVariables.length === 0) {
     if (!silent) {
-      alert('Por favor, selecciona al menos una variable en "Reglas de Mezclas" para optimizar.');
+      Swal.fire({ icon: 'warning', title: 'Sin variables configuradas', text: 'Por favor, selecciona al menos una variable en "Reglas de Mezclas" para optimizar.', confirmButtonColor: '#1d4ed8' });
     }
     return;
   }
@@ -5737,7 +5738,7 @@ const handleMezclas = async ({ silent = false } = {}) => {
       details: []
     };
     if (!silent) {
-      alert(`Error: ${error.message}`);
+      Swal.fire({ icon: 'error', title: 'Error al calcular mezclas', text: error.message || 'Ocurrió un error inesperado.', confirmButtonColor: '#1d4ed8' });
     }
   } finally {
     isCalculatingBlend.value = false;
@@ -5747,7 +5748,7 @@ const handleMezclas = async ({ silent = false } = {}) => {
 // Función para exportar Plan de Mezclas a Excel con formato avanzado
 const exportToExcel = async () => {
   if (!blendPlan.value || !blendPlan.value.plan) {
-    alert('No hay plan de mezclas para exportar.');
+    Swal.fire({ icon: 'info', title: 'Sin datos para exportar', text: 'No hay plan de mezclas para exportar.', confirmButtonColor: '#1d4ed8' });
     return;
   }
 
