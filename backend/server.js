@@ -6923,6 +6923,44 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
           ROUND(AVG(CASE WHEN "UHML" ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("UHML", ',', '.')::numeric END), 2) AS uhml,
           ROUND(AVG(CASE WHEN "UI"   ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("UI",   ',', '.')::numeric END), 2) AS ui,
           ROUND(AVG(CASE WHEN "ELG"  ~ '^[0-9][0-9,\\.]*$' THEN REPLACE("ELG",  ',', '.')::numeric END), 2) AS elg_fibra,
+            (
+              SELECT STRING_AGG(grado || ' (' || ROUND((peso_grado / NULLIF(peso_total, 0)) * 100, 1) || '%)', ', ')
+              FROM (
+                  SELECT 
+                      grado, 
+                      peso_grado, 
+                      SUM(peso_grado) OVER() AS peso_total
+                  FROM (
+                      SELECT 
+                          NULLIF(TRIM(COALESCE(t2."TP", '') || ' ' || COALESCE(t2."CLASSIFIC", '')), '') AS grado,
+                          SUM(CAST(REPLACE(REPLACE(COALESCE(t2."PESO", '0'), '.', ''), ',', '.') AS NUMERIC)) AS peso_grado
+                      FROM tb_calidad_fibra t2
+                      WHERE t2."TIPO_MOV" = 'MIST'
+                        AND CAST(NULLIF(regexp_replace(t2."LOTE_FIAC", '[^0-9]', '', 'g'), '') AS INTEGER) = CAST(NULLIF(regexp_replace("LOTE_FIAC", '[^0-9]', '', 'g'), '') AS INTEGER)
+                        AND NULLIF(TRIM(COALESCE(t2."TP", '') || ' ' || COALESCE(t2."CLASSIFIC", '')), '') IS NOT NULL
+                      GROUP BY NULLIF(TRIM(COALESCE(t2."TP", '') || ' ' || COALESCE(t2."CLASSIFIC", '')), '')
+                  ) sub
+              ) calc
+            ) AS clasificacion_argentina,
+            (
+              SELECT STRING_AGG('Corteza ' || grado || ' (' || ROUND((peso_grado / NULLIF(peso_total, 0)) * 100, 1) || '%)', ', ')
+              FROM (
+                  SELECT 
+                      grado, 
+                      peso_grado, 
+                      SUM(peso_grado) OVER() AS peso_total
+                  FROM (
+                      SELECT 
+                          NULLIF(TRIM(COALESCE(t2."CORTEZA", '')), '') AS grado,
+                          SUM(CAST(REPLACE(REPLACE(COALESCE(t2."PESO", '0'), '.', ''), ',', '.') AS NUMERIC)) AS peso_grado
+                      FROM tb_calidad_fibra t2
+                      WHERE t2."TIPO_MOV" = 'MIST'
+                        AND CAST(NULLIF(regexp_replace(t2."LOTE_FIAC", '[^0-9]', '', 'g'), '') AS INTEGER) = CAST(NULLIF(regexp_replace("LOTE_FIAC", '[^0-9]', '', 'g'), '') AS INTEGER)
+                        AND NULLIF(TRIM(COALESCE(t2."CORTEZA", '')), '') IS NOT NULL
+                      GROUP BY NULLIF(TRIM(COALESCE(t2."CORTEZA", '')), '')
+                  ) sub
+              ) calc
+            ) AS corteza_porcentaje,
           -- Solo fardos con fecha de entrada a producción (consumidos en blendomat)
           SUM(CASE WHEN "DT_ENTRADA_PROD" IS NOT NULL AND "DT_ENTRADA_PROD" <> ''
                    THEN ROUND(REPLACE("QTDE"::text, ',', '.')::numeric)::integer
@@ -6934,6 +6972,32 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
           AND "LOTE_FIAC" ~ '[0-9]'
           AND CAST(NULLIF(regexp_replace("LOTE_FIAC", '[^0-9]', '', 'g'), '') AS INTEGER) = ANY($1::integer[])
         GROUP BY CAST(NULLIF(regexp_replace("LOTE_FIAC", '[^0-9]', '', 'g'), '') AS INTEGER)
+      ),
+      carda_kgh_agg AS (
+        SELECT
+          mistura,
+          STRING_AGG(machine_family || ': ' || ROUND(avg_kgh, 1) || ' KG/H (' || muestras || ' muestras)', ', ' ORDER BY machine_family) AS cardas_kgh
+        FROM (
+          SELECT
+            COALESCE(
+              (regexp_match(p.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1],
+              (regexp_match(p.lote, '(\\d+)'))[1]
+            )::integer AS mistura,
+            p.machine_family,
+            ROUND(AVG((regexp_match(p.obs, '(\\d+\\.?\\d*)'))[1]::numeric), 1) AS avg_kgh,
+            COUNT(*) AS muestras
+          FROM tb_uster_carda_par p
+          WHERE COALESCE(
+              (regexp_match(p.lote, '[A-Za-z]+[-\\s]+(\\d+)'))[1],
+              (regexp_match(p.lote, '(\\d+)'))[1]
+            ) IS NOT NULL
+            AND p.obs ~ '^\\d'
+            AND p.machine_family IS NOT NULL
+            AND p.machine_family <> ''
+          GROUP BY 1, p.machine_family
+        ) sub
+        WHERE mistura = ANY($1::integer[])
+        GROUP BY mistura
       ),
       uster_base AS (
         SELECT
@@ -6997,6 +7061,8 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
         h.uhml,
         h.ui,
         h.elg_fibra,
+          h.clasificacion_argentina,
+          h.corteza_porcentaje,
         h.n_fardos,
         h.n_secuencias,
         ua.ne,
@@ -7014,10 +7080,12 @@ app.get('/api/dashboard/mezcla-lotes', async (req, res) => {
         ta.tenacidad,
         ta.elongacion,
         ta.fuerza_b,
-        ta.trabajo_b
+        ta.trabajo_b,
+        ck.cardas_kgh
       FROM hvi_agg h
       LEFT JOIN uster_agg  ua ON ua.mistura = h.mistura
       LEFT JOIN tenso_agg  ta ON ta.mistura = h.mistura AND ta.ne = ua.ne
+      LEFT JOIN carda_kgh_agg ck ON ck.mistura = h.mistura
       ORDER BY h.mistura ASC, ua.ne::numeric ASC NULLS LAST
     `;
 
@@ -7550,7 +7618,7 @@ app.post('/api/dashboard/narrativa-lotes', async (req, res) => {
           }).join('\n')
         : '';
       return `LOTE_FIAC ${misturaLabel}${mistura === actual ? ' [ACTUAL]' : ' [REFERENCIA]'}:
-  HVI: STR=${hvi.str ?? '-'} g/tex | SCI=${hvi.sci ?? '-'} | MIC=${hvi.mic ?? '-'} | UHML=${hvi.uhml ?? '-'} mm | ${hvi.n_fardos ?? '-'} fardos consumidos | ${hvi.n_secuencias ?? '-'} secuencias blendomat
+  HVI: STR=${hvi.str ?? '-'} g/tex | SCI=${hvi.sci ?? '-'} | MIC=${hvi.mic ?? '-'} | UHML=${hvi.uhml ?? '-'} mm | Grado=${hvi.clasificacion_argentina || 'N/D'} | Corteza=${hvi.corteza_porcentaje || 'N/D'} | Cardas=${hvi.cardas_kgh || 'N/D'} | ${hvi.n_fardos ?? '-'} fardos consumidos | ${hvi.n_secuencias ?? '-'} secuencias blendomat
   Hilo:\n${hilos || '   (sin datos)'}${provStr}`;
     }).join('\n\n');
 
@@ -7997,3 +8065,13 @@ async function startServer() {
 }
 
 startServer()
+
+
+
+
+
+
+
+
+
+
