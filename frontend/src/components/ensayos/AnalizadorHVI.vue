@@ -403,15 +403,20 @@ const exportarImagen = async () => {
   try {
     // Pequeña pausa para asegurar que el DOM esté listo y mostrar el feedback visual
     await new Promise(resolve => setTimeout(resolve, 500));
-    
-    const dataUrl = await toPng(analizadorRef.value, {
-      quality: 0.95,
+
+    const exportOptions = {
+      pixelRatio: 3,           // 3× resolución → imagen muy nítida
       backgroundColor: '#ffffff',
       cacheBust: true,
       style: {
-        borderRadius: '0' // Quitar redondeo externo para la imagen
+        borderRadius: '0'
       }
-    });
+    };
+
+    // Primer render (warm-up): html-to-image a veces omite fuentes/íconos en el primero
+    await toPng(analizadorRef.value, exportOptions);
+    // Segundo render: ya con recursos cargados → resultado nítido
+    const dataUrl = await toPng(analizadorRef.value, exportOptions);
 
     const link = document.createElement('a');
     link.download = `HVI_Análisis_${props.metadata?.loteEntrada || 'SinLote'}_${new Date().toISOString().split('T')[0]}.png`;

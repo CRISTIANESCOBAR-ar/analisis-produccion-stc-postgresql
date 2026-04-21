@@ -154,9 +154,9 @@
                 <td class="px-1 py-1 text-xs" @click.stop>
                   <select
                     v-model="item.cort"
-                    :disabled="item.tipo === 'Mue'"
-                    :class="[ 'w-full px-1 py-1 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-blue-500 outline-none disabled:bg-slate-50 disabled:opacity-50 cursor-pointer', selectedFileName === item.fileName ? 'bg-white' : '' ]"
+                    :class="[ 'w-full px-1 py-1 border border-slate-200 rounded text-xs focus:ring-1 focus:ring-blue-500 outline-none cursor-pointer', selectedFileName === item.fileName ? 'bg-white' : '' ]"
                   >
+                    <option value=""></option>
                     <option v-for="n in [1, 2, 3]" :key="n" :value="n">{{ n }}</option>
                   </select>
                 </td>
@@ -1599,7 +1599,7 @@ const processFiles = async () => {
             muestra: selectedFileItem.value.muestra,
             cantidad: selectedFileItem.value.cantidad,
             color: selectedFileItem.value.color,
-            cort: selectedFileItem.value.tipo === 'Mue' ? null : selectedFileItem.value.cort,
+            cort: selectedFileItem.value.cort || null,
             obs: selectedFileItem.value.obs
           },
           details: hviDetails.value
