@@ -10,7 +10,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['LogoSantana.jpg'],
       devOptions: {
-        enabled: true,
+        enabled: false,
         type: 'module'
       },
       manifest: {

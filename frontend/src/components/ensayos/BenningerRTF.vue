@@ -158,6 +158,7 @@
                 <th class="px-2 py-2 text-left">Comeco</th>
                 <th class="px-2 py-2 text-left">Partida sugerida</th>
                 <th class="px-2 py-2 text-left">Conf.</th>
+                <th class="px-2 py-2 text-left">Score</th>
                 <th class="px-2 py-2 text-left">Estado</th>
               </tr>
             </thead>
@@ -189,6 +190,14 @@
                     >
                       {{ row.confidence || 'none' }}
                     </span>
+                  </td>
+                  <td class="px-2 py-2 align-top w-[170px]">
+                    <span
+                      v-if="row.scoreDetail"
+                      class="font-mono text-[10px] text-slate-700"
+                      :title="`RTF: ${row.scoreDetail.rtfMetros?.toFixed(0) ?? '-'}m | DB: ${row.scoreDetail.dbMetros?.toFixed(0) ?? '-'}m | \u0394t: ${row.scoreDetail.diffMin != null ? row.scoreDetail.diffMin + ' min' : '-'}`"
+                    >R:{{ row.scoreDetail.scoreReceita }} M:{{ row.scoreDetail.scoreMetros }} T:{{ row.scoreDetail.scoreTime }} = <strong>{{ row.scoreDetail.total }}</strong></span>
+                    <span v-else class="text-slate-400 text-[10px]">-</span>
                   </td>
                   <td class="px-2 py-2 align-top">
                     <span
@@ -309,6 +318,141 @@
           </template>
         </div>
       </div>
+
+      <div class="shrink-0 mt-3 border border-slate-200 rounded-xl bg-white overflow-hidden">
+        <button
+          @click="secuenciaOpen = !secuenciaOpen"
+          class="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50 transition-colors"
+        >
+          <span class="flex items-center gap-2">
+            <span>📊</span>
+            Vista secuencia PARTIDA vs RTF
+            <span v-if="secuenciaRows.length" class="px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700 font-bold">
+              {{ secuenciaRows.length }} filas
+            </span>
+          </span>
+          <svg class="w-3.5 h-3.5 transition-transform duration-200" :class="{ 'rotate-180': secuenciaOpen }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        <div v-if="secuenciaOpen" class="border-t border-slate-200">
+          <div class="px-3 py-2 border-b border-slate-200 bg-slate-50 flex items-center gap-2 text-xs">
+            <span class="text-slate-600">Partida ancla:</span>
+            <input
+              v-model="secuenciaStartPartida"
+              type="text"
+              placeholder="(auto: primera high)"
+              class="px-2 py-1 rounded-md border border-slate-300 text-xs w-44"
+            />
+            <span class="text-slate-600">Filas:</span>
+            <input
+              v-model.number="secuenciaLimit"
+              type="number"
+              min="50"
+              max="1000"
+              class="px-2 py-1 rounded-md border border-slate-300 text-xs w-20"
+            />
+            <button
+              @click="loadSecuenciaView"
+              :disabled="secuenciaLoading || !rtfRows.length"
+              class="px-2.5 py-1 rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {{ secuenciaLoading ? 'Cargando...' : 'Generar vista' }}
+            </button>
+            <span class="text-slate-600">Offset:</span>
+            <input
+              v-model.number="secuenciaOffsetManual"
+              type="number"
+              min="-500"
+              max="500"
+              class="px-2 py-1 rounded-md border border-slate-300 text-xs w-20"
+              title="Offset secuencial PARTIDA-RTF"
+            />
+            <button
+              @click="rebuildSecuenciaRows()"
+              :disabled="secuenciaLoading || !secuenciaDbRows.length"
+              class="px-2.5 py-1 rounded-md text-white bg-slate-700 hover:bg-slate-800 disabled:opacity-50"
+            >
+              Recalcular
+            </button>
+            <button
+              @click="applySecuenciaSuggestions"
+              :disabled="secuenciaLoading || !secuenciaRows.length || isSaving"
+              class="px-2.5 py-1 rounded-md text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50"
+              title="Aplica sugerencia secuencial solo a medium (sin guardar en BD)"
+            >
+              Aplicar sugerencia secuencial (medium)
+            </button>
+            <button
+              @click="saveSugeridosWithValidation"
+              :disabled="secuenciaLoading || !secuenciaRows.length || isSaving"
+              class="px-2.5 py-1 rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+              title="Guarda filas SUGERIDO validando: Receita=BASE URDUME (obligatorio), metros (tolerancia 15%), velocidad (informativo)"
+            >
+              Guardar SUGERIDO (con validación)
+            </button>
+            <span class="text-slate-500 ml-auto">Se alinea por orden ascendente de secuencia RTF (NNN).</span>
+          </div>
+
+          <div v-if="secuenciaDbRows.length" class="px-3 py-1.5 text-[11px] text-slate-600 bg-slate-50 border-b border-slate-200">
+            Offset auto: {{ secuenciaOffsetAuto }} | Offset activo: {{ secuenciaOffsetManual }}
+          </div>
+
+          <div v-if="secuenciaError" class="px-3 py-2 text-xs text-rose-700 bg-rose-50 border-b border-rose-200">
+            {{ secuenciaError }}
+          </div>
+
+          <div class="overflow-auto max-h-72">
+            <table class="min-w-full text-[11px]">
+              <thead class="sticky top-0 bg-slate-100 border-b border-slate-200">
+                <tr>
+                  <th class="px-2 py-1 text-left">PARTIDA</th>
+                  <th class="px-2 py-1 text-left">BASE URDUME</th>
+                  <th class="px-2 py-1 text-left">DT_INICIO</th>
+                  <th class="px-2 py-1 text-left">HORA_INICIO</th>
+                  <th class="px-2 py-1 text-left">METRAGEM</th>
+                  <th class="px-2 py-1 text-left">VELOC</th>
+                  <th class="px-2 py-1 text-left">(NNN)</th>
+                  <th class="px-2 py-1 text-left">Comeco</th>
+                  <th class="px-2 py-1 text-left">Receita</th>
+                  <th class="px-2 py-1 text-left">1X014</th>
+                  <th class="px-2 py-1 text-left">1S102</th>
+                  <th class="px-2 py-1 text-left">MATCH</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(row, idx) in secuenciaRows" :key="`seq-${idx}`" class="border-b border-slate-100">
+                  <td class="px-2 py-1 font-semibold text-slate-800">{{ row.partida || '-' }}</td>
+                  <td class="px-2 py-1 text-slate-700">{{ row.baseUrdume || '-' }}</td>
+                  <td class="px-2 py-1 text-slate-600">{{ row.dtInicio || '-' }}</td>
+                  <td class="px-2 py-1 text-slate-600">{{ row.horaInicio || '-' }}</td>
+                  <td class="px-2 py-1 text-slate-700">{{ row.metragemTotal != null ? Number(row.metragemTotal).toFixed(0) : '-' }}</td>
+                  <td class="px-2 py-1 text-slate-700">{{ row.velocMedia != null ? Number(row.velocMedia).toFixed(1) : '-' }}</td>
+                  <td class="px-2 py-1 font-mono text-slate-700">{{ row.rtfSeqLabel || '-' }}</td>
+                  <td class="px-2 py-1 text-slate-700">{{ row.rtfComeco || '-' }}</td>
+                  <td class="px-2 py-1 text-slate-700">{{ row.rtfReceita || '-' }}</td>
+                  <td class="px-2 py-1 text-slate-700">{{ row.rtfCompSaida || '-' }}</td>
+                  <td class="px-2 py-1 text-slate-700">{{ row.rtfVelProd || '-' }}</td>
+                  <td class="px-2 py-1">
+                    <span
+                      class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
+                      :class="row.matchStatus === 'MATCH' ? 'bg-emerald-100 text-emerald-700' : row.matchStatus === 'SUGERIDO' ? 'bg-blue-100 text-blue-700' : row.matchStatus === 'RESIDUO' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-600'"
+                    >
+                      {{ row.matchStatus || '-' }}
+                    </span>
+                  </td>
+                </tr>
+                <tr v-if="!secuenciaRows.length">
+                  <td colspan="12" class="px-3 py-4 text-center text-slate-500">
+                    Genera la vista para comparar secuencia de PARTIDAS con secuencia RTF.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </main>
   </div>
 </template>
@@ -333,6 +477,17 @@ const sinMatchLoading = ref(false)
 const sinMatchRows    = ref([])
 const sinMatchTotal   = ref(null)
 const sinMatchLinked  = ref(new Set()) // source_files vinculados en esta sesión
+
+// Vista secuencial PARTIDA vs RTF
+const secuenciaOpen = ref(false)
+const secuenciaLoading = ref(false)
+const secuenciaRows = ref([])
+const secuenciaError = ref('')
+const secuenciaStartPartida = ref('')
+const secuenciaLimit = ref(300)
+const secuenciaDbRows = ref([])
+const secuenciaOffsetAuto = ref(0)
+const secuenciaOffsetManual = ref(0)
 
 async function toggleSinMatch() {
   sinMatchOpen.value = !sinMatchOpen.value
@@ -598,6 +753,24 @@ function formatMetricFromCode(lines, code, unit) {
   return `${value} ${unit}`
 }
 
+function normalizeRtfDateTime(raw) {
+  // Convierte formato RTF "DD-MM-YY HH:MM:SS" a "DD/MM/YYYY HH:MM"
+  if (!raw || typeof raw !== 'string') return ''
+  const trimmed = raw.trim()
+  // Ejemplo: "06-12-25 00:23:19" → "06/12/2025 00:23"
+  const match = trimmed.match(/^(\d{1,2})-(\d{1,2})-(\d{2})\s+(\d{2}):(\d{2})(?::\d{2})?/)
+  if (!match) {
+    console.warn('[normalizeRtfDateTime] No match para:', raw)
+    return raw
+  }
+  const [, dd, mm, yy, hh, mins] = match
+  // Convertir YY a YYYY: si yy < 50 asume 20xx, sino 19xx (aquí 25 → 2025)
+  const fullYear = Number(yy) < 50 ? `20${yy}` : `19${yy}`
+  const normalized = `${dd}/${mm}/${fullYear} ${hh}:${mins}`
+  console.log('[normalizeRtfDateTime]', raw, '→', normalized)
+  return normalized
+}
+
 function parseRtfHeader(rawText) {
   const plain = rtfToPlainText(rawText)
   const plainNorm = normalizeLoose(plain)
@@ -657,7 +830,7 @@ function parseRtfHeader(rawText) {
   return {
     idRolo: extractField(lines, 'id rolo'),
     indicativo: extractField(lines, 'indicativo'),
-    comeco: extractField(lines, 'comeco'),
+    comeco: normalizeRtfDateTime(extractField(lines, 'comeco')),
     fim: extractField(lines, 'fim'),
     duracao: extractField(lines, 'duracao'),
     receita: extractField(lines, 'receita'),
@@ -678,9 +851,10 @@ function parseRtfHeader(rawText) {
 }
 
 function confidenceClass(confidence) {
-  if (confidence === 'high') return 'bg-emerald-100 text-emerald-700'
-  if (confidence === 'medium') return 'bg-amber-100 text-amber-700'
-  if (confidence === 'low') return 'bg-orange-100 text-orange-700'
+  if (confidence === 'high')    return 'bg-emerald-100 text-emerald-700'
+  if (confidence === 'medium')  return 'bg-amber-100 text-amber-700'
+  if (confidence === 'low')     return 'bg-orange-100 text-orange-700'
+  if (confidence === 'residuo') return 'bg-purple-100 text-purple-700'
   return 'bg-slate-100 text-slate-600'
 }
 
@@ -713,6 +887,335 @@ function formatFibraQuality(fibra) {
 const pendingRows = computed(() => rtfRows.value.filter((row) => !row.saved))
 const highConfidenceRows = computed(() => pendingRows.value.filter((row) => row.confidence === 'high' && row.suggested))
 
+function extractRtfSeqIndex(fileName) {
+  const name = String(fileName || '')
+  const m = name.match(/\((\d{3})\)\.[rR][tT][fF]$/)
+  return m ? parseInt(m[1], 10) + 1 : 0
+}
+
+function toSeqLabel(seqIdx) {
+  if (!Number.isFinite(seqIdx) || seqIdx <= 0) return '(000)'
+  return `(${String(seqIdx - 1).padStart(3, '0')})`
+}
+
+const rtfRowsOrderedBySeq = computed(() => {
+  const list = [...rtfRows.value]
+  return list.sort((a, b) => {
+    const sa = extractRtfSeqIndex(a.fileName || a.sourceFile)
+    const sb = extractRtfSeqIndex(b.fileName || b.sourceFile)
+    if (sa !== sb) return sa - sb
+    return String(a.fileName || '').localeCompare(String(b.fileName || ''))
+  })
+})
+
+function getDefaultAnchorPartida() {
+  const firstHigh = rtfRowsOrderedBySeq.value.find((r) => r.confidence === 'high' && r.suggested?.partida)
+  return firstHigh?.suggested?.partida ? String(firstHigh.suggested.partida) : ''
+}
+
+function detectSecuenciaOffset(partidas, rtfSeq) {
+  const indexByPartida = new Map()
+  for (let i = 0; i < partidas.length; i++) {
+    const p = String(partidas[i]?.partida || '').trim()
+    if (p && !indexByPartida.has(p)) indexByPartida.set(p, i)
+  }
+
+  const weights = new Map()
+  for (let j = 0; j < rtfSeq.length; j++) {
+    const r = rtfSeq[j]
+    if (!r || r.confidence === 'residuo') continue
+    const partida = String(r.selectedCandidate?.partida || r.suggested?.partida || '').trim()
+    if (!partida || !indexByPartida.has(partida)) continue
+    const i = indexByPartida.get(partida)
+    const offset = i - j
+    const w = r.confidence === 'high' ? 3 : (r.confidence === 'medium' ? 1 : 0.5)
+    weights.set(offset, (weights.get(offset) || 0) + w)
+  }
+
+  if (!weights.size) return 0
+
+  const ordered = [...weights.entries()].sort((a, b) => {
+    if (b[1] !== a[1]) return b[1] - a[1]
+    return Math.abs(a[0]) - Math.abs(b[0])
+  })
+  return ordered[0][0]
+}
+
+function buildSecuenciaRows(partidas, rtfSeq, offset) {
+  const totalRows = Math.max(partidas.length, rtfSeq.length + Math.max(offset, 0), rtfSeq.length)
+  return Array.from({ length: totalRows }, (_, i) => {
+    const p = partidas[i] || {}
+    const rtfIndex = i - offset
+    const r = rtfIndex >= 0 && rtfIndex < rtfSeq.length ? rtfSeq[rtfIndex] : null
+    const seqIdx = r ? extractRtfSeqIndex(r.fileName || r.sourceFile) : null
+    const chosenPartida = String(r?.selectedCandidate?.partida || r?.suggested?.partida || '').trim()
+    const partida = String(p?.partida || '').trim()
+    const candidateForPartida = partida && r?.candidates?.length
+      ? r.candidates.find((cand) => String(cand.partida || '').trim() === partida)
+      : null
+
+    let matchStatus = ''
+    if (r?.confidence === 'residuo') matchStatus = 'RESIDUO'
+    else if (partida && chosenPartida && partida === chosenPartida) matchStatus = 'MATCH'
+    else if (r?.confidence === 'medium' && candidateForPartida) matchStatus = 'SUGERIDO'
+
+    return {
+      partida,
+      baseUrdume: p.baseUrdume || '',
+      dtInicio: p.dtInicio || '',
+      horaInicio: p.horaInicio || '',
+      metragemTotal: p.metragemTotal,
+      velocMedia: p.velocMedia,
+      rtfSeqLabel: seqIdx != null ? toSeqLabel(seqIdx) : '',
+      rtfComeco: r?.header?.comeco || '',
+      rtfReceita: r?.header?.receita || '',
+      rtfCompSaida: r?.header?.metros || '',
+      rtfVelProd: r?.header?.velMMin || '',
+      rtfSourceFile: r?.sourceFile || '',
+      rtfConfidence: r?.confidence || '',
+      candidateForPartida,
+      matchStatus,
+    }
+  })
+}
+
+function rebuildSecuenciaRows() {
+  secuenciaRows.value = buildSecuenciaRows(
+    secuenciaDbRows.value || [],
+    rtfRowsOrderedBySeq.value || [],
+    Number(secuenciaOffsetManual.value || 0)
+  )
+}
+
+function applySecuenciaSuggestions() {
+  const sourceToCandidate = new Map()
+  for (const row of secuenciaRows.value) {
+    if (!row?.rtfSourceFile) continue
+    if (row.rtfConfidence !== 'medium') continue
+    if (!row.candidateForPartida) continue
+
+    const original = rtfRows.value.find((r) => r.sourceFile === row.rtfSourceFile)
+    if (!original || original.saved) continue
+    sourceToCandidate.set(row.rtfSourceFile, row.candidateForPartida)
+  }
+
+  if (!sourceToCandidate.size) {
+    scanStatus.value = 'No hay sugerencias secuenciales aplicables para filas medium.'
+    return
+  }
+
+  rtfRows.value = rtfRows.value.map((row) => {
+    const cand = sourceToCandidate.get(row.sourceFile)
+    if (!cand) return row
+    return {
+      ...row,
+      selectedCandidate: cand,
+      suggested: cand,
+      decision: 'review_seq',
+      scoreGap: row.scoreGap || 0
+    }
+  })
+
+  rebuildSecuenciaRows()
+  scanStatus.value = `Sugerencia secuencial aplicada a ${sourceToCandidate.size} filas medium (sin guardar).`
+}
+
+// Diccionario Receita → BASE URDUME (debe mantenerse igual al backend)
+const RECEITA_MAP_FRONT = {
+  'U10(561)-4760':      'U10/1-4760561',
+  'U12.5(560)-5696':    'U12.5-5696560',
+  'U10+10F(561)-4760':  '10+10F4760561',
+  'U12(560)-5696':      'U12/1-5696560',
+  'U10(920)-4760':      'U10/1-4760920',
+  'U12.5(920)-5696':    'U12.5-5696920',
+  'U12(561)-4760':      'U12/1-4760560',
+  'U10+9,5F(498)-4760': 'U10+9F4760498',
+}
+
+/** Parsea "2.498 m" → 2498 */
+function parseRtfMetros(val) {
+  if (!val) return null
+  const m = String(val).replace(/\./g, '').match(/([\d,]+)/)
+  if (!m) return null
+  return parseFloat(m[1].replace(',', '.'))
+}
+
+/** Parsea "30 m/min" → 30 */
+function parseRtfVel(val) {
+  if (!val) return null
+  const m = String(val).match(/([\d,.]+)/)
+  if (!m) return null
+  return parseFloat(m[1].replace(',', '.'))
+}
+
+async function saveSugeridosWithValidation() {
+  // Recolectar filas marcadas como decision='review_seq' con candidato asignado
+  const candidates = rtfRows.value.filter(
+    (r) => r.decision === 'review_seq' && r.selectedCandidate && !r.saved
+  )
+
+  if (!candidates.length) {
+    await Swal.fire({
+      icon: 'info',
+      title: 'Sin sugeridos',
+      text: 'No hay filas SUGERIDO pendientes de guardar. Aplica primero la sugerencia secuencial.',
+      confirmButtonText: 'OK'
+    })
+    return
+  }
+
+  const METROS_TOL = 0.15 // 15% tolerancia
+  const valid = []
+  const rejected = []
+
+  for (const row of candidates) {
+    const receita = String(row.header?.receita || '').trim()
+    const expectedBase = RECEITA_MAP_FRONT[receita] || null
+    const actualBase  = String(row.selectedCandidate.baseUrdume || '').trim()
+
+    // Validación 1 – RECEITA = BASE URDUME (innegociable)
+    if (!expectedBase) {
+      rejected.push({ file: row.fileName, reason: `Receita "${receita}" no reconocida en diccionario` })
+      continue
+    }
+    if (expectedBase !== actualBase) {
+      rejected.push({ file: row.fileName, reason: `Receita "${receita}" → espera BASE "${expectedBase}" pero candidato tiene "${actualBase}"` })
+      continue
+    }
+
+    // Validación 2 – Metros (tolerancia 15%)
+    const rtfM = parseRtfMetros(row.header?.metros)
+    const dbM  = row.selectedCandidate.metragemTotal ?? row.selectedCandidate.metragemPartida
+    let metrosWarn = null
+    if (rtfM != null && dbM != null && dbM > 0) {
+      const diff = Math.abs(rtfM - dbM) / dbM
+      if (diff > METROS_TOL) {
+        rejected.push({ file: row.fileName, reason: `Metros fuera de tolerancia: RTF ${rtfM} m vs DB ${dbM} m (${(diff*100).toFixed(1)}% > ${METROS_TOL*100}%)` })
+        continue
+      }
+      if (diff > 0.05) metrosWarn = `Metros: RTF ${rtfM} m vs DB ${dbM} m (${(diff*100).toFixed(1)}%)`
+    }
+
+    // Validación 3 – Velocidad (informativo, no rechaza)
+    const rtfV = parseRtfVel(row.header?.velMMin)
+    const dbV  = row.selectedCandidate.velocMedia ?? row.selectedCandidate.velocidadeMediaPartida
+    let velWarn = null
+    if (rtfV != null && dbV != null && dbV > 0) {
+      const vdiff = Math.abs(rtfV - dbV) / dbV
+      if (vdiff > 0.20) velWarn = `Velocidad: RTF ${rtfV} m/min vs DB ${dbV?.toFixed(1)} m/min (${(vdiff*100).toFixed(1)}% diferencia)`
+    }
+
+    valid.push({ row, metrosWarn, velWarn })
+  }
+
+  // Resumen antes de guardar
+  const warnLines = valid
+    .filter((v) => v.metrosWarn || v.velWarn)
+    .map((v) => `<li class="text-left text-xs"><b>${v.row.fileName}</b>: ${[v.metrosWarn, v.velWarn].filter(Boolean).join(' | ')}</li>`)
+    .join('')
+  const rejLines = rejected
+    .map((r) => `<li class="text-left text-xs text-red-700"><b>${r.file}</b>: ${r.reason}</li>`)
+    .join('')
+
+  const { isConfirmed } = await Swal.fire({
+    icon: valid.length ? 'question' : 'warning',
+    title: 'Confirmar guardado SUGERIDO',
+    html: `
+      <div class="text-sm">
+        <p>✅ <b>${valid.length}</b> filas pasan validación</p>
+        <p>❌ <b>${rejected.length}</b> rechazadas (receita o metros fuera de rango)</p>
+        ${warnLines ? `<p class="mt-2 text-amber-700 font-semibold">⚠️ Advertencias (se guardan igual):</p><ul class="mt-1 space-y-0.5">${warnLines}</ul>` : ''}
+        ${rejLines ? `<p class="mt-2 font-semibold">Rechazadas:</p><ul class="mt-1 space-y-0.5">${rejLines}</ul>` : ''}
+      </div>`,
+    confirmButtonText: `Guardar ${valid.length} filas`,
+    cancelButtonText: 'Cancelar',
+    showCancelButton: true,
+    confirmButtonColor: '#2563eb',
+  })
+
+  if (!isConfirmed || !valid.length) return
+
+  isSaving.value = true
+  try {
+    const items = valid.map(({ row }) => ({
+      sourceFile: row.sourceFile,
+      header: row.header,
+      rawRtfText: row.rawRtfText || null,
+      plainText: row.plainText || null,
+      parseVersion: row.parseVersion || RTF_PARSE_VERSION,
+      selected: row.selectedCandidate,
+      confidence: 'medium',
+      mode: 'sequential_validated',
+      reason: 'SEQUENTIAL_VALIDATED',
+      candidates: row.candidates,
+      scoreGap: row.scoreGap || 0
+    }))
+
+    const response = await fetch('/api/benninger-rtf/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items })
+    })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+    const data = await response.json()
+    const savedSet = new Set((data.saved || []).map((r) => r.sourceFile))
+    rtfRows.value = rtfRows.value.map((row) => ({
+      ...row,
+      saved: savedSet.has(row.sourceFile) ? true : row.saved
+    }))
+
+    rebuildSecuenciaRows()
+    scanStatus.value = `SUGERIDO guardado: ${data.savedCount || 0} vinculaciones. ${rejected.length} rechazadas por validación.`
+
+    await Swal.fire({
+      icon: 'success',
+      title: 'Guardado completado',
+      text: `${data.savedCount || 0} filas SUGERIDO guardadas correctamente.`,
+      timer: 3000,
+      timerProgressBar: true,
+      showConfirmButton: false
+    })
+  } catch (err) {
+    scanStatus.value = `Error guardando SUGERIDO: ${err.message}`
+    await Swal.fire({ icon: 'error', title: 'Error', text: err.message })
+  } finally {
+    isSaving.value = false
+  }
+}
+
+async function loadSecuenciaView() {
+  try {
+    secuenciaLoading.value = true
+    secuenciaError.value = ''
+
+    const startPartida = (secuenciaStartPartida.value || getDefaultAnchorPartida()).trim()
+    // Si no hay ancla, el backend arranca desde la primera PARTIDA (COALESCE → rn=1)
+
+    const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
+    const API_URL = API_BASE ? `${API_BASE}/api` : '/api'
+    const limit = Math.max(50, Math.min(Number(secuenciaLimit.value || 300), 1000))
+
+    const res = await fetch(`${API_URL}/benninger-rtf/secuencia-partidas?startPartida=${encodeURIComponent(startPartida)}&limit=${limit}`)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    const partidas = Array.isArray(data.rows) ? data.rows : []
+    const rtfSeq = rtfRowsOrderedBySeq.value
+
+    secuenciaDbRows.value = partidas
+    secuenciaOffsetAuto.value = detectSecuenciaOffset(partidas, rtfSeq)
+    secuenciaOffsetManual.value = secuenciaOffsetAuto.value
+    rebuildSecuenciaRows()
+
+    secuenciaStartPartida.value = startPartida
+  } catch (err) {
+    secuenciaRows.value = []
+    secuenciaError.value = err.message || 'Error generando vista de secuencia.'
+  } finally {
+    secuenciaLoading.value = false
+  }
+}
+
 const displayRows = computed(() => {
   const list = showOnlyPending.value ? pendingRows.value : rtfRows.value
   return [...list].sort((a, b) => a.fileName.localeCompare(b.fileName))
@@ -723,11 +1226,12 @@ const selectedRow = computed(() => {
 })
 
 const summaryText = computed(() => {
-  const total = rtfRows.value.length
-  const saved = rtfRows.value.filter((r) => r.saved).length
-  const high = rtfRows.value.filter((r) => r.confidence === 'high').length
+  const total    = rtfRows.value.length
+  const saved    = rtfRows.value.filter((r) => r.saved).length
+  const high     = rtfRows.value.filter((r) => r.confidence === 'high').length
   const mediumLow = rtfRows.value.filter((r) => r.confidence === 'medium' || r.confidence === 'low').length
-  return `Total ${total} | Guardados ${saved} | Alta conf. ${high} | Dudosos ${mediumLow}`
+  const residuo  = rtfRows.value.filter((r) => r.confidence === 'residuo').length
+  return `Total ${total} | Guardados ${saved} | Alta conf. ${high} | Dudosos ${mediumLow} | Residuos ${residuo}`
 })
 
 function mergeRows(rowsFromApi) {
@@ -739,14 +1243,16 @@ function mergeRows(rowsFromApi) {
     const selectedCandidate = incoming.suggested || null
     return {
       ...row,
-      candidates: incoming.candidates || [],
-      suggested: incoming.suggested || null,
+      candidates:      incoming.candidates || [],
+      suggested:       incoming.suggested || null,
       selectedCandidate,
-      confidence: incoming.confidence || 'none',
-      scoreGap: incoming.scoreGap || 0,
-      decision: incoming.decision || 'review',
-      saved: incoming.saved === true ? true : row.saved,
-      matchError: incoming.error || null
+      confidence:      incoming.confidence || 'none',
+      scoreGap:        incoming.scoreGap || 0,
+      scoreDetail:     incoming.scoreDetail || null,
+      isResiduo:       incoming.isResiduo || false,
+      decision:        incoming.decision || 'review',
+      saved:           incoming.saved === true ? true : row.saved,
+      matchError:      incoming.error || null
     }
   })
 }
@@ -930,7 +1436,7 @@ async function runAutomaticMatch() {
   isMatching.value = true
   scanStatus.value = `Ejecutando matcheo automatico (0/${totalBatches} lotes)...`
 
-  const accSummary = { high: 0, medium: 0, low: 0, none: 0 }
+  const accSummary = { high: 0, medium: 0, low: 0, residuo: 0, none: 0 }
 
   try {
     for (let i = 0; i < filesToMatch.length; i += BATCH_SIZE) {
@@ -949,14 +1455,15 @@ async function runAutomaticMatch() {
       const data = await response.json()
       mergeRows(data.rows || [])
 
-      accSummary.high += data.summary?.high || 0
-      accSummary.medium += data.summary?.medium || 0
-      accSummary.low += data.summary?.low || 0
-      accSummary.none += data.summary?.none || 0
+      accSummary.high   += data.summary?.high    || 0
+      accSummary.medium += data.summary?.medium  || 0
+      accSummary.low    += data.summary?.low     || 0
+      accSummary.residuo += data.summary?.residuo || 0
+      accSummary.none   += data.summary?.none    || 0
     }
 
     const doubt = accSummary.medium + accSummary.low
-    scanStatus.value = `Matcheo completado. Alta confianza: ${accSummary.high}. Casos dudosos: ${doubt}.`
+    scanStatus.value = `Matcheo completado. Alta confianza: ${accSummary.high}. Dudosos: ${doubt}. Residuos: ${accSummary.residuo}. Sin match: ${accSummary.none}.`
   } catch (err) {
     scanStatus.value = `Error en matcheo automatico: ${err.message}`
   } finally {

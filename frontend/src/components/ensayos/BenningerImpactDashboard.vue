@@ -1062,11 +1062,34 @@ async function fetchAmlDetailLogs(partida) {
   try {
     const res = await fetch(`/api/benninger-rtf/logs?partida=${encodeURIComponent(partida)}&section=AML&limit=2000`)
     const data = await res.json().catch(() => ({}))
-    amlDetailEvents.value = Array.isArray(data.rows) ? data.rows : []
+    const raw = Array.isArray(data.rows) ? data.rows : []
+    amlDetailEvents.value = raw.map((ev, idx) => normalizeRtfEvent(ev, idx))
   } catch {
     amlDetailEvents.value = []
   } finally {
     loadingAml.value = false
+  }
+}
+
+// Normaliza un evento del parser (plain_text) al formato que espera ExpertDiagnosis
+function normalizeRtfEvent(ev, idx) {
+  const metros = ev.metros ?? ev.meter_pos
+  // Convertir "DD-MM-YY HH:MM:SS" → ISO "2025-12-13T12:38:56"
+  let tsIso = ev.timestamp_ts || null
+  if (!tsIso && ev.timestamp) {
+    const m = String(ev.timestamp).match(/(\d{2})-(\d{2})-(\d{2})\s+(\d{2}:\d{2}:\d{2})/)
+    if (m) tsIso = `20${m[3]}-${m[2]}-${m[1]}T${m[4]}`
+  }
+  return {
+    ...ev,
+    meter_pos: metros != null ? Number(metros) : null,
+    timestamp_ts: tsIso,
+    timestamp_end_ts: ev.timestamp_end_ts || null,
+    mensaje: ev.mensaje || ev.detalle || '',
+    event_code: ev.event_code || ev.codigo || '',
+    line_no: ev.line_no ?? idx,
+    severidad: ev.severidad || 'medio',
+    subsistema: ev.subsistema || ''
   }
 }
 

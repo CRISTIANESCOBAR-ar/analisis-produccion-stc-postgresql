@@ -352,13 +352,17 @@ function metroTelar(meterPos) { return Math.round(Number(meterPos) || 0) }
 
 // ── Paradas reales con duración ─────────────────────────────────────────────
 // Detección por patrón en mensaje (Benninger usa portugués: "parada", "grelha aberta")
+// También detecta código 1320/1321 (FALHA de urdume, paradas mecánicas en RTF)
 const paradasReales = computed(() => {
   const raw = []
   for (const e of allValidEvents.value) {
     const msg = normMsg(e)
-    // Parada = contiene "parada" o "grelha aberta", pero NO es un evento de producción
-    const esParada = (/parada|grelha\s*aberta/.test(msg)) &&
-                     !(/producao|producção|produccion/.test(msg))
+    const cod = String(e.codigo || e.event_code || '').trim()
+    // Parada = mensaje contiene "parada" o "grelha" + "aberta", o códigos RTF de FALHA (1320/1321)
+    const esParada = (
+      /parada|grelha.{0,10}aberta/.test(msg) ||
+      cod === '1320' || cod === '1321'
+    ) && !(/producao|producção|produccion/.test(msg))
     if (!esParada) continue
     const mPos = parseN(e.meter_pos)
     raw.push({
@@ -388,7 +392,9 @@ const gomaEventosTelar = computed(() =>
   allValidEvents.value
     .filter(e => {
       const msg = normMsg(e)
-      return /carga\s*de\s*goma|s\s*500/.test(msg) || String(e.event_code || '') === '1485'
+      const cod = String(e.codigo || e.event_code || '').trim()
+      return /carga\s*de\s*goma|s\s*500|fora\s*da\s*tolerancia.*goma/.test(msg) ||
+             cod === '1485' || String(e.event_code || '') === '1485'
     })
     .map((e, idx) => ({
       key: `goma-${idx}`,
@@ -600,8 +606,14 @@ const meterZonesTelar = computed(() => {
     const inBucket = events.filter(e => { const m = Number(e.meter_pos) || 0; return m >= lo && m < hi })
     if (!inBucket.length) continue
 
-    const paradas  = inBucket.filter(e => ['E3030', 'E1010'].includes(String(e.codigo || '').toUpperCase())).length
-    const goma     = inBucket.filter(e => String(e.codigo || '').toUpperCase() === 'S500' || String(e.event_code || '') === '1485').length
+    const paradas  = inBucket.filter(e => {
+      const cod = String(e.codigo || e.event_code || '').toUpperCase()
+      return ['E3030','E1010','1320','1321'].includes(cod)
+    }).length
+    const goma     = inBucket.filter(e => {
+      const cod = String(e.codigo || e.event_code || '').toUpperCase()
+      return cod === 'S500' || cod === '1485' || String(e.event_code || '') === '1485'
+    }).length
     const criticos = inBucket.filter(e => e.severidad === 'critico').length
     const lentos   = inBucket.filter(e => ['E1011', 'E3031', 'E1012', 'E3032'].includes(String(e.codigo || '').toUpperCase())).length
     const eventos  = [...inBucket].sort((a, b) => (Number(a.meter_pos) || 0) - (Number(b.meter_pos) || 0))

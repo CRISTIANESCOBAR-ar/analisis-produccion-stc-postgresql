@@ -8022,6 +8022,1040 @@ app.get('/api/informe-diario', async (req, res) => {
 })
 
 // =====================================================
+// HVI — ENSAYOS DETALLES
+// =====================================================
+
+// GET /api/hvi/ensayos-detalles
+app.get('/api/hvi/ensayos-detalles', async (req, res) => {
+  try {
+    const tableCheck = await query(`SELECT to_regclass('public.tb_hvi_ensayos') AS reg`, [])
+    if (!tableCheck.rows[0]?.reg) {
+      return res.json({ rows: [] })
+    }
+    const result = await query(`
+      SELECT
+        e.lote,
+        e.proveedor,
+        e.grado,
+        e.fecha,
+        e.tipo AS ensayo_tipo,
+        e.cantidad,
+        e.color,
+        e.cort,
+        d.fardo,
+        d.sci, d.mst, d.mic, d.mat, d.uhml,
+        d.ui, d.sf, d.str, d.elg, d.rd,
+        d.plus_b, d.tr_cnt, d.tr_ar, d.trid
+      FROM tb_hvi_ensayos e
+      JOIN tb_hvi_detalles d ON d.ensayo_id = e.id
+      ORDER BY e.fecha DESC NULLS LAST, e.lote, d.fardo
+    `, [], 'hvi/ensayos-detalles')
+    res.json({ rows: result.rows })
+  } catch (err) {
+    console.error('Error en /api/hvi/ensayos-detalles:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// =====================================================
+// BENNINGER RTF — GESTIÓN DE ARCHIVOS
+// =====================================================
+
+async function ensureBenningerRtfTable() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS tb_benninger_rtf (
+      id SERIAL PRIMARY KEY,
+      source_file TEXT NOT NULL UNIQUE,
+      partida TEXT,
+      rolada TEXT,
+      header JSONB,
+      raw_rtf_text TEXT,
+      plain_text TEXT,
+      parse_version TEXT,
+      confidence TEXT,
+      mode TEXT,
+      reason TEXT,
+      no_apta JSONB,
+      candidates JSONB,
+      score_gap NUMERIC,
+      saved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `, [], 'ensure-benninger-rtf-table')
+  // Columnas agregadas en v2 del scoring — idempotente
+  const extraCols = [
+    `ALTER TABLE tb_benninger_rtf ADD COLUMN IF NOT EXISTS seq_index INT`,
+    `ALTER TABLE tb_benninger_rtf ADD COLUMN IF NOT EXISTS score_total NUMERIC`,
+    `ALTER TABLE tb_benninger_rtf ADD COLUMN IF NOT EXISTS score_detail JSONB`,
+    `ALTER TABLE tb_benninger_rtf ADD COLUMN IF NOT EXISTS is_residuo BOOLEAN DEFAULT FALSE`,
+    `ALTER TABLE tb_benninger_rtf ADD COLUMN IF NOT EXISTS metros_rtf NUMERIC`,
+    `ALTER TABLE tb_benninger_rtf ADD COLUMN IF NOT EXISTS receita TEXT`,
+    `ALTER TABLE tb_benninger_rtf ADD COLUMN IF NOT EXISTS batch_id TEXT`,
+  ]
+  for (const sql of extraCols) {
+    await query(sql, [], 'ensure-benninger-rtf-table/alter').catch(() => {})
+  }
+}
+
+// POST /api/benninger-rtf/status
+// Recibe { fileNames: [...] }, devuelve { existing: [...], noMatch: [...] }
+app.post('/api/benninger-rtf/status', async (req, res) => {
+  try {
+    await ensureBenningerRtfTable()
+    const { fileNames } = req.body
+    if (!Array.isArray(fileNames) || !fileNames.length) {
+      return res.json({ existing: [], noMatch: [] })
+    }
+    const result = await query(
+      `SELECT source_file, partida FROM tb_benninger_rtf WHERE source_file = ANY($1)`,
+      [fileNames],
+      'benninger-rtf/status'
+    )
+    const existing = result.rows.map((r) => r.source_file)
+    const noMatch = result.rows.filter((r) => !r.partida).map((r) => r.source_file)
+    res.json({ existing, noMatch })
+  } catch (err) {
+    console.error('Error en /api/benninger-rtf/status:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/benninger-rtf/match
+// Scoring multi-señal: Receita(40) + Metragem(35) + Comeco(25)
+// PARTIDAS agrupadas por turno (SUM metragem, MIN fecha/hora)
+app.post('/api/benninger-rtf/match', async (req, res) => {
+  try {
+    await ensureBenningerRtfTable()
+    const { files = [] } = req.body
+    if (!files.length) {
+      return res.json({ rows: [], summary: { high: 0, medium: 0, low: 0, residuo: 0, none: 0 } })
+    }
+
+    // Diccionario Receita RTF → BASE URDUME en tb_produccion (equivalencias confirmadas)
+    const RECEITA_MAP = {
+      'U10(561)-4760':      'U10/1-4760561',
+      'U12.5(560)-5696':    'U12.5-5696560',
+      'U10+10F(561)-4760':  '10+10F4760561',
+      'U12(560)-5696':      'U12/1-5696560',
+      'U10(920)-4760':      'U10/1-4760920',
+      'U12.5(920)-5696':    'U12.5-5696920',
+      'U12(561)-4760':      'U12/1-4760560',
+      'U10+9,5F(498)-4760': 'U10+9F4760498',
+    }
+
+    // Helpers de tiempo: "DD/MM/YYYY" + "HH:MM" → minutos UTC desde epoch
+    function dtToMin(dt, hora) {
+      if (!dt || !hora) return null
+      const dm = String(dt).match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+      const tm = String(hora).match(/^(\d{2}):(\d{2})/)
+      if (!dm || !tm) return null
+      return Date.UTC(+dm[3], +dm[2] - 1, +dm[1], +tm[1], +tm[2]) / 60000
+    }
+
+    function comecoToMin(comeco) {
+      if (!comeco) return null
+      const parts = String(comeco).trim().split(' ')
+      return dtToMin(parts[0], parts[1])
+    }
+
+    // Parse metros en formato brasileño "2.000,00" → número
+    function parseDbMetros(s) {
+      if (!s) return null
+      const n = parseFloat(String(s).replace(/\./g, '').replace(',', '.'))
+      return isFinite(n) && n > 0 ? n : null
+    }
+
+    // Parse metros del RTF header "2000 m" → número
+    function parseRtfMetros(s) {
+      if (!s) return null
+      const n = parseFloat(String(s).replace(/[^0-9.,]/g, '').replace(',', '.'))
+      return isFinite(n) && n > 0 ? n : null
+    }
+
+    // Índice secuencial del nombre del RTF: (000)→1, (001)→2, sin sufijo→0
+    function seqIndex(filename) {
+      const m = String(filename || '').match(/\((\d{3})\)\.[rR][tT][fF]$/)
+      return m ? parseInt(m[1], 10) + 1 : 0
+    }
+
+    // Score tiempo: menor diferencia en minutos → más puntos
+    function scoreTime(comecoMin, dbStartMin) {
+      if (comecoMin == null || dbStartMin == null) return 0
+      const diff = Math.abs(comecoMin - dbStartMin)
+      if (diff <= 5)   return 25
+      if (diff <= 30)  return 20
+      if (diff <= 120) return 12
+      if (diff <= 360) return 5
+      return 0
+    }
+
+    // Score metragem: diferencia relativa entre RTF y DB
+    function scoreMetros(rtfM, dbM) {
+      if (!rtfM || !dbM) return 0
+      const pct = Math.abs(rtfM - dbM) / dbM
+      if (pct <= 0.03) return 35
+      if (pct <= 0.07) return 25
+      if (pct <= 0.15) return 15
+      if (pct <= 0.25) return 5
+      return 0
+    }
+
+    // Estado guardado previo
+    const sourceFiles = files.map((f) => f.sourceFile).filter(Boolean)
+    const savedResult = await query(
+      `SELECT source_file, partida, rolada FROM tb_benninger_rtf WHERE source_file = ANY($1)`,
+      [sourceFiles], 'benninger-rtf/match/saved'
+    )
+    const savedMap = new Map(savedResult.rows.map((r) => [r.source_file, r]))
+
+    // Parsear y ordenar archivos por secuencia
+    const parsedFiles = files.map((f) => ({
+      ...f,
+      receita:    String(f.header?.receita || '').trim(),
+      baseUrdume: RECEITA_MAP[String(f.header?.receita || '').trim()] || null,
+      seqIdx:     seqIndex(f.sourceFile),
+      comecoMin:  comecoToMin(f.header?.comeco),
+      rtfMetros:  parseRtfMetros(f.header?.metros),
+    })).sort((a, b) => a.seqIdx - b.seqIdx)
+
+    // Valores únicos de BASE URDUME en este lote
+    const baseUrdumeValues = [...new Set(parsedFiles.map((f) => f.baseUrdume).filter(Boolean))]
+
+    // Consulta batch: PARTIDAS agrupadas por turno (SUM metragem, MIN fecha+hora)
+    const partidasMap = new Map() // baseUrdume → [{partida, rolada, dtInicio, horaInicio, metrosTotal, inicioMin}]
+    if (baseUrdumeValues.length) {
+      const pResult = await query(`
+        WITH agg AS (
+          SELECT
+            TRIM("PARTIDA")       AS partida,
+            TRIM("BASE URDUME")   AS "baseUrdume",
+            MAX(TRIM("ROLADA"))   AS rolada,
+            MIN(
+              SUBSTRING(TRIM("DT_INICIO"), 7, 4) ||
+              SUBSTRING(TRIM("DT_INICIO"), 4, 2) ||
+              SUBSTRING(TRIM("DT_INICIO"), 1, 2) || ' ' ||
+              LEFT(TRIM("HORA_INICIO"), 5)
+            ) AS "inicioSort",
+            SUM(
+              CASE
+                WHEN TRIM("METRAGEM") ~ '^[0-9.]+,[0-9]+$'
+                  THEN REPLACE(REPLACE(TRIM("METRAGEM"), '.', ''), ',', '.')::NUMERIC
+                WHEN TRIM("METRAGEM") ~ '^[0-9]+$'
+                  THEN TRIM("METRAGEM")::NUMERIC
+                ELSE 0
+              END
+            ) AS "metrosTotal"
+          FROM tb_produccion
+          WHERE "SELETOR" = 'INDIGO'
+            AND TRIM("BASE URDUME") = ANY($1)
+          GROUP BY TRIM("PARTIDA"), TRIM("BASE URDUME")
+        )
+        SELECT
+          partida,
+          "baseUrdume",
+          rolada,
+          "inicioSort",
+          SUBSTRING("inicioSort", 7, 2) || '/' ||
+          SUBSTRING("inicioSort", 5, 2) || '/' ||
+          SUBSTRING("inicioSort", 1, 4) AS "dtInicio",
+          SUBSTRING("inicioSort", 10, 5) AS "horaInicio",
+          "metrosTotal"
+        FROM agg
+        ORDER BY "inicioSort"
+      `, [baseUrdumeValues], 'benninger-rtf/match/partidas')
+
+      for (const row of pResult.rows) {
+        const bu = row.baseUrdume
+        if (!partidasMap.has(bu)) partidasMap.set(bu, [])
+        const dp = String(row.dtInicio || '').split('/')
+        const tp = String(row.horaInicio || '00:00').split(':')
+        const inicioMin = dp.length === 3
+          ? Date.UTC(+dp[2], +dp[1] - 1, +dp[0], +tp[0], +(tp[1] || 0)) / 60000
+          : null
+        partidasMap.get(bu).push({
+          partida:     row.partida,
+          rolada:      row.rolada,
+          baseUrdume:  row.baseUrdume,
+          dtInicio:    row.dtInicio,
+          horaInicio:  row.horaInicio,
+          metrosTotal: row.metrosTotal ? Number(row.metrosTotal) : null,
+          inicioMin,
+        })
+      }
+    }
+
+    const summary = { high: 0, medium: 0, low: 0, residuo: 0, none: 0 }
+    const rows = []
+
+    for (const file of parsedFiles) {
+      const { sourceFile, header = {}, baseUrdume, comecoMin, rtfMetros, seqIdx } = file
+      const saved  = savedMap.has(sourceFile)
+
+      // RTF con muy pocos metros → probable residuo/desperdicio
+      const isResiduo = rtfMetros != null && rtfMetros < 300
+
+      let candidates   = []
+      let confidence   = 'none'
+      let suggested    = null
+      let scoreGap     = 0
+      let scoreDetail  = null
+
+      if (isResiduo) {
+        confidence = 'residuo'
+      } else if (baseUrdume) {
+        const partidas = partidasMap.get(baseUrdume) || []
+
+        const scored = partidas.map((p) => {
+          const sR    = 40  // Receita es filtro duro — si llegamos aquí siempre matchea
+          const sM    = scoreMetros(rtfMetros, p.metrosTotal)
+          const sT    = scoreTime(comecoMin, p.inicioMin)
+          const total = sR + sM + sT
+          const diffMin = comecoMin != null && p.inicioMin != null
+            ? Math.round(comecoMin - p.inicioMin) : null
+          return {
+            ...p,
+            metragemPartida:        p.metrosTotal,
+            velocidadeMediaPartida: null,
+            score: total,
+            scoreDetail: {
+              scoreReceita: sR,
+              scoreMetros:  sM,
+              scoreTime:    sT,
+              total,
+              rtfMetros,
+              dbMetros:     p.metrosTotal,
+              diffMin,
+            },
+            startDiffSec: diffMin != null ? diffMin * 60 : null,
+          }
+        }).sort((a, b) => b.score - a.score)
+
+        // Limita cantidad de candidatos para mantener la UI responsiva.
+        const MAX_CANDIDATES = 30
+        candidates = scored.slice(0, MAX_CANDIDATES)
+
+        if (scored.length >= 1) {
+          const best   = scored[0]
+          const second = scored[1]
+          scoreGap    = second ? best.score - second.score : best.score
+          scoreDetail = best.scoreDetail
+
+          // Regla ajustada:
+          // - score casi perfecto debe clasificar high aunque el gap sea moderado.
+          // - para el resto, usa gap mas realista para secuencias con partidas cercanas.
+          if      (best.score >= 95)                   confidence = 'high'
+          else if (best.score >= 85 && scoreGap >= 8) confidence = 'high'
+          else if (best.score >= 60)                   confidence = 'medium'
+          else if (best.score >= 40)                   confidence = 'low'
+          else                                         confidence = 'none'
+
+          suggested = best
+        }
+      }
+
+      const confKey = confidence || 'none'
+      summary[confKey] = (summary[confKey] || 0) + 1
+
+      console.log(`[match] file="${sourceFile}" seq=${seqIdx} base="${baseUrdume}" metros=${rtfMetros} conf="${confidence}" score=${scoreDetail?.total ?? '-'}`)
+
+      rows.push({
+        sourceFile,
+        candidates,
+        suggested,
+        confidence,
+        scoreGap,
+        scoreDetail,
+        saved,
+        decision:  confidence === 'high' ? 'auto' : 'review',
+        isResiduo,
+        seqIdx,
+      })
+    }
+
+    res.json({ rows, summary })
+  } catch (err) {
+    console.error('Error en /api/benninger-rtf/match:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/benninger-rtf/confirm
+// Guarda vinculaciones confirmadas en tb_benninger_rtf
+app.post('/api/benninger-rtf/confirm', async (req, res) => {
+  try {
+    await ensureBenningerRtfTable()
+    const { items = [] } = req.body
+    if (!items.length) return res.json({ saved: [], savedCount: 0, errors: [] })
+
+    const saved = []
+    const errors = []
+
+    for (const item of items) {
+      const {
+        sourceFile, header, rawRtfText, plainText, parseVersion,
+        selected, confidence, mode, reason, noApta, candidates, scoreGap
+      } = item
+
+      if (!sourceFile) continue
+      const partida = selected?.partida || null
+      const rolada = selected?.rolada || null
+
+      try {
+        await query(`
+          INSERT INTO tb_benninger_rtf (
+            source_file, partida, rolada, header, raw_rtf_text, plain_text,
+            parse_version, confidence, mode, reason, no_apta, candidates, score_gap
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          ON CONFLICT (source_file) DO UPDATE SET
+            partida      = EXCLUDED.partida,
+            rolada       = EXCLUDED.rolada,
+            header       = EXCLUDED.header,
+            raw_rtf_text = EXCLUDED.raw_rtf_text,
+            plain_text   = EXCLUDED.plain_text,
+            parse_version = EXCLUDED.parse_version,
+            confidence   = EXCLUDED.confidence,
+            mode         = EXCLUDED.mode,
+            reason       = EXCLUDED.reason,
+            no_apta      = EXCLUDED.no_apta,
+            candidates   = EXCLUDED.candidates,
+            score_gap    = EXCLUDED.score_gap,
+            saved_at     = CURRENT_TIMESTAMP
+        `, [
+          sourceFile, partida, rolada,
+          header ? JSON.stringify(header) : null,
+          rawRtfText || null, plainText || null,
+          parseVersion || null, confidence || null,
+          mode || null, reason || null,
+          noApta ? JSON.stringify(noApta) : null,
+          candidates ? JSON.stringify(candidates) : null,
+          scoreGap != null ? Number(scoreGap) : null
+        ], 'benninger-rtf/confirm/upsert')
+        saved.push({ sourceFile })
+      } catch (itemErr) {
+        errors.push({ sourceFile, error: itemErr.message })
+      }
+    }
+
+    res.json({ saved, savedCount: saved.length, errors })
+  } catch (err) {
+    console.error('Error en /api/benninger-rtf/confirm:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/benninger-rtf/debug-match?comeco=...
+// Endpoint de diagnóstico: replica la misma regla usada por /match
+app.get('/api/benninger-rtf/debug-match', async (req, res) => {
+  try {
+    const comeco = String(req.query.comeco || '').trim()
+
+    function extractDate(s) {
+      return s ? s.trim().split(' ')[0] : ''
+    }
+
+    function extractTime(s) {
+      if (!s) return ''
+      const parts = s.trim().split(' ')
+      if (parts.length >= 2) return parts[1].substring(0, 5)
+      if (/^\d{2}:\d{2}/.test(s.trim())) return s.trim().substring(0, 5)
+      return ''
+    }
+
+    const comecoDate = extractDate(comeco)
+    const comecoTime = extractTime(comeco)
+    const diagnostics = { comeco, comecoDate, comecoTime, strategy: 'datetime-only', rows: [] }
+
+    if (comecoDate && comecoTime) {
+      const result = await query(
+        `SELECT DISTINCT
+           "PARTIDA" AS partida,
+           "ROLADA" AS rolada,
+           "DT_INICIO" AS "dtInicio",
+           "HORA_INICIO" AS "horaInicio",
+           "ARTIGO" AS artigo
+         FROM tb_produccion
+         WHERE "SELETOR" = 'INDIGO'
+           AND TRIM("DT_INICIO") = $1
+           AND TRIM(LEFT("HORA_INICIO", 5)) = $2
+         ORDER BY "HORA_INICIO"
+         LIMIT 5`,
+        [comecoDate, comecoTime],
+        'debug-match/datetime'
+      )
+      diagnostics.rows = result.rows
+    }
+
+    res.json(diagnostics)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/benninger-rtf/secuencia-partidas?startPartida=XXXXXXX&limit=300
+// Devuelve una secuencia ordenada de PARTIDAS (INDIGO) agregadas por partida/base.
+app.get('/api/benninger-rtf/secuencia-partidas', async (req, res) => {
+  try {
+    const startPartida = String(req.query.startPartida || '').trim()
+    const limit = Math.max(50, Math.min(parseInt(req.query.limit || '300', 10), 1000))
+
+    const result = await query(`
+      WITH agg AS (
+        SELECT
+          TRIM("PARTIDA")     AS partida,
+          TRIM("BASE URDUME") AS "baseUrdume",
+          MIN(
+            SUBSTRING(TRIM("DT_INICIO"), 7, 4) ||
+            SUBSTRING(TRIM("DT_INICIO"), 4, 2) ||
+            SUBSTRING(TRIM("DT_INICIO"), 1, 2) || ' ' ||
+            LEFT(TRIM("HORA_INICIO"), 5)
+          ) AS "inicioSort",
+          SUM(
+            CASE
+              WHEN TRIM("METRAGEM") ~ '^[0-9.]+,[0-9]+$'
+                THEN REPLACE(REPLACE(TRIM("METRAGEM"), '.', ''), ',', '.')::NUMERIC
+              WHEN TRIM("METRAGEM") ~ '^[0-9]+$'
+                THEN TRIM("METRAGEM")::NUMERIC
+              ELSE 0
+            END
+          ) AS "metragemTotal",
+          AVG(
+            CASE
+              WHEN TRIM("VELOC") ~ '^[0-9]+([.,][0-9]+)?$'
+                THEN REPLACE(TRIM("VELOC"), ',', '.')::NUMERIC
+              ELSE NULL
+            END
+          ) AS "velocMedia"
+        FROM tb_produccion
+        WHERE "SELETOR" = 'INDIGO'
+        GROUP BY TRIM("PARTIDA"), TRIM("BASE URDUME")
+      ), ordered AS (
+        SELECT
+          ROW_NUMBER() OVER (ORDER BY "inicioSort", partida) AS rn,
+          partida,
+          "baseUrdume",
+          "inicioSort",
+          "metragemTotal",
+          "velocMedia"
+        FROM agg
+      ), anchor AS (
+        SELECT COALESCE((SELECT rn FROM ordered WHERE partida = $1 ORDER BY rn LIMIT 1), 1) AS start_rn
+      )
+      SELECT
+        o.rn,
+        o.partida,
+        o."baseUrdume",
+        SUBSTRING(o."inicioSort", 7, 2) || '/' ||
+        SUBSTRING(o."inicioSort", 5, 2) || '/' ||
+        SUBSTRING(o."inicioSort", 1, 4) AS "dtInicio",
+        SUBSTRING(o."inicioSort", 10, 5) AS "horaInicio",
+        o."metragemTotal",
+        o."velocMedia"
+      FROM ordered o
+      CROSS JOIN anchor a
+      WHERE o.rn >= a.start_rn
+      ORDER BY o.rn
+      LIMIT $2
+    `, [startPartida, limit], 'benninger-rtf/secuencia-partidas')
+
+    res.json({
+      startPartida: startPartida || null,
+      limit,
+      rows: result.rows || []
+    })
+  } catch (err) {
+    console.error('Error en /api/benninger-rtf/secuencia-partidas:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/benninger-rtf/secuencia-match-partidas?startPartida=0542101&limit=500
+// Devuelve PARTIDAS consecutivas de tb_produccion y, por cada PARTIDA, el mejor match RTF guardado.
+// No incluye filas de RTF sin partida; solo la vista PARTIDA -> (match RTF opcional).
+app.get('/api/benninger-rtf/secuencia-match-partidas', async (req, res) => {
+  try {
+    await ensureBenningerRtfTable()
+
+    const startPartida = String(req.query.startPartida || '0542101').trim() || '0542101'
+    const limit = Math.max(50, Math.min(parseInt(req.query.limit || '500', 10), 2000))
+
+    const result = await query(`
+      WITH agg AS (
+        SELECT
+          TRIM("PARTIDA")     AS partida,
+          TRIM("BASE URDUME") AS "baseUrdume",
+          MIN(
+            SUBSTRING(TRIM("DT_INICIO"), 7, 4) ||
+            SUBSTRING(TRIM("DT_INICIO"), 4, 2) ||
+            SUBSTRING(TRIM("DT_INICIO"), 1, 2) || ' ' ||
+            LEFT(TRIM("HORA_INICIO"), 5)
+          ) AS "inicioSort",
+          SUM(
+            CASE
+              WHEN TRIM("METRAGEM") ~ '^[0-9.]+,[0-9]+$'
+                THEN REPLACE(REPLACE(TRIM("METRAGEM"), '.', ''), ',', '.')::NUMERIC
+              WHEN TRIM("METRAGEM") ~ '^[0-9]+$'
+                THEN TRIM("METRAGEM")::NUMERIC
+              ELSE 0
+            END
+          ) AS "metragemTotal",
+          AVG(
+            CASE
+              WHEN TRIM("VELOC") ~ '^[0-9]+([.,][0-9]+)?$'
+                THEN REPLACE(TRIM("VELOC"), ',', '.')::NUMERIC
+              ELSE NULL
+            END
+          ) AS "velocMedia"
+        FROM tb_produccion
+        WHERE "SELETOR" = 'INDIGO'
+        GROUP BY TRIM("PARTIDA"), TRIM("BASE URDUME")
+      ), ordered AS (
+        SELECT
+          ROW_NUMBER() OVER (ORDER BY "inicioSort", partida) AS rn,
+          partida,
+          "baseUrdume",
+          "inicioSort",
+          "metragemTotal",
+          "velocMedia"
+        FROM agg
+      ), anchor AS (
+        SELECT COALESCE((SELECT rn FROM ordered WHERE partida = $1 ORDER BY rn LIMIT 1), 1) AS start_rn
+      )
+      SELECT
+        o.rn,
+        o.partida,
+        o."baseUrdume",
+        SUBSTRING(o."inicioSort", 7, 2) || '/' ||
+        SUBSTRING(o."inicioSort", 5, 2) || '/' ||
+        SUBSTRING(o."inicioSort", 1, 4) AS "dtInicio",
+        SUBSTRING(o."inicioSort", 10, 5) AS "horaInicio",
+        o."metragemTotal",
+        o."velocMedia",
+        br.source_file AS "sourceFile",
+        COALESCE(
+          br.seq_index,
+          NULLIF(SUBSTRING(br.source_file FROM '\\((\\d{3})\\)'), '')::INT
+        ) AS "rtfSeqIndex",
+        br.header->>'comeco' AS "rtfComeco",
+        br.header->>'receita' AS "rtfReceita",
+        br.header->>'metros' AS "rtf1X014",
+        br.header->>'velMMin' AS "rtf1S102",
+        CASE WHEN br.source_file IS NULL THEN 'SIN_MATCH' ELSE 'MATCH' END AS "matchStatus"
+      FROM ordered o
+      CROSS JOIN anchor a
+      LEFT JOIN LATERAL (
+        SELECT
+          r.source_file,
+          r.seq_index,
+          r.header,
+          r.confidence,
+          r.saved_at
+        FROM tb_benninger_rtf r
+        WHERE TRIM(COALESCE(r.partida, '')) = o.partida
+        ORDER BY
+          CASE
+            WHEN r.confidence = 'high' THEN 0
+            WHEN r.confidence = 'medium' THEN 1
+            WHEN r.confidence = 'sugerido' THEN 2
+            ELSE 3
+          END,
+          COALESCE(r.seq_index, 999999),
+          r.saved_at DESC
+        LIMIT 1
+      ) br ON TRUE
+      WHERE o.rn >= a.start_rn
+      ORDER BY o.rn
+      LIMIT $2
+    `, [startPartida, limit], 'benninger-rtf/secuencia-match-partidas')
+
+    const rows = (result.rows || []).map((row) => {
+      const seqNum = row.rtfSeqIndex == null ? NaN : Number(row.rtfSeqIndex)
+      return {
+        ...row,
+        hasMatch: !!row.sourceFile,
+        rtfSeqLabel: Number.isFinite(seqNum) && seqNum >= 0
+          ? String(seqNum).padStart(3, '0')
+          : ''
+      }
+    })
+
+    res.json({
+      startPartida,
+      limit,
+      rows
+    })
+  } catch (err) {
+    console.error('Error en /api/benninger-rtf/secuencia-match-partidas:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/benninger-rtf/seq-range?from=31&to=58
+// Devuelve archivos RTF por secuencia (NNN) para sugerencias visuales en baches SIN MATCH.
+app.get('/api/benninger-rtf/seq-range', async (req, res) => {
+  try {
+    await ensureBenningerRtfTable()
+
+    const from = Math.max(0, parseInt(req.query.from || '0', 10))
+    const to = Math.max(from, parseInt(req.query.to || String(from), 10))
+
+    const result = await query(`
+      WITH base AS (
+        SELECT
+          COALESCE(
+            seq_index,
+            NULLIF(SUBSTRING(source_file FROM '\\((\\d{3})\\)'), '')::INT
+          ) AS seq_idx,
+          source_file,
+          partida,
+          confidence,
+          header,
+          saved_at
+        FROM tb_benninger_rtf
+      )
+      SELECT DISTINCT ON (b.seq_idx)
+        b.seq_idx AS "seqIndex",
+        b.source_file AS "sourceFile",
+        b.partida,
+        b.confidence,
+        b.header->>'comeco' AS "comeco",
+        b.header->>'receita' AS "receita",
+        b.header->>'metros' AS "metros",
+        b.header->>'velMMin' AS "velMMin"
+      FROM base b
+      WHERE b.seq_idx IS NOT NULL
+        AND b.seq_idx BETWEEN $1 AND $2
+      ORDER BY
+        b.seq_idx,
+        CASE WHEN TRIM(COALESCE(b.partida, '')) = '' THEN 0 ELSE 1 END,
+        b.saved_at DESC
+    `, [from, to], 'benninger-rtf/seq-range')
+
+    res.json({
+      from,
+      to,
+      rows: result.rows || []
+    })
+  } catch (err) {
+    console.error('Error en /api/benninger-rtf/seq-range:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/benninger-rtf/sin-match
+// Devuelve archivos en la BD sin partida válida
+app.get('/api/benninger-rtf/sin-match', async (req, res) => {
+  try {
+    await ensureBenningerRtfTable()
+    const limit = Math.min(parseInt(req.query.limit || '500', 10), 2000)
+    const [countResult, rowsResult] = await Promise.all([
+      query(
+        `SELECT COUNT(*) AS total FROM tb_benninger_rtf WHERE (partida IS NULL OR partida = '') AND (no_apta IS NULL)`,
+        [], 'benninger-rtf/sin-match/count'
+      ),
+      query(
+        `SELECT source_file, rolada AS match_rolada, saved_at
+         FROM tb_benninger_rtf
+         WHERE (partida IS NULL OR partida = '') AND (no_apta IS NULL)
+         ORDER BY saved_at DESC
+         LIMIT $1`,
+        [limit], 'benninger-rtf/sin-match/rows'
+      )
+    ])
+    res.json({ rows: rowsResult.rows, total: parseInt(countResult.rows[0]?.total || '0', 10) })
+  } catch (err) {
+    console.error('Error en /api/benninger-rtf/sin-match:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PATCH /api/benninger-rtf/relink
+// Actualiza partida/rolada para un source_file ya guardado
+app.patch('/api/benninger-rtf/relink', async (req, res) => {
+  try {
+    await ensureBenningerRtfTable()
+    const { items = [] } = req.body
+    if (!items.length) return res.json({ saved: [], savedCount: 0, errors: [] })
+
+    const saved = []
+    const errors = []
+
+    for (const item of items) {
+      const { sourceFile, rolada, partida, reason } = item
+      if (!sourceFile) continue
+      try {
+        const result = await query(
+          `UPDATE tb_benninger_rtf
+           SET rolada = $1, partida = $2, reason = $3, mode = 'manual_relink', saved_at = CURRENT_TIMESTAMP
+           WHERE source_file = $4`,
+          [rolada || null, partida || null, reason || 'USER_MANUAL_RELINK', sourceFile],
+          'benninger-rtf/relink'
+        )
+        if (result.rowCount > 0) saved.push({ sourceFile })
+      } catch (itemErr) {
+        errors.push({ sourceFile, error: itemErr.message })
+      }
+    }
+
+    res.json({ saved, savedCount: saved.length, errors })
+  } catch (err) {
+    console.error('Error en /api/benninger-rtf/relink:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Parsea eventos AML del plain_text guardado en BD
+// Formato: línea "AML", luego >> DD-MM-YY HH:MM:SS  NNN[m]-CODIGO: TIPO: detalle << ...
+function parseAmlCelFromPlainText(plainText) {
+  if (!plainText) return { total: 0, aml: 0, cel: 0, riesgo: 'bajo', codigos: [], recurrentes: [], eventos: [] }
+  const lines = String(plainText).split('\n').map((l) => l.trim())
+  let section = null
+  const eventos = []
+  // >> DD-MM-YY HH:MM:SS    NNNN[m]-CODIGO: TIPO: detalle <<
+  const eventRe = />>\s*(\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s+(\d+)\[m\]-(\d+):\s*([A-ZÇÃÕÁÉÍÓÚa-z]+)?:?\s*(.*?)\s*<</i
+  for (const line of lines) {
+    const up = line.toUpperCase()
+    if (up === 'AML') { section = 'AML'; continue }
+    if (up === 'CEL') { section = 'CEL'; continue }
+    if (!section) continue
+    const m = line.match(eventRe)
+    if (!m) continue
+    const [, timestamp, metrosStr, codigoRaw, tipoRaw, detalheRaw] = m
+    const codigo = String(codigoRaw || '').padStart(4, '0').toUpperCase()
+    const detalle = String(detalheRaw || '').replace(/\.{3,}/g, '').trim() || String(tipoRaw || '').toUpperCase()
+    const severidad = String(tipoRaw || '').toUpperCase() === 'FALHA' ? 'alto' : 'medio'
+    eventos.push({ tipo: section, codigo, detalle, timestamp, metros: parseInt(metrosStr, 10), severidad })
+  }
+  const codigos = [...new Set(eventos.map((e) => e.codigo))]
+  const recurrentes = codigos
+    .map((cod) => ({ codigo: cod, count: eventos.filter((e) => e.codigo === cod).length }))
+    .filter((r) => r.count > 1)
+    .sort((a, b) => b.count - a.count)
+  const amlCount = eventos.filter((e) => e.tipo === 'AML').length
+  const celCount = eventos.filter((e) => e.tipo === 'CEL').length
+  return {
+    total: eventos.length,
+    aml: amlCount,
+    cel: celCount,
+    riesgo: eventos.length > 20 ? 'alto' : eventos.length > 5 ? 'medio' : 'bajo',
+    codigos,
+    recurrentes,
+    eventos
+  }
+}
+
+// GET /api/benninger-rtf/logs
+// Devuelve eventos AML/CEL almacenados en el header JSONB (o parseados desde plain_text)
+app.get('/api/benninger-rtf/logs', async (req, res) => {
+  try {
+    await ensureBenningerRtfTable()
+    const partida = String(req.query.partida || '').trim()
+    const section = String(req.query.section || 'AML').toUpperCase()
+    const limit = Math.min(parseInt(req.query.limit || '500', 10), 5000)
+    if (!partida) return res.json({ rows: [] })
+
+    const result = await query(
+      `SELECT header, plain_text FROM tb_benninger_rtf WHERE partida = $1 ORDER BY saved_at DESC LIMIT 10`,
+      [partida], 'benninger-rtf/logs'
+    )
+
+    const events = []
+    for (const row of result.rows) {
+      // Primero intentar desde header JSONB (ruta original)
+      let eventosSource = row.header?.proceso?.amlCel?.eventos
+      // Fallback: parsear desde plain_text si no hay eventos en el header
+      if (!Array.isArray(eventosSource) || eventosSource.length === 0) {
+        const parsed = parseAmlCelFromPlainText(row.plain_text)
+        eventosSource = parsed.eventos
+      }
+      if (!Array.isArray(eventosSource) || eventosSource.length === 0) continue
+      for (const ev of eventosSource) {
+        if (section === 'ALL' || String(ev?.tipo || '').toUpperCase() === section) {
+          events.push(ev)
+        }
+        if (events.length >= limit) break
+      }
+      if (events.length >= limit) break
+    }
+
+    res.json({ rows: events.slice(0, limit) })
+  } catch (err) {
+    console.error('Error en /api/benninger-rtf/logs:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/benninger-rtf/file
+// Descarga el texto RTF raw almacenado en la BD
+app.get('/api/benninger-rtf/file', async (req, res) => {
+  try {
+    await ensureBenningerRtfTable()
+    const sourceFile = String(req.query.sourceFile || '').trim()
+    if (!sourceFile) return res.status(400).json({ error: 'sourceFile requerido' })
+
+    const result = await query(
+      `SELECT raw_rtf_text, source_file FROM tb_benninger_rtf WHERE source_file = $1`,
+      [sourceFile], 'benninger-rtf/file'
+    )
+    if (!result.rows.length || !result.rows[0].raw_rtf_text) {
+      return res.status(404).json({ error: 'Archivo no encontrado' })
+    }
+
+    const fileName = path.basename(sourceFile).replace(/[^a-zA-Z0-9._\-]/g, '_')
+    res.setHeader('Content-Type', 'application/rtf')
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`)
+    res.send(result.rows[0].raw_rtf_text)
+  } catch (err) {
+    console.error('Error en /api/benninger-rtf/file:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// =====================================================
+// BENNINGER IMPACTO HILO
+// =====================================================
+
+// GET /api/benninger-impacto?partida=XXXXXXX
+app.get('/api/benninger-impacto', async (req, res) => {
+  try {
+    await ensureBenningerRtfTable()
+    const partida = String(req.query.partida || '').trim()
+
+    // Sin partida: devolver payload vacío (el frontend muestra estado inicial)
+    if (!partida) {
+      return res.json({
+        sourceFile: '', rawRtfText: '', match: null, referencias: null,
+        laboratorio: {}, proceso: {}
+      })
+    }
+
+    // Buscar el registro Benninger más reciente para la partida
+    const rtfResult = await query(
+      `SELECT source_file, partida, rolada, header, raw_rtf_text, plain_text, confidence, saved_at
+       FROM tb_benninger_rtf
+       WHERE partida = $1
+       ORDER BY saved_at DESC
+       LIMIT 1`,
+      [partida], 'benninger-impacto/rtf'
+    )
+
+    if (!rtfResult.rows.length) {
+      return res.json({
+        success: false,
+        error: `No se encontró análisis Benninger para la partida ${partida}`
+      })
+    }
+
+    const rtf = rtfResult.rows[0]
+    const header = rtf.header || {}
+
+    // Construir proceso: primero desde header.proceso (si existe), luego desde campos flat del header
+    const procesoBase = header.proceso && typeof header.proceso === 'object' && Object.keys(header.proceso).length > 0
+      ? header.proceso
+      : {}
+    const proceso = {
+      stretchAplicado:  procesoBase.stretchAplicado  ?? header.stretchAplicado  ?? header['1S034'],
+      humedadSalida:    procesoBase.humedadSalida    ?? header.humedadSalida    ?? header['1S068'],
+      tensionPlegador:  procesoBase.tensionPlegador  ?? header.tensionPlegador  ?? header['1S054'],
+      gomaReal:         procesoBase.gomaReal         ?? header.gomaReal         ?? header['1A41'],
+      presionExprimido: procesoBase.presionExprimido ?? header.presionExprimido ?? header['1S086'],
+      gomaObjetivo:     procesoBase.gomaObjetivo     ?? header.gomaObjetivo,
+      velocidad:        procesoBase.velocidad        ?? (() => {
+        const v = String(header.velMMin || '').replace(/[^0-9.,]/g, '').replace(',', '.')
+        return v ? parseFloat(v) : undefined
+      })(),
+      tensionTimeline:  procesoBase.tensionTimeline  ?? header.tensionTimeline  ?? [],
+      // amlCel: desde header.proceso si disponible, si no parsear desde plain_text
+      amlCel: (procesoBase.amlCel && (procesoBase.amlCel.total > 0 || Array.isArray(procesoBase.amlCel.eventos)))
+        ? procesoBase.amlCel
+        : parseAmlCelFromPlainText(rtf.plain_text)
+    }
+
+    // Intentar obtener datos de laboratorio (Uster) para la partida
+    // Se busca en tb_uster_par por lote ligado a la partida mediante tb_produccion
+    let laboratorio = {}
+    let referencias = null
+
+    try {
+      // Detectar nombre exacto de la columna 'lote fiacao' (puede tener 1 o 2 espacios)
+      const prodColsRes = await query(
+        `SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='tb_produccion'`,
+        [], 'benninger-impacto/cols'
+      ).catch(() => null)
+      const prodColsMap = new Map((prodColsRes?.rows || []).map((r) => [String(r.column_name).toLowerCase(), r.column_name]))
+      const loteColName = ['lote fiacao', 'lote  fiacao'].find((c) => prodColsMap.has(c))
+      const loteExprImpacto = loteColName ? `p.${quoteIdent(prodColsMap.get(loteColName))}` : 'NULL::text'
+
+      const hivResult = await query(`
+        SELECT
+          AVG(d.sci)    AS sci,
+          AVG(d.mic)    AS mic,
+          AVG(d.str)    AS str,
+          AVG(d.uhml)   AS uhml,
+          AVG(d.elg)    AS elg,
+          AVG(d.rd)     AS rd,
+          AVG(d.plus_b) AS plus_b
+        FROM tb_hvi_ensayos e
+        JOIN tb_hvi_detalles d ON d.ensayo_id = e.id
+        WHERE TRIM(UPPER(e.lote)) = ANY(
+          SELECT DISTINCT TRIM(UPPER(${loteExprImpacto}))
+          FROM tb_produccion p
+          WHERE TRIM(p."PARTIDA") = $1 AND p."SELETOR" = 'INDIGO' AND p."FILIAL" = '05'
+          LIMIT 20
+        )
+      `, [partida], 'benninger-impacto/hvi').catch(() => null)
+
+      if (hivResult?.rows?.length) {
+        const r = hivResult.rows[0]
+        laboratorio = {
+          sci:   r.sci   != null ? Number(r.sci)   : undefined,
+          mic:   r.mic   != null ? Number(r.mic)   : undefined,
+          str:   r.str   != null ? Number(r.str)   : undefined,
+          uhml:  r.uhml  != null ? Number(r.uhml)  : undefined,
+          elg:   r.elg   != null ? Number(r.elg)   : undefined,
+          rd:    r.rd    != null ? Number(r.rd)    : undefined,
+          plusB: r.plus_b != null ? Number(r.plus_b) : undefined
+        }
+      }
+    } catch (_) { /* laboratorio queda vacío, no es crítico */ }
+
+    // Intentar obtener testnr de Uster para la partida (referencia)
+    try {
+      const usterRef = await query(`
+        SELECT p.testnr
+        FROM tb_uster_par p
+        WHERE TRIM(UPPER(p.lote)) = ANY(
+          SELECT DISTINCT TRIM(UPPER("ARTIGO"))
+          FROM tb_produccion
+          WHERE TRIM("PARTIDA") = $1 AND "SELETOR" = 'INDIGO' AND "FILIAL" = '05'
+          LIMIT 5
+        )
+        ORDER BY p.time_stamp DESC NULLS LAST
+        LIMIT 1
+      `, [partida], 'benninger-impacto/uster-ref').catch(() => null)
+
+      if (usterRef?.rows?.length) {
+        referencias = { uster: { testnr: usterRef.rows[0].testnr } }
+      }
+    } catch (_) { /* referencias queda null */ }
+
+    res.json({
+      sourceFile:  rtf.source_file || '',
+      rawRtfText:  rtf.raw_rtf_text || '',
+      match: {
+        partida: rtf.partida,
+        rolada:  rtf.rolada,
+        confidence: rtf.confidence
+      },
+      referencias,
+      laboratorio,
+      proceso
+    })
+  } catch (err) {
+    console.error('Error en /api/benninger-impacto:', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// =====================================================
 // INICIAR SERVIDOR
 // =====================================================
 async function startServer() {

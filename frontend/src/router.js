@@ -26,6 +26,11 @@ const routes = [
     meta: { title: 'Benninger RTF' }
   },
   {
+    path: '/benninger-rtf-partidas-secuencia',
+    component: () => import('./components/ensayos/BenningerRTFPartidasSecuencia.vue'),
+    meta: { title: 'Benninger RTF Partidas Secuencia' }
+  },
+  {
     path: '/benninger-impacto',
     component: () => import('./components/ensayos/BenningerImpactDashboard.vue'),
     meta: { title: 'Benninger Impacto Hilo' }
