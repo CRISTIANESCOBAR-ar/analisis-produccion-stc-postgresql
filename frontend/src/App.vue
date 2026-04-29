@@ -26,7 +26,9 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
         </svg>
       </button>
-      <span class="ml-3 text-white font-semibold text-sm tracking-wide">STC Producción</span>
+      
+      <img src="/LogoSantana.jpg" alt="Logo Santana" class="h-6 w-14 object-contain object-center ml-2 rounded-[4px]" />
+      <span class="ml-3 text-white font-semibold text-sm tracking-wide">Santana Producción</span>
     </header>
 
     <!-- Sidebar Overlay -->
@@ -501,6 +503,13 @@
               <span>🏭</span> Dashboard Mezcla → Hilo
             </router-link>
             <router-link 
+              to="/relato-ia-integral" 
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
+              :class="{ 'bg-blue-600': $route.path === '/relato-ia-integral' }"
+            >
+              <span>💡</span> Relato Integral IA
+            </router-link>
+            <router-link 
               to="/detalle-mistura-lote" 
               class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm" 
               :class="{ 'bg-blue-600': $route.path === '/detalle-mistura-lote' }"
@@ -568,7 +577,7 @@ const indigoRoutes = [
 ]
   const isIndigoRouteActive = computed(() => indigoRoutes.includes(route.path)) 
   
-  const configRoutes = ['/parametros-hvi', '/detalle-mistura-lote', '/configuracion-estandares', '/correlacion-mezcla-hilo', '/dashboard-mezcla']
+  const configRoutes = ['/parametros-hvi', '/detalle-mistura-lote', '/configuracion-estandares', '/correlacion-mezcla-hilo', '/dashboard-mezcla', '/relato-ia-integral']
   const isConfigRouteActive = computed(() => configRoutes.includes(route.path))
 
   function openSidebar() {

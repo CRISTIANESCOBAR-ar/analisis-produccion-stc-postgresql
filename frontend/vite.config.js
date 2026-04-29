@@ -8,15 +8,15 @@ export default defineConfig({
     vue(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['LogoSantana.jpg'],
+      includeAssets: ['LogoSantana.jpg', 'icon-192.png', 'icon-512.png', 'icon-maskable-192.png', 'icon-maskable-512.png'],
       devOptions: {
-        enabled: false,
+        enabled: true,
         type: 'module'
       },
       manifest: {
-        name: 'STC Produccion',
-        short_name: 'STC',
-        description: 'Gestion de Calidad y Produccion - STC',
+        name: 'Santana - STC Producción',
+        short_name: 'Santana',
+        description: 'Gestión de Calidad y Producción - Santana',
         theme_color: '#ffffff',
         background_color: '#ffffff',
         display: 'standalone',

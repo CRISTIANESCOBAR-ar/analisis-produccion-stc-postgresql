@@ -91,6 +91,11 @@ const routes = [
     meta: { title: 'Dashboard Mezcla → Hilo' }
   },
   {
+    path: '/relato-ia-integral',
+    component: () => import('./components/ensayos/RelatoIntegralIAView.vue'),
+    meta: { title: 'Relato Integral IA' }
+  },
+  {
     path: '/informe-auditoria-lote',
     component: () => import('./components/ensayos/InformeAuditoriaLote.vue'),
     meta: { title: 'Informe Auditoría por Lote' }
@@ -225,8 +230,8 @@ const router = createRouter({
 
 router.beforeEach((to, from, next) => {
   document.title = to.meta.title 
-    ? `${to.meta.title} - STC Produção` 
-    : 'STC Produção'
+    ? `${to.meta.title} - Santana Producción` 
+    : 'Santana Producción'
   next()
 })
 
