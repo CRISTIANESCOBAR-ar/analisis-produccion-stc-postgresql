@@ -90,11 +90,11 @@ const routes = [
     component: () => import('./components/ensayos/DashboardMezclaHilo.vue'),
     meta: { title: 'Dashboard Mezcla → Hilo' }
   },
-  {
-    path: '/relato-ia-integral',
-    component: () => import('./components/ensayos/RelatoIntegralIAView.vue'),
-    meta: { title: 'Relato Integral IA' }
-  },
+  // {
+  //   path: '/relato-ia-integral',
+  //   component: () => import('./components/ensayos/RelatoIntegralIAView.vue'),
+  //   meta: { title: 'Relato Integral IA' }
+  // },
   {
     path: '/informe-auditoria-lote',
     component: () => import('./components/ensayos/InformeAuditoriaLote.vue'),

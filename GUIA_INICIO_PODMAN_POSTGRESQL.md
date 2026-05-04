@@ -1,44 +1,63 @@
 # Guía de Inicio - Podman y PostgreSQL
 
-## Requisitos Previos
-- Podman Desktop instalado en Windows
-- Docker Compose instalado
-- Proyecto clonado en `C:\stc-produccion-v2`
+> **Estado verificado:** 4 mayo 2026 — Stack operativo en este equipo.
 
-### Instalación rápida (PowerShell, opcional para futuras instalaciones)
+## Requisitos Previos (ya instalados en este equipo)
 
-Si en el futuro necesitas reinstalar Podman desde PowerShell (ejecutar como Administrador):
+| Componente | Estado | Versión |
+|---|---|---|
+| Podman Desktop | ✅ Instalado | 1.27.1 |
+| Podman CLI | ✅ Instalado | 5.8.2 |
+| Docker Compose (provider) | ✅ Instalado | 5.1.3 |
+| WSL | ✅ Instalado | — |
+| Node.js | ✅ Instalado | v24 |
+
+### Reinstalación desde cero (solo si es necesario)
 
 ```powershell
-winget source update
+# Podman Desktop (GUI)
 winget install -e --id RedHat.Podman-Desktop --accept-source-agreements --accept-package-agreements
+
+# Podman CLI (requerido para comandos en terminal)
+winget install -e --id RedHat.Podman --accept-source-agreements --accept-package-agreements
+
+# Docker Compose (provider para 'podman compose')
+winget install -e --id Docker.DockerCompose --accept-source-agreements --accept-package-agreements
+
+# WSL (requiere PowerShell como Admin + reinicio)
+wsl --install --no-launch
+```
+
+> **Importante:** Después de instalar WSL, reiniciar Windows. Luego correr `podman machine init` y `podman machine start`.
+
+### Verificación rápida
+
+```powershell
+podman --version        # Debe mostrar: podman version 5.x.x
+docker-compose --version # Debe mostrar: Docker Compose version v5.x.x
+podman machine list     # Debe mostrar: podman-machine-default
 ```
 
 ### Verificación inmediata después de instalar
 
-Abre una terminal nueva de PowerShell y verifica que Windows ya reconoce el comando:
+Abre una terminal **nueva** de PowerShell y verifica:
 
 ```powershell
 podman --version
 ```
 
-**Salida esperada:**
-```
-podman version x.y.z
-```
-
-Si aparece `podman no se reconoce`, cierra y vuelve a abrir PowerShell. Si sigue igual, reinicia Windows y vuelve a probar.
+> Si aparece `podman no se reconoce`, el PATH no se actualizó aún — cierra PowerShell y vuelve a abrirlo. Si sigue igual, reinicia Windows.
 
 ### Requisito crítico de Windows para Podman Machine
 
-Si Podman Desktop muestra que falta **Virtual Machine Platform**, habilítalo así (PowerShell como Administrador):
+Si `podman machine init` falla con "WSL no está instalado":
 
 ```powershell
+# Ejecutar como Administrador, luego reiniciar Windows
+wsl --install --no-launch
 dism /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
 dism /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
 ```
-
-> **Importante:** Reinicia Windows después de ejecutar estos comandos.
 
 ---
 
@@ -58,41 +77,49 @@ dism /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all
 
 ---
 
-## Pasos para Iniciar el Sistema
+## Arranque diario (sesión de trabajo normal)
 
-### 0. Verificar que Podman esté disponible
+### Opción A — Atajo (alias del perfil PowerShell)
 
 ```powershell
-podman --version
+stc-db-up        # levanta Podman machine + contenedor postgres
+stc-db-status    # verifica que esté "Up (healthy)"
 ```
 
-Si este comando falla con `podman no se reconoce`, instala Podman Desktop:
+### Opción B — Script todo-en-uno (levanta DB + backend PoC + frontend PoC)
 
 ```powershell
-winget source update
-winget install -e --id RedHat.Podman-Desktop --accept-source-agreements --accept-package-agreements
+cd C:\stc-mezclas-poc
+.\start-dev.ps1
 ```
 
-Después, cierra PowerShell, ábrelo de nuevo y repite `podman --version` antes de continuar.
-
----
-
-### 1. Iniciar Podman Machine
+### Opción C — Comandos manuales paso a paso
 
 ```powershell
+# 1. Iniciar Podman Machine
 podman machine start
+# Si ya está corriendo verás: "Error: already running"
+# → Verificar inmediatamente que el socket responde:
+podman ps
+# Si 'podman ps' falla con "unable to connect", hacer stop/start (ver Troubleshooting)
+
+# 2. Levantar PostgreSQL
+cd C:\stc-produccion-v2
+podman compose up -d postgres
+
+# 3. Verificar estado — ESPERAR "Up (healthy)" antes de arrancar el backend
+podman ps --filter name=stc_postgres
 ```
 
-**Salida esperada:**
+Salida esperada del paso 3:
 ```
-Starting machine "podman-machine-default"
+CONTAINER ID  IMAGE                     STATUS          PORTS                   NAMES
+xxxxxxxxxxxx  postgres:16-alpine        Up (healthy)    0.0.0.0:5433->5432/tcp  stc_postgres
 ```
-
-> **Nota:** Si ya está corriendo, verás: `Error: already running` (esto es normal, continúa).
 
 ---
 
-### 2. Verificar el Estado de Podman
+### 2. Verificar el Estado de Podman (manual)
 
 ```powershell
 podman ps
@@ -187,25 +214,24 @@ Abre tu navegador en: **http://localhost:5050/browser/**
 
 ---
 
-### 8. Iniciar el Backend
+### 8. Iniciar el Backend PoC (stc-mezclas-poc)
 
 ```powershell
-cd backend
-npm start
+cd C:\stc-mezclas-poc\backend
+npm run dev
 ```
 
 **Salida esperada:**
 ```
-✅ PostgreSQL conectado
-🚀 Backend iniciado en puerto 3001
+✓ PoC Backend corriendo en puerto 3005
 ```
 
 ---
 
-### 9. Iniciar el Frontend (En otra terminal)
+### 9. Iniciar el Frontend PoC (En otra terminal)
 
 ```powershell
-cd C:\stc-produccion-v2\frontend
+cd C:\stc-mezclas-poc\frontend
 npm run dev
 ```
 
@@ -215,34 +241,89 @@ VITE v5.x ready in xxx ms
 ➜ Local: http://localhost:5173/
 ```
 
+> **Atajo:** en lugar de los pasos 8 y 9, ejecutar `.\start-dev.ps1` desde `C:\stc-mezclas-poc`.
+
 ---
 
 ## Información de Conexión
 
 ### PostgreSQL
 - **Host:** localhost
-- **Puerto:** 5433 (desde el host)
+- **Puerto:** 5433 (desde el host) / 5432 (interno al contenedor)
 - **Base de datos:** stc_produccion
 - **Usuario:** stc_user
 - **Contraseña:** stc_password_2026
 
-### pgAdmin (Opcional)
-- **URL:** http://localhost:5050/browser/
-- **Email:** admin@stc.com
-- **Contraseña:** admin123
+### API Backend PoC
+- **URL:** http://localhost:3005
+- **Health check:** http://localhost:3005/api/health
 
-### API Backend
-- **URL:** http://localhost:3001
-- **Endpoints:** 
-  - API: `http://localhost:3001/api/*`
-  - Health: `http://localhost:3001/health`
-
-### Frontend
+### Frontend PoC
 - **URL:** http://localhost:5173
+
+### Verificación de stack completo
+```powershell
+cd C:\stc-mezclas-poc
+.\check-stack.ps1
+# o el alias:
+scheck
+```
 
 ---
 
 ## Solución de Problemas Comunes
+
+### Error: "already running" pero `podman ps` falla con "unable to connect"
+
+**Causa:** La Podman machine está marcada como running en WSL, pero el proceso SSH que gestiona el socket se cayó. El puerto queda bloqueado por otro proceso del sistema.
+
+**Síntoma exacto:**
+```
+Error: unable to connect to Podman socket: failed to connect: dial tcp 127.0.0.1:XXXXX: connectex: ...
+```
+
+**Solución:**
+```powershell
+# Stop forzado + reinicio limpio (Podman reasigna el puerto automáticamente)
+podman machine stop
+podman machine start
+
+# Verificar que el socket responde
+podman ps
+```
+
+---
+
+### Error: "EADDRINUSE: address already in use — port 3005"
+
+**Causa:** Ya hay un proceso Node.js escuchando en el puerto 3005 (una instancia anterior del backend que no se cerró correctamente).
+
+**Solución:**
+```powershell
+# Matar el proceso Node en puerto 3005 y reiniciar el backend
+Stop-Process -Id (Get-NetTCPConnection -LocalPort 3005 -State Listen | Select-Object -First 1 -ExpandProperty OwningProcess) -Force
+cd C:\stc-mezclas-poc\backend
+npm start
+```
+
+---
+
+### Error: `[uster-cardas] schema error:` / `[tensorapid] Schema setup error:` (mensaje vacío)
+
+**Causa:** El backend arrancó mientras PostgreSQL aún estaba en estado `starting` (no `healthy`). La conexión falla antes de establecerse y el objeto de error no tiene `.message`.
+
+**Solución:** Siempre esperar a que el STATUS sea `Up (healthy)` antes de arrancar el backend:
+```powershell
+# Esperar healthy (puede tardar 10-20 segundos)
+podman ps --filter name=stc_postgres
+
+# Una vez healthy, arrancar el backend
+cd C:\stc-mezclas-poc\backend
+npm start
+# Salida esperada: "✓ PoC Backend corriendo en puerto 3005" (sin errores de schema)
+```
+
+---
 
 ### Error: "network stc_network has incorrect label"
 
@@ -436,4 +517,4 @@ podman compose down -v
 
 ---
 
-**Última actualización:** 10 de febrero de 2026
+**Última actualización:** 4 de mayo de 2026
