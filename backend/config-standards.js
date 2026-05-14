@@ -11,7 +11,7 @@ const router = express.Router();
 // Configurar pool explícitamente usando las variables del .env (que usan nombres distintos a los default de pg)
 const pool = new Pool({
     host: process.env.PG_HOST || 'localhost',
-    port: process.env.PG_PORT || 5432,
+    port: process.env.PG_PORT || 5433,
     database: process.env.PG_DATABASE || 'stc_produccion',
     user: process.env.PG_USER || 'stc_user',
     password: process.env.PG_PASSWORD || 'stc_password_2026'
@@ -19,8 +19,9 @@ const pool = new Pool({
 
 // Auto-migración al iniciar (asegura columnas y tablas nuevas)
 async function ensureSchema() {
-    const client = await pool.connect();
+    let client;
     try {
+        client = await pool.connect();
         await client.query(`
             ALTER TABLE tb_config_tolerancias 
             ADD COLUMN IF NOT EXISTS limite_max_absoluto DECIMAL(5,2),
@@ -40,9 +41,9 @@ async function ensureSchema() {
         `);
         console.log('✓ Config Schema Updated');
     } catch (e) {
-        console.error('Migration error (Config):', e);
+        console.error('Migration error (Config):', e.message || e);
     } finally {
-        client.release();
+        if (client) client.release();
     }
 }
 // Ejecutar migración en segundo plano al cargar módulo

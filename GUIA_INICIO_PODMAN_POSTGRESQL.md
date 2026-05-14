@@ -273,6 +273,44 @@ scheck
 
 ## Solución de Problemas Comunes
 
+### Error: `podman compose` falla con "error during connect: EOF" o "pipe not available"
+
+**Causa:** `win-sshproxy.exe` está corriendo con parámetros de una máquina Podman anterior y no puede crear el named pipe de Windows.
+
+**Solución:**
+```powershell
+# Matar el proxy viejo y reiniciar la machine (el nuevo proxy toma el pipe correcto)
+podman machine stop
+Stop-Process -Name win-sshproxy -Force -ErrorAction SilentlyContinue
+podman machine start
+# Salida esperada: "API forwarding listening on: npipe:////./pipe/docker_engine"
+```
+
+---
+
+### Error: `Connection terminated unexpectedly` al arrancar el backend
+
+**Causa:** El contenedor postgres tuvo un shutdown no limpio (por ejemplo al hacer `podman machine stop` con el contenedor corriendo). Al reiniciar, postgres entra en modo de **recovery WAL** durante ~5-10 segundos; en ese lapso acepta TCP pero rechaza queries.
+
+**Síntoma:**
+```
+Error: Connection terminated unexpectedly
+    at async ensureSchema (config-standards.js:22:20)
+```
+
+**Solución:** Esperar a que los logs muestren `database system is ready to accept connections` antes de arrancar el backend:
+```powershell
+# Verificar que postgres terminó la recuperación
+podman logs stc_postgres 2>&1 | Select-Object -Last 5
+# Buscar: "database system is ready to accept connections"
+
+# Entonces arrancar el backend
+cd C:\stc-produccion-v2\backend
+npm start
+```
+
+---
+
 ### Error: "already running" pero `podman ps` falla con "unable to connect"
 
 **Causa:** La Podman machine está marcada como running en WSL, pero el proceso SSH que gestiona el socket se cayó. El puerto queda bloqueado por otro proceso del sistema.

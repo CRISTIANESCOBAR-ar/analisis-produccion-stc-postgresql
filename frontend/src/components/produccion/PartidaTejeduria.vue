@@ -65,6 +65,20 @@
             </svg>
             <span>Imprimir</span>
           </button>
+          <button
+            v-if="datos && datos.encontrada"
+            @click="exportarExcel"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-md transition-colors border border-emerald-700"
+            title="Exportar tabla a Excel"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="12" y1="11" x2="12" y2="17"></line>
+              <polyline points="9 14 12 17 15 14"></polyline>
+            </svg>
+            <span>Exportar Excel</span>
+          </button>
         </div>
       </div>
 
@@ -340,7 +354,7 @@
             </thead>
             <tbody>
               <tr
-                v-for="(r, i) in datos.registros"
+                v-for="(r, i) in registrosOrdenados"
                 :key="i"
                 :class="i % 2 === 0 ? 'bg-white' : 'bg-slate-50'"
                 class="hover:bg-blue-50 transition-colors"
@@ -420,6 +434,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import ExcelJS from 'exceljs'
 
 const API = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
 
@@ -433,6 +448,26 @@ const enc = computed(() => datos.value?.encabezado || {})
 const tot = computed(() => datos.value?.totales || {})
 const hist    = computed(() => datos.value?.historial || [])
 const calidad = computed(() => datos.value?.calidad   || [])
+
+// Último carácter del artículo es letra → invertir filas
+const articuloUltimoEsLetra = computed(() => {
+  const art = (enc.value.articulo || '').trimEnd()
+  if (!art) return false
+  return /[a-zA-Z]/.test(art[art.length - 1])
+})
+
+const registrosOrdenados = computed(() => {
+  const rows = datos.value?.registros || []
+  if (!articuloUltimoEsLetra.value) return rows
+
+  // Invertir y recalcular metros_term_acum desde la primera fila invertida
+  const reversed = [...rows].reverse()
+  let acum = 0
+  return reversed.map(r => {
+    acum += r.metros_term != null ? Number(r.metros_term) : 0
+    return { ...r, metros_term_acum: acum }
+  })
+})
 
 // Convierte "1-5352.16" → "1535216" (elimina máscara)
 function normalizarPartida(raw) {
@@ -524,5 +559,214 @@ const colorRotInd = computed(() => {
 // ── Imprimir ─────────────────────────────────────────────────────────────────
 function imprimir() {
   window.print()
+}
+
+// ── Exportar Excel ───────────────────────────────────────────────────────────
+async function exportarExcel() {
+  const e         = enc.value
+  const registros = registrosOrdenados.value
+  const totales   = tot.value
+
+  const wb = new ExcelJS.Workbook()
+  const ws = wb.addWorksheet('Tejeduría')
+
+  // ── Anchos de columna exactos del modelo.xlsx (19 cols A:S) ─────────
+  ws.columns = [
+    { width: 3.7  }, // A  — margen
+    { width: 14.7 }, // B  — Fecha
+    { width: 5.7  }, // C  — Tur
+    { width: 14.7 }, // D  — Partida
+    { width: 8.7  }, // E  — Metros Crudos
+    { width: 8.7  }, // F  — Metros Termin.
+    { width: 8.7  }, // G  — Metros Term. Acumul.
+    { width: 8.7  }, // H  — Defecto
+    { width: 8.7  }, // I  — Inicio
+    { width: 8.7  }, // J  — Final
+    { width: 8.7  }, // K  — Sub Total Turno
+    { width: 8.7  }, // L  — Total Turno m
+    { width: 8.7  }, // M  — Paradas Trama
+    { width: 8.7  }, // N  — Paradas Urdimbre
+    { width: 8.7  }, // O  — Total Paradas
+    { width: 8.7  }, // P  — Eficiencia %
+    { width: 8.7  }, // Q  — Roturas TRAMA 105
+    { width: 8.7  }, // R  — Roturas URDIDO 105
+    { width: 8.7  }, // S  — RPM
+  ]
+
+  // Factor conversión ExcelJS→Excel UI calibrado empíricamente (K = 1.25)
+  const K    = 1.25
+  const thin  = { style: 'thin' }
+  const BDR   = { top: thin, left: thin, bottom: thin, right: thin }
+  const GRAY = { type: 'pattern', pattern: 'solid', fgColor: { theme: 0, tint: -0.1499984740745262 } }
+  const F12  = { size: 12, color: { theme: 1 } }
+  const F12B = { bold: true, size: 12, color: { theme: 1 } }
+  const AL_C = { horizontal: 'center', vertical: 'middle' }
+  const AL_R = { horizontal: 'right',  vertical: 'middle' }
+  const AL_L = { horizontal: 'left',   vertical: 'middle', indent: 1 }
+
+  function sc(rowNum, col, value, alignment, font, fill, border = true) {
+    const cell = ws.getCell(rowNum, col)
+    if (value !== undefined) cell.value = value
+    if (alignment) cell.alignment = alignment
+    if (font)      cell.font      = font
+    if (fill)      cell.fill      = fill
+    if (border)    cell.border    = BDR
+    return cell
+  }
+  function rowBorder(rowNum, c1, c2) {
+    for (let c = c1; c <= c2; c++) if (c > 1) ws.getCell(rowNum, c).border = BDR
+  }
+
+  // ── Fila 1: vacía (sin borde, alto por defecto) ──────────────────────
+
+  // ── Fila 2: título ───────────────────────────────────────────────────
+  ws.getRow(2).height = 25.2 * K  // → Excel muestra 25.2
+  ws.mergeCells('B2:S2')
+  sc(2, 2,
+    'SANTANA TEXTIL CHACO S.A. – UNIDAD V - Eficiencia y Paradas – TEJEDURÍA',
+    { horizontal: 'center', vertical: 'middle' },
+    { bold: true, size: 16, color: { theme: 1 } }
+  )
+  rowBorder(2, 1, 19)
+
+  // ── Filas 3-5: metadatos ─────────────────────────────────────────────
+  // Fila 3: Partida | Artículo | Nombre
+  ws.mergeCells('C3:D3')
+  sc(3,  2, 'Partida',                  AL_R, F12)
+  sc(3,  3, inputPartidaBuscada.value,  AL_L, F12B)
+  sc(3,  5, 'Artículo',                 AL_R, F12)
+  sc(3,  6, e.articulo || '–',          AL_L, F12B)
+  sc(3, 10, 'Nombre',                   AL_R, F12)
+  sc(3, 11, e.nombre   || '–',          AL_L, F12B)
+  ws.getRow(3).height = 20 * K   // → Excel muestra 20
+
+  // Fila 4: Telar | Trama | Pasadas
+  sc(4,  2, 'Telar',                    AL_R, F12)
+  sc(4,  3, e.telar    ?? '–',          AL_L, F12B)
+  sc(4,  5, 'Trama',                    AL_R, F12)
+  sc(4,  6, e.trama    || '–',          AL_L, F12B)
+  sc(4, 10, 'Pasadas',                  AL_R, F12)
+  sc(4, 11, e.pasadas  ?? '–',          AL_L, F12B)
+  ws.getRow(4).height = 20 * K   // → Excel muestra 20
+
+  // Fila 5: Grupo | Base | OE's
+  sc(5,  2, 'Grupo',                    AL_R, F12)
+  sc(5,  3, e.grupo    || '–',          AL_L, F12B)
+  sc(5,  5, 'Base',                     AL_R, F12)
+  sc(5,  6, e.base     || '–',          AL_L, F12B)
+  sc(5, 10, "OE's",                     AL_R, F12)
+  sc(5, 11, e.oes      || '–',          AL_L, F12B)
+  ws.getRow(5).height = 20 * K   // → Excel muestra 20
+
+  // ── Fila 6: separador vacío ───────────────────────────────────────────
+  ws.getRow(6).height = 15.6 * K  // → Excel muestra 15.6
+
+  // ── Fila 7: encabezados de columna ───────────────────────────────────
+  ws.getRow(7).height = 46.8 * K  // → Excel muestra 46.8
+  const HDRS = [
+    '', 'Fecha', 'Tur', 'Partida',
+    'Metros Crudos', 'Metros Termin.', 'Metros Term. Acumul.',
+    'Defecto', 'Inicio', 'Final', 'Sub Total Turno', 'Total Turno m',
+    'Paradas Trama', 'Paradas Urdimbre', 'Total Paradas',
+    'Eficiencia %', 'Roturas TRAMA 105', 'Roturas URDIDO 105', 'RPM',
+  ]
+  HDRS.forEach((h, i) => {
+    const col  = i + 1
+    const cell = ws.getCell(7, col)
+    cell.value  = h
+    cell.border = col > 1 ? BDR : undefined
+    if (col > 1) {
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+      cell.font      = F12B
+      cell.fill      = GRAY
+    } else {
+      cell.alignment = { wrapText: true }
+      cell.font      = F12
+    }
+  })
+
+  // ── Filas de datos (dinámicas), alto 18 ──────────────────────────────
+  let curRow = 8
+  registros.forEach(r => {
+    ws.getRow(curRow).height = 18 * K  // → Excel muestra 18
+    const vals = [
+      null,
+      r.fecha ? new Date(r.fecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '–',
+      r.turno   ?? '–',
+      r.partida ?? '–',
+      r.metros_crudos    != null ? Number(r.metros_crudos)           : null,
+      r.metros_term      != null ? Number(r.metros_term)             : null,
+      r.metros_term_acum != null ? Number(r.metros_term_acum)        : null,
+      null, null, null, null, null,
+      r.paradas_trama    != null ? Number(r.paradas_trama)           : null,
+      r.paradas_urdimbre != null ? Number(r.paradas_urdimbre)        : null,
+      r.total_paradas    != null ? Number(r.total_paradas)           : null,
+      r.eficiencia       != null ? Number(r.eficiencia.toFixed(1))   : null,
+      r.rt_105           != null ? Number(r.rt_105.toFixed(1))       : null,
+      r.ru_105           != null ? Number(r.ru_105.toFixed(1))       : null,
+      r.rpm              != null ? r.rpm                             : null,
+    ]
+    vals.forEach((v, i) => {
+      const cell = ws.getCell(curRow, i + 1)
+      cell.value     = v
+      if (i > 0) cell.border = BDR
+      cell.alignment = AL_C
+      cell.font      = F12
+    })
+    curRow++
+  })
+
+  // ── Fila de totales, alto 25.2, relleno gris ──────────────────────────
+  ws.getRow(curRow).height = 25.2 * K  // → Excel muestra 25.2
+  const totVals = [
+    null,
+    'Total / Promedio', null, null,
+    totales.metros_crudos    != null ? Number(totales.metros_crudos)          : null,
+    totales.metros_term      != null ? Number(totales.metros_term)            : null,
+    null, null, null, null, null, null,
+    totales.paradas_trama    != null ? Number(totales.paradas_trama)          : null,
+    totales.paradas_urdimbre != null ? Number(totales.paradas_urdimbre)       : null,
+    totales.total_paradas    != null ? Number(totales.total_paradas)          : null,
+    totales.eficiencia       != null ? Number(totales.eficiencia.toFixed(1))  : null,
+    totales.rt_105           != null ? Number(totales.rt_105.toFixed(1))      : null,
+    totales.ru_105           != null ? Number(totales.ru_105.toFixed(1))      : null,
+    totales.rpm              != null ? totales.rpm                            : null,
+  ]
+  totVals.forEach((v, i) => {
+    const cell = ws.getCell(curRow, i + 1)
+    cell.value     = v
+    if (i > 0) cell.border = BDR
+    cell.alignment = AL_C
+    cell.font      = F12
+    cell.fill      = GRAY
+  })
+  curRow++
+
+  // ── Fila separadora vacía ─────────────────────────────────────────────
+  for (let c = 2; c <= 19; c++) {
+    ws.getCell(curRow, c).alignment = AL_C
+    ws.getCell(curRow, c).font      = F12
+  }
+  curRow++
+
+  // ── Fila Observaciones, alto 30.6 ────────────────────────────────────
+  ws.getRow(curRow).height = 30.6 * K  // → Excel muestra 30.6
+  ws.getCell(curRow, 1).alignment = { vertical: 'middle' }
+  ws.getCell(curRow, 1).font      = F12
+  sc(curRow, 2, 'Observaciones', AL_R, F12, null, false)
+  ws.getCell(curRow, 3).value     = ''
+  ws.getCell(curRow, 3).alignment = AL_L
+  ws.getCell(curRow, 3).font      = F12B
+  ws.mergeCells(curRow, 3, curRow, 19)
+
+  // ── Generar y descargar ───────────────────────────────────────────────
+  const buffer = await wb.xlsx.writeBuffer()
+  const blob   = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  const url    = URL.createObjectURL(blob)
+  const a      = document.createElement('a')
+  a.href     = url
+  a.download = `partida_tejeduria_${inputPartidaBuscada.value.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().slice(0, 10)}.xlsx`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 </script>

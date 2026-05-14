@@ -1855,14 +1855,14 @@ app.get('/api/calidad/defectos-por-tipo', async (req, res) => {
     const dateStr   = String(date).split('T')[0]
     const isDayMode = String(mode || 'month').toLowerCase() === 'day'
 
-    // Expresión para parsear data_prod de tb_defectos (DD/MM/YYYY o YYYY-MM-DD)
-    const defDataProd     = sqlParseDate('d.data_prod')
+    // Expresión para parsear DATA_PROD de tb_defectos (DD/MM/YYYY o YYYY-MM-DD)
+    const defDataProd     = sqlParseDate('d."DATA_PROD"')
     // Expresión para parsear DAT_PROD de tb_calidad
     const calDatProd      = sqlParseDate('c."DAT_PROD"')
     // Parsers numéricos
     const calMetragemExpr = sqlParseNumberIntl('c."METRAGEM"')
     const calLarguraExpr  = sqlParseNumber('c."LARGURA"')
-    const defPontosExpr   = sqlParseNumber('d.pontos')
+    const defPontosExpr   = sqlParseNumber('d."PONTOS"')
 
     let sql
 
@@ -1891,16 +1891,16 @@ app.get('/api/calidad/defectos-por-tipo', async (req, res) => {
         ),
         defectos_dia AS (
           SELECT
-            MIN(d.cod_def)          AS cod_def,
-            btrim(d.desc_defeito)   AS desc_defeito,
+            MIN(d."COD_DEF")       AS cod_def,
+            btrim(d."DESC_DEFEITO") AS desc_defeito,
             SUM(COALESCE(${defPontosExpr}, 0)) AS pts_totales
           FROM tb_defectos d
-          INNER JOIN piezas_dia p ON p."PEÇA" = d.partida || d.peca
-          WHERE d.filial    = '05'
-            AND d.qualidade = '1'
-            AND btrim(d.desc_defeito) <> ''
-            AND btrim(d.desc_defeito) <> '--'
-          GROUP BY btrim(d.desc_defeito)
+          INNER JOIN piezas_dia p ON p."PEÇA" = d."PARTIDA" || d."PECA"
+          WHERE d."FILIAL"    = '05'
+            AND d."QUALIDADE" = '1'
+            AND btrim(d."DESC_DEFEITO") <> ''
+            AND btrim(d."DESC_DEFEITO") <> '--'
+          GROUP BY btrim(d."DESC_DEFEITO")
           HAVING SUM(COALESCE(${defPontosExpr}, 0)) > 0
         ),
         total_pts AS (
@@ -1942,16 +1942,16 @@ app.get('/api/calidad/defectos-por-tipo', async (req, res) => {
         ),
         defectos_mes AS (
           SELECT
-            btrim(d.desc_defeito)   AS desc_defeito,
-            MIN(d.cod_def)          AS cod_def,
+            btrim(d."DESC_DEFEITO") AS desc_defeito,
+            MIN(d."COD_DEF")       AS cod_def,
             SUM(COALESCE(${defPontosExpr}, 0)) AS pts_totales
           FROM tb_defectos d
-          WHERE d.filial    = '05'
-            AND d.qualidade = '1'
+          WHERE d."FILIAL"    = '05'
+            AND d."QUALIDADE" = '1'
             AND to_char(${defDataProd}, 'YYYY-MM') = to_char($1::date, 'YYYY-MM')
-            AND btrim(d.desc_defeito) <> ''
-            AND btrim(d.desc_defeito) <> '--'
-          GROUP BY btrim(d.desc_defeito)
+            AND btrim(d."DESC_DEFEITO") <> ''
+            AND btrim(d."DESC_DEFEITO") <> '--'
+          GROUP BY btrim(d."DESC_DEFEITO")
           HAVING SUM(COALESCE(${defPontosExpr}, 0)) > 0
         ),
         total_pts AS (
@@ -4506,6 +4506,7 @@ app.get('/api/calidad-fibra-mistura', async (req, res) => {
         totales.sum[key] = (totales.sum[key] || 0) + val * peso
       }
     }
+
 
     const seqsOut = Object.values(seqs).map((s) => {
       const out = { SEQ: s.SEQ, DT_ENTRADA_PROD: s.DT_ENTRADA_PROD, HR_ENTRADA_PROD: s.HR_ENTRADA_PROD }
