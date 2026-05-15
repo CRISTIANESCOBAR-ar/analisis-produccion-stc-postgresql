@@ -86,6 +86,8 @@ stc-db-up        # levanta Podman machine + contenedor postgres
 stc-db-status    # verifica que esté "Up (healthy)"
 ```
 
+> En este equipo, `stc-db-up` y `./start-db.ps1` arrancan mejor el PostgreSQL diario porque usan `podman start` si `stc_postgres` ya existe. `podman compose up` queda como paso de creación inicial.
+
 ### Opción B — Script todo-en-uno (levanta DB + backend PoC + frontend PoC)
 
 ```powershell
@@ -105,6 +107,12 @@ podman ps
 
 # 2. Levantar PostgreSQL
 cd C:\stc-produccion-v2
+./start-db.ps1
+
+# Alternativa mínima si el contenedor ya existe:
+podman start stc_postgres
+
+# Usar compose solo si el contenedor todavía no existe:
 podman compose up -d postgres
 
 # 3. Verificar estado — ESPERAR "Up (healthy)" antes de arrancar el backend
@@ -144,10 +152,20 @@ cd C:\stc-produccion-v2
 ### 4. Levantar PostgreSQL
 
 ```powershell
+# Uso diario en este equipo (contenedor ya creado)
+podman start stc_postgres
+
+# Solo si el contenedor no existe todavía
 podman compose up -d postgres
 ```
 
 **Salida esperada:**
+```
+stc_postgres
+```
+
+Si se ejecuta por primera vez con `podman compose up -d postgres`, la salida esperada será similar a:
+
 ```
 [+] up 2/2
  ✔ Network stc_network    Created
@@ -285,6 +303,28 @@ Stop-Process -Name win-sshproxy -Force -ErrorAction SilentlyContinue
 podman machine start
 # Salida esperada: "API forwarding listening on: npipe:////./pipe/docker_engine"
 ```
+
+---
+
+### Error: `podman compose up -d postgres` falla con "could not find a matching machine for connection ..."
+
+**Causa:** En este Windows puede fallar `podman machine inspect` aunque el daemon ya esté respondiendo. El contenedor existente se puede arrancar igual, pero `podman compose` no logra mapear la conexión SSH actual a la machine.
+
+**Solución inmediata:** usar el arranque diario sin compose:
+```powershell
+cd C:\stc-produccion-v2
+.\start-db.ps1
+
+# o, si solo quieres levantar el contenedor existente
+podman start stc_postgres
+```
+
+**Verificación:**
+```powershell
+podman ps --filter name=stc_postgres
+```
+
+Debe mostrar `Up (healthy)` antes de arrancar el backend.
 
 ---
 

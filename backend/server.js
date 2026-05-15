@@ -166,6 +166,15 @@ async function tableExists(tableName) {
   return Boolean(res.rows?.[0]?.reg)
 }
 
+async function getTableColumnsMap(tableName, label) {
+  const res = await query(
+    `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1`,
+    [tableName],
+    label
+  )
+  return new Map((res.rows || []).map((row) => [String(row.column_name).toLowerCase(), row.column_name]))
+}
+
 async function ensureCostosSchema() {
   await query(
     `CREATE TABLE IF NOT EXISTS tb_costo_items (
@@ -431,7 +440,7 @@ async function ensureCalidadIndexes() {
   try {
     await query(`
       CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_tb_defectos_etiqueta_trim
-        ON tb_defectos ((btrim(etiqueta)))
+          ON tb_defectos ((btrim("ETIQUETA")))
     `)
   } catch (e) {
     console.warn('No se pudo crear idx_tb_defectos_etiqueta_trim:', e.message)
@@ -2365,24 +2374,29 @@ app.get('/api/produccion/estopa-azul', async (req, res) => {
     const mesInicio = monthStart || `${year}-${month}-01`
     const mesFin = monthEnd || datePattern
 
+    const fichasCols = await getTableColumnsMap('tb_fichas', 'tb-fichas-columns/estopa-azul')
+    const consumoKey = ['cons#urd/m', 'cons.urd/m', 'consumo'].find((c) => fichasCols.has(c))
+    const urdumeKey = ['urdume', 'base urdume'].find((c) => fichasCols.has(c))
+    const consumoCol = consumoKey ? fichasCols.get(consumoKey) : null
+    const urdumeCol = urdumeKey ? fichasCols.get(urdumeKey) : null
+
     const dtBaseDate = sqlParseDate('p."DT_BASE_PRODUCAO"')
     const dtMovDate = sqlParseDate('r."DT_MOV"')
     const metragemNum = sqlParseNumberIntl('p."METRAGEM"')
-    const pesoMantaNum = sqlParseNumberIntl('f."CONS#URD/m"')
+    const pesoMantaNum = consumoCol ? sqlParseNumberIntl(`f.${quoteIdent(consumoCol)}`) : 'NULL::numeric'
     const estopaKgNum = sqlParseNumberIntl('r."PESO LIQUIDO (KG)"')
+    const urdumeExpr = urdumeCol ? `f.${quoteIdent(urdumeCol)}` : 'NULL::text'
 
     const sqlDia = `
       WITH bases AS (
         SELECT DISTINCT
-          f."URDUME" AS artigo,
+          ${urdumeExpr} AS artigo,
           ${pesoMantaNum} AS peso_manta
         FROM tb_fichas f
-        WHERE f."URDUME" IS NOT NULL
-          AND f."URDUME" <> ''
-          AND f."CONS#URD/m" IS NOT NULL
-          AND f."CONS#URD/m" <> ''
-          AND f."CONS#URD/m" <> '0'
-          AND f."CONS#URD/m" <> '0,00'
+        WHERE ${urdumeExpr} IS NOT NULL
+          AND ${urdumeExpr} <> ''
+          AND ${pesoMantaNum} IS NOT NULL
+          AND ${pesoMantaNum} <> 0
       ),
       metros_base AS (
         SELECT
@@ -2416,15 +2430,13 @@ app.get('/api/produccion/estopa-azul', async (req, res) => {
     const sqlMes = `
       WITH bases AS (
         SELECT DISTINCT
-          f."URDUME" AS artigo,
+          ${urdumeExpr} AS articulo,
           ${pesoMantaNum} AS peso_manta
         FROM tb_fichas f
-        WHERE f."URDUME" IS NOT NULL
-          AND f."URDUME" <> ''
-          AND f."CONS#URD/m" IS NOT NULL
-          AND f."CONS#URD/m" <> ''
-          AND f."CONS#URD/m" <> '0'
-          AND f."CONS#URD/m" <> '0,00'
+        WHERE ${urdumeExpr} IS NOT NULL
+          AND ${urdumeExpr} <> ''
+          AND ${pesoMantaNum} IS NOT NULL
+          AND ${pesoMantaNum} <> 0
       ),
       metros_base AS (
         SELECT
@@ -2440,7 +2452,7 @@ app.get('/api/produccion/estopa-azul', async (req, res) => {
         SELECT
           SUM(mb.metros * COALESCE(b.peso_manta, 0)) / 1000 * 0.98 AS suma_producto
         FROM metros_base mb
-        LEFT JOIN bases b ON mb.base = b.artigo
+        LEFT JOIN bases b ON mb.base = b.articulo
       ),
       estopa_azul AS (
         SELECT
@@ -2491,6 +2503,14 @@ app.get('/api/produccion/tecelagem-resumen', async (req, res) => {
     const [year, month] = datePattern.split('-')
     const mesInicio = monthStart || `${year}-${month}-01`
     const mesFin = monthEnd || datePattern
+
+    const fichasCols = await getTableColumnsMap('tb_fichas', 'tb-fichas-columns/tecelagem-resumen')
+    const consumoKey = ['cons#urd/m', 'cons.urd/m', 'consumo'].find((c) => fichasCols.has(c))
+    const encUrdKey = ['enc#tec#urdume', 'enc.tec.urdume', 'sizing'].find((c) => fichasCols.has(c))
+    const artigoKey = ['artigo codigo', 'artigo'].find((c) => fichasCols.has(c))
+    const consumoCol = consumoKey ? fichasCols.get(consumoKey) : null
+    const encUrdCol = encUrdKey ? fichasCols.get(encUrdKey) : null
+    const artigoCol = artigoKey ? fichasCols.get(artigoKey) : null
 
     const dtBaseDate = sqlParseDate('p."DT_BASE_PRODUCAO"')
     const metragemEncNum = sqlParseNumberIntl('p."METRAGEM ENCOLH"')
@@ -2578,10 +2598,11 @@ app.get('/api/produccion/tecelagem-resumen', async (req, res) => {
 
     // Estopa azul tejeduria (residuos por sector)
     const dtMovDate = sqlParseDate('r."DT_MOV"')
-    const pesoMantaNum = sqlParseNumberIntl('f."CONS#URD/m"')
-    const encUrdNum = sqlParseNumberIntl('f."ENC#TEC#URDUME"')
+    const pesoMantaNum = consumoCol ? sqlParseNumberIntl(`f.${quoteIdent(consumoCol)}`) : 'NULL::numeric'
+    const encUrdNum = encUrdCol ? sqlParseNumberIntl(`f.${quoteIdent(encUrdCol)}`) : 'NULL::numeric'
     const metragemNum = sqlParseNumberIntl('p."METRAGEM"')
     const estopaKgNum = sqlParseNumberIntl('r."PESO LIQUIDO (KG)"')
+    const artigoExpr = artigoCol ? `f.${quoteIdent(artigoCol)}` : 'NULL::text'
 
     const sqlEstopaDiaPeso = `
       WITH tej AS (
@@ -2596,11 +2617,11 @@ app.get('/api/produccion/tecelagem-resumen', async (req, res) => {
       ),
       fic AS (
         SELECT
-          f."ARTIGO CODIGO" AS articulo,
+          ${artigoExpr} AS articulo,
           ${pesoMantaNum} AS peso_manta,
           ${encUrdNum} AS enc_urd
         FROM tb_fichas f
-        WHERE f."ARTIGO CODIGO" IS NOT NULL AND f."ARTIGO CODIGO" <> ''
+        WHERE ${artigoExpr} IS NOT NULL AND ${artigoExpr} <> ''
       )
       SELECT
         SUM(tej.metragem * ((100 + COALESCE(fic.enc_urd, 0)) / 100) * (COALESCE(fic.peso_manta, 0) / 1000)) AS peso_urd
@@ -2629,11 +2650,11 @@ app.get('/api/produccion/tecelagem-resumen', async (req, res) => {
       ),
       fic AS (
         SELECT
-          f."ARTIGO CODIGO" AS articulo,
+          ${artigoExpr} AS articulo,
           ${pesoMantaNum} AS peso_manta,
           ${encUrdNum} AS enc_urd
         FROM tb_fichas f
-        WHERE f."ARTIGO CODIGO" IS NOT NULL AND f."ARTIGO CODIGO" <> ''
+        WHERE ${artigoExpr} IS NOT NULL AND ${artigoExpr} <> ''
       )
       SELECT
         SUM(tej.metragem * ((100 + COALESCE(fic.enc_urd, 0)) / 100) * (COALESCE(fic.peso_manta, 0) / 1000)) AS peso_urd
@@ -2718,9 +2739,9 @@ app.get('/api/produccion/acabamento-resumen', async (req, res) => {
     const mesFin = monthEnd || datePattern
 
     const dtBaseDate = sqlParseDate('p."DT_BASE_PRODUCAO"')
-    const dtProdDate = sqlParseDate('t.dt_prod')
+    const dtProdDate = sqlParseDate('t."DT_PROD"')
     const metragemNum = sqlParseNumberIntl('p."METRAGEM"')
-    const testeMetragemNum = sqlParseNumberIntl('t.metragem')
+    const testeMetragemNum = sqlParseNumberIntl('t."METRAGEM"')
     const encUrdNum = sqlParseNumberIntl('t."%_ENC_URD"')
 
     const sqlMetrosDia = `
@@ -2746,8 +2767,8 @@ app.get('/api/produccion/acabamento-resumen', async (req, res) => {
         END AS enc_urd_pct
       FROM tb_testes t
       WHERE ${dtProdDate} = $1::date
-        AND t.maquina = '165001'
-        AND t.aprov = 'A'
+        AND t."MAQUINA" = '165001'
+        AND t."APROV" = 'A'
     `
     const sqlEncUrdMes = `
       SELECT
@@ -2759,8 +2780,8 @@ app.get('/api/produccion/acabamento-resumen', async (req, res) => {
       FROM tb_testes t
       WHERE ${dtProdDate} >= $1::date
         AND ${dtProdDate} <= $2::date
-        AND t.maquina = '165001'
-        AND t.aprov = 'A'
+        AND t."MAQUINA" = '165001'
+        AND t."APROV" = 'A'
     `
 
     const resultMetrosDia = await query(sqlMetrosDia, [datePattern], 'acabamento/metros-dia')
@@ -3386,8 +3407,8 @@ app.get('/api/residuos-indigo-tejeduria', async (req, res) => {
     const fichasCols = new Map(
       (fichasColumns.rows || []).map((r) => [String(r.column_name).toLowerCase(), r.column_name])
     )
-    const consumoKey = ['cons#urd/m', 'consumo'].find((c) => fichasCols.has(c))
-    const sizingKey = ['enc#tec#urdume', 'sizing'].find((c) => fichasCols.has(c))
+    const consumoKey = ['cons#urd/m', 'cons.urd/m', 'consumo'].find((c) => fichasCols.has(c))
+    const sizingKey = ['enc#tec#urdume', 'enc.tec.urdume', 'sizing'].find((c) => fichasCols.has(c))
     const consumoCol = consumoKey ? fichasCols.get(consumoKey) : null
     const sizingCol = sizingKey ? fichasCols.get(sizingKey) : null
     const consumoNum = consumoCol ? sqlParseNumber(quoteIdent(consumoCol)) : 'NULL::numeric'
@@ -8033,6 +8054,12 @@ app.get('/api/hvi/ensayos-detalles', async (req, res) => {
     if (!tableCheck.rows[0]?.reg) {
       return res.json({ rows: [] })
     }
+
+    const ensayosCols = await getTableColumnsMap('tb_hvi_ensayos', 'tb-hvi-ensayos-columns')
+    const cantidadExpr = ensayosCols.has('cantidad') ? `e.${quoteIdent(ensayosCols.get('cantidad'))}` : 'NULL::integer'
+    const colorExpr = ensayosCols.has('color') ? `e.${quoteIdent(ensayosCols.get('color'))}` : 'NULL::text'
+    const cortExpr = ensayosCols.has('cort') ? `e.${quoteIdent(ensayosCols.get('cort'))}` : 'NULL::integer'
+
     const result = await query(`
       SELECT
         e.lote,
@@ -8040,9 +8067,9 @@ app.get('/api/hvi/ensayos-detalles', async (req, res) => {
         e.grado,
         e.fecha,
         e.tipo AS ensayo_tipo,
-        e.cantidad,
-        e.color,
-        e.cort,
+        ${cantidadExpr} AS cantidad,
+        ${colorExpr} AS color,
+        ${cortExpr} AS cort,
         d.fardo,
         d.sci, d.mst, d.mic, d.mat, d.uhml,
         d.ui, d.sf, d.str, d.elg, d.rd,
