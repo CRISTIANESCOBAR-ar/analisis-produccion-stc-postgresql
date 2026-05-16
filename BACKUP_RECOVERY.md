@@ -22,9 +22,104 @@ Este documento describe el sistema de backup automático implementado para prote
 
 Los backups se guardan en: `C:\stc-produccion-v2\backups\`
 
+Si la unidad `D:` está disponible, el script también copia automáticamente los backups a `D:\Backups-STC\`.
+
+### Backup Enfocado por Eventos de Importación
+
+Para no depender solo del Programador de tareas de Windows, el backend de la PoC ahora puede disparar un backup en segundo plano cuando se confirman importaciones de:
+
+- USTER
+- USTER Cardas
+- Tensorapid
+- HVI/CSV
+
+Ese disparo **no ocurre por cada archivo inmediatamente**. Se aplica una estrategia de consolidación:
+
+- Ventana de silencio: 15 minutos después del último guardado relevante
+- Cooldown mínimo entre backups automáticos: 2 horas
+- Tipo de backup disparado por la app: `Focused`
+
+El modo `Focused` genera un dump rápido solo de tablas críticas de ensayos:
+
+- `tb_uster_par`
+- `tb_uster_tbl`
+- `tb_uster_carda_par`
+- `tb_uster_carda_tbl`
+- `tb_tensorapid_par`
+- `tb_tensorapid_tbl`
+- `tb_hvi_ensayos`
+- `tb_hvi_detalles`
+
+### Backup Full al Final de Importaciones Masivas
+
+La app de producción ahora dispara un backup `Full` cuando una importación masiva termina sin errores en:
+
+- `POST /api/produccion/import-all`
+- `POST /api/produccion/import/force-all`
+
+Regla aplicada:
+
+- si el lote no importó nada, no se lanza backup full
+- si hubo algún error en el lote, no se lanza backup full
+- si el lote terminó bien y hubo tablas importadas, se dispara backup `Full` en segundo plano
+
+Ejecución manual del modo enfocado:
+
+```powershell
+.\backup-database.ps1 -Mode Focused -Reason "manual"
+```
+
+El estado del scheduler se puede ver en el backend:
+
+```text
+GET /api/health
+```
+
+Campo esperado en la respuesta:
+
+```json
+{
+  "backupTrigger": {
+    "enabled": true,
+    "running": false,
+    "pending": false
+  }
+}
+```
+
 ### Backup Automático Diario
 
 Para configurar backup automático diario:
+
+Opción recomendada en este repositorio:
+
+```powershell
+.
+egister-nightly-backup-task.ps1
+```
+
+Eso registra una tarea diaria que ejecuta:
+
+```powershell
+.
+un-nightly-backup.ps1
+```
+
+El wrapper nocturno primero:
+
+- verifica/arranca Podman
+- inicia `stc_postgres` si hace falta
+- espera a que PostgreSQL esté `healthy`
+- ejecuta `backup-database.ps1 -Mode Full`
+
+Configuración aplicada por la tarea:
+
+- `WakeToRun`
+- `StartWhenAvailable`
+- ejecución con el usuario actual en modo `S4U`
+- `RunLevel Highest`
+
+Si prefieres crearla manualmente en Task Scheduler:
 
 1. Abrir **Programador de tareas** (Task Scheduler)
 2. Crear tarea básica:
@@ -32,12 +127,13 @@ Para configurar backup automático diario:
    - **Desencadenador**: Diario a las 2:00 AM
    - **Acción**: Iniciar programa
      - **Programa**: `powershell.exe`
-     - **Argumentos**: `-File C:\stc-produccion-v2\backup-database.ps1`
+     - **Argumentos**: `-NoProfile -ExecutionPolicy Bypass -File C:\stc-produccion-v2\run-nightly-backup.ps1`
      - **Iniciar en**: `C:\stc-produccion-v2`
 
 ### Retención
 
-- Se mantienen automáticamente los **últimos 7 backups**
+- Backups full: **7** copias en `C:` y **14** copias en `D:`
+- Backups enfocados de ensayos: **30** copias en `C:` y **60** copias en `D:`
 - Los backups más antiguos se eliminan automáticamente
 
 ## 🔄 Restauración de Datos

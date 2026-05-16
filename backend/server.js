@@ -10,6 +10,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getImportStatus, importCSV, importAll, importSpecificTables, importForceAll, renameduplicateHeaders, getTableColumns, compareColumns, addColumnsToTable } from './import-manager.js'
 import configStandardsRouter from './config-standards.js';
 import { optimizeBlend } from './services/blendomat-optimizer.js';
+import { triggerFullBackup, getFullBackupStatus } from './services/fullBackupTrigger.js';
 import { getEficienciasResumen, getEficienciasDetalle } from './routes/eficiencias-tecelaje.mjs';
 import { parseNarrativaStructure } from '../shared/narrativaSections.js';
 
@@ -5132,7 +5133,23 @@ app.post('/api/produccion/import-all', async (req, res) => {
   try {
     const csvFolder = resolveCsvFolderFromBody(req)
     const results = await importAll(pool, csvFolder)
-    res.json({ results })
+    const errors = results.filter((r) => r && r.success === false)
+    const successful = results.filter((r) => r && r.success === true)
+    const backup = (successful.length > 0 && errors.length === 0)
+      ? triggerFullBackup(`csv-import-all:${successful.length}`)
+      : { scheduled: false, reason: errors.length ? 'import-errors' : 'nothing-imported', ...getFullBackupStatus() }
+
+    res.json({
+      success: errors.length === 0,
+      results,
+      errors,
+      backup,
+      summary: {
+        total: results.length,
+        successful: successful.length,
+        failed: errors.length
+      }
+    })
   } catch (err) {
     console.error('Error en import-all:', err)
     res.status(500).json({ error: err.message })
@@ -5148,14 +5165,19 @@ app.post('/api/produccion/import/force-all', async (req, res) => {
 
     const results = await importForceAll(pool, csvFolder)
     const errors = results.filter((r) => r && r.success === false)
+    const successful = results.filter((r) => r && r.success === true)
+    const backup = (successful.length > 0 && errors.length === 0)
+      ? triggerFullBackup(`csv-force-all:${successful.length}`)
+      : { scheduled: false, reason: errors.length ? 'import-errors' : 'nothing-imported', ...getFullBackupStatus() }
 
     res.json({
       success: errors.length === 0,
       results,
       errors,
+      backup,
       summary: {
         total: results.length,
-        successful: results.length - errors.length,
+        successful: successful.length,
         failed: errors.length
       }
     })
