@@ -2543,26 +2543,39 @@ app.get('/api/produccion/tecelagem-resumen', async (req, res) => {
     `
 
     const sqlMes = `
+      WITH daily AS (
+        SELECT
+          ${dtBaseDate} AS dia,
+          COALESCE(SUM(${metragemEncNum}), 0)   AS metros,
+          COALESCE(SUM(${paradaTramaNum}), 0)   AS parada_trama,
+          COALESCE(SUM(${paradaUrdNum}), 0)     AS parada_urd,
+          COALESCE(SUM(${pontosLidosNum}), 0)   AS pontos_lidos,
+          COALESCE(SUM(${pontos100Num}), 0)     AS pontos_100
+        FROM tb_produccion p
+        WHERE ${dtBaseDate} >= $1::date
+          AND ${dtBaseDate} <= $2::date
+          AND p."SELETOR" = 'TECELAGEM'
+        GROUP BY ${dtBaseDate}
+      )
       SELECT
-        COALESCE(SUM(${metragemEncNum}), 0) AS metros,
+        COALESCE(SUM(metros), 0) AS metros,
         CASE
-          WHEN SUM(${pontosLidosNum}) > 0 THEN SUM(${paradaTramaNum}) * 100000.0 /
-            (SUM(${pontosLidosNum}) * 1000)
+          WHEN SUM(pontos_lidos) > 0 THEN SUM(parada_trama) * 100000.0 /
+            (SUM(pontos_lidos) * 1000)
           ELSE 0
         END AS rot_tra_105,
         CASE
-          WHEN SUM(${pontosLidosNum}) > 0 THEN SUM(${paradaUrdNum}) * 100000.0 /
-            (SUM(${pontosLidosNum}) * 1000)
+          WHEN SUM(pontos_lidos) > 0 THEN SUM(parada_urd) * 100000.0 /
+            (SUM(pontos_lidos) * 1000)
           ELSE 0
         END AS rot_urd_105,
         CASE
-          WHEN SUM(${pontos100Num}) > 0 THEN SUM(${pontosLidosNum}) * 100.0 / SUM(${pontos100Num})
+          WHEN SUM(CASE WHEN pontos_lidos > 0 THEN pontos_100 ELSE 0 END) > 0
+          THEN SUM(CASE WHEN pontos_lidos > 0 THEN pontos_lidos ELSE 0 END) * 100.0 /
+               SUM(CASE WHEN pontos_lidos > 0 THEN pontos_100 ELSE 0 END)
           ELSE 0
         END AS eficiencia
-      FROM tb_produccion p
-      WHERE ${dtBaseDate} >= $1::date
-        AND ${dtBaseDate} <= $2::date
-        AND p."SELETOR" = 'TECELAGEM'
+      FROM daily
     `
 
     const resultDia = await query(sqlDia, [datePattern], 'produccion/tecelagem-dia')
