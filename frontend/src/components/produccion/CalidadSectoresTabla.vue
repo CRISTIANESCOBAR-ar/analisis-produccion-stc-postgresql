@@ -19,7 +19,7 @@
     <div class="flex gap-3 flex-1 min-h-0">
 
       <!-- ── COLUMNA IZQUIERDA: Tabla sectores (altura completa) ── -->
-      <div class="quality-card shadow border border-slate-200 rounded overflow-hidden flex flex-col relative flex-shrink-0" style="width: fit-content;">
+      <div class="quality-card shadow border border-slate-200 rounded overflow-hidden flex flex-col relative shrink-0" style="width: fit-content;">
         
         <div class="flex items-center justify-between bg-gray-100 text-slate-800 px-2 py-1.5 text-xs font-semibold border-b border-slate-200">
           <div class="flex items-center gap-1.5">
@@ -148,14 +148,14 @@
 
         <!-- Gráfico de Eficiencias y Roturas -->
         <div ref="chartContainerRef" class="flex-1 min-h-0 shadow border border-slate-200 rounded bg-white flex flex-col overflow-hidden">
-          <div class="flex items-center justify-between bg-gray-100 text-slate-800 px-2 py-1.5 text-xs font-semibold border-b border-slate-200 chart-header flex-shrink-0">
+          <div class="flex items-center justify-between bg-gray-100 text-slate-800 px-2 py-1.5 text-xs font-semibold border-b border-slate-200 chart-header shrink-0">
             <!-- Título completo para pantallas grandes -->
             <span class="whitespace-nowrap hidden xl:block">Eficiencias y Roturas de Trama 105 - Tejeduría</span>
             <!-- Título medio para pantallas medianas -->
             <span class="whitespace-nowrap hidden lg:block xl:hidden">Efic. y RT105 - Tejeduría</span>
             <!-- Título compacto con mes para pantallas pequeñas -->
             <span class="whitespace-nowrap text-xs lg:hidden">Efic. y RT105 - {{ chartMonthYear }}</span>
-            <div class="flex items-center gap-1.5 flex-shrink-0">
+            <div class="flex items-center gap-1.5 shrink-0">
               <!-- Mostrar mes solo en pantallas grandes y medianas -->
               <span class="hidden lg:inline">{{ chartMonthYear }}</span>
               <span class="hidden lg:inline">-</span>
@@ -199,7 +199,7 @@
               <span class="font-normal text-slate-500"> · DÍA — {{ displayDate }}</span>
               <span v-if="defectosDataDay.total.metros_lin" class="font-normal text-slate-400"> · {{ Number(defectosDataDay.total.metros_lin).toLocaleString('es-AR', { maximumFractionDigits: 0 }) }} m</span>
             </span>
-            <div class="flex items-center gap-2 flex-shrink-0">
+            <div class="flex items-center gap-2 shrink-0">
               <button
                 v-if="!defectosDataDay.loading && defectosDataDay.rows.length > 0"
                 @click="showAllDefectosDay = !showAllDefectosDay"
@@ -215,7 +215,7 @@
                 v-if="!defectosDataDay.loading && defectosDataDay.rows.length > 0"
                 ref="copyDefDayBtnRef"
                 @click="copyDefectosTable(defectosDisplayRowsDay, defectosDataDay.total, 'DÍA — ' + displayDate, 'defectos-dia')"
-                class="inline-flex items-center justify-center w-6 h-6 text-slate-500 hover:text-slate-700 hover:bg-slate-200 rounded transition-colors duration-150 flex-shrink-0"
+                class="inline-flex items-center justify-center w-6 h-6 text-slate-500 hover:text-slate-700 hover:bg-slate-200 rounded transition-colors duration-150 shrink-0"
               >
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -288,7 +288,7 @@
               <span class="font-normal text-slate-500"> · MES — {{ chartMonthYear }}</span>
               <span v-if="defectosData.total.metros_lin" class="font-normal text-slate-400"> · {{ Number(defectosData.total.metros_lin).toLocaleString('es-AR', { maximumFractionDigits: 0 }) }} m</span>
             </span>
-            <div class="flex items-center gap-2 flex-shrink-0">
+            <div class="flex items-center gap-2 shrink-0">
               <button
                 v-if="!defectosData.loading && defectosData.rows.length > 0"
                 @click="showAllDefectos = !showAllDefectos"
@@ -304,7 +304,7 @@
                 v-if="!defectosData.loading && defectosData.rows.length > 0"
                 ref="copyDefMonthBtnRef"
                 @click="copyDefectosTable(defectosDisplayRows, defectosData.total, 'MES — ' + chartMonthYear, 'defectos-mes')"
-                class="inline-flex items-center justify-center w-6 h-6 text-slate-500 hover:text-slate-700 hover:bg-slate-200 rounded transition-colors duration-150 flex-shrink-0"
+                class="inline-flex items-center justify-center w-6 h-6 text-slate-500 hover:text-slate-700 hover:bg-slate-200 rounded transition-colors duration-150 shrink-0"
               >
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
