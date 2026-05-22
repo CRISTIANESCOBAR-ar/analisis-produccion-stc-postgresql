@@ -1,7 +1,7 @@
 <template>
   <div class="w-full h-screen flex flex-col p-1 relative" ref="containerRef">
     <!-- Overlay de carga -->
-    <div v-if="cargando" class="fixed inset-0 bg-white/40 backdrop-blur-xs flex items-center justify-center z-[9999] transition-all duration-300">
+    <div v-if="cargando" class="fixed inset-0 bg-white/40 backdrop-blur-xs flex items-center justify-center z-9999 transition-all duration-300">
       <div class="flex flex-col items-center gap-4 bg-white/90 px-10 py-8 rounded-2xl shadow-2xl border border-blue-100">
         <div class="relative">
           <div class="animate-spin rounded-full h-16 w-16 border-4 border-blue-50 border-t-blue-600"></div>
@@ -147,7 +147,7 @@
             <div class="px-2 py-1 text-sm font-semibold tabular-nums" :class="colorRotUrd">
               {{ enc.rot_urd_106 != null ? enc.rot_urd_106.toFixed(2).replace('.', ',') : '–' }}
             </div>
-            <div class="px-2 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-r border-slate-200 border-l border-slate-200">Rot. Indigo 103</div>
+            <div class="px-2 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-x border-slate-200">Rot. Indigo 103</div>
             <div class="px-2 py-1 text-sm font-semibold tabular-nums" :class="colorRotInd">
               {{ enc.rot_ind_103 != null ? enc.rot_ind_103.toFixed(2).replace('.', ',') : '–' }}
             </div>
