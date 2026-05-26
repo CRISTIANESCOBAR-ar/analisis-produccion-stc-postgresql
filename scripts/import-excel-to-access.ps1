@@ -32,7 +32,13 @@ param(
     [switch]$Replace,
     [string]$FichaExcelPath = "C:\STC\fichaArtigo.xlsx",
     [string]$FichaTableName = "tb_FICHAS",
-    [bool]$IncludeFicha = $true
+    [bool]$IncludeFicha = $true,
+    [string]$RptProducaoPath = "C:\STC\rptProducaoMaquina.xlsx",
+    [string]$RptProducaoSheet = "rptProdMaq$",
+    [string]$CalidadTableName = "tb_CALIDAD",
+    [string]$CalidadTempTableName = "tb_CALIDAD_TEMP",
+    [string]$CalidadDateField = "DT_BASE_PRODUCAO",
+    [bool]$ProcessCalidad = $true
 )
 
 function Release-ComObject($com) {
@@ -99,6 +105,67 @@ try {
             Write-Host "Importación a '$tbl' completada."
         } catch {
             Write-Error "Error importando '$src' a '$tbl': $_"
+        }
+    }
+
+    # --- Procesar tb_CALIDAD: importar rptProducaoMaquina.xlsx a tabla temporal y actualizar por fechas ---
+    if ($ProcessCalidad) {
+        if (-not (Test-Path $RptProducaoPath)) {
+            Write-Warning "Omitiendo actualización de $CalidadTableName: no se encontró '$RptProducaoPath'."
+        } else {
+            Write-Host "Procesando archivo de producción para actualizar $CalidadTableName..."
+
+            # Intentar eliminar tabla temporal si existe
+            try {
+                $access.DoCmd.SetWarnings($false)
+                $access.DoCmd.RunSQL("DROP TABLE [$CalidadTempTableName]")
+                $access.DoCmd.SetWarnings($true)
+            } catch {
+                $access.DoCmd.SetWarnings($true)
+            }
+
+            # Importar hoja específica a la tabla temporal
+            try {
+                $access.DoCmd.TransferSpreadsheet($transferType, $spreadsheetType, $CalidadTempTableName, $RptProducaoPath, $hasFieldNames, $RptProducaoSheet)
+                Write-Host "Importación a '$CalidadTempTableName' completada."
+            } catch {
+                Write-Error "Error importando '$RptProducaoPath' a '$CalidadTempTableName': $_"
+            }
+
+            # Usar ADO para obtener fechas distintas de la tabla temporal y eliminar en la tabla definitiva
+            try {
+                $ado = New-Object -ComObject ADODB.Connection
+                $ado.Open("Provider=Microsoft.ACE.OLEDB.12.0;Data Source=$AccessPath;")
+
+                $sqlDates = "SELECT DISTINCTROW Format$([" + $CalidadTempTableName + "].[" + $CalidadDateField + "],'Short Date') AS FECHA " +
+                            "FROM " + $CalidadTempTableName + " " +
+                            "GROUP BY Format$([" + $CalidadTempTableName + "].[" + $CalidadDateField + "],'Short Date') " +
+                            "ORDER BY Format$([" + $CalidadTempTableName + "].[" + $CalidadDateField + "],'Short Date');"
+
+                $rs = $ado.Execute($sqlDates)
+                while (-not $rs.EOF) {
+                    $fecha = $rs.Fields.Item("FECHA").Value
+                    if ($null -ne $fecha) {
+                        $fechaStr = $fecha.ToString()
+                        $deleteSql = "DELETE * FROM [" + $CalidadTableName + "] WHERE (((Format$([" + $CalidadTableName + "].[" + $CalidadDateField + "],'Short Date'))='" + $fechaStr + "'))"
+                        Write-Host "Eliminando filas en $CalidadTableName con fecha: $fechaStr"
+                        $ado.Execute($deleteSql) | Out-Null
+                    }
+                    $rs.MoveNext()
+                }
+
+                # Copiar desde la tabla temporal a la tabla definitiva
+                Write-Host "Insertando registros desde $CalidadTempTableName a $CalidadTableName..."
+                $ado.Execute("INSERT INTO [" + $CalidadTableName + "] SELECT * FROM [" + $CalidadTempTableName + "]") | Out-Null
+
+                # Opcional: eliminar la tabla temporal
+                try { $ado.Execute("DROP TABLE [" + $CalidadTempTableName + "]") | Out-Null } catch { }
+
+                $ado.Close()
+                $ado = $null
+            } catch {
+                Write-Error "Error actualizando $CalidadTableName: $_"
+            }
         }
     }
 
