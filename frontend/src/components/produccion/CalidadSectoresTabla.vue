@@ -1,7 +1,7 @@
 <template>
   <div class="w-full h-screen px-2 md:px-4 py-3 flex flex-col relative">
     <!-- Overlay de carga para toda la pantalla -->
-    <div v-if="loading" class="fixed inset-0 bg-white/40 backdrop-blur-[2px] flex items-center justify-center z-[9999] transition-all duration-300">
+    <div v-if="loading" class="fixed inset-0 bg-white/40 backdrop-blur-[2px] flex items-center justify-center z-9999 transition-all duration-300">
       <div class="flex flex-col items-center gap-4 bg-white/90 px-10 py-8 rounded-2xl shadow-2xl border border-blue-100">
         <div class="relative">
           <div class="animate-spin rounded-full h-16 w-16 border-4 border-blue-50 border-t-blue-600"></div>
@@ -86,7 +86,7 @@
             </div>
             <button 
               ref="prevMonthBtnRef"
-              class="inline-flex items-center justify-center px-1.5 py-1.5 border border-slate-300 bg-gradient-to-b from-slate-50 to-slate-100 text-slate-700 rounded text-xs font-bold hover:from-slate-100 hover:to-slate-200 transition-all duration-150" 
+              class="inline-flex items-center justify-center px-1.5 py-1.5 border border-slate-300 bg-linear-to-b from-slate-50 to-slate-100 text-slate-700 rounded text-xs font-bold hover:from-slate-100 hover:to-slate-200 transition-all duration-150" 
               @click="saltarMes(-1)" 
               @mousedown.prevent
               tabindex="-1"
@@ -94,7 +94,7 @@
             >&lt;&lt;</button>
             <button
               ref="prevDayBtnRef" 
-              class="inline-flex items-center justify-center px-1.5 py-1.5 border border-slate-300 bg-gradient-to-b from-slate-50 to-slate-100 text-slate-700 rounded text-xs font-bold hover:from-slate-100 hover:to-slate-200 transition-all duration-150" 
+              class="inline-flex items-center justify-center px-1.5 py-1.5 border border-slate-300 bg-linear-to-b from-slate-50 to-slate-100 text-slate-700 rounded text-xs font-bold hover:from-slate-100 hover:to-slate-200 transition-all duration-150" 
               @click="cambiarFecha(-1)" 
               @mousedown.prevent
               tabindex="-1"
@@ -102,7 +102,7 @@
             >&lt;</button>
             <button
               ref="nextDayBtnRef" 
-              class="inline-flex items-center justify-center px-1.5 py-1.5 border border-slate-300 bg-gradient-to-b from-slate-50 to-slate-100 text-slate-700 rounded text-xs font-bold hover:from-slate-100 hover:to-slate-200 transition-all duration-150" 
+              class="inline-flex items-center justify-center px-1.5 py-1.5 border border-slate-300 bg-linear-to-b from-slate-50 to-slate-100 text-slate-700 rounded text-xs font-bold hover:from-slate-100 hover:to-slate-200 transition-all duration-150" 
               @click="cambiarFecha(1)" 
               @mousedown.prevent
               tabindex="-1"
@@ -110,7 +110,7 @@
             >&gt;</button>
             <button 
               ref="nextMonthBtnRef"
-              class="inline-flex items-center justify-center px-1.5 py-1.5 border border-slate-300 bg-gradient-to-b from-slate-50 to-slate-100 text-slate-700 rounded text-xs font-bold hover:from-slate-100 hover:to-slate-200 transition-all duration-150" 
+              class="inline-flex items-center justify-center px-1.5 py-1.5 border border-slate-300 bg-linear-to-b from-slate-50 to-slate-100 text-slate-700 rounded text-xs font-bold hover:from-slate-100 hover:to-slate-200 transition-all duration-150" 
               @click="saltarMes(1)" 
               @mousedown.prevent
               tabindex="-1"
@@ -380,10 +380,10 @@
 
   <div
     v-if="showDebugModal"
-    class="fixed inset-0 z-[999] flex items-center justify-center bg-black/40"
+    class="fixed inset-0 z-999 flex items-center justify-center bg-black/40"
     @click.self="showDebugModal = false"
   >
-    <div class="bg-white rounded-lg shadow-xl border border-slate-200 w-[420px]">
+    <div class="bg-white rounded-lg shadow-xl border border-slate-200 w-105">
       <div class="flex items-center justify-between px-4 py-2 border-b border-slate-200">
         <span class="text-sm font-semibold text-slate-700">Depuración de bordes (INDIGO / TECELAGEM)</span>
         <button class="text-slate-500 hover:text-slate-700" @click="showDebugModal = false">✕</button>
