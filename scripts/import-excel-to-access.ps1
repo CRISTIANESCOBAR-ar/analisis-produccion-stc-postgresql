@@ -37,7 +37,12 @@ param(
     [string]$RptProducaoSheet = "rptProdMaq$",
     [string]$ProducaoTableName = "tb_PRODUCCION",
     [string]$ProducaoDateField = "DT_BASE_PRODUCAO",
-    [bool]$ProcessProducao = $true
+    [bool]$ProcessProducao = $true,
+    [bool]$UseStaging = $true,
+    [switch]$DryRun,
+    [switch]$KeepTemp,
+    [bool]$BackupAccdb = $true,
+    [string]$BackupDir = "C:\STC\backups"
 )
 
 function Release-ComObject($com) {
@@ -153,6 +158,140 @@ try {
             }
         }
     }
+        # --- Procesar tb_PRODUCCION: staging + dry-run + backup ---
+        if ($ProcessProducao) {
+            if (-not (Test-Path $RptProducaoPath)) {
+                Write-Warning "Omitiendo actualización de $ProducaoTableName: no se encontró '$RptProducaoPath'."
+            } else {
+                Write-Host "Procesando archivo de producción para actualizar $ProducaoTableName..."
+
+                try {
+                    # Backup del archivo .accdb antes de modificar
+                    if ($BackupAccdb) {
+                        try {
+                            if (-not (Test-Path $BackupDir)) { New-Item -ItemType Directory -Path $BackupDir -Force | Out-Null }
+                            $ts = Get-Date -Format "yyyyMMdd_HHmmss"
+                            $accdbName = [System.IO.Path]::GetFileNameWithoutExtension($AccessPath)
+                            $backupFile = Join-Path $BackupDir ("${accdbName}_$ts.accdb")
+                            Copy-Item -Path $AccessPath -Destination $backupFile -Force
+                            Write-Host "Backup creado: $backupFile"
+                        } catch {
+                            Write-Warning "No se pudo crear backup del .accdb: $_"
+                        }
+                    }
+
+                    $tempTable = $ProducaoTableName + "_TEMP"
+
+                    if ($UseStaging) {
+                        # Importar Excel a tabla temporal (elimina tabla temporal previa si existe)
+                        try {
+                            $access.DoCmd.SetWarnings($false)
+                            $access.DoCmd.RunSQL("DROP TABLE [" + $tempTable + "]")
+                            $access.DoCmd.SetWarnings($true)
+                        } catch {
+                            $access.DoCmd.SetWarnings($true)
+                        }
+
+                        try {
+                            $access.DoCmd.TransferSpreadsheet($transferType, $spreadsheetType, $tempTable, $RptProducaoPath, $hasFieldNames, $RptProducaoSheet)
+                            Write-Host "Importado a tabla temporal: $tempTable"
+                        } catch {
+                            Write-Error "Error importando Excel a tabla temporal: $_"
+                            throw $_
+                        }
+
+                        # Conectar por ADO para operaciones de validación/borrado/inserción
+                        $ado = New-Object -ComObject ADODB.Connection
+                        $ado.Open("Provider=Microsoft.ACE.OLEDB.12.0;Data Source=$AccessPath;")
+
+                        # Intentar normalizar fechas en la temporal (donde IsDate es true)
+                        try {
+                            $convSql = "UPDATE [" + $tempTable + "] SET [" + $ProducaoDateField + "] = CDate([" + $ProducaoDateField + "]) WHERE IsDate([" + $ProducaoDateField + "])"
+                            $ado.Execute($convSql) | Out-Null
+                        } catch {
+                            Write-Warning "No se pudo convertir automáticamente todas las fechas en $tempTable: $_"
+                        }
+
+                        # Obtener fechas distintas y conteos desde la temporal
+                        $sqlDates = "SELECT Format$([" + $ProducaoDateField + "],'Short Date') AS FECHA, COUNT(*) AS CNT FROM [" + $tempTable + "] GROUP BY Format$([" + $ProducaoDateField + "],'Short Date') ORDER BY Format$([" + $ProducaoDateField + "],'Short Date')"
+                        $rsDates = $ado.Execute($sqlDates)
+                        $datesToDelete = @()
+                        while (-not $rsDates.EOF) {
+                            $d = @{}
+                            $d.FECHA = $rsDates.Fields.Item("FECHA").Value
+                            $d.CNT = $rsDates.Fields.Item("CNT").Value
+                            $datesToDelete += $d
+                            $rsDates.MoveNext()
+                        }
+                        if ($rsDates.State -ne $null) { try { $rsDates.Close() } catch {} }
+
+                        if ($DryRun) {
+                            Write-Host "DRY-RUN: Fechas encontradas en $tempTable:"
+                            foreach ($d in $datesToDelete) {
+                                Write-Host ("  {0} -> {1} registros" -f $d.FECHA, $d.CNT)
+                            }
+                            if (-not $KeepTemp) {
+                                try { $access.DoCmd.RunSQL("DROP TABLE [" + $tempTable + "]") } catch { }
+                            }
+                            $ado.Close(); $ado = $null
+                        } else {
+                            # borrar por fechas
+                            foreach ($d in $datesToDelete) {
+                                $fechaStr = $d.FECHA
+                                Write-Host "Eliminando filas en $ProducaoTableName con fecha: $fechaStr"
+                                $deleteSql = "DELETE * FROM [" + $ProducaoTableName + "] WHERE (((Format$([" + $ProducaoTableName + "].[" + $ProducaoDateField + "],'Short Date'))='" + $fechaStr + "'))"
+                                $ado.Execute($deleteSql) | Out-Null
+                            }
+
+                            # calcular columnas comunes
+                            $rsTempFld = $ado.Execute("SELECT * FROM [" + $tempTable + "] WHERE 1=0")
+                            $tempCols = @(); for ($i=0;$i -lt $rsTempFld.Fields.Count;$i++) { $tempCols += $rsTempFld.Fields.Item($i).Name }
+                            $rsTempFld.Close()
+                            $rsDestFld = $ado.Execute("SELECT * FROM [" + $ProducaoTableName + "] WHERE 1=0")
+                            $destCols = @(); for ($i=0;$i -lt $rsDestFld.Fields.Count;$i++) { $destCols += $rsDestFld.Fields.Item($i).Name }
+                            $rsDestFld.Close()
+
+                            $common = @()
+                            foreach ($c in $destCols) {
+                                if ($tempCols -contains $c) { $common += $c }
+                            }
+                            if (-not $common.Count) {
+                                Write-Warning "No hay columnas en común entre $tempTable y $ProducaoTableName. Abortando insert."
+                            } else {
+                                $colList = ($common | ForEach-Object { '[' + $_ + ']' }) -join ','
+                                $insertSql = "INSERT INTO [" + $ProducaoTableName + "] (" + $colList + ") SELECT " + $colList + " FROM [" + $tempTable + "]"
+                                Write-Host "Insertando registros comunes (columnas: $($common -join ', '))..."
+                                $ado.Execute($insertSql) | Out-Null
+                                Write-Host "Insert completado."
+                            }
+                            if (-not $KeepTemp) { try { $ado.Execute("DROP TABLE [" + $tempTable + "]") | Out-Null } catch { } }
+                            $ado.Close(); $ado = $null
+                        }
+                    } else {
+                        # fallback directo (sin staging)
+                        try {
+                            $ado = New-Object -ComObject ADODB.Connection
+                            $ado.Open("Provider=Microsoft.ACE.OLEDB.12.0;Data Source=$AccessPath;")
+                            $excelIn = "'" + $RptProducaoPath + "' 'Excel 12.0 Xml;HDR=Yes;IMEX=1;'"
+                            $sheetToken = "[" + $RptProducaoSheet + "]"
+                            $sqlDates = "SELECT DISTINCTROW Format$(" + $sheetToken + ".[" + $ProducaoDateField + "],'Short Date') AS FECHA FROM " + $sheetToken + " IN " + $excelIn + " GROUP BY Format$(" + $sheetToken + ".[" + $ProducaoDateField + "],'Short Date') ORDER BY Format$(" + $sheetToken + ".[" + $ProducaoDateField + "],'Short Date');"
+                            $rs = $ado.Execute($sqlDates)
+                            $datesToDelete = @()
+                            while (-not $rs.EOF) { $datesToDelete += $rs.Fields.Item("FECHA").Value; $rs.MoveNext() }
+                            foreach ($fechaStr in $datesToDelete) {
+                                $ado.Execute("DELETE * FROM [" + $ProducaoTableName + "] WHERE (((Format$( [" + $ProducaoTableName + "] .[" + $ProducaoDateField + "],'Short Date'))='" + $fechaStr + "'))") | Out-Null
+                            }
+                            $insertSql = "INSERT INTO [" + $ProducaoTableName + "] SELECT * FROM " + $sheetToken + " IN " + $excelIn
+                            $ado.Execute($insertSql) | Out-Null
+                            $ado.Close(); $ado = $null
+                        } catch { Write-Error "Error proceso directo: $_" }
+                    }
+
+                } catch {
+                    Write-Error "Error actualizando $ProducaoTableName: $_"
+                }
+            }
+        }
 
 } catch {
     Write-Error "Error durante la importación: $_"
