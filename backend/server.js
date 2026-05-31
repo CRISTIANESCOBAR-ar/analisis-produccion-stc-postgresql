@@ -2550,6 +2550,114 @@ app.get('/api/calidad/partidas-por-defecto', async (req, res) => {
 })
 
 
+// GET /api/calidad/heatmap-telar-defecto - Matriz Telar × Defecto con Pts/100m² para un rango de fechas
+// Parámetros: startDate=YYYY-MM-DD, endDate=YYYY-MM-DD, trama=Todas|ALG 100%|P + E|POL 100%
+app.get('/api/calidad/heatmap-telar-defecto', async (req, res) => {
+  try {
+    const t0 = hrMs()
+    const { startDate, endDate, trama } = req.query
+    if (!startDate || !endDate) return res.status(400).json({ error: 'Se requieren "startDate" y "endDate" (YYYY-MM-DD)' })
+
+    const startStr = String(startDate).split('T')[0]
+    const endStr   = String(endDate).split('T')[0]
+
+    let tramasFilter = ''
+    if (trama === 'ALG 100%')      tramasFilter = `AND left(c."ARTIGO", 1) = 'A'`
+    else if (trama === 'P + E')    tramasFilter = `AND left(c."ARTIGO", 1) = 'Y'`
+    else if (trama === 'POL 100%') tramasFilter = `AND left(c."ARTIGO", 1) = 'P'`
+
+    const calDatProd    = sqlParseDate('c."DAT_PROD"')
+    const metragemExpr  = sqlParseNumberIntl('c."METRAGEM"')
+    const larguraExpr   = sqlParseNumber('c."LARGURA"')
+    const defPontosExpr = sqlParseNumber('d."PONTOS"')
+
+    const sql = `
+      WITH
+      cal_primeira AS (
+        SELECT DISTINCT c."PEÇA", c."PARTIDA"
+        FROM tb_calidad c
+        WHERE c."EMP"       = 'STC'
+          AND c."QUALIDADE" ILIKE 'PRIMEIRA%'
+          AND ${calDatProd} BETWEEN $1::date AND $2::date
+          ${tramasFilter}
+      ),
+      area_por_partida AS (
+        SELECT
+          c."PARTIDA",
+          SUM(${metragemExpr} * COALESCE(${larguraExpr}, 0) / 100.0) AS area_m2
+        FROM tb_calidad c
+        WHERE c."EMP"       = 'STC'
+          AND c."QUALIDADE" ILIKE 'PRIMEIRA%'
+          AND ${calDatProd} BETWEEN $1::date AND $2::date
+          ${tramasFilter}
+        GROUP BY c."PARTIDA"
+      ),
+      defectos_raw AS (
+        SELECT
+          cp."PARTIDA",
+          btrim(d."DESC_DEFEITO")                    AS desc_defeito,
+          MIN(d."COD_DEF")                           AS cod_def,
+          SUM(COALESCE(${defPontosExpr}, 0))         AS pts
+        FROM tb_defectos d
+        INNER JOIN cal_primeira cp ON cp."PEÇA" = d."PARTIDA" || d."PECA"
+        WHERE d."FILIAL"    = '05'
+          AND d."QUALIDADE" = '1'
+          AND btrim(d."DESC_DEFEITO") <> ''
+          AND btrim(d."DESC_DEFEITO") <> '--'
+        GROUP BY cp."PARTIDA", btrim(d."DESC_DEFEITO")
+        HAVING SUM(COALESCE(${defPontosExpr}, 0)) > 0
+      ),
+      partida_vars AS (
+        SELECT
+          PD."PARTIDA",
+          PD."PARTIDA" AS "Var0",
+          CASE WHEN length(PD."PARTIDA") > 1 AND left(PD."PARTIDA", 1) ~ '^[0-9]$' AND left(PD."PARTIDA", 1)::int > 0
+            THEN (left(PD."PARTIDA", 1)::int - 1)::text || substring(PD."PARTIDA" FROM 2) END AS "Var1",
+          CASE WHEN length(PD."PARTIDA") > 1 AND left(PD."PARTIDA", 1) ~ '^[0-9]$' AND left(PD."PARTIDA", 1)::int > 1
+            THEN (left(PD."PARTIDA", 1)::int - 2)::text || substring(PD."PARTIDA" FROM 2) END AS "Var2",
+          CASE WHEN length(PD."PARTIDA") > 1 AND left(PD."PARTIDA", 1) ~ '^[0-9]$' AND left(PD."PARTIDA", 1)::int > 2
+            THEN (left(PD."PARTIDA", 1)::int - 3)::text || substring(PD."PARTIDA" FROM 2) END AS "Var3",
+          CASE WHEN length(PD."PARTIDA") > 1
+            THEN '0' || substring(PD."PARTIDA" FROM 2) END AS "Var4"
+        FROM (SELECT DISTINCT "PARTIDA" FROM defectos_raw) PD
+      ),
+      tej_por_partida AS (
+        SELECT
+          PV."PARTIDA"                                                                        AS "CalPartida",
+          MAX(CASE WHEN right(P."MAQUINA", 2) ~ '^[0-9]{2}$'
+            THEN right(P."MAQUINA", 2)::int ELSE NULL END)                                  AS "Telar"
+        FROM partida_vars PV
+        LEFT JOIN tb_produccion P ON P."FILIAL"  = '05'
+          AND P."SELETOR" = 'TECELAGEM'
+          AND P."PARTIDA" IN (PV."Var0", PV."Var1", PV."Var2", PV."Var3", PV."Var4")
+        GROUP BY PV."PARTIDA"
+      )
+      SELECT
+        TEJ."Telar"                                                             AS "Telar",
+        DR.desc_defeito                                                         AS "desc_defeito",
+        MIN(DR.cod_def)                                                         AS "cod_def",
+        ROUND(
+          SUM(DR.pts) * 100.0 / NULLIF(SUM(A.area_m2), 0)::numeric, 2
+        )                                                                       AS "pts_100m2",
+        ROUND(SUM(DR.pts))::integer                                             AS "pts_totales"
+      FROM defectos_raw DR
+      LEFT JOIN  area_por_partida  A   ON A."PARTIDA"     = DR."PARTIDA"
+      INNER JOIN tej_por_partida   TEJ ON TEJ."CalPartida" = DR."PARTIDA"
+      WHERE TEJ."Telar" IS NOT NULL AND TEJ."Telar" > 0
+      GROUP BY TEJ."Telar", DR.desc_defeito
+      ORDER BY TEJ."Telar" ASC, SUM(DR.pts) DESC
+    `
+
+    const result = await query(sql, [startStr, endStr], 'calidad/heatmap-telar-defecto')
+    res.json(result.rows || [])
+    console.log(`[PERF] GET /calidad/heatmap-telar-defecto ${startStr}→${endStr} rows=${result.rows.length} total=${(hrMs() - t0).toFixed(1)}ms`)
+  } catch (err) {
+    console.error('Error en /api/calidad/heatmap-telar-defecto:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+
 // GET /api/calidad/available-dates - Fechas disponibles en tb_calidad
 app.get('/api/calidad/available-dates', async (req, res) => {
   try {

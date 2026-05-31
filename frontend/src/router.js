@@ -161,6 +161,11 @@ const routes = [
     meta: { title: 'Defecto → Partidas – Tejeduría' }
   },
   {
+    path: '/heatmap-tejeduria',
+    component: () => import('./components/produccion/HeatmapTelarDefecto.vue'),
+    meta: { title: 'Mapa de Calor Telar × Defecto – Tejeduría' }
+  },
+  {
     path: '/caida-telares',
     component: () => import('./components/produccion/CaidaTelares.vue'),
     meta: { title: 'Caida de Telares' }
