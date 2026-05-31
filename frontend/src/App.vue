@@ -333,6 +333,20 @@
               <span>🏭</span> Partida en Producción
             </router-link>
             <router-link
+              to="/pts-tejeduria"
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm"
+              :class="{ 'bg-blue-600': $route.path === '/pts-tejeduria' }"
+            >
+              <span>🔢</span> Pts por Partida
+            </router-link>
+            <router-link
+              to="/defecto-tejeduria"
+              class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm"
+              :class="{ 'bg-blue-600': $route.path === '/defecto-tejeduria' }"
+            >
+              <span>🔎</span> Defecto → Partidas
+            </router-link>
+            <router-link
               to="/caida-telares"
               class="flex items-center gap-2 px-3 py-2 rounded hover:bg-blue-700 transition-colors text-sm"
               :class="{ 'bg-blue-600': $route.path === '/caida-telares' }"
@@ -561,7 +575,7 @@ const isProdRouteActive = computed(() => prodRoutes.includes(route.path))
 const inventoryRoutes = ['/inventario']
 const isInventoryRouteActive = computed(() => inventoryRoutes.includes(route.path))
 
-const calidadRoutes = ['/revision-cq', '/desempeno-revisores', '/analisis-mesa-test', '/calidad-sectores', '/partida-tejeduria', '/caida-telares', '/performance-revisores']
+const calidadRoutes = ['/revision-cq', '/desempeno-revisores', '/analisis-mesa-test', '/calidad-sectores', '/partida-tejeduria', '/pts-tejeduria', '/defecto-tejeduria', '/caida-telares', '/performance-revisores']
 const isCalidadRouteActive = computed(() => calidadRoutes.includes(route.path))
 
 const indigoRoutes = [

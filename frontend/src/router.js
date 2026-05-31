@@ -151,6 +151,16 @@ const routes = [
     meta: { title: 'Partida en Producción – Tejeduría' }
   },
   {
+    path: '/pts-tejeduria',
+    component: () => import('./components/produccion/PtsPorPartida.vue'),
+    meta: { title: 'Pts/100m² por Partida – Tejeduría' }
+  },
+  {
+    path: '/defecto-tejeduria',
+    component: () => import('./components/produccion/DefectoPorPartida.vue'),
+    meta: { title: 'Defecto → Partidas – Tejeduría' }
+  },
+  {
     path: '/caida-telares',
     component: () => import('./components/produccion/CaidaTelares.vue'),
     meta: { title: 'Caida de Telares' }

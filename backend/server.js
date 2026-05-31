@@ -1859,11 +1859,16 @@ app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
 app.get('/api/calidad/defectos-por-tipo', async (req, res) => {
   try {
     const t0 = hrMs()
-    const { date, mode } = req.query
+    const { date, mode, trama } = req.query
     if (!date) return res.status(400).json({ error: 'Se requiere parámetro "date" (YYYY-MM-DD)' })
 
     const dateStr   = String(date).split('T')[0]
     const isDayMode = String(mode || 'month').toLowerCase() === 'day'
+
+    let tramasFilter = ''
+    if (trama === 'ALG 100%')      tramasFilter = `AND left(c."ARTIGO", 1) = 'A'`
+    else if (trama === 'P + E')    tramasFilter = `AND left(c."ARTIGO", 1) = 'Y'`
+    else if (trama === 'POL 100%') tramasFilter = `AND left(c."ARTIGO", 1) = 'P'`
 
     // Expresión para parsear DATA_PROD de tb_defectos (DD/MM/YYYY o YYYY-MM-DD)
     const defDataProd     = sqlParseDate('d."DATA_PROD"')
@@ -1889,6 +1894,7 @@ app.get('/api/calidad/defectos-por-tipo', async (req, res) => {
           WHERE c."EMP" = 'STC'
             AND c."QUALIDADE" ILIKE 'PRIMEIRA%'
             AND ${calDatProd} = $1::date
+            ${tramasFilter}
         ),
         area_dia AS (
           SELECT
@@ -1898,6 +1904,7 @@ app.get('/api/calidad/defectos-por-tipo', async (req, res) => {
           WHERE c."EMP" = 'STC'
             AND c."QUALIDADE" ILIKE 'PRIMEIRA%'
             AND ${calDatProd} = $1::date
+            ${tramasFilter}
         ),
         defectos_dia AS (
           SELECT
@@ -1937,8 +1944,68 @@ app.get('/api/calidad/defectos-por-tipo', async (req, res) => {
         FROM defectos_dia dd
         ORDER BY dd.pts_totales DESC
       `
+    } else if (tramasFilter) {
+      // ── MODO MES con filtro Trama (usa piezas via tb_calidad) ─────────────
+      sql = `
+        WITH
+        piezas_mes AS (
+          SELECT DISTINCT c."PEÇA"
+          FROM tb_calidad c
+          WHERE c."EMP" = 'STC'
+            AND c."QUALIDADE" ILIKE 'PRIMEIRA%'
+            AND to_char(${calDatProd}, 'YYYY-MM') = to_char($1::date, 'YYYY-MM')
+            ${tramasFilter}
+        ),
+        area_mes AS (
+          SELECT
+            COALESCE(SUM(${calMetragemExpr} * COALESCE(${calLarguraExpr}, 0) / 100.0), 0) AS metros2,
+            COALESCE(SUM(${calMetragemExpr}), 0) AS metros_lin
+          FROM tb_calidad c
+          WHERE c."EMP" = 'STC'
+            AND c."QUALIDADE" ILIKE 'PRIMEIRA%'
+            AND to_char(${calDatProd}, 'YYYY-MM') = to_char($1::date, 'YYYY-MM')
+            ${tramasFilter}
+        ),
+        defectos_mes AS (
+          SELECT
+            btrim(d."DESC_DEFEITO") AS desc_defeito,
+            MIN(d."COD_DEF")       AS cod_def,
+            SUM(COALESCE(${defPontosExpr}, 0)) AS pts_totales
+          FROM tb_defectos d
+          INNER JOIN piezas_mes p ON p."PEÇA" = d."PARTIDA" || d."PECA"
+          WHERE d."FILIAL"    = '05'
+            AND d."QUALIDADE" = '1'
+            AND btrim(d."DESC_DEFEITO") <> ''
+            AND btrim(d."DESC_DEFEITO") <> '--'
+          GROUP BY btrim(d."DESC_DEFEITO")
+          HAVING SUM(COALESCE(${defPontosExpr}, 0)) > 0
+        ),
+        total_pts AS (
+          SELECT COALESCE(SUM(pts_totales), 0) AS total FROM defectos_mes
+        )
+        SELECT
+          dm.cod_def                                                        AS "cod_def",
+          dm.desc_defeito                                                   AS "desc_defeito",
+          ROUND(dm.pts_totales)::integer                                    AS "pts_totales",
+          ROUND(
+            CASE WHEN (SELECT metros2 FROM area_mes) > 0
+              THEN dm.pts_totales * 100.0 / (SELECT metros2 FROM area_mes)
+              ELSE 0
+            END::numeric, 2
+          )                                                                 AS "pts_100m2",
+          ROUND(
+            CASE WHEN (SELECT total FROM total_pts) > 0
+              THEN dm.pts_totales * 100.0 / (SELECT total FROM total_pts)
+              ELSE 0
+            END::numeric, 2
+          )                                                                 AS "porcentaje",
+          (SELECT metros2    FROM area_mes)                                 AS "area_m2_total",
+          (SELECT metros_lin FROM area_mes)                                 AS "metros_lin_total"
+        FROM defectos_mes dm
+        ORDER BY dm.pts_totales DESC
+      `
     } else {
-      // ── MODO MES ──────────────────────────────────────────────────────────
+      // ── MODO MES (sin filtro trama) ────────────────────────────────────────
       sql = `
         WITH
         area_mes AS (
@@ -2017,6 +2084,467 @@ app.get('/api/calidad/defectos-por-tipo', async (req, res) => {
     console.log(`[PERF] GET /calidad/defectos-por-tipo?mode=${isDayMode?'day':'month'} ${dateStr} rows=${rows.length} total=${(hrMs()-t0).toFixed(1)}ms`)
   } catch (err) {
     console.error('Error en /api/calidad/defectos-por-tipo:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+
+// GET /api/calidad/pts-por-partida - Partidas con Pts/100m², métricas de calidad y tejeduría
+// Parámetros: date=YYYY-MM-DD, mode=day (default)|month, trama=Todas|ALG 100%|P + E|POL 100%
+app.get('/api/calidad/pts-por-partida', async (req, res) => {
+  try {
+    const t0 = hrMs()
+    const { date, mode, trama } = req.query
+    if (!date) return res.status(400).json({ error: 'Se requiere parámetro "date" (YYYY-MM-DD)' })
+
+    const dateStr  = String(date).split('T')[0]
+    const isDayMode = String(mode || 'day').toLowerCase() === 'day'
+
+    let tramasFilter = ''
+    if (trama === 'ALG 100%') tramasFilter = `AND left(c."ARTIGO", 1) = 'A'`
+    else if (trama === 'P + E') tramasFilter = `AND left(c."ARTIGO", 1) = 'Y'`
+    else if (trama === 'POL 100%') tramasFilter = `AND left(c."ARTIGO", 1) = 'P'`
+
+    const calDatProd    = sqlParseDate('c."DAT_PROD"')
+    const metragemExpr  = sqlParseNumberIntl('c."METRAGEM"')
+    const pontuacaoExpr = sqlParseNumber('c."PONTUACAO"')
+    const larguraExpr   = sqlParseNumber('c."LARGURA"')
+    const prodPtsLidos  = sqlParseNumber('P."PONTOS_LIDOS"')
+    const prodPts100    = sqlParseNumber('P."PONTOS_100%"')
+    const prodParTra    = sqlParseNumber('P."PARADA TEC TRAMA"')
+    const prodParUrd    = sqlParseNumber('P."PARADA TEC URDUME"')
+
+    const [yyyy, mm] = dateStr.split('-')
+    const monthStart = `${yyyy}-${mm}-01`
+
+    const dateFilterSql = isDayMode
+      ? `c."DAT_PROD" = ANY($1::text[])`
+      : `${calDatProd} BETWEEN $1::date AND $2::date`
+    const params = isDayMode
+      ? [dateTextCandidates(dateStr)]
+      : [monthStart, dateStr]
+
+    const sql = `
+      WITH
+      cal_raw AS (
+        SELECT
+          c."PARTIDA",
+          c."NM MERC"                           AS nome_merc,
+          c."ARTIGO"                             AS artigo,
+          c."TRAMA"                              AS trama,
+          c."HORA"                               AS hora,
+          c."PEÇA"                               AS peca,
+          c."ETIQUETA"                           AS etiqueta,
+          btrim(c."QUALIDADE")                   AS qualidade,
+          ${metragemExpr}                        AS metragem,
+          ${pontuacaoExpr}                       AS pontuacao,
+          ${larguraExpr}                         AS largura
+        FROM tb_calidad c
+        WHERE c."EMP" = 'STC'
+          AND ${dateFilterSql}
+          AND c."QUALIDADE" NOT ILIKE '%RETALHO%'
+          ${tramasFilter}
+      ),
+      cal_dedup AS (
+        -- Una fila por rollo (deduplica si el mismo rollo aparece con múltiples defectos)
+        SELECT
+          "PARTIDA", nome_merc, artigo, trama, hora, peca, etiqueta, qualidade,
+          MAX(metragem)  AS metragem,
+          MAX(pontuacao) AS pontuacao,
+          MAX(largura)   AS largura
+        FROM cal_raw
+        GROUP BY "PARTIDA", nome_merc, artigo, trama, hora, peca, etiqueta, qualidade
+      ),
+      cal_por_partida AS (
+        SELECT
+          "PARTIDA",
+          MIN(nome_merc)  AS "NombreArticulo",
+          MIN(artigo)     AS "ARTIGO",
+          MIN(trama)      AS "Trama",
+          CAST(SUM(metragem) AS INTEGER) AS "MetrosRevisados",
+          ROUND(
+            SUM(CASE WHEN qualidade ILIKE 'PRIMEIRA%' THEN metragem ELSE 0 END)
+            / NULLIF(SUM(metragem), 0) * 100
+          , 1) AS "CalidadPct",
+          ROUND(
+            (SUM(CASE WHEN qualidade ILIKE 'PRIMEIRA%' THEN COALESCE(pontuacao, 0) ELSE 0 END) * 100)
+            / NULLIF(
+              (SUM(CASE WHEN qualidade ILIKE 'PRIMEIRA%' THEN metragem * COALESCE(largura, 0) ELSE 0 END))
+              / NULLIF(SUM(CASE WHEN qualidade ILIKE 'PRIMEIRA%' THEN metragem ELSE 0 END), 0)
+              / 100
+              * SUM(CASE WHEN qualidade ILIKE 'PRIMEIRA%' THEN metragem ELSE 0 END)
+            , 0)
+          , 2) AS "Pts100m2",
+          COUNT(CASE WHEN qualidade ILIKE 'PRIMEIRA%' THEN 1 END) AS "TotalRollos",
+          COUNT(CASE WHEN qualidade ILIKE 'PRIMEIRA%'
+            AND (pontuacao IS NULL OR pontuacao = 0) THEN 1 END) AS "SinPuntos",
+          ROUND(
+            COUNT(CASE WHEN qualidade ILIKE 'PRIMEIRA%'
+              AND (pontuacao IS NULL OR pontuacao = 0) THEN 1 END)::numeric
+            / NULLIF(COUNT(CASE WHEN qualidade ILIKE 'PRIMEIRA%' THEN 1 END)::numeric, 0) * 100
+          , 1) AS "SinPuntosPct"
+        FROM cal_dedup
+        GROUP BY "PARTIDA"
+      ),
+      horas_partida AS (
+        SELECT "PARTIDA", MIN(hora) AS "HoraInicio"
+        FROM cal_raw
+        GROUP BY "PARTIDA"
+      ),
+      partida_vars AS (
+        SELECT
+          C.*,
+          C."PARTIDA" AS "Var0",
+          CASE WHEN length(C."PARTIDA") > 1
+               AND left(C."PARTIDA", 1) ~ '^[0-9]$'
+               AND left(C."PARTIDA", 1)::int > 0
+            THEN (left(C."PARTIDA", 1)::int - 1)::text || substring(C."PARTIDA" FROM 2)
+          END AS "Var1",
+          CASE WHEN length(C."PARTIDA") > 1
+               AND left(C."PARTIDA", 1) ~ '^[0-9]$'
+               AND left(C."PARTIDA", 1)::int > 1
+            THEN (left(C."PARTIDA", 1)::int - 2)::text || substring(C."PARTIDA" FROM 2)
+          END AS "Var2",
+          CASE WHEN length(C."PARTIDA") > 1
+               AND left(C."PARTIDA", 1) ~ '^[0-9]$'
+               AND left(C."PARTIDA", 1)::int > 2
+            THEN (left(C."PARTIDA", 1)::int - 3)::text || substring(C."PARTIDA" FROM 2)
+          END AS "Var3",
+          CASE WHEN length(C."PARTIDA") > 1
+            THEN '0' || substring(C."PARTIDA" FROM 2)
+          END AS "Var4"
+        FROM cal_por_partida C
+      ),
+      tej_por_partida AS (
+        SELECT PV."PARTIDA" AS "CalPartida", TEJ.*
+        FROM partida_vars PV
+        LEFT JOIN LATERAL (
+          SELECT
+            P."PARTIDA",
+            MAX(CASE WHEN right(P."MAQUINA", 2) ~ '^[0-9]{2}$'
+              THEN right(P."MAQUINA", 2)::int ELSE NULL END) AS "Telar",
+            SUM(COALESCE(${prodPtsLidos}, 0)) AS "PtsLei",
+            SUM(COALESCE(${prodPts100},   0)) AS "Pts100",
+            SUM(COALESCE(${prodParTra},   0)) AS "ParTra",
+            SUM(COALESCE(${prodParUrd},   0)) AS "ParUrd"
+          FROM tb_produccion P
+          WHERE P."FILIAL" = '05'
+            AND P."SELETOR" = 'TECELAGEM'
+            AND P."PARTIDA" IN (PV."Var0", PV."Var1", PV."Var2", PV."Var3", PV."Var4")
+          GROUP BY P."PARTIDA"
+          ORDER BY CASE P."PARTIDA"
+            WHEN PV."Var0" THEN 0 WHEN PV."Var1" THEN 1 WHEN PV."Var2" THEN 2
+            WHEN PV."Var3" THEN 3 WHEN PV."Var4" THEN 4 ELSE 9
+          END ASC
+          LIMIT 1
+        ) TEJ ON TRUE
+      )
+      SELECT
+        HP."HoraInicio"            AS "HoraInicio",
+        PV."PARTIDA"               AS "Partida",
+        PV."NombreArticulo"        AS "NombreArticulo",
+        PV."ARTIGO"                AS "ARTIGO",
+        PV."Trama"                 AS "Trama",
+        PV."MetrosRevisados"       AS "MetrosRevisados",
+        PV."CalidadPct"            AS "CalidadPct",
+        COALESCE(PV."Pts100m2", 0) AS "Pts100m2",
+        PV."TotalRollos"           AS "TotalRollos",
+        PV."SinPuntos"             AS "SinPuntos",
+        PV."SinPuntosPct"          AS "SinPuntosPct",
+        COALESCE(TEJ."Telar", 0)   AS "Telar",
+        CASE WHEN TEJ."PtsLei" IS NULL OR TEJ."PtsLei" = 0 THEN NULL
+          ELSE ROUND((TEJ."PtsLei" / NULLIF(TEJ."Pts100", 0)) * 100, 1)
+        END AS "EficienciaPct",
+        CASE WHEN TEJ."PtsLei" IS NULL OR TEJ."PtsLei" = 0 THEN NULL
+          ELSE ROUND((TEJ."ParUrd" * 100000)::numeric / NULLIF((TEJ."PtsLei" * 1000), 0)::numeric, 1)
+        END AS "RU105",
+        CASE WHEN TEJ."PtsLei" IS NULL OR TEJ."PtsLei" = 0 THEN NULL
+          ELSE ROUND((TEJ."ParTra" * 100000)::numeric / NULLIF((TEJ."PtsLei" * 1000), 0)::numeric, 1)
+        END AS "RT105"
+      FROM partida_vars PV
+      LEFT JOIN horas_partida HP ON PV."PARTIDA" = HP."PARTIDA"
+      LEFT JOIN tej_por_partida TEJ ON TEJ."CalPartida" = PV."PARTIDA"
+      ORDER BY PV."Pts100m2" DESC NULLS LAST, HP."HoraInicio" ASC
+    `
+
+    const result = await query(sql, params, `calidad/pts-por-partida[${isDayMode ? 'day' : 'month'}]`)
+    res.json(result.rows || [])
+    console.log(`[PERF] GET /calidad/pts-por-partida?mode=${isDayMode ? 'day' : 'month'} ${dateStr} rows=${result.rows.length} total=${(hrMs() - t0).toFixed(1)}ms`)
+  } catch (err) {
+    console.error('Error en /api/calidad/pts-por-partida:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+
+// GET /api/calidad/defectos-por-partida - Desglose de defectos para una partida y fecha
+// Parámetros: date=YYYY-MM-DD, mode=day (default)|month, partida=string
+app.get('/api/calidad/defectos-por-partida', async (req, res) => {
+  try {
+    const t0 = hrMs()
+    const { date, mode, partida } = req.query
+    if (!date) return res.status(400).json({ error: 'Se requiere parámetro "date" (YYYY-MM-DD)' })
+    if (!partida) return res.status(400).json({ error: 'Se requiere parámetro "partida"' })
+
+    const dateStr   = String(date).split('T')[0]
+    const isDayMode = String(mode || 'day').toLowerCase() === 'day'
+    const partidaStr = String(partida).trim()
+
+    const calDatProd   = sqlParseDate('c."DAT_PROD"')
+    const metragemExpr = sqlParseNumberIntl('c."METRAGEM"')
+    const larguraExpr  = sqlParseNumber('c."LARGURA"')
+    const pontosExpr   = sqlParseNumber('d."PONTOS"')
+
+    const [yyyy, mm] = dateStr.split('-')
+    const monthStart = `${yyyy}-${mm}-01`
+
+    // El filtro de fecha en tb_calidad usa siempre el DAT_PROD parseado
+    const dateFilterCal = isDayMode
+      ? `c."DAT_PROD" = ANY($1::text[])`
+      : `${calDatProd} BETWEEN $1::date AND $2::date`
+
+    const partidaParam = isDayMode ? '$2' : '$3'
+    const params = isDayMode
+      ? [dateTextCandidates(dateStr), partidaStr]
+      : [monthStart, dateStr, partidaStr]
+
+    const sql = `
+      WITH
+      piezas AS (
+        SELECT DISTINCT c."PEÇA"
+        FROM tb_calidad c
+        WHERE c."EMP"       = 'STC'
+          AND c."QUALIDADE" ILIKE 'PRIMEIRA%'
+          AND c."PARTIDA"   = ${partidaParam}
+          AND ${dateFilterCal}
+      ),
+      area AS (
+        SELECT COALESCE(SUM(${metragemExpr} * COALESCE(${larguraExpr}, 0) / 100.0), 0) AS metros2
+        FROM tb_calidad c
+        WHERE c."EMP"       = 'STC'
+          AND c."QUALIDADE" ILIKE 'PRIMEIRA%'
+          AND c."PARTIDA"   = ${partidaParam}
+          AND ${dateFilterCal}
+      ),
+      defectos AS (
+        SELECT
+          MIN(d."COD_DEF")          AS cod_def,
+          btrim(d."DESC_DEFEITO")   AS desc_defeito,
+          SUM(COALESCE(${pontosExpr}, 0)) AS pts_totales
+        FROM tb_defectos d
+        INNER JOIN piezas p ON p."PEÇA" = d."PARTIDA" || d."PECA"
+        WHERE d."FILIAL"    = '05'
+          AND d."QUALIDADE" = '1'
+          AND btrim(d."DESC_DEFEITO") <> ''
+          AND btrim(d."DESC_DEFEITO") <> '--'
+        GROUP BY btrim(d."DESC_DEFEITO")
+        HAVING SUM(COALESCE(${pontosExpr}, 0)) > 0
+      ),
+      total_pts AS (
+        SELECT COALESCE(SUM(pts_totales), 0) AS total FROM defectos
+      )
+      SELECT
+        d.cod_def                                                   AS "cod_def",
+        d.desc_defeito                                              AS "desc_defeito",
+        ROUND(d.pts_totales)::integer                               AS "pts_totales",
+        ROUND(
+          CASE WHEN (SELECT metros2 FROM area) > 0
+            THEN d.pts_totales * 100.0 / (SELECT metros2 FROM area)
+            ELSE 0
+          END::numeric, 2
+        )                                                           AS "pts_100m2",
+        ROUND(
+          CASE WHEN (SELECT total FROM total_pts) > 0
+            THEN d.pts_totales * 100.0 / (SELECT total FROM total_pts)
+            ELSE 0
+          END::numeric, 2
+        )                                                           AS "porcentaje",
+        (SELECT metros2 FROM area)                                  AS "area_m2"
+      FROM defectos d
+      ORDER BY d.pts_totales DESC
+    `
+
+    const result = await query(sql, params, `calidad/defectos-por-partida[${isDayMode ? 'day' : 'month'}]`)
+    const rows = result.rows || []
+
+    const areaM2    = rows.length > 0 ? (Number(rows[0].area_m2) || 0) : 0
+    const totPts    = rows.reduce((s, r) => s + (Number(r.pts_totales) || 0), 0)
+    const totPts100 = areaM2 > 0 ? Math.round(totPts * 100 / areaM2 * 100) / 100 : 0
+
+    res.json({
+      rows: rows.map(r => ({
+        cod_def:      r.cod_def || '',
+        desc_defeito: r.desc_defeito,
+        pts_totales:  Number(r.pts_totales),
+        pts_100m2:    Number(r.pts_100m2),
+        porcentaje:   Number(r.porcentaje),
+      })),
+      total: { pts_totales: totPts, pts_100m2: totPts100, area_m2: Math.round(areaM2 * 100) / 100 },
+    })
+    console.log(`[PERF] GET /calidad/defectos-por-partida?mode=${isDayMode ? 'day' : 'month'} ${dateStr} partida=${partidaStr} rows=${rows.length} total=${(hrMs() - t0).toFixed(1)}ms`)
+  } catch (err) {
+    console.error('Error en /api/calidad/defectos-por-partida:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+
+// GET /api/calidad/partidas-por-defecto - Partidas que contienen un defecto dado, con métricas de tejeduría
+// Parámetros: date=YYYY-MM-DD, mode=day(default)|month, defecto=DESC_DEFEITO, trama=Todas|ALG 100%|P + E|POL 100%
+app.get('/api/calidad/partidas-por-defecto', async (req, res) => {
+  try {
+    const t0 = hrMs()
+    const { date, mode, defecto, trama } = req.query
+    if (!date)    return res.status(400).json({ error: 'Se requiere parámetro "date" (YYYY-MM-DD)' })
+    if (!defecto) return res.status(400).json({ error: 'Se requiere parámetro "defecto"' })
+
+    const dateStr    = String(date).split('T')[0]
+    const isDayMode  = String(mode || 'day').toLowerCase() === 'day'
+    const defectoStr = String(defecto).trim()
+
+    let tramasFilter = ''
+    if (trama === 'ALG 100%')      tramasFilter = `AND left(c."ARTIGO", 1) = 'A'`
+    else if (trama === 'P + E')    tramasFilter = `AND left(c."ARTIGO", 1) = 'Y'`
+    else if (trama === 'POL 100%') tramasFilter = `AND left(c."ARTIGO", 1) = 'P'`
+
+    const calDatProd  = sqlParseDate('c."DAT_PROD"')
+    const metragemExpr  = sqlParseNumberIntl('c."METRAGEM"')
+    const larguraExpr   = sqlParseNumber('c."LARGURA"')
+    const defPontosExpr = sqlParseNumber('d."PONTOS"')
+    const prodPtsLidos  = sqlParseNumber('P."PONTOS_LIDOS"')
+    const prodPts100    = sqlParseNumber('P."PONTOS_100%"')
+    const prodParTra    = sqlParseNumber('P."PARADA TEC TRAMA"')
+    const prodParUrd    = sqlParseNumber('P."PARADA TEC URDUME"')
+
+    const dateFilter = isDayMode
+      ? `${calDatProd} = $1::date`
+      : `to_char(${calDatProd}, 'YYYY-MM') = to_char($1::date, 'YYYY-MM')`
+
+    const sql = `
+      WITH
+      cal_primeira AS (
+        SELECT DISTINCT c."PEÇA", c."PARTIDA"
+        FROM tb_calidad c
+        WHERE c."EMP"       = 'STC'
+          AND c."QUALIDADE" ILIKE 'PRIMEIRA%'
+          AND ${dateFilter}
+          ${tramasFilter}
+      ),
+      area_por_partida AS (
+        SELECT
+          c."PARTIDA",
+          COALESCE(SUM(${metragemExpr} * COALESCE(${larguraExpr}, 0) / 100.0), 0) AS area_m2,
+          MIN(c."NM MERC") AS nom_merc,
+          MIN(c."TRAMA")   AS trama_val
+        FROM tb_calidad c
+        WHERE c."EMP"       = 'STC'
+          AND c."QUALIDADE" ILIKE 'PRIMEIRA%'
+          AND ${dateFilter}
+          ${tramasFilter}
+        GROUP BY c."PARTIDA"
+      ),
+      pts_totales_por_partida AS (
+        SELECT
+          cp."PARTIDA",
+          SUM(COALESCE(${defPontosExpr}, 0)) AS pts_totales
+        FROM tb_defectos d
+        INNER JOIN cal_primeira cp ON cp."PEÇA" = d."PARTIDA" || d."PECA"
+        WHERE d."FILIAL"    = '05'
+          AND d."QUALIDADE" = '1'
+        GROUP BY cp."PARTIDA"
+      ),
+      pts_defecto_por_partida AS (
+        SELECT
+          cp."PARTIDA",
+          SUM(COALESCE(${defPontosExpr}, 0)) AS pts_defecto
+        FROM tb_defectos d
+        INNER JOIN cal_primeira cp ON cp."PEÇA" = d."PARTIDA" || d."PECA"
+        WHERE d."FILIAL"    = '05'
+          AND d."QUALIDADE" = '1'
+          AND btrim(d."DESC_DEFEITO") = $2
+        GROUP BY cp."PARTIDA"
+        HAVING SUM(COALESCE(${defPontosExpr}, 0)) > 0
+      ),
+      partida_vars AS (
+        SELECT
+          PD."PARTIDA"                                                    AS "PARTIDA",
+          PD."PARTIDA"                                                    AS "Var0",
+          CASE WHEN length(PD."PARTIDA") > 1
+               AND left(PD."PARTIDA", 1) ~ '^[0-9]$'
+               AND left(PD."PARTIDA", 1)::int > 0
+            THEN (left(PD."PARTIDA", 1)::int - 1)::text || substring(PD."PARTIDA" FROM 2)
+          END AS "Var1",
+          CASE WHEN length(PD."PARTIDA") > 1
+               AND left(PD."PARTIDA", 1) ~ '^[0-9]$'
+               AND left(PD."PARTIDA", 1)::int > 1
+            THEN (left(PD."PARTIDA", 1)::int - 2)::text || substring(PD."PARTIDA" FROM 2)
+          END AS "Var2",
+          CASE WHEN length(PD."PARTIDA") > 1
+               AND left(PD."PARTIDA", 1) ~ '^[0-9]$'
+               AND left(PD."PARTIDA", 1)::int > 2
+            THEN (left(PD."PARTIDA", 1)::int - 3)::text || substring(PD."PARTIDA" FROM 2)
+          END AS "Var3",
+          CASE WHEN length(PD."PARTIDA") > 1
+            THEN '0' || substring(PD."PARTIDA" FROM 2)
+          END AS "Var4"
+        FROM pts_defecto_por_partida PD
+      ),
+      tej_por_partida AS (
+        SELECT PV."PARTIDA" AS "CalPartida", TEJ.*
+        FROM partida_vars PV
+        LEFT JOIN LATERAL (
+          SELECT
+            MAX(CASE WHEN right(P."MAQUINA", 2) ~ '^[0-9]{2}$'
+              THEN right(P."MAQUINA", 2)::int ELSE NULL END)      AS "Telar",
+            SUM(COALESCE(${prodPtsLidos}, 0))                     AS "PtsLei",
+            SUM(COALESCE(${prodPts100},   0))                     AS "Pts100",
+            SUM(COALESCE(${prodParTra},   0))                     AS "ParTra",
+            SUM(COALESCE(${prodParUrd},   0))                     AS "ParUrd"
+          FROM tb_produccion P
+          WHERE P."FILIAL"  = '05'
+            AND P."SELETOR" = 'TECELAGEM'
+            AND P."PARTIDA" IN (PV."Var0", PV."Var1", PV."Var2", PV."Var3", PV."Var4")
+          GROUP BY P."PARTIDA"
+          ORDER BY CASE P."PARTIDA"
+            WHEN PV."Var0" THEN 0 WHEN PV."Var1" THEN 1 WHEN PV."Var2" THEN 2
+            WHEN PV."Var3" THEN 3 WHEN PV."Var4" THEN 4 ELSE 9
+          END ASC
+          LIMIT 1
+        ) TEJ ON TRUE
+      )
+      SELECT
+        PD."PARTIDA"                                                        AS "Partida",
+        COALESCE(A.nom_merc, '—')                                          AS "NombreArticulo",
+        COALESCE(A.trama_val, '—')                                         AS "Trama",
+        COALESCE(TEJ."Telar", 0)                                           AS "Telar",
+        ROUND(PD.pts_defecto)::integer                                      AS "pts_defecto",
+        ROUND(
+          CASE WHEN A.area_m2 > 0 THEN PD.pts_defecto * 100.0 / A.area_m2 ELSE 0 END::numeric, 2
+        )                                                                   AS "pts_100m2_defecto",
+        ROUND(
+          CASE WHEN PT.pts_totales > 0 THEN PD.pts_defecto * 100.0 / PT.pts_totales ELSE 0 END::numeric, 1
+        )                                                                   AS "pct_del_total",
+        CASE WHEN TEJ."PtsLei" IS NULL OR TEJ."PtsLei" = 0 THEN NULL
+          ELSE ROUND((TEJ."PtsLei" / NULLIF(TEJ."Pts100", 0)) * 100, 1)
+        END                                                                 AS "EficienciaPct",
+        CASE WHEN TEJ."PtsLei" IS NULL OR TEJ."PtsLei" = 0 THEN NULL
+          ELSE ROUND((TEJ."ParUrd" * 100000)::numeric / NULLIF((TEJ."PtsLei" * 1000), 0)::numeric, 1)
+        END                                                                 AS "RU105",
+        CASE WHEN TEJ."PtsLei" IS NULL OR TEJ."PtsLei" = 0 THEN NULL
+          ELSE ROUND((TEJ."ParTra" * 100000)::numeric / NULLIF((TEJ."PtsLei" * 1000), 0)::numeric, 1)
+        END                                                                 AS "RT105"
+      FROM pts_defecto_por_partida PD
+      LEFT JOIN area_por_partida A         ON A."PARTIDA"    = PD."PARTIDA"
+      LEFT JOIN pts_totales_por_partida PT ON PT."PARTIDA"   = PD."PARTIDA"
+      LEFT JOIN tej_por_partida TEJ        ON TEJ."CalPartida" = PD."PARTIDA"
+      ORDER BY PD.pts_defecto DESC NULLS LAST
+    `
+
+    const result = await query(sql, [dateStr, defectoStr], `calidad/partidas-por-defecto[${isDayMode ? 'day' : 'month'}]`)
+    res.json(result.rows || [])
+    console.log(`[PERF] GET /calidad/partidas-por-defecto?mode=${isDayMode ? 'day' : 'month'} ${dateStr} defecto="${defectoStr}" rows=${result.rows.length} total=${(hrMs() - t0).toFixed(1)}ms`)
+  } catch (err) {
+    console.error('Error en /api/calidad/partidas-por-defecto:', err)
     res.status(500).json({ error: err.message })
   }
 })
