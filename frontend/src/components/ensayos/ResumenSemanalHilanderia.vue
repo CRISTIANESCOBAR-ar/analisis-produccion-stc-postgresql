@@ -48,7 +48,7 @@
 
         <div v-else class="overflow-auto _minimal-scroll w-full flex-1 min-h-0 rounded-xl border border-slate-200">
           <table class="min-w-full w-full table-auto divide-y divide-slate-200 text-xs">
-            <thead class="bg-gradient-to-r from-slate-50 to-slate-100 sticky top-0 z-20">
+            <thead class="bg-linear-to-r from-slate-50 to-slate-100 sticky top-0 z-20">
               <!-- Fila de agrupación superior -->
               <tr>
                 <th rowspan="2" class="px-2 py-2 text-center font-semibold text-slate-700 border-b-2 border-slate-200">Mes</th>

@@ -1,7 +1,7 @@
 <template>
   <div class="w-full h-screen flex flex-col p-1">
     <main class="w-full flex-1 min-h-0 bg-white rounded-2xl shadow-xl px-4 py-3 border border-slate-200 flex flex-col">
-      <div class="flex flex-col gap-2 mb-3 flex-shrink-0">
+      <div class="flex flex-col gap-2 mb-3 shrink-0">
         <!-- Single top row: title, search, filters (center), refresh -->
         <div class="@container flex items-center gap-1.5">
           <!-- Data source indicator -->
@@ -241,7 +241,7 @@
 
         <div v-else class="flex-1 min-h-0 flex flex-col">
           <div v-if="filteredRows.length === 0"
-            class="text-sm text-slate-600 mb-4 py-4 text-center bg-slate-50 rounded-lg flex-shrink-0">
+            class="text-sm text-slate-600 mb-4 py-4 text-center bg-slate-50 rounded-lg shrink-0">
             No hay coincidencias para la búsqueda.
           </div>
 
@@ -271,7 +271,7 @@
                 <col style="width:6%" /> <!-- Trabajo B -->
                 <col style="width:6%" /> <!-- Acciones -->
               </colgroup>
-              <thead class="bg-gradient-to-r from-slate-50 to-slate-100 sticky top-0 z-20">
+              <thead class="bg-linear-to-r from-slate-50 to-slate-100 sticky top-0 z-20">
                 <tr>
                   <th class="px-2 py-[0.3rem] text-center font-semibold text-slate-700 border-b border-slate-200">Ensayo
                   </th>
@@ -375,7 +375,7 @@
             </table>
           </div>
           <!-- pagination controls -->
-          <div class="flex items-center justify-between mt-3 px-1 flex-shrink-0">
+          <div class="flex items-center justify-between mt-3 px-1 shrink-0">
             <div class="text-sm text-slate-600">Mostrando {{ startDisplay }}–{{ endDisplay }} de {{ filteredRows.length
             }}</div>
             <div class="flex items-center gap-2">
@@ -422,7 +422,7 @@
     <div v-if="modalVisible" class="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog"
       aria-modal="true" aria-labelledby="modalTitle">
       <!-- overlay -->
-      <div class="fixed inset-0 bg-gradient-to-br from-slate-900/50 to-slate-800/50 backdrop-blur-sm z-40"
+      <div class="fixed inset-0 bg-linear-to-br from-slate-900/50 to-slate-800/50 backdrop-blur-sm z-40"
         @click="closeModal" aria-hidden="true"></div>
 
       <!-- modal content -->
@@ -516,7 +516,7 @@
               <table class="min-w-full text-xs">
                 <!-- Make the table wrapper the scroll container and use top-0 on thead so
                      the header sticks correctly inside the scrolling area. -->
-                <thead class="bg-gradient-to-r from-slate-50 to-slate-100 sticky top-0 z-30">
+                <thead class="bg-linear-to-r from-slate-50 to-slate-100 sticky top-0 z-30">
                   <tr>
                     <th class="px-3 py-2 text-center font-semibold text-slate-700 border-b border-slate-200">Huso</th>
                     <th class="px-3 py-2 text-center font-semibold text-slate-700 border-b border-slate-200">Titulo</th>
@@ -663,7 +663,7 @@
                   </tr>
 
                   <!-- statistics rows -->
-                  <tr class="bg-gradient-to-r from-blue-50 to-indigo-50 font-semibold border-t-2 border-blue-200">
+                  <tr class="bg-linear-to-r from-blue-50 to-indigo-50 font-semibold border-t-2 border-blue-200">
                     <td class="px-3 py-1 text-slate-700">
                       <div class="flex items-center justify-center gap-1">
                         <span>Promedio</span>
