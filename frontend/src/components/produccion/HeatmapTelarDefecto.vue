@@ -44,6 +44,40 @@
         <option v-for="t in availableTramas" :key="t" :value="t">{{ t }}</option>
       </select>
 
+      <!-- Divider -->
+      <div class="w-px h-6 bg-slate-200 hidden sm:block"></div>
+
+      <!-- Sector -->
+      <div class="flex items-center gap-1.5 text-xs">
+        <span class="text-slate-500 whitespace-nowrap">Sector:</span>
+        <div class="flex rounded border border-slate-300 overflow-hidden">
+          <button
+            v-for="s in availableSectors" :key="s.label"
+            class="px-2 py-1.5 font-semibold border-r border-slate-300 last:border-0 transition-colors"
+            :class="selectedSector === s.label ? s.activeClass : 'bg-white text-slate-600 hover:bg-slate-50'"
+            @click="selectedSector = s.label"
+          >{{ s.label }}</button>
+        </div>
+      </div>
+
+      <!-- Buscar defecto -->
+      <div class="flex items-center gap-1 text-xs">
+        <div class="relative">
+          <input
+            v-model="defectoSearch"
+            type="text"
+            placeholder="Buscar defecto…"
+            class="pl-2 pr-6 py-1.5 border border-slate-300 rounded text-xs text-slate-700 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 w-36"
+          />
+          <button
+            v-if="defectoSearch"
+            @click="defectoSearch = ''"
+            class="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors leading-none"
+            title="Limpiar búsqueda"
+          >✕</button>
+        </div>
+      </div>
+
       <!-- TopN -->
       <div class="flex items-center gap-1.5 text-xs">
         <span class="text-slate-500 whitespace-nowrap">Top defectos:</span>
@@ -75,7 +109,7 @@
     <div class="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">
 
       <!-- Sin datos -->
-      <div v-if="!loading && rawData.length === 0 && !fetchError" class="flex-1 flex flex-col items-center justify-center gap-3 text-slate-300">
+      <div v-if="!loading && filteredData.length === 0 && !fetchError" class="flex-1 flex flex-col items-center justify-center gap-3 text-slate-300">
         <svg class="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
         </svg>
@@ -249,6 +283,30 @@ const loading       = ref(false)
 const fetchError    = ref('')
 const rawData       = ref([])
 
+// ── Filtros client-side ───────────────────────────────────────────────────
+const selectedSector = ref('Todas')
+const defectoSearch  = ref('')
+
+const availableSectors = [
+  { label: 'Todas', activeClass: 'bg-slate-700 text-white' },
+  { label: 'INDI',  activeClass: 'bg-blue-600 text-white' },
+  { label: 'HILA',  activeClass: 'bg-purple-600 text-white' },
+  { label: 'TEJE',  activeClass: 'bg-green-700 text-white' },
+  { label: 'ACAB',  activeClass: 'bg-orange-500 text-white' },
+]
+
+const filteredData = computed(() => {
+  let rows = rawData.value
+  if (selectedSector.value !== 'Todas') {
+    rows = rows.filter(r => defectoSector(r.cod_def) === selectedSector.value)
+  }
+  if (defectoSearch.value.trim()) {
+    const q = defectoSearch.value.trim().toLowerCase()
+    rows = rows.filter(r => r.desc_defeito.toLowerCase().includes(q))
+  }
+  return rows
+})
+
 // ── Period presets ────────────────────────────────────────────────────────
 const presets = [
   { label: '7d',  days: 7  },
@@ -281,13 +339,13 @@ function defectoSector(cod) {
 
 // ── Pivot de filas planas → matriz ────────────────────────────────────────
 const matrix = computed(() => {
-  if (!rawData.value.length) return { telares: [], defectos: [], cells: {}, totalByTelar: {}, totalByDefecto: {} }
+  if (!filteredData.value.length) return { telares: [], defectos: [], cells: {}, totalByTelar: {}, totalByDefecto: {} }
 
   // Sumar pts_totales por defecto (para rankear top-N)
   const defectoAgg  = {}
   const telarSet    = new Set()
 
-  for (const row of rawData.value) {
+  for (const row of filteredData.value) {
     const t = Number(row.Telar)
     const d = row.desc_defeito
     if (!defectoAgg[d]) defectoAgg[d] = { cod_def: row.cod_def, pts: 0 }
@@ -308,7 +366,7 @@ const matrix = computed(() => {
   const totalByTelar    = {}
   const totalByDefecto  = {}
 
-  for (const row of rawData.value) {
+  for (const row of filteredData.value) {
     if (!topSet.has(row.desc_defeito)) continue
     const t    = Number(row.Telar)
     const d    = row.desc_defeito
@@ -341,8 +399,8 @@ const sortedTelares = computed(() => {
 
 // Valor máximo pts_100m2 en toda la matriz (para escala de color)
 const maxVal = computed(() => {
-  if (!rawData.value.length) return 1
-  return Math.max(...rawData.value.map(r => Number(r.pts_100m2) || 0), 1)
+  if (!filteredData.value.length) return 1
+  return Math.max(...filteredData.value.map(r => Number(r.pts_100m2) || 0), 1)
 })
 
 // ── Color de celda (HSL verde→rojo) ──────────────────────────────────────

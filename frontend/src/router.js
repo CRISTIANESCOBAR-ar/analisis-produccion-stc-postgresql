@@ -174,8 +174,12 @@ const routes = [
     path: '/performance-revisores',
     component: () => import('./components/produccion/PerformanceMensualRevisores.vue'),
     meta: { title: 'Performance Mensual Revisores - Control de Calidad' }
-  }
-  ,
+  },
+  {
+    path: '/analisis-patrones-teje',
+    component: () => import('./components/produccion/AnalisisPatronesTeje.vue'),
+    meta: { title: 'Análisis de Patrones de Defectos (IA)' }
+  },
   {
     path: '/residuos-indigo-tejeduria',
     component: () => import('./components/ResiduosIndigoTejeduria.vue'),

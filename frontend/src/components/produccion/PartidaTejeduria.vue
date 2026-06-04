@@ -318,7 +318,7 @@
                       </template>
                       <template v-if="c.pts_100m2 != null">
                         <span class="text-slate-300">|</span>
-                        <span class="text-slate-400">Pts/m²</span>
+                        <span class="text-slate-400">Pts/100m²</span>
                         <span class="font-semibold tabular-nums">{{ c.pts_100m2.toFixed(1).replace('.', ',') }}</span>
                       </template>
                     </div>
