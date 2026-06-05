@@ -28,17 +28,17 @@
         <div class="flex items-end h-full pt-4">
           <button
             @click="ejecutarAnalisis"
-            :disabled="loading || !fechaInicio || !fechaFin"
+            :disabled="(loadingData || loadingIA) || !fechaInicio || !fechaFin"
             class="h-9 px-5 flex items-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg select-none"
           >
-            <svg v-if="loading" class="w-4 h-4 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+            <svg v-if="loadingData || loadingIA" class="w-4 h-4 animate-spin text-white" fill="none" viewBox="0 0 24 24">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
             <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
             </svg>
-            <span>{{ loading ? 'Analizando...' : 'Analizar con IA' }}</span>
+            <span>{{ loadingData ? 'Cargando datos...' : (loadingIA ? 'Analizando...' : 'Analizar con IA') }}</span>
           </button>
         </div>
       </div>
@@ -197,7 +197,7 @@
           <!-- Contenido AI -->
           <div class="flex-1 overflow-auto min-h-0 flex flex-col">
             <!-- Cargando -->
-            <div v-if="loading" class="flex-1 flex flex-col items-center justify-center p-6 text-center select-none">
+            <div v-if="loadingIA" class="flex-1 flex flex-col items-center justify-center p-6 text-center select-none">
               <div class="relative w-16 h-16 mb-4">
                 <div class="absolute inset-0 rounded-full border-4 border-indigo-100 border-t-indigo-600 animate-spin"></div>
                 <div class="absolute inset-2 rounded-full bg-indigo-50/50 flex items-center justify-center text-xl animate-pulse">💡</div>
@@ -209,7 +209,29 @@
             </div>
 
             <!-- Datos analizados -->
-            <div v-else-if="analisis" class="markdown-container text-xs text-slate-700 leading-relaxed font-sans pb-2" v-html="mdToHtml(analisis)"></div>
+            <div v-else-if="analisis" class="flex flex-col gap-3 pb-2">
+              <div v-if="tokenInfo" class="flex flex-wrap items-center gap-3 bg-slate-50 border border-slate-100 px-3 py-2 rounded-lg text-[10px]">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-bold text-slate-400 uppercase tracking-wider">Fuente:</span>
+                  <span class="px-2 py-0.5 rounded-full font-bold" :class="fuente === 'cache' ? 'bg-emerald-100 text-emerald-700' : 'bg-purple-100 text-purple-700'">
+                    {{ fuente === 'cache' ? 'Caché (Instantáneo)' : 'Gemini AI' }}
+                  </span>
+                </div>
+                <div class="h-3 w-px bg-slate-200"></div>
+                <div class="flex items-center gap-2">
+                  <span class="font-bold text-slate-400 uppercase tracking-wider">Tokens:</span>
+                  <span class="font-bold text-slate-700">{{ tokenInfo.tokensTotal.toLocaleString('es-AR') }}</span>
+                </div>
+                <div class="h-3 w-px bg-slate-200"></div>
+                <div class="flex items-center gap-2">
+                  <span class="font-bold text-slate-400 uppercase tracking-wider">Costo:</span>
+                  <span class="font-bold" :class="tokenInfo.costoUSD < 0.001 ? 'text-emerald-600' : 'text-amber-600'">
+                    U$S {{ tokenInfo.costoUSD < 0.0001 ? '< 0.0001' : tokenInfo.costoUSD.toFixed(4) }}
+                  </span>
+                </div>
+              </div>
+              <div class="markdown-container text-xs text-slate-700 leading-relaxed font-sans" v-html="mdToHtml(analisis)"></div>
+            </div>
 
             <!-- Estado inicial vacío -->
             <div v-else class="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-400 select-none">
@@ -255,44 +277,47 @@
           <table class="min-w-full divide-y divide-slate-100 text-xs table-fixed">
             <thead class="bg-slate-50 sticky top-0 z-10">
               <tr>
-                <th class="w-18 px-3 py-2 text-center font-bold text-slate-500">Partida</th>
-                <th class="w-24 px-3 py-2 text-left font-bold text-slate-500">Artículo</th>
-                <th class="w-16 px-3 py-2 text-center font-bold text-slate-500">Trama</th>
-                <th class="w-14 px-3 py-2 text-center font-bold text-slate-500">Telar</th>
-                <th class="w-14 px-3 py-2 text-center font-bold text-slate-500">Efic. %</th>
-                <th class="w-14 px-3 py-2 text-right font-bold text-slate-500">RT105</th>
-                <th class="w-14 px-3 py-2 text-right font-bold text-slate-500">RU105</th>
-                <th class="w-16 px-3 py-2 text-right font-bold text-slate-500">Metros</th>
-                <th class="w-14 px-3 py-2 text-center font-bold text-slate-500">Defecto</th>
-                <th class="w-16 px-3 py-2 text-right font-bold text-slate-500">Pts/100m²</th>
+                <th class="w-16 px-2 py-2 text-center font-bold text-slate-500">Partida</th>
+                <th class="w-20 px-2 py-2 text-left font-bold text-slate-500">Artículo</th>
+                <th class="w-14 px-2 py-2 text-center font-bold text-slate-500">Grupo</th>
+                <th class="w-20 px-2 py-2 text-center font-bold text-slate-500">Trama</th>
+                <th class="w-12 px-2 py-2 text-center font-bold text-slate-500">Telar</th>
+                <th class="w-12 px-2 py-2 text-center font-bold text-slate-500">Efic.%</th>
+                <th class="w-12 px-2 py-2 text-right font-bold text-slate-500">RT105</th>
+                <th class="w-12 px-2 py-2 text-right font-bold text-slate-500">RU105</th>
+                <th class="w-12 px-2 py-2 text-right font-bold text-slate-500">Par.T</th>
+                <th class="w-12 px-2 py-2 text-right font-bold text-slate-500">Par.U</th>
+                <th class="w-14 px-2 py-2 text-right font-bold text-slate-500">Metros</th>
+                <th class="w-10 px-2 py-2 text-center font-bold text-slate-500" title="Parada Tear">333</th>
+                <th class="w-10 px-2 py-2 text-center font-bold text-slate-500" title="Trama Mole">340</th>
+                <th class="w-10 px-2 py-2 text-center font-bold text-slate-500" title="Trama Curta">382</th>
+                <th class="w-10 px-2 py-2 text-center font-bold text-slate-500" title="Trama Dobrada">387</th>
+                <th class="w-10 px-2 py-2 text-center font-bold text-slate-500" title="Trama Dupla">386</th>
+                <th class="w-14 px-2 py-2 text-right font-bold text-slate-500">Pts/100m²</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100 bg-white font-mono">
-              <tr v-for="r in pagedDataset" :key="r.partida + '_' + r.cod_def" class="hover:bg-slate-50 transition-colors">
-                <td class="px-3 py-2.5 font-bold text-slate-800 text-center">{{ formatPartida(r.partida) }}</td>
-                <td class="px-3 py-2.5 text-slate-700 text-left font-medium font-sans" :title="r.nm_mercado || r.artigo">
-                  <div class="font-bold font-mono text-[11px] leading-tight">{{ formatArtigo(r.artigo) }}</div>
-                  <div v-if="r.nm_mercado" class="text-[10px] text-slate-400 font-normal leading-tight truncate max-w-[150px]">
-                    {{ r.nm_mercado }}
-                  </div>
+              <tr v-for="r in pagedDataset" :key="r.partida" class="hover:bg-slate-50 transition-colors">
+                <td class="px-2 py-2.5 font-bold text-slate-800 text-center">{{ formatPartida(r.partida) }}</td>
+                <td class="px-2 py-2.5 text-slate-700 text-left font-medium font-sans" :title="r.articulo">
+                  <div class="font-bold font-mono text-[11px] leading-tight">{{ formatArtigo(r.articulo) }}</div>
                 </td>
-                <td class="px-3 py-2.5 text-slate-700 text-center font-mono text-[11px]">{{ r.trama || '—' }}</td>
-                <td class="px-3 py-2.5 text-slate-700 font-bold text-center">{{ formatMaquina(r.maquina) }}</td>
-                <td class="px-3 py-2.5 text-center" :class="eficClass(r.eficiencia)">{{ formatDecimal(r.eficiencia, 1) }}%</td>
-                <td class="px-3 py-2.5 text-right text-slate-700 font-mono text-[11px]">{{ formatDecimal(r.rt105, 2) }}</td>
-                <td class="px-3 py-2.5 text-right text-slate-700 font-mono text-[11px]">{{ formatDecimal(r.ru105, 2) }}</td>
-                <td class="px-3 py-2.5 text-right text-slate-600">{{ formatInteger(r.metros_revisados) }}m</td>
-                <td class="px-3 py-2.5 text-center">
-                  <span
-                    class="inline-block px-1.5 py-0.5 rounded font-bold text-[9px]"
-                    :class="defectoClass(r.cod_def)"
-                    :title="r.desc_defeito || 'Sin Defecto'"
-                  >
-                    {{ r.cod_def || '—' }}
-                  </span>
-                </td>
-                <td class="px-3 py-2.5 text-right font-black" :class="ptsClass(r.pts_100m2)">
-                  {{ formatDecimal(r.pts_100m2, 2) }}
+                <td class="px-2 py-2.5 text-slate-700 text-center font-mono text-[11px] font-bold">{{ r.grupo_tear || '—' }}</td>
+                <td class="px-2 py-2.5 text-slate-700 text-center font-mono text-[10px] whitespace-nowrap">{{ r.caracteristicas_trama?.tipo_trama_filtro || r.caracteristicas_trama?.titulo || '—' }}</td>
+                <td class="px-2 py-2.5 text-slate-700 font-bold text-center">{{ formatMaquina(r.indicadores_tejeduria?.telar_asignado) }}</td>
+                <td class="px-2 py-2.5 text-center" :class="eficClass(r.indicadores_tejeduria?.eficiencia_porcentaje)">{{ formatDecimal(r.indicadores_tejeduria?.eficiencia_porcentaje, 1) }}%</td>
+                <td class="px-2 py-2.5 text-right font-mono" :class="r.indicadores_tejeduria?.rt105_paradas_trama > 5 ? 'text-amber-600 font-bold' : 'text-slate-500'">{{ formatDecimal(r.indicadores_tejeduria?.rt105_paradas_trama, 1) }}</td>
+                <td class="px-2 py-2.5 text-right font-mono" :class="r.indicadores_tejeduria?.ru105_paradas_urdimbre > 5 ? 'text-amber-600 font-bold' : 'text-slate-500'">{{ formatDecimal(r.indicadores_tejeduria?.ru105_paradas_urdimbre, 1) }}</td>
+                <td class="px-2 py-2.5 text-right font-mono text-slate-600">{{ r.indicadores_tejeduria?.suma_paradas_trama || 0 }}</td>
+                <td class="px-2 py-2.5 text-right font-mono text-slate-600">{{ r.indicadores_tejeduria?.suma_paradas_urdimbre || 0 }}</td>
+                <td class="px-2 py-2.5 text-right text-slate-600">{{ formatInteger(r.indicadores_tejeduria?.metros_primeira) }}m</td>
+                <td class="px-2 py-2.5 text-center font-mono" :class="getDefectCount(r, '333') > 0 ? 'text-red-600 font-bold' : 'text-slate-300'">{{ getDefectCount(r, '333') || '-' }}</td>
+                <td class="px-2 py-2.5 text-center font-mono" :class="getDefectCount(r, '340') > 0 ? 'text-amber-600 font-bold' : 'text-slate-300'">{{ getDefectCount(r, '340') || '-' }}</td>
+                <td class="px-2 py-2.5 text-center font-mono" :class="getDefectCount(r, '382') > 0 ? 'text-orange-600 font-bold' : 'text-slate-300'">{{ getDefectCount(r, '382') || '-' }}</td>
+                <td class="px-2 py-2.5 text-center font-mono" :class="getDefectCount(r, '387') > 0 ? 'text-amber-600 font-bold' : 'text-slate-300'">{{ getDefectCount(r, '387') || '-' }}</td>
+                <td class="px-2 py-2.5 text-center font-mono" :class="getDefectCount(r, '386') > 0 ? 'text-orange-600 font-bold' : 'text-slate-300'">{{ getDefectCount(r, '386') || '-' }}</td>
+                <td class="px-2 py-2.5 text-right font-black" :class="ptsClass(r.conteo_defectos_revisadora?.pts_por_100m2)">
+                  {{ formatDecimal(r.conteo_defectos_revisadora?.pts_por_100m2, 2) }}
                 </td>
               </tr>
               <tr v-if="!filteredDataset.length">
@@ -353,7 +378,8 @@ function getPastDateString(offsetDays) {
 const fechaInicio = ref(getPastDateString(30))
 const fechaFin = ref(getPastDateString(1))
 
-const loading = ref(false)
+const loadingData = ref(false)
+const loadingIA = ref(false)
 const firstRun = ref(true)
 const dataset = ref([])
 const defects = ref([])
@@ -361,6 +387,9 @@ const totalMetros = ref(0)
 const totalAreaM2 = ref(0)
 const analisis = ref('')
 const error = ref(null)
+const tokenInfo = ref(null)
+const fuente = ref('')
+const modelo = ref('')
 
 // Filtros locales
 const filtroMaquina = ref('')
@@ -393,6 +422,12 @@ const sectorCounts = computed(() => {
 })
 
 // Agrupamiento y filtrado de defectos
+const getDefectCount = (row, code) => {
+  if (!row?.conteo_defectos_revisadora?.detalle_frecuencia_codigo) return 0;
+  const codes = row.conteo_defectos_revisadora.detalle_frecuencia_codigo;
+  return codes[`${code}_TEJE`] || codes[code] || 0;
+};
+
 const processedDefects = computed(() => {
   let list = (defects.value || []).map(r => ({
     ...r,
@@ -476,12 +511,12 @@ const filteredDataset = computed(() => {
 
   const termMaquina = String(filtroMaquina.value).trim().toLowerCase()
   if (termMaquina) {
-    list = list.filter(r => String(r.maquina || '').toLowerCase().includes(termMaquina))
+    list = list.filter(r => String(r.indicadores_tejeduria?.telar_asignado || '').toLowerCase().includes(termMaquina))
   }
 
   const termArtigo = String(filtroArtigo.value).trim().toLowerCase()
   if (termArtigo) {
-    list = list.filter(r => String(r.artigo || '').toLowerCase().includes(termArtigo))
+    list = list.filter(r => String(r.articulo || '').toLowerCase().includes(termArtigo))
   }
 
   return list
@@ -504,42 +539,81 @@ watch([filteredDataset, pageSize], () => {
 async function ejecutarAnalisis() {
   if (!fechaInicio.value || !fechaFin.value) return
 
-  loading.value = true
+  loadingData.value = true
   error.value = null
   firstRun.value = false
+  analisis.value = ''
+  tokenInfo.value = null
+  fuente.value = ''
+  modelo.value = ''
 
   try {
+    // 1. Obtener Datos
     const params = new URLSearchParams({
       fecha_inicio: fechaInicio.value,
       fecha_fin: fechaFin.value
     })
     
-    const response = await fetch(`${API_BASE}/api/calidad/analisis-patrones-teje?${params}`)
-    const data = await response.json()
+    const resDatos = await fetch(`${API_BASE}/api/calidad/datos-patrones-teje?${params}`)
+    const dataDatos = await resDatos.json()
 
-    if (!response.ok) {
-      throw new Error(data.error || 'Error en la petición de análisis')
-    }
-
-    if (data.success) {
-      dataset.value = Array.isArray(data.dataset) ? data.dataset : []
-      defects.value = Array.isArray(data.defects) ? data.defects : []
-      totalMetros.value = Number(data.total_metros || 0)
-      totalAreaM2.value = Number(data.total_area_m2 || 0)
-      analisis.value = data.analisis || ''
+    if (!resDatos.ok) throw new Error(dataDatos.error || 'Error obteniendo datos de calidad')
+    
+    if (dataDatos.success) {
+      dataset.value = Array.isArray(dataDatos.dataset) ? dataDatos.dataset : []
+      defects.value = Array.isArray(dataDatos.defects) ? dataDatos.defects : []
+      totalMetros.value = Number(dataDatos.total_metros || 0)
+      totalAreaM2.value = Number(dataDatos.total_area_m2 || 0)
     } else {
-      throw new Error(data.error || 'No se pudo generar el análisis')
+      throw new Error('Formato de datos inválido')
     }
+    
+    loadingData.value = false;
+
+    // Si no hay datos, cortamos acá
+    if (dataset.value.length === 0) {
+      analisis.value = 'No se encontraron registros de tejeduría en el rango de fechas seleccionado.';
+      return;
+    }
+
+    // 2. Ejecutar IA (Apagado temporalmente)
+    loadingIA.value = false;
+    analisis.value = '**Análisis de IA en pausa** mientras se ajustan las visualizaciones de tabla.';
+    /*
+    const resIA = await fetch(`${API_BASE}/api/calidad/ia-patrones-teje`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        dataset: dataset.value,
+        defects: defects.value,
+        totalMetros: totalMetros.value,
+        totalAreaM2: totalAreaM2.value,
+        fechaInicio: fechaInicio.value,
+        fechaFin: fechaFin.value
+      })
+    });
+    
+    const dataIA = await resIA.json();
+    
+    if (!resIA.ok) throw new Error(dataIA.error || 'Error en análisis de IA');
+    
+    analisis.value = dataIA.narrativa || dataIA.analisis || '';
+    tokenInfo.value = dataIA.tokenInfo || null;
+    fuente.value = dataIA.fuente || '';
+    modelo.value = dataIA.modelo || '';
+    */
+
   } catch (err) {
     console.error('[analisis-patrones-teje] failed:', err)
     error.value = err.message
     Swal.fire({
       icon: 'error',
       title: 'Error de análisis',
-      text: err.message || 'No se pudo realizar el análisis de patrones.'
+      text: err.message || 'Ocurrió un error en el proceso.'
     })
   } finally {
-    loading.value = false
+    loadingData.value = false
+    loadingIA.value = false
   }
 }
 

@@ -4,6 +4,7 @@ import express from 'express'
 import cors from 'cors'
 import pg from 'pg'
 import fs from 'fs'
+import crypto from 'crypto'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { GoogleGenerativeAI } from "@google/generative-ai"
@@ -30,6 +31,22 @@ function looksLikeWindowsPath(p) {
   if (!p) return false
   // Drive letter (C:\...) or UNC (\\server\share)
   return /^[a-zA-Z]:[\\/]/.test(p) || /^\\\\/.test(p)
+}
+
+function sha256(s) {
+  return crypto.createHash('sha256').update(s).digest('hex');
+}
+
+function buildCacheKey({ lotes, fecha, formato, modelo, dataHash, origen }) {
+  return sha256(`${lotes}|${fecha || ''}|${formato || 'actual'}|${modelo || ''}|${dataHash}|${origen}`);
+}
+
+function hashRowsPayload(dataset) {
+  const norm = dataset.map(r => ({
+    p: r.partida, a: r.articulo, t: r.indicadores_tejeduria?.telar_asignado, e: r.indicadores_tejeduria?.eficiencia_porcentaje,
+    d: r.conteo_defectos_revisadora?.detalle_frecuencia_codigo
+  }));
+  return sha256(JSON.stringify(norm));
 }
 
 function buildNarrativaStructuredFields(narrativaText) {
@@ -8407,7 +8424,7 @@ Análisis Comparativo Fibra ↔️ Hilo
   }
 });
 
-app.get('/api/calidad/analisis-patrones-teje', async (req, res) => {
+app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
   try {
     const { fecha_inicio, fecha_fin } = req.query;
     if (!fecha_inicio || !fecha_fin) {
@@ -8421,15 +8438,9 @@ app.get('/api/calidad/analisis-patrones-teje', async (req, res) => {
       return res.status(400).json({ error: 'Formato de fecha inválido' });
     }
 
-    // 1) Queries optimizadas
     const querySql = `
-      WITH piece_summary AS (
-        SELECT 
-          TRIM(BOTH FROM "PARTIDA") AS partida_clean,
-          TRIM(BOTH FROM "PEÇA") AS peca_clean,
-          SUM(CAST(NULLIF(REPLACE(REPLACE(TRIM("METRAGEM"::TEXT), '.', ''), ',', '.'), '') AS NUMERIC)) AS piece_metragem,
-          AVG(CAST(NULLIF(REPLACE(TRIM("PONTUACAO"::TEXT), ',', '.'), '') AS NUMERIC)) AS piece_pontuacion,
-          AVG(CAST(NULLIF(REPLACE(TRIM("LARGURA"::TEXT), ',', '.'), '') AS NUMERIC)) AS piece_largura
+      WITH partidas_list AS (
+        SELECT DISTINCT TRIM(BOTH FROM "PARTIDA") AS target_partida
         FROM public.tb_calidad
         WHERE "EMP" = 'STC'
           AND "QUALIDADE" IN ('1', 'PRIMEIRA') 
@@ -8441,74 +8452,125 @@ app.get('/api/calidad/analisis-patrones-teje', async (req, res) => {
               ELSE NULL
             END
           ) BETWEEN $1::date AND $2::date
-        GROUP BY TRIM(BOTH FROM "PARTIDA"), TRIM(BOTH FROM "PEÇA")
       ),
-      cte_calidad AS (
+      partida_prod AS (
         SELECT 
-          partida_clean,
-          SUM(piece_metragem) AS metros_revisados,
-          COUNT(DISTINCT peca_clean) AS total_piezas,
-          SUM(piece_pontuacion) AS total_puntos_calidad,
-          SUM(piece_metragem * COALESCE(piece_largura, 0) / 100.0) AS area_m2_revisada
-        FROM piece_summary
-        GROUP BY partida_clean
+          TRIM(BOTH FROM p."PARTIDA") AS partida,
+          COALESCE(
+            MAX(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN p."ARTIGO" END),
+            MAX(p."ARTIGO")
+          ) AS artigo,
+          MAX(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN p."GRUPO TEAR" END) AS grupo_tear,
+          MAX(CASE WHEN p."SELETOR" = 'INDIGO' THEN CAST(NULLIF(REPLACE(TRIM(p."VELOC"), ',', '.'), '') AS NUMERIC) END) AS indigo_velocidad,
+          SUM(CASE WHEN p."SELETOR" = 'INDIGO' THEN CAST(NULLIF(REPLACE(TRIM(p."RUPTURAS"), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS indigo_rupturas,
+          SUM(CASE WHEN p."SELETOR" = 'INDIGO' THEN CAST(NULLIF(REPLACE(TRIM(p."CAVALOS"), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS indigo_cavalos,
+          MAX(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN p."MAQUINA" END) AS tece_telar,
+          SUM(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."PONTOS_LIDOS"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS puntos_lidos,
+          SUM(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."PONTOS_100%"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS puntos_100,
+          SUM(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."PARADA TEC TRAMA"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS suma_paradas_trama,
+          SUM(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."PARADA TEC URDUME"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS suma_paradas_urdimbre
+        FROM public.tb_produccion p
+        WHERE TRIM(BOTH FROM p."PARTIDA") IN (SELECT target_partida FROM partidas_list)
+        GROUP BY TRIM(BOTH FROM p."PARTIDA")
       ),
-      cte_defectos AS (
+      partida_calidad AS (
         SELECT 
-          TRIM(BOTH FROM d."PARTIDA") AS partida_clean,
-          d."COD_DEF" AS cod_def,
-          d."DESC_DEFEITO" AS desc_defeito,
-          SUM(CAST(NULLIF(REPLACE(TRIM(d."PONTOS"::TEXT), ',', '.'), '') AS NUMERIC)) AS total_puntos
+          TRIM(BOTH FROM c."PARTIDA") AS partida,
+          MIN(c."DT INI TEC") AS dt_ini_tec,
+          MIN(c."HR INI TEC") AS hr_ini_tec,
+          MAX(c."DT FIM TEC") AS dt_fim_tec,
+          MAX(c."HR FIM TEC") AS hr_fim_tec,
+          SUM(CASE WHEN TRIM(BOTH FROM c."QUALIDADE") IN ('1', 'PRIMEIRA') THEN CAST(NULLIF(REPLACE(REPLACE(TRIM(c."METRAGEM"::TEXT), '.', ''), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS metros_primeira
+        FROM public.tb_calidad c
+        WHERE TRIM(BOTH FROM c."PARTIDA") IN (SELECT target_partida FROM partidas_list)
+        GROUP BY TRIM(BOTH FROM c."PARTIDA")
+      ),
+      partida_defectos AS (
+        SELECT 
+          TRIM(BOTH FROM d."PARTIDA") AS partida,
+          COUNT(CASE WHEN TRIM(BOTH FROM d."COD_DEF") IN ('340', '382', '387', '333', '319', '328', '386') THEN 1 END) AS total_defectos_trama_4ptos,
+          COUNT(CASE WHEN TRIM(BOTH FROM d."COD_DEF") IN ('312', '313', '310', '311') THEN 1 END) AS total_defectos_urdimbre,
+          COUNT(CASE WHEN TRIM(BOTH FROM d."COD_DEF") = '333' THEN 1 END) AS count_333,
+          COUNT(CASE WHEN TRIM(BOTH FROM d."COD_DEF") = '340' THEN 1 END) AS count_340,
+          COUNT(CASE WHEN TRIM(BOTH FROM d."COD_DEF") = '382' THEN 1 END) AS count_382,
+          COUNT(CASE WHEN TRIM(BOTH FROM d."COD_DEF") = '387' THEN 1 END) AS count_387,
+          COUNT(CASE WHEN TRIM(BOTH FROM d."COD_DEF") = '319' THEN 1 END) AS count_319,
+          COUNT(CASE WHEN TRIM(BOTH FROM d."COD_DEF") = '328' THEN 1 END) AS count_328,
+          COUNT(CASE WHEN TRIM(BOTH FROM d."COD_DEF") = '386' THEN 1 END) AS count_386,
+          SUM(CAST(NULLIF(REPLACE(TRIM(d."PONTOS"::text), ',', '.'), '') AS NUMERIC)) AS total_pontos
         FROM public.tb_defectos d
-        INNER JOIN piece_summary ps ON ps.peca_clean = d."PARTIDA" || d."PECA"
-        WHERE d."FILIAL" = '05'
+        WHERE TRIM(BOTH FROM d."PARTIDA") IN (SELECT target_partida FROM partidas_list)
           AND d."QUALIDADE" = '1'
-          AND btrim(d."DESC_DEFEITO") <> ''
-          AND btrim(d."DESC_DEFEITO") <> '--'
-        GROUP BY TRIM(BOTH FROM d."PARTIDA"), d."COD_DEF", d."DESC_DEFEITO"
+        GROUP BY TRIM(BOTH FROM d."PARTIDA")
       ),
-      cte_produccion AS (
+      partida_ficha AS (
         SELECT 
-          TRIM(BOTH FROM "PARTIDA") AS partida_clean,
-          "ARTIGO" AS artigo,
-          MAX(TRIM(BOTH FROM "NM MERCADO")) AS nm_mercado,
-          MAX(TRIM(BOTH FROM "TRAMA REDUZIDA 1")) AS trama,
-          "MAQUINA" AS maquina,
-          SUM(CAST(NULLIF(REPLACE(TRIM("PONTOS_LIDOS"::TEXT), ',', '.'), '') AS NUMERIC)) * 100.0 / 
-            NULLIF(SUM(CAST(NULLIF(REPLACE(TRIM("PONTOS_100%"::TEXT), ',', '.'), '') AS NUMERIC)), 0) AS eficiencia_avg,
-          ROUND(
-            (SUM(COALESCE(CAST(NULLIF(REPLACE(TRIM("PARADA TEC TRAMA"::TEXT), ',', '.'), '') AS NUMERIC), 0)) * 100000.0) /
-            NULLIF(SUM(CAST(NULLIF(REPLACE(TRIM("PONTOS_LIDOS"::TEXT), ',', '.'), '') AS NUMERIC)) * 1000.0, 0),
-            2
-          ) AS rt105,
-          ROUND(
-            (SUM(COALESCE(CAST(NULLIF(REPLACE(TRIM("PARADA TEC URDUME"::TEXT), ',', '.'), '') AS NUMERIC), 0)) * 100000.0) /
-            NULLIF(SUM(CAST(NULLIF(REPLACE(TRIM("PONTOS_LIDOS"::TEXT), ',', '.'), '') AS NUMERIC)) * 1000.0, 0),
-            2
-          ) AS ru105
-        FROM public.tb_produccion
-        WHERE "SELETOR" = 'TECELAGEM'
-          AND TRIM(BOTH FROM "PARTIDA") IN (SELECT partida_clean FROM cte_calidad)
-        GROUP BY TRIM(BOTH FROM "PARTIDA"), "ARTIGO", "MAQUINA"
+          f."ARTIGO CODIGO" AS artigo_codigo,
+          f."COMPOSIÇÃO" AS composicion,
+          f."TRAMA REDUZIDO" AS trama_reducido
+        FROM public.tb_fichas f
       )
       SELECT 
-        p.partida_clean AS partida,
-        p.artigo,
-        p.nm_mercado,
-        p.trama,
-        p.maquina,
-        ROUND(p.eficiencia_avg, 1) AS eficiencia,
-        p.rt105,
-        p.ru105,
-        c.metros_revisados,
-        d.cod_def,
-        d.desc_defeito,
-        d.total_puntos AS puntos_defecto,
-        ROUND(((COALESCE(d.total_puntos, 0) * 100) / NULLIF(c.area_m2_revisada, 0)), 2) AS pts_100m2
-      FROM cte_produccion p
-      INNER JOIN cte_calidad c ON p.partida_clean = c.partida_clean
-      LEFT JOIN cte_defectos d ON p.partida_clean = d.partida_clean
-      ORDER BY pts_100m2 DESC NULLS LAST
+        json_build_object(
+          'partida', ctx.target_partida,
+          'articulo', COALESCE(p.artigo, (SELECT "ARTIGO" FROM public.tb_calidad WHERE TRIM(BOTH FROM "PARTIDA") = ctx.target_partida LIMIT 1)),
+          'grupo_tear', p.grupo_tear,
+          'cronologia_tejeduria', json_build_object(
+             'inicio', COALESCE(c.dt_ini_tec || ' ' || c.hr_ini_tec, ''),
+             'fin', COALESCE(c.dt_fim_tec || ' ' || c.hr_fim_tec, '')
+          ),
+          'caracteristicas_trama', json_build_object(
+            'composicion', f.composicion,
+            'titulo', f.trama_reducido,
+            'tipo_trama_filtro', CASE 
+              WHEN REPLACE(REPLACE(UPPER(f.composicion), ' ', ''), 'Ã', 'A') IN ('100%ALGODON', '100%ALGODAO', '100%COTTON') THEN '100% CO - Ne ' || COALESCE(f.trama_reducido, '')
+              WHEN (UPPER(f.composicion) LIKE '%ALGOD%' OR UPPER(f.composicion) LIKE '%COTTON%' OR UPPER(f.composicion) LIKE '%CO%') 
+                   AND (UPPER(f.composicion) LIKE '%POLYESTER%' OR UPPER(f.composicion) LIKE '%POLIESTER%' OR UPPER(f.composicion) LIKE '%PES%') 
+                   AND (UPPER(f.composicion) LIKE '%ELASTAN%' OR UPPER(f.composicion) LIKE '%SPANDEX%' OR UPPER(f.composicion) LIKE '%PUE%' OR UPPER(f.composicion) LIKE '%LYCRA%') THEN 'Mezcla Elástica'
+              WHEN (UPPER(f.composicion) LIKE '%ALGOD%' OR UPPER(f.composicion) LIKE '%COTTON%' OR UPPER(f.composicion) LIKE '%CO%') 
+                   AND (UPPER(f.composicion) LIKE '%POLYESTER%' OR UPPER(f.composicion) LIKE '%POLIESTER%' OR UPPER(f.composicion) LIKE '%PES%') THEN 'Mezcla Rígida'
+              ELSE 'Otros'
+            END
+          ),
+          'indicadores_indigo', json_build_object(
+            'seletor', 'INDIGO',
+            'velocidad_nominal', COALESCE(p.indigo_velocidad, 0),
+            'r103_roturas_absolutas', COALESCE(p.indigo_rupturas, 0),
+            'cav105_cavalos_absolutos', COALESCE(p.indigo_cavalos, 0)
+          ),
+          'indicadores_tejeduria', json_build_object(
+            'seletor', 'TECELAGEM',
+            'telar_asignado', p.tece_telar,
+            'eficiencia_porcentaje', CASE WHEN p.puntos_100 > 0 THEN ROUND((p.puntos_lidos * 100.0 / p.puntos_100), 2) ELSE 0 END,
+            'rt105_paradas_trama', CASE WHEN p.puntos_lidos > 0 THEN ROUND((p.suma_paradas_trama * 100000.0) / (p.puntos_lidos * 1000.0), 2) ELSE 0 END,
+            'ru105_paradas_urdimbre', CASE WHEN p.puntos_lidos > 0 THEN ROUND((p.suma_paradas_urdimbre * 100000.0) / (p.puntos_lidos * 1000.0), 2) ELSE 0 END,
+            'suma_paradas_trama', COALESCE(p.suma_paradas_trama, 0),
+            'suma_paradas_urdimbre', COALESCE(p.suma_paradas_urdimbre, 0),
+            'metros_primeira', COALESCE(c.metros_primeira, 0)
+          ),
+          'conteo_defectos_revisadora', json_build_object(
+            'origen_tabla', 'tb_defectos',
+            'total_defectos_trama_4ptos', COALESCE(d.total_defectos_trama_4ptos, 0),
+            'total_defectos_urdimbre', COALESCE(d.total_defectos_urdimbre, 0),
+            'total_pontos', COALESCE(d.total_pontos, 0),
+            'pts_por_100m2', CASE WHEN c.metros_primeira > 0 THEN ROUND((COALESCE(d.total_pontos, 0) / c.metros_primeira) * 100, 2) ELSE 0 END,
+            'detalle_frecuencia_codigo', json_build_object(
+              '333_parada_tear', COALESCE(d.count_333, 0),
+              '340_trama_mole', COALESCE(d.count_340, 0),
+              '382_trama_curta', COALESCE(d.count_382, 0),
+              '387_trama_dobrada', COALESCE(d.count_387, 0),
+              '319_trama_quebrada', COALESCE(d.count_319, 0),
+              '328_falta_trama', COALESCE(d.count_328, 0),
+              '386_trama_dupla', COALESCE(d.count_386, 0)
+            )
+          )
+        ) AS partida_json
+      FROM partidas_list ctx
+      LEFT JOIN partida_prod p ON p.partida = ctx.target_partida
+      LEFT JOIN partida_calidad c ON c.partida = ctx.target_partida
+      LEFT JOIN partida_defectos d ON d.partida = ctx.target_partida
+      LEFT JOIN partida_ficha f ON f.artigo_codigo = p.artigo
+      ORDER BY (CASE WHEN c.metros_primeira > 0 THEN ROUND((COALESCE(d.total_pontos, 0) / c.metros_primeira) * 100, 2) ELSE 0 END) DESC;
     `;
 
     const metrosQuery = `
@@ -8535,6 +8597,7 @@ app.get('/api/calidad/analisis-patrones-teje', async (req, res) => {
         COALESCE(SUM(piece_metragem * COALESCE(piece_largura, 0) / 100.0), 0) AS total_area_m2
       FROM piece_summary
     `;
+
     const defectsQuery = `
       WITH piece_summary AS (
         SELECT DISTINCT
@@ -8571,20 +8634,10 @@ app.get('/api/calidad/analisis-patrones-teje', async (req, res) => {
       pool.query(defectsQuery, [isoInicio, isoFin])
     ]);
 
-    const dataset = dbResult.rows;
+    const dataset = dbResult.rows.map(r => r.partida_json).filter(Boolean);
     const totalMetros = Number(metrosResult.rows[0]?.total_metros || 0);
     const totalAreaM2 = Number(metrosResult.rows[0]?.total_area_m2 || 0);
     const rawDefects = defectsResult.rows;
-
-    if (dataset.length === 0) {
-      return res.json({
-        success: true,
-        dataset: [],
-        defects: [],
-        total_metros: 0,
-        analisis: 'No se encontraron registros de tejeduría en el rango de fechas seleccionado.'
-      });
-    }
 
     const totalPuntosGlobal = rawDefects.reduce((acc, r) => acc + Number(r.total_puntos || 0), 0);
     const defects = rawDefects.map(r => {
@@ -8600,43 +8653,94 @@ app.get('/api/calidad/analisis-patrones-teje', async (req, res) => {
       };
     });
 
-    // 2) Invocar la API de Gemini para análisis de patrones en cascada
+    return res.json({
+      success: true,
+      dataset,
+      defects,
+      total_metros: totalMetros,
+      total_area_m2: totalAreaM2
+    });
+  } catch (err) {
+    console.error('Error en /api/calidad/datos-patrones-teje:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/calidad/ia-patrones-teje', async (req, res) => {
+  try {
+    const { dataset, defects, totalMetros, totalAreaM2, fechaInicio, fechaFin } = req.body;
+    
+    if (!dataset || !defects || !fechaInicio || !fechaFin) {
+      return res.status(400).json({ error: 'Faltan parámetros requeridos para el análisis de IA.' });
+    }
+
+    const isoInicio = fechaInicio;
+    const isoFin = fechaFin;
+
     let analisisIA = 'El motor de diagnóstico de IA de Gemini se encuentra temporalmente desactivado durante la fase de alineación de datos de PostgreSQL.';
-    if (false && process.env.GOOGLE_API_KEY) {
+    if (process.env.GOOGLE_API_KEY) {
       try {
         const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
         
-        // Reducimos el payload para la IA para no saturar los límites de tokens
         const cleanDataForAI = dataset.slice(0, 15).map(r => ({
           partida: r.partida,
-          artigo: r.artigo,
-          maquina: r.maquina,
-          eficiencia: r.eficiencia,
-          metros: r.metros_revisados,
-          pts_100m2: r.pts_100m2,
-          cod_def: r.cod_def,
-          defecto: r.desc_defeito,
-          puntos_defecto: r.puntos_defecto
+          artigo: r.articulo,
+          grupo_tear: r.grupo_tear,
+          cronologia_tejeduria: r.cronologia_tejeduria,
+          matriz_trama: r.caracteristicas_trama?.tipo_trama_filtro,
+          indigo: r.indicadores_indigo,
+          tejeduria: r.indicadores_tejeduria,
+          revision_defectos: r.conteo_defectos_revisadora
         }));
 
         const cleanDefectsForAI = defects.slice(0, 10);
 
-        const prompt = `Actúa como un Auditor e Ingeniero de Control de Calidad Textil experto. Analiza los siguientes conjuntos de datos del periodo seleccionado:
+        const prompt = `Actúa como un Ingeniero de Control de Calidad Textil y Auditor de Planta de Alta Performance. El volumen de metros analizados corresponde estrictamente a los "Metros Revisados de Primera" de tb_calidad. Analiza el siguiente JSON de datos consolidados:
 
-1. RESUMEN GLOBAL DE DEFECTOS DEL PERIODO (Total metros producidos: ${totalMetros.toFixed(1)}m):
+1. RESUMEN GLOBAL DE DEFECTOS DEL PERIODO (Total metros: ${Number(totalMetros).toFixed(1)}m):
 ${JSON.stringify(cleanDefectsForAI)}
 
-2. DETALLE DE PARTIDAS CRÍTICAS (Las de peor desempeño):
+2. DETALLE DE PARTIDAS CRÍTICAS (JSON Consolidados):
 ${JSON.stringify(cleanDataForAI)}
 
-Tu objetivo es encontrar patrones de correlación clave que causan puntuaciones altas de Pts/100m² en el sector TEJE (defectos código 3xx, ej: paradas de telar 333, tramas 340, 382, 387) y proponer soluciones.
+Instrucciones Críticas de Análisis:
 
-Por favor analiza los datos y genera una respuesta estructurada estrictamente en Markdown adecuada para un Jefe de Tejeduría (Supervisor):
-1. **Vector Crítico Principal**: Identifica si los defectos se concentran en artículos específicos, telares específicos o correlaciones de eficiencia.
-2. **Correlación Matemática de Culpabilidad**: Cuantifica qué códigos y sectores representan los peores pesos de defectos.
-3. **Directiva de Acción de Planta**: Da instrucciones operativas claras y prácticas para el supervisor de planta.
+1. Análisis de Correlación Mecánica vs. Revisación (El Núcleo):
+Calcula y analiza los ratios por partida crítica:
+- Ratio de Traspaso de Trama: Compara las paradas mecánicas de trama (rt105_paradas_trama) contra el conteo físico de defectos (340_trama_mole, 382_trama_curta, 387_trama_dobrada).
+- Ratio de Traspaso de Urdimbre: Compara las paradas de urdimbre (ru105_paradas_urdimbre) contra (313_fio_quebrado, 333_parada_tear).
+Diagnóstico: Si paradas son altas pero defectos bajos, el operario trabaja bien. Si defectos superan o igualan paradas, detalla la falla en arranque o sensor.
 
-IMPORTANTE: Sé directo, profesional, usa terminología textil y no uses formatos complejos.`;
+2. Segmentación Física por Matriz de Trama:
+Agrupa por tipo_trama_filtro. Da un dictamen sobre tramas 100% Algodón (Ne 9/1 vs Ne 7/1). Cruza esto con Índigo (r103_roturas_absolutas, cav105_cavalos_absolutos, velocidad_nominal) para saber si títulos finos venían penalizados desde la preparación.
+
+3. Análisis Temporal y de Coincidencia (Clusters):
+Revisa la cronologia_tejeduria (inicio/fin) de las partidas afectadas. Determina si los picos en ciertos telares fueron simultáneos. Si fueron contemporáneos, dicta si el patrón apunta a materia prima defectuosa (aislando la culpa del telar). Cruza con grupo_tear para identificar si la falla se mueve con el equipo humano o si es estática en la máquina.
+
+Estructura Obligatoria del Output (en Markdown):
+Sección 1: Diagnóstico de Correlación Matemática (Ratios de Traspaso por Partida).
+Sección 2: Impacto Físico del Hilado (Dictamen de Composición y Títulos cruzado con Índigo).
+Sección 3: Análisis Cronológico y Factor Humano (Simultaneidad y Grupo Tear).
+Sección 4: Directivas Quirúrgicas de Planta (Acciones directas sin teoría genérica).`;
+
+        const origenStr = 'Tejeduría - Patrones de Defectos';
+        const formatoKey = 'patrones-teje';
+        const modeloKey = 'gemini-2.5-flash';
+        const dataHash = hashRowsPayload(cleanDataForAI);
+        const cacheKey = buildCacheKey({ lotes: 'teje_patrones', fecha: `${isoInicio}_${isoFin}`, formato: formatoKey, modelo: modeloKey, dataHash, origen: origenStr });
+
+        try {
+            const hit = await pool.query('SELECT narrativa, json_analisis_ia, modelo_usado, token_info FROM tb_narrativa_cache WHERE cache_key = $1 AND origen = $2', [cacheKey, origenStr]);
+            if (hit.rows.length) {
+                await pool.query('UPDATE tb_narrativa_cache SET hits = hits + 1, last_hit_at = NOW() WHERE cache_key = $1 AND origen = $2', [cacheKey, origenStr]);
+                const cached = hit.rows[0];
+                return res.json({
+                    success: true, narrativa: cached.narrativa, fuente: 'cache', modelo: cached.modelo_usado,
+                    tokenInfo: cached.token_info || null,
+                    ...buildNarrativaStructuredFields(cached.narrativa)
+                });
+            }
+        } catch (e) { console.warn('Cache check fail:', e.message); }
 
         const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
         let lastErr = null;
@@ -8646,6 +8750,32 @@ IMPORTANTE: Sé directo, profesional, usa terminología textil y no uses formato
             const result = await model.generateContent(prompt);
             const response = await result.response;
             analisisIA = response.text();
+
+            const usage = result.response.usageMetadata || {};
+            const tokensEntrada = usage.promptTokenCount || 0;
+            const tokensSalida = usage.candidatesTokenCount || 0;
+            const tokensTotal = usage.totalTokenCount || (tokensEntrada + tokensSalida);
+            const p = { in: 0.15, out: 0.60 };
+            const costoUSD = (tokensEntrada / 1_000_000) * p.in + (tokensSalida / 1_000_000) * p.out;
+            const tokenInfo = { tokensEntrada, tokensSalida, tokensTotal, costoUSD: +costoUSD.toFixed(6) };
+
+            try {
+                await pool.query(
+                    `INSERT INTO tb_narrativa_cache (cache_key, lotes, fecha, formato, modelo, data_hash, narrativa, json_analisis_ia, modelo_usado, token_info, origen)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+                     ON CONFLICT (cache_key) DO UPDATE SET narrativa=EXCLUDED.narrativa, json_analisis_ia=EXCLUDED.json_analisis_ia, modelo_usado=EXCLUDED.modelo_usado, token_info=EXCLUDED.token_info, last_hit_at=NOW(), origen=EXCLUDED.origen`,
+                    [cacheKey, 'teje_patrones', `${isoInicio}_${isoFin}`, formatoKey, modeloKey, dataHash, analisisIA, dataset, modelName, JSON.stringify(tokenInfo), origenStr]
+                );
+                await pool.query(
+                    `INSERT INTO tb_narrativa_log (lotes, fecha_corte, formato, idioma, modelo, tokens_entrada, tokens_salida, tokens_total, costo_usd, fuente, desde_cache, origen)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'gemini',FALSE,$10)`,
+                    ['teje_patrones', `${isoInicio}_${isoFin}`, formatoKey, 'es', modelName, tokensEntrada, tokensSalida, tokensTotal, costoUSD.toFixed(6), origenStr]
+                );
+            } catch (e) { console.warn('Cache/Log insert error:', e.message); }
+            
+            req.tokenInfoForAI = tokenInfo;
+            req.modeloUsado = modelName;
+
             if (analisisIA) break;
           } catch (err) {
             lastErr = err.message;
@@ -8658,7 +8788,7 @@ IMPORTANTE: Sé directo, profesional, usa terminología textil y no uses formato
           
 **Resumen Analítico Local (Reglas de Negocio):**
 * Defecto principal: **Código ${defects[0]?.cod_def || '—'} - ${defects[0]?.desc_defeito || '—'}** con **${defects[0]?.pts_100m2 || '—'} Pts/100m²** (${defects[0]?.porcentaje || '—'}%).
-* Partida más crítica: **Partida ${dataset[0].partida}** (Artigo: ${dataset[0].artigo}, Telar: ${dataset[0].maquina}) con **${dataset[0].pts_100m2} Pts/100m²**.`;
+* Partida más crítica: **Partida ${dataset[0]?.partida}** (Artigo: ${dataset[0]?.articulo}, Telar: ${dataset[0]?.indicadores_tejeduria?.telar_asignado}) con **${dataset[0]?.conteo_defectos_revisadora?.pts_por_100m2} Pts/100m²**.`;
         }
       } catch (aiErr) {
         console.error('Error general de IA en patrones:', aiErr);
@@ -8668,24 +8798,19 @@ IMPORTANTE: Sé directo, profesional, usa terminología textil y no uses formato
       analisisIA = '**Servicio de IA desactivado (Falta GOOGLE_API_KEY en configuración).**';
     }
 
-    res.json({
+    return res.json({
       success: true,
-      dataset: dataset,
-      defects: defects,
-      total_metros: totalMetros,
-      total_area_m2: totalAreaM2,
-      analisis: analisisIA
+      narrativa: analisisIA,
+      fuente: 'gemini',
+      tokenInfo: req.tokenInfoForAI || null,
+      modelo: req.modeloUsado || 'gemini-2.5-flash',
+      ...buildNarrativaStructuredFields(analisisIA)
     });
   } catch (err) {
-    console.error('Error en /api/calidad/analisis-patrones-teje:', err);
+    console.error('Error en /api/calidad/ia-patrones-teje:', err);
     res.status(500).json({ error: err.message });
   }
 });
-
-// =====================================================
-// GET /api/informe-diario?fecha=YYYY-MM-DD
-// Retorna todos los días del mes con datos de producción:
-// INDIGO, TECELAGEM, ACABAMENTO, CALIDAD
 // =====================================================
 app.get('/api/informe-diario', async (req, res) => {
   try {
