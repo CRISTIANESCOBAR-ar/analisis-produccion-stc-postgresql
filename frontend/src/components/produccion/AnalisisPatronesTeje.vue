@@ -1,7 +1,7 @@
 <template>
-  <div class="min-h-screen bg-slate-50 p-4 md:p-6 flex flex-col gap-6 font-sans">
+  <div class="h-full bg-slate-50 p-2 md:p-3 flex flex-col gap-3 font-sans overflow-hidden">
     <!-- TOP BAR: Encabezado y Filtros Principales -->
-    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 md:p-5 flex flex-wrap items-center justify-between gap-4 shrink-0">
+    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-2 md:p-2.5 flex flex-wrap items-center justify-between gap-2 shrink-0">
       <div class="flex items-center gap-3">
         <div class="h-10 w-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600 shadow-inner">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -16,16 +16,16 @@
 
       <!-- Filtros por Fecha -->
       <div class="flex flex-wrap items-center gap-3">
-        <div class="flex flex-col gap-0.5">
+        <div class="flex items-center gap-2">
           <label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Fecha Inicio</label>
           <CustomDatepicker v-model="fechaInicio" :show-buttons="false" placeholder="Fecha de Inicio" />
         </div>
-        <div class="flex flex-col gap-0.5">
+        <div class="flex items-center gap-2">
           <label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Fecha Fin</label>
           <CustomDatepicker v-model="fechaFin" :show-buttons="false" placeholder="Fecha Fin" />
         </div>
 
-        <div class="flex items-end h-full pt-4">
+        <div class="flex items-center h-full">
           <button
             @click="ejecutarAnalisis"
             :disabled="(loadingData || loadingIA) || !fechaInicio || !fechaFin"
@@ -56,10 +56,10 @@
     </div>
 
     <!-- MAIN BODY: Diseño en Rejilla de Dos Columnas -->
-    <div class="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-6">
+    <div class="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-3">
       
       <!-- COLUMNA IZQUIERDA: Resumen de Defectos + Informe IA (lg:col-span-4) -->
-      <div class="lg:col-span-4 flex flex-col gap-6 min-h-0">
+      <div class="lg:col-span-4 flex flex-col gap-3 min-h-0 overflow-y-auto pr-1">
         
         <!-- CARD Superior Izquierda: Resumen de Defectos del Periodo -->
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[420px] shrink-0">
@@ -246,8 +246,8 @@
       </div>
 
       <!-- COLUMNA DERECHA: Detalle de las Partidas (lg:col-span-8) -->
-      <div class="lg:col-span-8 bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex flex-col min-h-[700px]">
-        <div class="flex items-center justify-between pb-3 border-b border-slate-100 gap-4 mb-3 flex-wrap">
+      <div class="lg:col-span-8 bg-white rounded-2xl border border-slate-100 shadow-sm p-2.5 flex flex-col min-h-0">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100 gap-4 mb-3 flex-wrap shrink-0">
           <div class="flex items-center gap-2">
             <h3 class="text-sm font-extrabold text-slate-700 uppercase tracking-wide text-xs">Detalle de Partidas Críticas</h3>
             <span v-if="dataset.length" class="text-[10px] text-indigo-650 bg-indigo-50 px-2 py-0.5 rounded-full font-bold">
@@ -255,20 +255,49 @@
             </span>
           </div>
 
-          <!-- Búsqueda local de telar y estilo -->
-          <div class="flex items-center gap-2">
-            <input
-              v-model="filtroMaquina"
-              type="text"
-              placeholder="Telar..."
-              class="w-20 px-2 py-1 text-[11px] border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
-            />
-            <input
-              v-model="filtroArtigo"
-              type="text"
-              placeholder="Artículo..."
-              class="w-28 px-2 py-1 text-[11px] border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
-            />
+          <div class="flex items-center gap-4 flex-wrap justify-end">
+            <!-- Paginación -->
+            <div v-if="filteredDataset.length" class="flex items-center gap-3 font-sans">
+              <div class="text-[11px] text-slate-500 hidden sm:block">
+                {{ Math.min(filteredDataset.length, (page - 1) * pageSize + 1) }}-{{ Math.min(filteredDataset.length, page * pageSize) }} de {{ filteredDataset.length }}
+              </div>
+              <div class="flex items-center gap-2">
+                <button
+                  @click="page = Math.max(1, page - 1)"
+                  :disabled="page <= 1"
+                  class="px-2.5 py-1 border border-slate-200 rounded-lg text-[10px] hover:bg-slate-50 disabled:opacity-40 bg-white"
+                >
+                  Ant
+                </button>
+                <span class="text-[11px] text-slate-650 font-bold font-mono">{{ page }} / {{ totalPages }}</span>
+                <button
+                  @click="page = Math.min(totalPages, page + 1)"
+                  :disabled="page >= totalPages"
+                  class="px-2.5 py-1 border border-slate-200 rounded-lg text-[10px] hover:bg-slate-50 disabled:opacity-40 bg-white"
+                >
+                  Sig
+                </button>
+              </div>
+            </div>
+
+            <!-- Divisor -->
+            <div class="h-6 w-px bg-slate-200 hidden md:block" v-if="filteredDataset.length"></div>
+
+            <!-- Búsqueda local de telar y estilo -->
+            <div class="flex items-center gap-2">
+              <input
+                v-model="filtroMaquina"
+                type="text"
+                placeholder="Telar..."
+                class="w-20 px-2 py-1 text-[11px] border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+              />
+              <input
+                v-model="filtroArtigo"
+                type="text"
+                placeholder="Artículo..."
+                class="w-28 px-2 py-1 text-[11px] border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+              />
+            </div>
           </div>
         </div>
 
@@ -287,12 +316,14 @@
                 <th class="w-12 px-2 py-2 text-right font-bold text-slate-500">RU105</th>
                 <th class="w-12 px-2 py-2 text-right font-bold text-slate-500">Par.T</th>
                 <th class="w-12 px-2 py-2 text-right font-bold text-slate-500">Par.U</th>
+                <th class="w-10 px-2 py-2 text-right font-bold text-slate-500" title="Total Defectos Trama (Revisadora)">Def.T</th>
+                <th class="w-10 px-2 py-2 text-right font-bold text-slate-500" title="Total Defectos Urdimbre (Revisadora)">Def.U</th>
                 <th class="w-14 px-2 py-2 text-right font-bold text-slate-500">Metros</th>
-                <th class="w-10 px-2 py-2 text-center font-bold text-slate-500" title="Parada Tear">333</th>
-                <th class="w-10 px-2 py-2 text-center font-bold text-slate-500" title="Trama Mole">340</th>
-                <th class="w-10 px-2 py-2 text-center font-bold text-slate-500" title="Trama Curta">382</th>
-                <th class="w-10 px-2 py-2 text-center font-bold text-slate-500" title="Trama Dobrada">387</th>
-                <th class="w-10 px-2 py-2 text-center font-bold text-slate-500" title="Trama Dupla">386</th>
+                <th class="w-12 px-2 py-2 text-center font-bold text-slate-500" title="Pts Parada Tear">Pts 333</th>
+                <th class="w-12 px-2 py-2 text-center font-bold text-slate-500" title="Pts Trama Mole">Pts 340</th>
+                <th class="w-12 px-2 py-2 text-center font-bold text-slate-500" title="Pts Trama Curta">Pts 382</th>
+                <th class="w-12 px-2 py-2 text-center font-bold text-slate-500" title="Pts Trama Dobrada">Pts 387</th>
+                <th class="w-12 px-2 py-2 text-center font-bold text-slate-500" title="Pts Trama Dupla">Pts 386</th>
                 <th class="w-14 px-2 py-2 text-right font-bold text-slate-500">Pts/100m²</th>
               </tr>
             </thead>
@@ -310,12 +341,14 @@
                 <td class="px-2 py-2.5 text-right font-mono" :class="r.indicadores_tejeduria?.ru105_paradas_urdimbre > 5 ? 'text-amber-600 font-bold' : 'text-slate-500'">{{ formatDecimal(r.indicadores_tejeduria?.ru105_paradas_urdimbre, 1) }}</td>
                 <td class="px-2 py-2.5 text-right font-mono text-slate-600">{{ r.indicadores_tejeduria?.suma_paradas_trama || 0 }}</td>
                 <td class="px-2 py-2.5 text-right font-mono text-slate-600">{{ r.indicadores_tejeduria?.suma_paradas_urdimbre || 0 }}</td>
+                <td class="px-2 py-2.5 text-right font-mono text-blue-600 font-bold" :title="r.conteo_defectos_revisadora?.total_defectos_trama_4ptos + ' fallas graves (4 pts)'">{{ r.conteo_defectos_revisadora?.total_defectos_trama || 0 }}</td>
+                <td class="px-2 py-2.5 text-right font-mono text-blue-600 font-bold" :title="r.conteo_defectos_revisadora?.total_defectos_urdimbre_4ptos + ' fallas graves (4 pts)'">{{ r.conteo_defectos_revisadora?.total_defectos_urdimbre || 0 }}</td>
                 <td class="px-2 py-2.5 text-right text-slate-600">{{ formatInteger(r.indicadores_tejeduria?.metros_primeira) }}m</td>
-                <td class="px-2 py-2.5 text-center font-mono" :class="getDefectCount(r, '333') > 0 ? 'text-red-600 font-bold' : 'text-slate-300'">{{ getDefectCount(r, '333') || '-' }}</td>
-                <td class="px-2 py-2.5 text-center font-mono" :class="getDefectCount(r, '340') > 0 ? 'text-amber-600 font-bold' : 'text-slate-300'">{{ getDefectCount(r, '340') || '-' }}</td>
-                <td class="px-2 py-2.5 text-center font-mono" :class="getDefectCount(r, '382') > 0 ? 'text-orange-600 font-bold' : 'text-slate-300'">{{ getDefectCount(r, '382') || '-' }}</td>
-                <td class="px-2 py-2.5 text-center font-mono" :class="getDefectCount(r, '387') > 0 ? 'text-amber-600 font-bold' : 'text-slate-300'">{{ getDefectCount(r, '387') || '-' }}</td>
-                <td class="px-2 py-2.5 text-center font-mono" :class="getDefectCount(r, '386') > 0 ? 'text-orange-600 font-bold' : 'text-slate-300'">{{ getDefectCount(r, '386') || '-' }}</td>
+                <td class="px-2 py-2.5 text-center font-mono" :class="r.conteo_defectos_revisadora?.pts_100m2_333 > 0 ? 'text-red-600 font-bold' : 'text-slate-300'" :title="r.conteo_defectos_revisadora?.detalle_frecuencia_codigo?.['333_parada_tear'] + ' eventos'">{{ formatDecimal(r.conteo_defectos_revisadora?.pts_100m2_333, 1) || '-' }}</td>
+                <td class="px-2 py-2.5 text-center font-mono" :class="r.conteo_defectos_revisadora?.pts_100m2_340 > 0 ? 'text-amber-600 font-bold' : 'text-slate-300'" :title="r.conteo_defectos_revisadora?.detalle_frecuencia_codigo?.['340_trama_mole'] + ' eventos'">{{ formatDecimal(r.conteo_defectos_revisadora?.pts_100m2_340, 1) || '-' }}</td>
+                <td class="px-2 py-2.5 text-center font-mono" :class="r.conteo_defectos_revisadora?.pts_100m2_382 > 0 ? 'text-orange-600 font-bold' : 'text-slate-300'" :title="r.conteo_defectos_revisadora?.detalle_frecuencia_codigo?.['382_trama_curta'] + ' eventos'">{{ formatDecimal(r.conteo_defectos_revisadora?.pts_100m2_382, 1) || '-' }}</td>
+                <td class="px-2 py-2.5 text-center font-mono" :class="r.conteo_defectos_revisadora?.pts_100m2_387 > 0 ? 'text-amber-600 font-bold' : 'text-slate-300'" :title="r.conteo_defectos_revisadora?.detalle_frecuencia_codigo?.['387_trama_dobrada'] + ' eventos'">{{ formatDecimal(r.conteo_defectos_revisadora?.pts_100m2_387, 1) || '-' }}</td>
+                <td class="px-2 py-2.5 text-center font-mono" :class="r.conteo_defectos_revisadora?.pts_100m2_386 > 0 ? 'text-orange-600 font-bold' : 'text-slate-300'" :title="r.conteo_defectos_revisadora?.detalle_frecuencia_codigo?.['386_trama_dupla'] + ' eventos'">{{ formatDecimal(r.conteo_defectos_revisadora?.pts_100m2_386, 1) || '-' }}</td>
                 <td class="px-2 py-2.5 text-right font-black" :class="ptsClass(r.conteo_defectos_revisadora?.pts_por_100m2)">
                   {{ formatDecimal(r.conteo_defectos_revisadora?.pts_por_100m2, 2) }}
                 </td>
@@ -329,29 +362,7 @@
           </table>
         </div>
 
-        <!-- Paginación -->
-        <div v-if="filteredDataset.length" class="flex items-center justify-between mt-3 gap-3 flex-wrap pt-2 border-t border-slate-100 font-sans">
-          <div class="text-[11px] text-slate-500">
-            {{ Math.min(filteredDataset.length, (page - 1) * pageSize + 1) }}-{{ Math.min(filteredDataset.length, page * pageSize) }} de {{ filteredDataset.length }}
-          </div>
-          <div class="flex items-center gap-2">
-            <button
-              @click="page = Math.max(1, page - 1)"
-              :disabled="page <= 1"
-              class="px-2.5 py-1 border border-slate-200 rounded-lg text-[10px] hover:bg-slate-50 disabled:opacity-40"
-            >
-              Ant
-            </button>
-            <span class="text-[11px] text-slate-650 font-bold font-mono">{{ page }} / {{ totalPages }}</span>
-            <button
-              @click="page = Math.min(totalPages, page + 1)"
-              :disabled="page >= totalPages"
-              class="px-2.5 py-1 border border-slate-200 rounded-lg text-[10px] hover:bg-slate-50 disabled:opacity-40"
-            >
-              Sig
-            </button>
-          </div>
-        </div>
+
       </div>
 
     </div>
@@ -425,7 +436,7 @@ const sectorCounts = computed(() => {
 const getDefectCount = (row, code) => {
   if (!row?.conteo_defectos_revisadora?.detalle_frecuencia_codigo) return 0;
   const codes = row.conteo_defectos_revisadora.detalle_frecuencia_codigo;
-  return codes[`${code}_TEJE`] || codes[code] || 0;
+  return codes[code] || 0;
 };
 
 const processedDefects = computed(() => {

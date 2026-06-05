@@ -1,0 +1,15 @@
+function sha256(s) {
+  return crypto.createHash('sha256').update(s).digest('hex');
+}
+
+function buildCacheKey({ lotes, fecha, formato, modelo, dataHash, origen }) {
+  return sha256(`${lotes}|${fecha || ''}|${formato || 'actual'}|${modelo || ''}|${dataHash}|${origen}`);
+}
+
+function hashRowsPayload(dataset) {
+  const norm = dataset.map(r => ({
+    p: r.partida, a: r.articulo, t: r.indicadores_tejeduria?.telar_asignado, e: r.indicadores_tejeduria?.eficiencia_porcentaje,
+    d: r.conteo_defectos_revisadora?.detalle_frecuencia_codigo
+  }));
+  return sha256(JSON.stringify(norm));
+}

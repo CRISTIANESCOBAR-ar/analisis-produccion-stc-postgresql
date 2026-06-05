@@ -8480,7 +8480,9 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
           MIN(c."HR INI TEC") AS hr_ini_tec,
           MAX(c."DT FIM TEC") AS dt_fim_tec,
           MAX(c."HR FIM TEC") AS hr_fim_tec,
-          SUM(CASE WHEN TRIM(BOTH FROM c."QUALIDADE") IN ('1', 'PRIMEIRA') THEN CAST(NULLIF(REPLACE(REPLACE(TRIM(c."METRAGEM"::TEXT), '.', ''), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS metros_primeira
+          SUM(CASE WHEN TRIM(BOTH FROM c."QUALIDADE") IN ('1', 'PRIMEIRA') THEN CAST(NULLIF(REPLACE(REPLACE(TRIM(c."METRAGEM"::TEXT), '.', ''), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS metros_primeira,
+          SUM(CAST(NULLIF(REPLACE(REPLACE(TRIM(c."METRAGEM"::TEXT), '.', ''), ',', '.'), '') AS NUMERIC)) AS metros_totales,
+          SUM(CAST(NULLIF(REPLACE(REPLACE(TRIM(c."METRAGEM"::TEXT), '.', ''), ',', '.'), '') AS NUMERIC) * COALESCE(CAST(NULLIF(REPLACE(TRIM(c."LARGURA"::TEXT), ',', '.'), '') AS NUMERIC), 0) / 100.0) AS area_m2_total
         FROM public.tb_calidad c
         WHERE TRIM(BOTH FROM c."PARTIDA") IN (SELECT target_partida FROM partidas_list)
         GROUP BY TRIM(BOTH FROM c."PARTIDA")
@@ -8488,19 +8490,25 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
       partida_defectos AS (
         SELECT 
           TRIM(BOTH FROM d."PARTIDA") AS partida,
-          COUNT(CASE WHEN TRIM(BOTH FROM d."COD_DEF") IN ('340', '382', '387', '333', '319', '328', '386') THEN 1 END) AS total_defectos_trama_4ptos,
+          COUNT(CASE WHEN TRIM(BOTH FROM d."COD_DEF") IN ('340', '382', '387', '333', '319', '328', '386') AND CAST(NULLIF(REPLACE(TRIM(d."PONTOS"::text), ',', '.'), '') AS NUMERIC) >= 4 THEN 1 END) AS total_defectos_trama_4ptos,
+          COUNT(CASE WHEN TRIM(BOTH FROM d."COD_DEF") IN ('312', '313', '310', '311') AND CAST(NULLIF(REPLACE(TRIM(d."PONTOS"::text), ',', '.'), '') AS NUMERIC) >= 4 THEN 1 END) AS total_defectos_urdimbre_4ptos,
+          COUNT(CASE WHEN TRIM(BOTH FROM d."COD_DEF") IN ('340', '382', '387', '333', '319', '328', '386') THEN 1 END) AS total_defectos_trama,
           COUNT(CASE WHEN TRIM(BOTH FROM d."COD_DEF") IN ('312', '313', '310', '311') THEN 1 END) AS total_defectos_urdimbre,
           COUNT(CASE WHEN TRIM(BOTH FROM d."COD_DEF") = '333' THEN 1 END) AS count_333,
+          SUM(CASE WHEN TRIM(BOTH FROM d."COD_DEF") = '333' THEN CAST(NULLIF(REPLACE(TRIM(d."PONTOS"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS puntos_333,
           COUNT(CASE WHEN TRIM(BOTH FROM d."COD_DEF") = '340' THEN 1 END) AS count_340,
+          SUM(CASE WHEN TRIM(BOTH FROM d."COD_DEF") = '340' THEN CAST(NULLIF(REPLACE(TRIM(d."PONTOS"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS puntos_340,
           COUNT(CASE WHEN TRIM(BOTH FROM d."COD_DEF") = '382' THEN 1 END) AS count_382,
+          SUM(CASE WHEN TRIM(BOTH FROM d."COD_DEF") = '382' THEN CAST(NULLIF(REPLACE(TRIM(d."PONTOS"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS puntos_382,
           COUNT(CASE WHEN TRIM(BOTH FROM d."COD_DEF") = '387' THEN 1 END) AS count_387,
+          SUM(CASE WHEN TRIM(BOTH FROM d."COD_DEF") = '387' THEN CAST(NULLIF(REPLACE(TRIM(d."PONTOS"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS puntos_387,
           COUNT(CASE WHEN TRIM(BOTH FROM d."COD_DEF") = '319' THEN 1 END) AS count_319,
           COUNT(CASE WHEN TRIM(BOTH FROM d."COD_DEF") = '328' THEN 1 END) AS count_328,
           COUNT(CASE WHEN TRIM(BOTH FROM d."COD_DEF") = '386' THEN 1 END) AS count_386,
+          SUM(CASE WHEN TRIM(BOTH FROM d."COD_DEF") = '386' THEN CAST(NULLIF(REPLACE(TRIM(d."PONTOS"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS puntos_386,
           SUM(CAST(NULLIF(REPLACE(TRIM(d."PONTOS"::text), ',', '.'), '') AS NUMERIC)) AS total_pontos
         FROM public.tb_defectos d
         WHERE TRIM(BOTH FROM d."PARTIDA") IN (SELECT target_partida FROM partidas_list)
-          AND d."QUALIDADE" = '1'
         GROUP BY TRIM(BOTH FROM d."PARTIDA")
       ),
       partida_ficha AS (
@@ -8550,10 +8558,17 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
           ),
           'conteo_defectos_revisadora', json_build_object(
             'origen_tabla', 'tb_defectos',
-            'total_defectos_trama_4ptos', COALESCE(d.total_defectos_trama_4ptos, 0),
+            'total_defectos_trama', COALESCE(d.total_defectos_trama, 0),
             'total_defectos_urdimbre', COALESCE(d.total_defectos_urdimbre, 0),
+            'total_defectos_trama_4ptos', COALESCE(d.total_defectos_trama_4ptos, 0),
+            'total_defectos_urdimbre_4ptos', COALESCE(d.total_defectos_urdimbre_4ptos, 0),
             'total_pontos', COALESCE(d.total_pontos, 0),
-            'pts_por_100m2', CASE WHEN c.metros_primeira > 0 THEN ROUND((COALESCE(d.total_pontos, 0) / c.metros_primeira) * 100, 2) ELSE 0 END,
+            'pts_por_100m2', CASE WHEN c.area_m2_total > 0 THEN ROUND((COALESCE(d.total_pontos, 0) / c.area_m2_total) * 100, 2) ELSE 0 END,
+            'pts_100m2_333', CASE WHEN c.area_m2_total > 0 THEN ROUND((COALESCE(d.puntos_333, 0) / c.area_m2_total) * 100, 2) ELSE 0 END,
+            'pts_100m2_340', CASE WHEN c.area_m2_total > 0 THEN ROUND((COALESCE(d.puntos_340, 0) / c.area_m2_total) * 100, 2) ELSE 0 END,
+            'pts_100m2_382', CASE WHEN c.area_m2_total > 0 THEN ROUND((COALESCE(d.puntos_382, 0) / c.area_m2_total) * 100, 2) ELSE 0 END,
+            'pts_100m2_387', CASE WHEN c.area_m2_total > 0 THEN ROUND((COALESCE(d.puntos_387, 0) / c.area_m2_total) * 100, 2) ELSE 0 END,
+            'pts_100m2_386', CASE WHEN c.area_m2_total > 0 THEN ROUND((COALESCE(d.puntos_386, 0) / c.area_m2_total) * 100, 2) ELSE 0 END,
             'detalle_frecuencia_codigo', json_build_object(
               '333_parada_tear', COALESCE(d.count_333, 0),
               '340_trama_mole', COALESCE(d.count_340, 0),
@@ -8581,7 +8596,6 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
           AVG(CAST(NULLIF(REPLACE(TRIM("LARGURA"::TEXT), ',', '.'), '') AS NUMERIC)) AS piece_largura
         FROM public.tb_calidad
         WHERE "EMP" = 'STC'
-          AND "QUALIDADE" IN ('1', 'PRIMEIRA') 
           AND (
             CASE
               WHEN "DAT_PROD" IS NULL OR "DAT_PROD" = '' THEN NULL
@@ -8604,7 +8618,6 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
           TRIM(BOTH FROM "PEÇA") AS peca_clean
         FROM public.tb_calidad
         WHERE "EMP" = 'STC'
-          AND "QUALIDADE" IN ('1', 'PRIMEIRA') 
           AND (
             CASE
               WHEN "DAT_PROD" IS NULL OR "DAT_PROD" = '' THEN NULL
@@ -8621,7 +8634,6 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
       FROM public.tb_defectos d
       INNER JOIN piece_summary ps ON ps.peca_clean = d."PARTIDA" || d."PECA"
       WHERE d."FILIAL" = '05'
-        AND d."QUALIDADE" = '1'
         AND btrim(d."DESC_DEFEITO") <> ''
         AND btrim(d."DESC_DEFEITO") <> '--'
       GROUP BY d."COD_DEF", d."DESC_DEFEITO"
