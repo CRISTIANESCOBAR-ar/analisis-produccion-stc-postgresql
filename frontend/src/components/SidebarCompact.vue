@@ -100,14 +100,7 @@ const groups = [
       { to: '/informe-diario', icon: '📊', label: 'Informe STC Diario' },
     ],
   },
-  {
-    id: 'inventarios',
-    icon: '📦',
-    label: 'Inventarios',
-    links: [
-      { to: '/inventario', icon: '🧶', label: 'Materia Prima' },
-    ],
-  },
+  // Inventarios oculto — Materia Prima será mostrada desde otra App
   { sep: 'sep1' },
   {
     id: 'calidad',
