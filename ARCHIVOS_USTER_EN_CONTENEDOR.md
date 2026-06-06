@@ -2,6 +2,8 @@
 
 ## 📋 Resumen Ejecutivo
 
+> **Nota:** Las vistas de UI `Uster`, `Uster Cardas` y `Tenso/Tensorapid` fueron movidas a otra aplicación. La interfaz en `stc-produccion-v2` redirige ahora a *Resumen Ensayos*; este documento conserva instrucciones sobre archivos y sincronización para el backend/infraestructura.
+
 **Problema**: El USTER está en una red antigua y restrictiva. No se puede conectar directo.  
 **Solución**: PC puente en la red del laboratorio sincroniza archivos `.PAR` y `.TBL` hacia carpeta compartida SMB.  
 **Beneficio**: El contenedor accede a archivos "normalizados" sin complicaciones de red.

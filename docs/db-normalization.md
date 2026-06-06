@@ -2,6 +2,8 @@
 
 Documento centralizado para reglas de normalizacion de lotes, fechas y formulas de negocio en `stc-produccion-v2`.
 
+> **Nota:** Las vistas de interfaz para `Uster`, `Uster Cardas` y `Tenso/Tensorapid` ahora se gestionan desde otra App. En esta base de código se mantienen las reglas de normalización y los endpoints necesarios, pero la UI del frontend redirige a `Resumen Ensayos`.
+
 ## Alcance y fuentes revisadas
 
 Fuentes principales del codigo:
