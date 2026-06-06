@@ -14,7 +14,7 @@ export default defineConfig({
         type: 'module'
       },
       manifest: {
-        name: 'Santana - STC Producción',
+        name: 'Santana Produccion',
         short_name: 'Santana',
         description: 'Gestión de Calidad y Producción - Santana',
         theme_color: '#ffffff',

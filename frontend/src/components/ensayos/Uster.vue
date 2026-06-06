@@ -799,8 +799,7 @@ async function onFolderInputChange(e) {
 }
 
 onMounted(() => {
-  // colocar el título en la pestaña del navegador
-  if (typeof window !== 'undefined' && typeof window.document !== 'undefined') window.document.title = 'Uster';
+  // Título gestionado centralmente en router.beforeEach
   (async () => {
     try {
       // try to load persisted DirectoryHandle from IDB and re-scan if permission

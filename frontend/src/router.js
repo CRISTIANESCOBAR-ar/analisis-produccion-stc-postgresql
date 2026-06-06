@@ -247,10 +247,103 @@ const router = createRouter({
   routes
 })
 
+const routeTitleGroups = [
+  {
+    title: 'Laboratorio Hilandería',
+    paths: [
+      '/resumen',
+      '/resumen-cardas',
+      '/resumen-semanal-hilanderia',
+      '/analisis-calidad-fibra',
+      '/golden-batch',
+      '/informe-auditoria-lote',
+      '/resumen-diario',
+      '/stats',
+      '/uster',
+      '/uster-cardas',
+      '/tenso',
+      '/benninger-rtf',
+      '/benninger-rtf-partidas-secuencia',
+      '/benninger-impacto'
+    ]
+  },
+  {
+    title: 'Producción',
+    paths: ['/import-control', '/importaciones', '/informe-diario']
+  },
+  {
+    title: 'Inventarios',
+    paths: ['/inventario']
+  },
+  {
+    title: 'Control de Calidad',
+    paths: [
+      '/revision-cq',
+      '/desempeno-revisores',
+      '/analisis-mesa-test',
+      '/calidad-sectores',
+      '/consulta-calidad-partida',
+      '/partida-tejeduria',
+      '/pts-tejeduria',
+      '/defecto-tejeduria',
+      '/heatmap-tejeduria',
+      '/caida-telares',
+      '/performance-revisores',
+      '/analisis-patrones-teje'
+    ]
+  },
+  {
+    title: 'ÍNDIGO',
+    paths: [
+      '/residuos-indigo-tejeduria',
+      '/analisis-residuos-indigo',
+      '/consulta-rolada-indigo',
+      '/informe-produccion-indigo',
+      '/verificacion-partidas-rolada',
+      '/auditoria-rtf-secuencia',
+      '/seguimiento-roladas',
+      '/seguimiento-roladas-fibra',
+      '/grafico-metricas-diarias'
+    ]
+  },
+  {
+    title: 'Configuración',
+    paths: ['/parametros-hvi', '/detalle-mistura-lote', '/correlacion-mezcla-hilo', '/dashboard-mezcla', '/relato-ia-integral', '/configuracion-estandares']
+  }
+]
+
+function getRouteGroupTitle(path) {
+  const group = routeTitleGroups.find(entry => entry.paths.includes(path))
+  return group ? group.title : ''
+}
+
 router.beforeEach((to, from, next) => {
-  document.title = to.meta.title 
-    ? `${to.meta.title} - Santana Producción` 
-    : 'Santana Producción'
+  const baseTitle = 'Santana Produccion'
+  const pageTitle = typeof to.meta.title === 'string' ? to.meta.title.trim() : ''
+  const groupTitle = getRouteGroupTitle(to.path)
+  const titleParts = [groupTitle, pageTitle].filter(Boolean)
+
+  // Detect PWA/standalone display to avoid duplicating app name
+  let isPWA = false
+  if (typeof window !== 'undefined') {
+    try {
+      const mm = window.matchMedia
+      isPWA = (mm && (mm('(display-mode: standalone)').matches || mm('(display-mode: fullscreen)').matches)) ||
+              window.navigator.standalone === true ||
+              (document.referrer && document.referrer.startsWith('android-app://'))
+    } catch (e) {
+      isPWA = false
+    }
+  }
+
+  if (isPWA) {
+    // Installed app: let the platform show app name; set only page/group
+    document.title = titleParts.length ? titleParts.join(' - ') : baseTitle
+  } else {
+    // Browser tab: include app name suffix
+    document.title = titleParts.length ? `${titleParts.join(' - ')} | ${baseTitle}` : baseTitle
+  }
+
   next()
 })
 

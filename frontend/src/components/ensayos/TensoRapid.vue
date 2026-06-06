@@ -1555,7 +1555,7 @@ async function onTensoFolderInputChangeLocal(e) {
 }
 
 onMounted(() => {
-	if (typeof window !== 'undefined' && typeof window.document !== 'undefined') window.document.title = 'TensoRapid'
+	// Título gestionado centralmente en router.beforeEach
 	// try to load existing snapshot from localStorage
 	try {
 		const raw = localStorage.getItem('tenso.scanSnapshot')

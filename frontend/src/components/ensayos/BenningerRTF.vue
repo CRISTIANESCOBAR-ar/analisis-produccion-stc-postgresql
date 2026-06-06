@@ -1740,7 +1740,7 @@ async function registerNoAptaRow() {
 }
 
 onMounted(async () => {
-  if (typeof document !== 'undefined') document.title = 'Benninger RTF'
+  // Título gestionado centralmente en router.beforeEach
 
   try {
     const dirHandle = await getDirHandleFromIDB()
