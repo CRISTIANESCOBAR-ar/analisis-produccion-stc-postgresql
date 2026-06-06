@@ -187,6 +187,7 @@ stc-produccion-v2/
 
 ## 📝 Notas
 
+- **Nota:** Las vistas de interfaz `Uster`, `Uster Cardas` y `Tenso/Tensorapid` fueron reubicadas y ahora se gestionan desde otra aplicación. La UI principal de este repositorio redirige a `Resumen Ensayos` cuando corresponde; conserve las instrucciones de sincronización y backend en `ARCHIVOS_USTER_EN_CONTENEDOR.md` si necesita integrar archivos raw.
 - **Seguridad**: Las credenciales actuales son de desarrollo. Cambiar en producción.
 - **Performance**: PostgreSQL optimizado para consultas con índices estratégicos.
 - **Backup**: Configurar backups automáticos en producción.
