@@ -232,8 +232,9 @@ const routes = [
   },
   {
     path: '/inventario',
-    component: () => import('./components/inventario/InventoryManager.vue'),
-    meta: { title: 'Gestión de Inventario (MP)' }
+    // Temporalmente deshabilitado: la vista de Inventario se sirve desde otra App.
+    // Evitamos acceso por URL redirigiendo al root.
+    redirect: '/',
   },
   {
     path: '/informe-diario',
@@ -271,10 +272,7 @@ const routeTitleGroups = [
     title: 'Producción',
     paths: ['/import-control', '/importaciones', '/informe-diario']
   },
-  {
-    title: 'Inventarios',
-    paths: ['/inventario']
-  },
+  // Inventarios: eliminado de los grupos de título — gestionado por otra App
   {
     title: 'Control de Calidad',
     paths: [
