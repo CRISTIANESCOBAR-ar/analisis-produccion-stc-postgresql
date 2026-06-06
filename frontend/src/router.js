@@ -1,24 +1,22 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 const routes = [
-  { 
-    path: '/', 
-    redirect: '/uster' 
+  {
+    path: '/',
+    redirect: '/resumen'
   },
-  { 
-    path: '/uster', 
-    component: () => import('./components/ensayos/Uster.vue'), 
-    meta: { title: 'Uster' } 
+  {
+    path: '/uster',
+    // Fuera de esta App — redirigir al Resumen de Ensayos
+    redirect: '/resumen'
   },
   {
     path: '/uster-cardas',
-    component: () => import('./components/ensayos/UsterCardas.vue'),
-    meta: { title: 'Uster Cardas' }
+    redirect: '/resumen'
   },
-  { 
-    path: '/tenso', 
-    component: () => import('./components/ensayos/TensoRapid.vue'), 
-    meta: { title: 'TensoRapid' } 
+  {
+    path: '/tenso',
+    redirect: '/resumen'
   },
   {
     path: '/benninger-rtf',
@@ -260,9 +258,6 @@ const routeTitleGroups = [
       '/informe-auditoria-lote',
       '/resumen-diario',
       '/stats',
-      '/uster',
-      '/uster-cardas',
-      '/tenso',
       '/benninger-rtf',
       '/benninger-rtf-partidas-secuencia',
       '/benninger-impacto'
