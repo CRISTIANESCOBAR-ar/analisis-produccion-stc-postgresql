@@ -88,8 +88,7 @@ const groups = [
       { to: '/informe-auditoria-lote', icon: '📋', label: 'Informe Auditoría Lote' },
       { to: '/resumen-diario', icon: '📅', label: 'Resumen Diario' },
       { to: '/stats', icon: '📊', label: 'Gráficos' },
-      { to: '/benninger-rtf', icon: '🧾', label: 'Benninger RTF' },
-      { to: '/benninger-impacto', icon: '⚙️', label: 'Benninger Impacto Hilo' },
+      // Benninger moved to INDIGO group
     ],
   },
   {
@@ -140,6 +139,8 @@ const groups = [
       { to: '/informe-produccion-indigo', icon: '📅', label: 'ROLADAS del Mes' },
       { to: '/verificacion-partidas-rolada', icon: '🔬', label: 'Verificación Partidas Rolada' },
       { to: '/auditoria-rtf-secuencia', icon: '🔢', label: 'Auditoría RTF Secuencia' },
+      { to: '/benninger-rtf', icon: '🧾', label: 'Benninger RTF' },
+      { to: '/benninger-impacto', icon: '⚙️', label: 'Benninger Impacto Hilo' },
       { to: '/seguimiento-roladas', icon: '📈', label: 'Seguimiento de Roladas' },
       { to: '/seguimiento-roladas-fibra', icon: '🧬', label: 'Seguimiento Roladas + Fibra' },
       { to: '/grafico-metricas-diarias', icon: '📉', label: 'Gráfico Métricas Diarias' },
