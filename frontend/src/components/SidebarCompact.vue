@@ -108,6 +108,7 @@ const groups = [
     label: 'Control de Calidad',
     links: [
       { to: '/revision-cq', icon: '📋', label: 'Metros por Revisor' },
+      { to: '/meta-por-revisor', icon: '📋', label: 'Meta por Revisor' },
       { to: '/desempeno-revisores', icon: '⚡', label: 'Desempeño Revisores' },
       { to: '/analisis-mesa-test', icon: '🧪', label: 'Mesa de Test' },
       { to: '/calidad-sectores', icon: '📈', label: 'Metros por Sector' },

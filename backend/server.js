@@ -2819,6 +2819,49 @@ app.get('/api/metas/resumen/:fecha', async (req, res) => {
   }
 })
 
+// GET /api/metas/mes?fecha=YYYY-MM-DD - Lista todas las metas del mes (Dia, Revision)
+app.get('/api/metas/mes', async (req, res) => {
+  try {
+    const fechaQuery = req.query.fecha || new Date().toISOString().slice(0, 10)
+    const datePattern = String(fechaQuery).split('T')[0]
+    const [year, month] = datePattern.split('-')
+    const monthStart = `${year}-${month}-01`
+
+    // último día del mes
+    const lastDay = new Date(parseInt(year, 10), parseInt(month, 10), 0).getDate()
+    const monthEnd = `${year}-${month}-${String(lastDay).padStart(2, '0')}`
+
+    const metasExists = await tableExists('tb_metas')
+    const rows = []
+    if (!metasExists) {
+      for (let d = 1; d <= lastDay; d++) {
+        const dia = `${year}-${month}-${String(d).padStart(2, '0')}`
+        rows.push({ Dia: dia, Revision: null })
+      }
+      return res.json({ rows })
+    }
+
+    const result = await query(
+      `SELECT to_char("Dia", 'YYYY-MM-DD') AS dia, "Revision" AS revision FROM tb_metas WHERE "Dia" >= $1 AND "Dia" <= $2 ORDER BY "Dia"`,
+      [monthStart, monthEnd],
+      'metas/mes'
+    )
+
+    const map = new Map((result.rows || []).map(r => [r.dia, r.revision == null ? null : Number(r.revision)]))
+
+    for (let d = 1; d <= lastDay; d++) {
+      const dia = `${year}-${month}-${String(d).padStart(2, '0')}`
+      const revision = map.has(dia) ? map.get(dia) : null
+      rows.push({ Dia: dia, Revision: revision })
+    }
+
+    res.json({ rows })
+  } catch (err) {
+    console.error('Error en /api/metas/mes:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // GET /api/calidad/pts100m2 - Puntos por 100m2
 app.get('/api/calidad/pts100m2', async (req, res) => {
   try {

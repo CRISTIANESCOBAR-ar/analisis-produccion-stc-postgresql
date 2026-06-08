@@ -118,6 +118,11 @@ const routes = [
     component: () => import('./components/produccion/ImportControl.vue'), 
     meta: { title: 'Control de Importaciones' } 
   },
+  {
+    path: '/meta-por-revisor',
+    component: () => import('./components/produccion/MetaPorRevisor.vue'),
+    meta: { title: 'Meta por Revisor - Control de Calidad' }
+  },
   { 
     path: '/revision-cq', 
     component: () => import('./components/produccion/RevisionCQ.vue'), 
@@ -272,6 +277,7 @@ const routeTitleGroups = [
     title: 'Control de Calidad',
     paths: [
       '/revision-cq',
+      '/meta-por-revisor',
       '/desempeno-revisores',
       '/analisis-mesa-test',
       '/calidad-sectores',
