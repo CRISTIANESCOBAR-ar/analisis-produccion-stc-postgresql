@@ -54,12 +54,14 @@
           <tr>
             <th class="px-3 py-2 text-left font-semibold text-slate-700">Dia</th>
             <th class="px-3 py-2 text-left font-semibold text-slate-700">Revision</th>
+            <th class="px-3 py-2 text-left font-semibold text-slate-700">Metros revisados</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="r in monthRows" :key="r.Dia" class="border-b border-slate-100 hover:bg-indigo-50/20">
             <td class="px-3 py-2 text-sm text-slate-700">{{ formatDateLocal(r.Dia) }}</td>
             <td class="px-3 py-2 text-sm text-slate-700">{{ r.Revision === null ? 0 : r.Revision }}</td>
+            <td class="px-3 py-2 text-sm text-slate-700">{{ r.MetrosRevisados === null ? 0 : r.MetrosRevisados }}</td>
           </tr>
         </tbody>
       </table>
@@ -102,8 +104,9 @@ async function loadData(){
   loading.value = true
   rows.value = []
   try {
-    const fecha = endDate.value || new Date().toISOString().slice(0,10)
-    const resp = await fetch(`/api/metas/mes?fecha=${fecha}`)
+    const s = startDate.value || new Date().toISOString().slice(0,10)
+    const e = endDate.value || new Date().toISOString().slice(0,10)
+    const resp = await fetch(`/api/metas/mes?start=${s}&end=${e}`)
     if (resp.ok) {
       const data = await resp.json()
       monthRows.value = (data.rows || [])
@@ -141,14 +144,14 @@ function staticJune2026(){
     ['2026-06-19',44000],['2026-06-20',44000],['2026-06-21',null],['2026-06-22',44000],['2026-06-23',44000],['2026-06-24',44000],
     ['2026-06-25',44000],['2026-06-26',44000],['2026-06-27',44000],['2026-06-28',44000],['2026-06-29',44000],['2026-06-30',44000]
   ]
-  return list.map(x => ({ Dia: x[0], Revision: x[1] }))
+  return list.map(x => ({ Dia: x[0], Revision: x[1], MetrosRevisados: null }))
 }
 
 function exportCsv(){
-  const header = ['Dia','Revision']
+  const header = ['Dia','Revision','MetrosRevisados']
   const lines = [header.join(',')]
   monthRows.value.forEach(r => {
-    const line = [r.Dia, r.Revision === null ? 0 : r.Revision]
+    const line = [r.Dia, r.Revision === null ? 0 : r.Revision, r.MetrosRevisados === null ? 0 : r.MetrosRevisados]
     lines.push(line.join(','))
   })
   const csv = lines.join('\n')

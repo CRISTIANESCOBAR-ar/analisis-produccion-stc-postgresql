@@ -2824,9 +2824,57 @@ app.get('/api/metas/mes', async (req, res) => {
   try {
     const fechaQuery = req.query.fecha || new Date().toISOString().slice(0, 10)
     const datePattern = String(fechaQuery).split('T')[0]
+    const { start, end } = req.query
+
+    // Si vienen start+end, devolvemos la serie entre esas fechas y agregamos metros revisados desde tb_calidad
+    if (start && end) {
+      const isoStart = dateVariants(start).iso
+      const isoEnd = dateVariants(end).iso
+      if (!isoStart || !isoEnd) return res.status(400).json({ error: 'Fechas inválidas' })
+
+      const metasExists = await tableExists('tb_metas')
+      const calidadExists = await tableExists('tb_calidad')
+
+      // Expresiones SQL seguras para parseo de columnas
+      const datProdDate = sqlParseDate('c."DAT_PROD"')
+      const metragemNum = sqlParseNumberIntl('c."METRAGEM"')
+
+      // Generar serie de fechas y hacer LEFT JOIN con metas y con tb_calidad agregada
+      const sql = `
+        WITH dias AS (
+          SELECT generate_series($1::date, $2::date, '1 day')::date AS dia
+        ),
+        metas AS (
+          SELECT to_char("Dia", 'YYYY-MM-DD') AS dia, "Revision" AS revision
+          FROM tb_metas
+          WHERE "Dia" >= $1::date AND "Dia" <= $2::date
+        ),
+        calidad AS (
+          SELECT to_char(${datProdDate}, 'YYYY-MM-DD') AS dia, SUM(${metragemNum}) AS metros_revisados
+          FROM tb_calidad c
+          WHERE ${datProdDate} >= $1::date AND ${datProdDate} <= $2::date
+          GROUP BY to_char(${datProdDate}, 'YYYY-MM-DD')
+        )
+        SELECT to_char(d.dia, 'YYYY-MM-DD') AS dia, m.revision AS revision, c.metros_revisados AS metros_revisados
+        FROM dias d
+        LEFT JOIN metas m ON m.dia = to_char(d.dia, 'YYYY-MM-DD')
+        LEFT JOIN calidad c ON c.dia = to_char(d.dia, 'YYYY-MM-DD')
+        ORDER BY d.dia
+      `
+
+      const result = await query(sql, [isoStart, isoEnd], 'metas/mes-range')
+      const rows = (result.rows || []).map(r => ({
+        Dia: r.dia,
+        Revision: r.revision == null ? null : Number(r.revision),
+        MetrosRevisados: r.metros_revisados == null ? null : Number(r.metros_revisados)
+      }))
+
+      return res.json({ rows })
+    }
+
+    // Comportamiento antiguo: lista todas las metas del mes indicado por 'fecha'
     const [year, month] = datePattern.split('-')
     const monthStart = `${year}-${month}-01`
-
     // último día del mes
     const lastDay = new Date(parseInt(year, 10), parseInt(month, 10), 0).getDate()
     const monthEnd = `${year}-${month}-${String(lastDay).padStart(2, '0')}`
