@@ -104,21 +104,52 @@ async function loadData(){
   loading.value = true
   rows.value = []
   try {
+    // fecha seleccionada por el usuario (rango)
     const s = startDate.value || new Date().toISOString().slice(0,10)
     const e = endDate.value || new Date().toISOString().slice(0,10)
-    const resp = await fetch(`/api/metas/mes?start=${s}&end=${e}`)
-    if (resp.ok) {
-      const data = await resp.json()
-      monthRows.value = (data.rows || [])
-      // Si no hay filas devolver dataset estático para junio 2026
-      if (!data.rows || data.rows.length === 0) {
-        monthRows.value = staticJune2026()
-      }
-      loading.value = false
-      return
+
+    // Determinar mes de referencia (usamos startDate para elegir el mes a mostrar)
+    const ref = s ? new Date(s + 'T00:00:00') : new Date()
+    const year = ref.getFullYear()
+    const month = ref.getMonth()
+    const monthStart = toYMD(new Date(year, month, 1))
+    const monthEnd = toYMD(new Date(year, month + 1, 0))
+
+    // Pedir metas para TODO el mes
+    const metasPromise = fetch(`/api/metas/mes?start=${monthStart}&end=${monthEnd}`)
+    // Pedir revisiones sólo para el rango seleccionado
+    const revisionesPromise = fetch(`/api/metas/mes?start=${s}&end=${e}`)
+
+    const [metasResp, revisionesResp] = await Promise.all([metasPromise, revisionesPromise])
+
+    let metasRows = []
+    if (metasResp.ok) {
+      const data = await metasResp.json()
+      metasRows = (data.rows || [])
     }
-    throw new Error('no api')
-  } catch (e) {
+
+    // fallback a dataset estático si no hay metas para el mes
+    if (!metasRows || metasRows.length === 0) metasRows = staticJune2026()
+
+    // Revisiones (rango): extraer metros_revisados por día
+    let revisionesRows = []
+    if (revisionesResp.ok) {
+      const data2 = await revisionesResp.json()
+      revisionesRows = (data2.rows || [])
+    }
+
+    const revisMap = new Map((revisionesRows || []).map(r => [r.Dia, r.MetrosRevisados == null ? null : Number(r.MetrosRevisados)]))
+
+    // Construir mes combinado: metas del mes + metros revisados solo del rango
+    const combined = (metasRows || []).map(m => ({
+      Dia: m.Dia,
+      Revision: m.Revision == null ? null : Number(m.Revision),
+      MetrosRevisados: revisMap.has(m.Dia) ? revisMap.get(m.Dia) : null
+    }))
+
+    monthRows.value = combined
+    return
+  } catch (err) {
     // fallback: usar dataset estático para junio 2026
     monthRows.value = staticJune2026()
   } finally {
