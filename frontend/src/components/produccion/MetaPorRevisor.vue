@@ -48,20 +48,42 @@
       </div>
     </div>
 
-    <div class="flex-1 overflow-auto rounded-xl border border-slate-200 bg-white shadow-md p-4">
-      <table class="min-w-full w-full table-auto divide-y divide-slate-200 text-xs">
-        <thead class="bg-linear-to-r from-indigo-50 to-indigo-100 sticky top-0 z-5">
+    <div class="flex-1 overflow-auto rounded-xl border border-slate-200 bg-white shadow-md">
+      <table class="w-[850px] table-fixed divide-y divide-slate-200 text-xs">
+        <thead class="bg-linear-to-r from-indigo-50 to-indigo-100 sticky top-0 z-20">
           <tr>
-            <th class="px-3 py-2 text-left font-semibold text-slate-700">Dia</th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-700">Revision</th>
-            <th class="px-3 py-2 text-left font-semibold text-slate-700">Metros revisados</th>
+            <th class="w-[110px] px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">Dia</th>
+            <th class="w-[80px] px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">Metas</th>
+            <th class="w-[95px] px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">Revisado</th>
+            <th class="w-[95px] px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">Saldo</th>
+            <th class="w-[100px] px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">Meta Ajustada</th>
+            <th class="w-[80px] px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">Revisores</th>
+            <th class="w-[125px] px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">Revisado Promedio</th>
+            <th class="w-[75px] px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">1ra. %</th>
+            <th class="w-[90px] px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">Pts/100m²</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="r in monthRows" :key="r.Dia" class="border-b border-slate-100 hover:bg-indigo-50/20">
-            <td class="px-3 py-2 text-sm text-slate-700">{{ formatDateLocal(r.Dia) }}</td>
-            <td class="px-3 py-2 text-sm text-slate-700">{{ r.Revision === null ? 0 : r.Revision }}</td>
-            <td class="px-3 py-2 text-sm text-slate-700">{{ r.MetrosRevisados === null ? 0 : r.MetrosRevisados }}</td>
+            <td class="px-3 py-2.5 text-sm text-slate-700">{{ formatDateLocal(r.Dia) }}</td>
+            <td class="px-3 py-2.5 text-sm text-slate-700">{{ formatMeta(r.Revision) }}</td>
+            <td class="px-3 py-2.5 text-sm text-slate-700">{{ r.Dia > endDate ? '' : formatRevisado(r.MetrosRevisados) }}</td>
+            <td class="px-3 py-2.5 text-sm font-medium" :class="getSaldoClass(r)">
+              {{ r.Dia > endDate ? '' : formatRevisado((r.MetrosRevisados || 0) - (r.Revision || 0)) }}
+            </td>
+            <td class="px-3 py-2.5 text-sm text-slate-700">{{ r.MetaAjustada !== null ? formatMeta(r.MetaAjustada) : '' }}</td>
+            <td class="px-3 py-2.5 text-sm text-slate-700 cursor-help" :title="r.Revisores">
+              {{ r.Dia > endDate ? '' : getRevisoresCount(r.Revisores) }}
+            </td>
+            <td class="px-3 py-2.5 text-sm text-slate-700">
+              {{ r.Dia > endDate ? '' : formatPromedio(r.MetrosRevisados, r.Revisores) }}
+            </td>
+            <td class="px-3 py-2.5 text-sm text-slate-700">
+              {{ r.Dia > endDate ? '' : formatPct(r.Pct1ra) }}
+            </td>
+            <td class="px-3 py-2.5 text-sm text-slate-700">
+              {{ r.Dia > endDate ? '' : formatPts(r.Pts100m2) }}
+            </td>
           </tr>
         </tbody>
       </table>
@@ -138,20 +160,34 @@ async function loadData(){
       revisionesRows = (data2.rows || [])
     }
 
-    const revisMap = new Map((revisionesRows || []).map(r => [r.Dia, r.MetrosRevisados == null ? null : Number(r.MetrosRevisados)]))
+    const revisMap = new Map((revisionesRows || []).map(r => [
+      r.Dia,
+      {
+        MetrosRevisados: r.MetrosRevisados == null ? null : Number(r.MetrosRevisados),
+        Revisores: r.Revisores || '',
+        Pct1ra: r.Pct1ra == null ? null : Number(r.Pct1ra),
+        Pts100m2: r.Pts100m2 == null ? null : Number(r.Pts100m2)
+      }
+    ]))
 
     // Construir mes combinado: metas del mes + metros revisados solo del rango
-    const combined = (metasRows || []).map(m => ({
-      Dia: m.Dia,
-      Revision: m.Revision == null ? null : Number(m.Revision),
-      MetrosRevisados: revisMap.has(m.Dia) ? revisMap.get(m.Dia) : null
-    }))
+    const combined = (metasRows || []).map(m => {
+      const revisData = revisMap.get(m.Dia) || { MetrosRevisados: null, Revisores: '', Pct1ra: null, Pts100m2: null }
+      return {
+        Dia: m.Dia,
+        Revision: m.Revision == null ? null : Number(m.Revision),
+        MetrosRevisados: revisData.MetrosRevisados,
+        Revisores: revisData.Revisores,
+        Pct1ra: revisData.Pct1ra,
+        Pts100m2: revisData.Pts100m2
+      }
+    })
 
-    monthRows.value = combined
+    monthRows.value = calculateMetaAjustada(combined)
     return
   } catch (err) {
     // fallback: usar dataset estático para junio 2026
-    monthRows.value = staticJune2026()
+    monthRows.value = calculateMetaAjustada(staticJune2026())
   } finally {
     loading.value = false
   }
@@ -159,11 +195,88 @@ async function loadData(){
 
 const monthRows = ref([])
 
+const WEEKDAYS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
+const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+
 function formatDateLocal(iso){
   try {
+    if (!iso) return ''
     const d = new Date(iso + 'T00:00:00')
-    return `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}`
+    if (isNaN(d.getTime())) return iso
+    const ddd = WEEKDAYS[d.getDay()]
+    const dd = String(d.getDate()).padStart(2, '0')
+    const mmm = MONTHS[d.getMonth()]
+    const yy = String(d.getFullYear()).slice(-2)
+    return `${ddd} ${dd}-${mmm}-${yy}`
   } catch (e) { return iso }
+}
+
+function getRevisoresCount(str) {
+  if (!str) return 0
+  return str.split(',').map(s => s.trim()).filter(Boolean).length
+}
+
+function formatPromedio(metros, revisoresStr) {
+  if (metros == null) return '0'
+  const count = getRevisoresCount(revisoresStr)
+  if (count <= 0) return '0'
+  const prom = Math.round(Number(metros) / count)
+  return prom.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+}
+
+function formatPct(v) {
+  if (v == null) return '0,0%'
+  return Number(v).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'
+}
+
+function formatPts(v) {
+  if (v == null) return '0,0'
+  return Number(v).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+}
+
+function formatMeta(v) {
+  if (v == null) return '0'
+  return Number(v).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+}
+
+function formatRevisado(v) {
+  if (v == null) return '0,0'
+  return Number(v).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+}
+
+function getSaldoClass(r) {
+  if (r.Dia > endDate.value) return ''
+  const diff = (r.MetrosRevisados || 0) - (r.Revision || 0)
+  return diff < 0 ? 'text-red-600' : 'text-emerald-600'
+}
+
+function calculateMetaAjustada(combined) {
+  const totalMonthMeta = combined.reduce((sum, r) => sum + (r.Revision || 0), 0)
+  const limitDate = endDate.value
+
+  let cumReviewed = 0
+
+  for (let i = 0; i < combined.length; i++) {
+    const r = combined[i]
+    const isPastOrEqual = r.Dia <= limitDate
+
+    if (isPastOrEqual) {
+      cumReviewed += (r.MetrosRevisados || 0)
+    }
+
+    if (isPastOrEqual && (r.Revision || 0) > 0) {
+      const remainingActiveDays = combined.slice(i + 1).filter(row => (row.Revision || 0) > 0).length
+      
+      if (remainingActiveDays > 0) {
+        r.MetaAjustada = (totalMonthMeta - cumReviewed) / remainingActiveDays
+      } else {
+        r.MetaAjustada = r.Revision
+      }
+    } else {
+      r.MetaAjustada = null
+    }
+  }
+  return combined
 }
 
 function staticJune2026(){
@@ -175,14 +288,29 @@ function staticJune2026(){
     ['2026-06-19',44000],['2026-06-20',44000],['2026-06-21',null],['2026-06-22',44000],['2026-06-23',44000],['2026-06-24',44000],
     ['2026-06-25',44000],['2026-06-26',44000],['2026-06-27',44000],['2026-06-28',44000],['2026-06-29',44000],['2026-06-30',44000]
   ]
-  return list.map(x => ({ Dia: x[0], Revision: x[1], MetrosRevisados: null }))
+  return list.map(x => ({ Dia: x[0], Revision: x[1], MetrosRevisados: null, Revisores: '', Pct1ra: null, Pts100m2: null }))
 }
 
 function exportCsv(){
-  const header = ['Dia','Revision','MetrosRevisados']
+  const header = ['Dia','Metas','Revisado','Saldo','Meta Ajustada','Revisores','Revisado Promedio','1ra. %','Pts/100m²']
   const lines = [header.join(',')]
   monthRows.value.forEach(r => {
-    const line = [r.Dia, r.Revision === null ? 0 : r.Revision, r.MetrosRevisados === null ? 0 : r.MetrosRevisados]
+    const isFuture = r.Dia > endDate.value
+    const metaAjustadaVal = r.MetaAjustada === null ? '' : r.MetaAjustada
+    const revisadoVal = (isFuture || r.MetrosRevisados === null) ? '' : r.MetrosRevisados
+    const saldoVal = isFuture ? '' : ((r.MetrosRevisados || 0) - (r.Revision || 0))
+    const revisoresVal = isFuture ? '' : (r.Revisores ? `"${r.Revisores.replace(/"/g, '""')}"` : '')
+    
+    let promedioVal = ''
+    if (!isFuture && r.MetrosRevisados !== null) {
+      const count = getRevisoresCount(r.Revisores)
+      promedioVal = count > 0 ? Math.round(r.MetrosRevisados / count).toString() : '0'
+    }
+
+    const pct1raVal = (isFuture || r.Pct1ra === null) ? '' : r.Pct1ra
+    const pts100m2Val = (isFuture || r.Pts100m2 === null) ? '' : r.Pts100m2
+
+    const line = [r.Dia, r.Revision === null ? 0 : r.Revision, revisadoVal, saldoVal, metaAjustadaVal, revisoresVal, promedioVal, pct1raVal, pts100m2Val]
     lines.push(line.join(','))
   })
   const csv = lines.join('\n')

@@ -2838,6 +2838,8 @@ app.get('/api/metas/mes', async (req, res) => {
       // Expresiones SQL seguras para parseo de columnas
       const datProdDate = sqlParseDate('c."DAT_PROD"')
       const metragemNum = sqlParseNumberIntl('c."METRAGEM"')
+      const larguraNum = sqlParseNumberIntl('c."LARGURA"')
+      const pontuacaoNum = sqlParseNumberIntl('c."PONTUACAO"')
 
       // Generar serie de fechas y hacer LEFT JOIN con metas y con tb_calidad agregada
       const sql = `
@@ -2849,16 +2851,54 @@ app.get('/api/metas/mes', async (req, res) => {
           FROM tb_metas
           WHERE "Dia" >= $1::date AND "Dia" <= $2::date
         ),
-        calidad AS (
-          SELECT to_char(${datProdDate}, 'YYYY-MM-DD') AS dia, SUM(${metragemNum}) AS metros_revisados
+        calidad_revisores AS (
+          SELECT 
+            to_char(${datProdDate}, 'YYYY-MM-DD') AS dia,
+            c."REVISOR FINAL" AS revisor,
+            SUM(${metragemNum}) AS metros
+          FROM tb_calidad c
+          WHERE ${datProdDate} >= $1::date AND ${datProdDate} <= $2::date
+            AND c."REVISOR FINAL" IS NOT NULL 
+            AND btrim(c."REVISOR FINAL") <> ''
+            AND btrim(c."REVISOR FINAL") <> '--'
+          GROUP BY to_char(${datProdDate}, 'YYYY-MM-DD'), c."REVISOR FINAL"
+        ),
+        calidad_con_media AS (
+          SELECT 
+            dia,
+            revisor,
+            metros,
+            AVG(metros) OVER (PARTITION BY dia) AS media_dia
+          FROM calidad_revisores
+        ),
+        calidad_dia AS (
+          SELECT 
+            dia,
+            SUM(metros) AS metros_revisados,
+            string_agg(revisor, ', ') FILTER (WHERE metros >= 0.25 * media_dia) AS revisores
+          FROM calidad_con_media
+          GROUP BY dia
+        ),
+        calidad_kpis AS (
+          SELECT 
+            to_char(${datProdDate}, 'YYYY-MM-DD') AS dia,
+            ROUND(COALESCE(SUM(CASE WHEN c."QUALIDADE" ILIKE 'PRIMEIRA%' THEN ${metragemNum} ELSE 0 END) / NULLIF(SUM(${metragemNum}), 0) * 100, 0)::numeric, 1) AS pct_1ra,
+            ROUND(COALESCE((SUM(CASE WHEN c."QUALIDADE" ILIKE 'PRIMEIRA%' THEN COALESCE(${pontuacaoNum}, 0) ELSE 0 END) * 100.0) / NULLIF(SUM(CASE WHEN c."QUALIDADE" ILIKE 'PRIMEIRA%' THEN ${metragemNum} * COALESCE(${larguraNum}, 0) / 100.0 ELSE 0 END), 0), 0)::numeric, 1) AS pts_100m2
           FROM tb_calidad c
           WHERE ${datProdDate} >= $1::date AND ${datProdDate} <= $2::date
           GROUP BY to_char(${datProdDate}, 'YYYY-MM-DD')
         )
-        SELECT to_char(d.dia, 'YYYY-MM-DD') AS dia, m.revision AS revision, c.metros_revisados AS metros_revisados
+        SELECT 
+          to_char(d.dia, 'YYYY-MM-DD') AS dia, 
+          m.revision AS revision, 
+          c.metros_revisados AS metros_revisados,
+          c.revisores AS revisores,
+          k.pct_1ra AS pct_1ra,
+          k.pts_100m2 AS pts_100m2
         FROM dias d
         LEFT JOIN metas m ON m.dia = to_char(d.dia, 'YYYY-MM-DD')
-        LEFT JOIN calidad c ON c.dia = to_char(d.dia, 'YYYY-MM-DD')
+        LEFT JOIN calidad_dia c ON c.dia = to_char(d.dia, 'YYYY-MM-DD')
+        LEFT JOIN calidad_kpis k ON k.dia = to_char(d.dia, 'YYYY-MM-DD')
         ORDER BY d.dia
       `
 
@@ -2866,7 +2906,10 @@ app.get('/api/metas/mes', async (req, res) => {
       const rows = (result.rows || []).map(r => ({
         Dia: r.dia,
         Revision: r.revision == null ? null : Number(r.revision),
-        MetrosRevisados: r.metros_revisados == null ? null : Number(r.metros_revisados)
+        MetrosRevisados: r.metros_revisados == null ? null : Number(r.metros_revisados),
+        Revisores: r.revisores || '',
+        Pct1ra: r.pct_1ra == null ? null : Number(r.pct_1ra),
+        Pts100m2: r.pts_100m2 == null ? null : Number(r.pts_100m2)
       }))
 
       return res.json({ rows })
