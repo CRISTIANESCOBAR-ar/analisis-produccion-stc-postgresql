@@ -8593,12 +8593,23 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
           COALESCE(
             MAX(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN p."ARTIGO" END),
             MAX(p."ARTIGO")
-          ) AS artigo,
+          ) AS articulo,
           MAX(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN p."GRUPO TEAR" END) AS grupo_tear,
-          MAX(CASE WHEN p."SELETOR" = 'INDIGO' THEN CAST(NULLIF(REPLACE(TRIM(p."VELOC"), ',', '.'), '') AS NUMERIC) END) AS indigo_velocidad,
-          SUM(CASE WHEN p."SELETOR" = 'INDIGO' THEN CAST(NULLIF(REPLACE(TRIM(p."RUPTURAS"), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS indigo_rupturas,
-          SUM(CASE WHEN p."SELETOR" = 'INDIGO' THEN CAST(NULLIF(REPLACE(TRIM(p."CAVALOS"), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS indigo_cavalos,
+          MAX(CASE WHEN p."SELETOR" = 'INDIGO' THEN CAST(NULLIF(REPLACE(TRIM(p."VELOC"::text), ',', '.'), '') AS NUMERIC) END) AS indigo_velocidad,
+          SUM(CASE WHEN p."SELETOR" = 'INDIGO' THEN CAST(NULLIF(REPLACE(TRIM(p."RUPTURAS"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS indigo_rupturas,
+          SUM(CASE WHEN p."SELETOR" = 'INDIGO' THEN CAST(NULLIF(REPLACE(TRIM(p."CAVALOS"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS indigo_cavalos,
           MAX(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN p."MAQUINA" END) AS tece_telar,
+          -- Nuevas agregaciones solicitadas
+          AVG(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."RPM LEITURA"::text), ',', '.'), '') AS NUMERIC) END) AS rpm_real,
+          AVG(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."LARG PAD"::text), ',', '.'), '') AS NUMERIC) END) AS ancho_tela_padron,
+          SUM(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."QTDE_CAVALO"::text), ',', ''), '') AS INTEGER) ELSE 0 END) AS total_cavalos,
+          -- Turnos INDIGO distintos agrupados (ej: partida que cruza turnos A y B → "A / B")
+          STRING_AGG(DISTINCT NULLIF(TRIM(COALESCE(
+            CASE WHEN p."SELETOR" = 'INDIGO' AND NULLIF(TRIM(p."TURNO_INDIGO"::text),'') IS NOT NULL THEN p."TURNO_INDIGO" END,
+            CASE WHEN p."SELETOR" = 'INDIGO' AND NULLIF(TRIM(p."TURNO"::text),'') IS NOT NULL THEN p."TURNO" END
+          )), ''), ' / ') AS turno_indigo,
+          -- Trama desde tb_produccion (fallback si no hay ficha técnica)
+          STRING_AGG(DISTINCT NULLIF(TRIM(p."TRAMA REDUZIDA 1"::text), ''), ' / ') AS trama_prod_reduz1,
           SUM(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."PONTOS_LIDOS"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS puntos_lidos,
           SUM(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."PONTOS_100%"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS puntos_100,
           SUM(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."PARADA TEC TRAMA"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS suma_paradas_trama,
@@ -8610,6 +8621,7 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
       partida_calidad AS (
         SELECT 
           TRIM(BOTH FROM c."PARTIDA") AS partida,
+          STRING_AGG(DISTINCT NULLIF(TRIM(c."TRAMA"), ''), ' / ') AS trama_calidad,
           MIN(c."DT INI TEC") AS dt_ini_tec,
           MIN(c."HR INI TEC") AS hr_ini_tec,
           MAX(c."DT FIM TEC") AS dt_fim_tec,
@@ -8647,7 +8659,7 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
       ),
       partida_ficha AS (
         SELECT 
-          f."ARTIGO CODIGO" AS artigo_codigo,
+          TRIM(BOTH FROM f."ARTIGO CODIGO") AS artigo_codigo,
           f."COMPOSIÇÃO" AS composicion,
           f."TRAMA REDUZIDO" AS trama_reducido
         FROM public.tb_fichas f
@@ -8655,7 +8667,7 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
       SELECT 
         json_build_object(
           'partida', ctx.target_partida,
-          'articulo', COALESCE(p.artigo, (SELECT "ARTIGO" FROM public.tb_calidad WHERE TRIM(BOTH FROM "PARTIDA") = ctx.target_partida LIMIT 1)),
+          'articulo', COALESCE(p.articulo, (SELECT "ARTIGO" FROM public.tb_calidad WHERE TRIM(BOTH FROM "PARTIDA") = ctx.target_partida LIMIT 1)),
           'grupo_tear', p.grupo_tear,
           'cronologia_tejeduria', json_build_object(
              'inicio', COALESCE(c.dt_ini_tec || ' ' || c.hr_ini_tec, ''),
@@ -8665,12 +8677,19 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
             'composicion', f.composicion,
             'titulo', f.trama_reducido,
             'tipo_trama_filtro', CASE 
-              WHEN REPLACE(REPLACE(UPPER(f.composicion), ' ', ''), 'Ã', 'A') IN ('100%ALGODON', '100%ALGODAO', '100%COTTON') THEN '100% CO - Ne ' || COALESCE(f.trama_reducido, '')
-              WHEN (UPPER(f.composicion) LIKE '%ALGOD%' OR UPPER(f.composicion) LIKE '%COTTON%' OR UPPER(f.composicion) LIKE '%CO%') 
-                   AND (UPPER(f.composicion) LIKE '%POLYESTER%' OR UPPER(f.composicion) LIKE '%POLIESTER%' OR UPPER(f.composicion) LIKE '%PES%') 
+              -- Clasificación desde ficha técnica (tb_fichas.COMPOSIÇÃO)
+              WHEN REPLACE(REPLACE(REPLACE(UPPER(COALESCE(f.composicion,'')), ' ', ''), 'Ã', 'A'), 'Ç', 'C') IN ('100%ALGODON','100%ALGODAO','100%COTTON','100%CO') THEN '100% CO - Ne ' || COALESCE(f.trama_reducido, COALESCE(p.trama_prod_reduz1, c.trama_calidad, ''))
+              WHEN f.composicion IS NOT NULL AND
+                   (UPPER(f.composicion) LIKE '%ALGOD%' OR UPPER(f.composicion) LIKE '%COTTON%')
+                   AND (UPPER(f.composicion) LIKE '%POLYESTER%' OR UPPER(f.composicion) LIKE '%POLIESTER%' OR UPPER(f.composicion) LIKE '%PES%')
                    AND (UPPER(f.composicion) LIKE '%ELASTAN%' OR UPPER(f.composicion) LIKE '%SPANDEX%' OR UPPER(f.composicion) LIKE '%PUE%' OR UPPER(f.composicion) LIKE '%LYCRA%') THEN 'Mezcla Elástica'
-              WHEN (UPPER(f.composicion) LIKE '%ALGOD%' OR UPPER(f.composicion) LIKE '%COTTON%' OR UPPER(f.composicion) LIKE '%CO%') 
+              WHEN f.composicion IS NOT NULL AND
+                   (UPPER(f.composicion) LIKE '%ALGOD%' OR UPPER(f.composicion) LIKE '%COTTON%')
                    AND (UPPER(f.composicion) LIKE '%POLYESTER%' OR UPPER(f.composicion) LIKE '%POLIESTER%' OR UPPER(f.composicion) LIKE '%PES%') THEN 'Mezcla Rígida'
+              -- Fallback: trama desde tb_calidad cuando no hay ficha técnica
+              WHEN f.composicion IS NULL AND c.trama_calidad IS NOT NULL THEN c.trama_calidad
+              -- Fallback: trama desde tb_produccion
+              WHEN f.composicion IS NULL AND p.trama_prod_reduz1 IS NOT NULL THEN p.trama_prod_reduz1
               ELSE 'Otros'
             END
           ),
@@ -8678,7 +8697,11 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
             'seletor', 'INDIGO',
             'velocidad_nominal', COALESCE(p.indigo_velocidad, 0),
             'r103_roturas_absolutas', COALESCE(p.indigo_rupturas, 0),
-            'cav105_cavalos_absolutos', COALESCE(p.indigo_cavalos, 0)
+            'cav105_cavalos_absolutos', COALESCE(p.indigo_cavalos, 0),
+            'turno_indigo', COALESCE(p.turno_indigo, ''),
+            'rpm_real', COALESCE(p.rpm_real, NULL),
+            'ancho_tela_padron', COALESCE(p.ancho_tela_padron, NULL),
+            'total_cavalos', COALESCE(p.total_cavalos, 0)
           ),
           'indicadores_tejeduria', json_build_object(
             'seletor', 'TECELAGEM',
@@ -8688,7 +8711,10 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
             'ru105_paradas_urdimbre', CASE WHEN p.puntos_lidos > 0 THEN ROUND((p.suma_paradas_urdimbre * 100000.0) / (p.puntos_lidos * 1000.0), 2) ELSE 0 END,
             'suma_paradas_trama', COALESCE(p.suma_paradas_trama, 0),
             'suma_paradas_urdimbre', COALESCE(p.suma_paradas_urdimbre, 0),
-            'metros_primeira', COALESCE(c.metros_primeira, 0)
+            'metros_primeira', COALESCE(c.metros_primeira, 0),
+            'rpm_real', COALESCE(p.rpm_real, NULL),
+            'ancho_tela_padron', COALESCE(p.ancho_tela_padron, NULL),
+            'total_cavalos', COALESCE(p.total_cavalos, 0)
           ),
           'conteo_defectos_revisadora', json_build_object(
             'origen_tabla', 'tb_defectos',
@@ -8718,7 +8744,7 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
       LEFT JOIN partida_prod p ON p.partida = ctx.target_partida
       LEFT JOIN partida_calidad c ON c.partida = ctx.target_partida
       LEFT JOIN partida_defectos d ON d.partida = ctx.target_partida
-      LEFT JOIN partida_ficha f ON f.artigo_codigo = p.artigo
+      LEFT JOIN partida_ficha f ON TRIM(BOTH FROM f.artigo_codigo) = TRIM(BOTH FROM p.articulo)
       ORDER BY (CASE WHEN c.metros_primeira > 0 THEN ROUND((COALESCE(d.total_pontos, 0) / c.metros_primeira) * 100, 2) ELSE 0 END) DESC;
     `;
 

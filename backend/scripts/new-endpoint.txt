@@ -33,12 +33,17 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
           COALESCE(
             MAX(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN p."ARTIGO" END),
             MAX(p."ARTIGO")
-          ) AS artigo,
+          ) AS articulo,
           MAX(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN p."GRUPO TEAR" END) AS grupo_tear,
-          MAX(CASE WHEN p."SELETOR" = 'INDIGO' THEN CAST(NULLIF(REPLACE(TRIM(p."VELOC"), ',', '.'), '') AS NUMERIC) END) AS indigo_velocidad,
-          SUM(CASE WHEN p."SELETOR" = 'INDIGO' THEN CAST(NULLIF(REPLACE(TRIM(p."RUPTURAS"), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS indigo_rupturas,
-          SUM(CASE WHEN p."SELETOR" = 'INDIGO' THEN CAST(NULLIF(REPLACE(TRIM(p."CAVALOS"), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS indigo_cavalos,
+          MAX(CASE WHEN p."SELETOR" = 'INDIGO' THEN CAST(NULLIF(REPLACE(TRIM(p."VELOC"::text), ',', '.'), '') AS NUMERIC) END) AS indigo_velocidad,
+          SUM(CASE WHEN p."SELETOR" = 'INDIGO' THEN CAST(NULLIF(REPLACE(TRIM(p."RUPTURAS"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS indigo_rupturas,
+          SUM(CASE WHEN p."SELETOR" = 'INDIGO' THEN CAST(NULLIF(REPLACE(TRIM(p."CAVALOS"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS indigo_cavalos,
           MAX(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN p."MAQUINA" END) AS tece_telar,
+          -- Nuevas variables solicitadas: RPM real, LARG PAD (ancho de tela), QTDE_CAVALO (total cavalos) y TURNO_INDIGO
+          AVG(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."RPM LEITURA"::text), ',', '.'), '') AS NUMERIC) END) AS rpm_real,
+          AVG(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."LARG PAD"::text), ',', '.'), '') AS NUMERIC) END) AS ancho_tela_padron,
+          SUM(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."QTDE_CAVALO"::text), ',', ''), '') AS INTEGER) ELSE 0 END) AS total_cavalos,
+          MAX(CASE WHEN p."SELETOR" = 'INDIGO' THEN NULLIF(TRIM(p."TURNO_INDIGO"::text), '') END) AS turno_indigo,
           SUM(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."PONTOS_LIDOS"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS puntos_lidos,
           SUM(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."PONTOS_100%"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS puntos_100,
           SUM(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."PARADA TEC TRAMA"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS suma_paradas_trama,
@@ -110,7 +115,11 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
             'seletor', 'INDIGO',
             'velocidad_nominal', COALESCE(p.indigo_velocidad, 0),
             'r103_roturas_absolutas', COALESCE(p.indigo_rupturas, 0),
-            'cav105_cavalos_absolutos', COALESCE(p.indigo_cavalos, 0)
+            'cav105_cavalos_absolutos', COALESCE(p.indigo_cavalos, 0),
+            'turno_indigo', COALESCE(p.turno_indigo, ''),
+            'rpm_real', COALESCE(p.rpm_real, NULL),
+            'ancho_tela_padron', COALESCE(p.ancho_tela_padron, NULL),
+            'total_cavalos', COALESCE(p.total_cavalos, 0)
           ),
           'indicadores_tejeduria', json_build_object(
             'seletor', 'TECELAGEM',
@@ -118,7 +127,10 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
             'eficiencia_porcentaje', CASE WHEN p.puntos_100 > 0 THEN ROUND((p.puntos_lidos * 100.0 / p.puntos_100), 2) ELSE 0 END,
             'rt105_paradas_trama', CASE WHEN p.puntos_lidos > 0 THEN ROUND((p.suma_paradas_trama * 100000.0) / (p.puntos_lidos * 1000.0), 2) ELSE 0 END,
             'ru105_paradas_urdimbre', CASE WHEN p.puntos_lidos > 0 THEN ROUND((p.suma_paradas_urdimbre * 100000.0) / (p.puntos_lidos * 1000.0), 2) ELSE 0 END,
-            'metros_primeira', COALESCE(c.metros_primeira, 0)
+            'metros_primeira', COALESCE(c.metros_primeira, 0),
+            'rpm_real', COALESCE(p.rpm_real, NULL),
+            'ancho_tela_padron', COALESCE(p.ancho_tela_padron, NULL),
+            'total_cavalos', COALESCE(p.total_cavalos, 0)
           ),
           'conteo_defectos_revisadora', json_build_object(
             'origen_tabla', 'tb_defectos',
@@ -234,6 +246,18 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
     });
   } catch (err) {
     console.error('Error en /api/calidad/datos-patrones-teje:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Alias / compatibilidad histórica: mantiene /analisis-patrones-teje apuntando al mismo recurso
+app.get('/api/calidad/analisis-patrones-teje', async (req, res) => {
+  try {
+    const params = new URLSearchParams(req.query).toString();
+    const target = `/api/calidad/datos-patrones-teje${params ? '?' + params : ''}`;
+    return res.redirect(307, target);
+  } catch (err) {
+    console.error('Error redirigiendo /api/calidad/analisis-patrones-teje:', err);
     res.status(500).json({ error: err.message });
   }
 });

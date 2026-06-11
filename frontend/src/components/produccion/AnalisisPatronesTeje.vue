@@ -311,6 +311,10 @@
                 <th class="w-14 px-2 py-2 text-center font-bold text-slate-500">Grupo</th>
                 <th class="w-20 px-2 py-2 text-center font-bold text-slate-500">Trama</th>
                 <th class="w-12 px-2 py-2 text-center font-bold text-slate-500">Telar</th>
+                <th class="w-12 px-2 py-2 text-center font-bold text-slate-500">RPM</th>
+                <th class="w-14 px-2 py-2 text-center font-bold text-slate-500">Ancho</th>
+                <th class="w-12 px-2 py-2 text-center font-bold text-slate-500">Cav.</th>
+                <th class="w-12 px-2 py-2 text-center font-bold text-slate-500">Turno</th>
                 <th class="w-12 px-2 py-2 text-center font-bold text-slate-500">Efic.%</th>
                 <th class="w-12 px-2 py-2 text-right font-bold text-slate-500">RT105</th>
                 <th class="w-12 px-2 py-2 text-right font-bold text-slate-500">RU105</th>
@@ -336,6 +340,10 @@
                 <td class="px-2 py-2.5 text-slate-700 text-center font-mono text-[11px] font-bold">{{ r.grupo_tear || '—' }}</td>
                 <td class="px-2 py-2.5 text-slate-700 text-center font-mono text-[10px] whitespace-nowrap">{{ r.caracteristicas_trama?.tipo_trama_filtro || r.caracteristicas_trama?.titulo || '—' }}</td>
                 <td class="px-2 py-2.5 text-slate-700 font-bold text-center">{{ formatMaquina(r.indicadores_tejeduria?.telar_asignado) }}</td>
+                <td class="px-2 py-2.5 text-center">{{ formatDecimal(r.indicadores_tejeduria?.rpm_real, 1) || '—' }}</td>
+                <td class="px-2 py-2.5 text-center">{{ formatDecimal(r.indicadores_tejeduria?.ancho_tela_padron, 1) || '—' }}</td>
+                <td class="px-2 py-2.5 text-center">{{ formatInteger(r.indicadores_tejeduria?.total_cavalos) }}</td>
+                <td class="px-2 py-2.5 text-center">{{ r.indicadores_indigo?.turno_indigo || '—' }}</td>
                 <td class="px-2 py-2.5 text-center" :class="eficClass(r.indicadores_tejeduria?.eficiencia_porcentaje)">{{ formatDecimal(r.indicadores_tejeduria?.eficiencia_porcentaje, 1) }}%</td>
                 <td class="px-2 py-2.5 text-right font-mono" :class="r.indicadores_tejeduria?.rt105_paradas_trama > 5 ? 'text-amber-600 font-bold' : 'text-slate-500'">{{ formatDecimal(r.indicadores_tejeduria?.rt105_paradas_trama, 1) }}</td>
                 <td class="px-2 py-2.5 text-right font-mono" :class="r.indicadores_tejeduria?.ru105_paradas_urdimbre > 5 ? 'text-amber-600 font-bold' : 'text-slate-500'">{{ formatDecimal(r.indicadores_tejeduria?.ru105_paradas_urdimbre, 1) }}</td>

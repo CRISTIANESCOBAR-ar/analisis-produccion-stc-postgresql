@@ -52,16 +52,16 @@
       <table class="w-[850px] table-fixed divide-y divide-slate-200 text-xs">
         <thead class="bg-linear-to-r from-indigo-50 to-indigo-100 sticky top-0 z-20">
           <tr>
-            <th class="w-[110px] px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">Dia</th>
-            <th class="w-[80px] px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">Metas</th>
-            <th class="w-[95px] px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">Revisado</th>
-            <th class="w-[95px] px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">Saldo</th>
-            <th class="w-[100px] px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">Meta Ajustada</th>
-            <th class="w-[80px] px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">Revisores</th>
-            <th class="w-[125px] px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">Revisado Promedio</th>
-            <th class="w-[75px] px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">1ra. %</th>
-            <th class="w-[90px] px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">Pts/100m²</th>
-          </tr>
+            <th class="w-28 px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">Dia</th>
+            <th class="w-20 px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">Metas</th>
+            <th class="w-24 px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">Revisado</th>
+            <th class="w-24 px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">Saldo</th>
+            <th class="w-24 px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">Meta Ajustada</th>
+            <th class="w-20 px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">Revisores</th>
+            <th class="w-32 px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">Revisado Promedio</th>
+            <th class="w-20 px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">1ra. %</th>
+            <th class="w-24 px-3 py-2.5 text-left font-semibold text-slate-700 bg-indigo-50">Pts/100m²</th>
+              </tr>
         </thead>
         <tbody>
           <tr v-for="r in monthRows" :key="r.Dia" class="border-b border-slate-100 hover:bg-indigo-50/20">
