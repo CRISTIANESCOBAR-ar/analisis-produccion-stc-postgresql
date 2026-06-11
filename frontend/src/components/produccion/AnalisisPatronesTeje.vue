@@ -315,6 +315,7 @@
                 <th class="w-14 px-2 py-2 text-center font-bold text-slate-500">Ancho</th>
                 <th class="w-12 px-2 py-2 text-center font-bold text-slate-500">Cav.</th>
                 <th class="w-12 px-2 py-2 text-center font-bold text-slate-500">Turno</th>
+                <th class="w-12 px-2 py-2 text-right font-bold text-slate-500" title="Roturas Índigo cada 1000m (RU 10³)">RU10³</th>
                 <th class="w-12 px-2 py-2 text-center font-bold text-slate-500">Efic.%</th>
                 <th class="w-12 px-2 py-2 text-right font-bold text-slate-500">RT105</th>
                 <th class="w-12 px-2 py-2 text-right font-bold text-slate-500">RU105</th>
@@ -344,6 +345,7 @@
                 <td class="px-2 py-2.5 text-center">{{ formatDecimal(r.indicadores_tejeduria?.ancho_tela_padron, 1) || '—' }}</td>
                 <td class="px-2 py-2.5 text-center">{{ formatInteger(r.indicadores_tejeduria?.total_cavalos) }}</td>
                 <td class="px-2 py-2.5 text-center">{{ r.indicadores_indigo?.turno_indigo || '—' }}</td>
+                <td class="px-2 py-2.5 text-right font-mono text-purple-600 font-bold" :title="'Roturas Índigo: ' + (r.indicadores_indigo?.r103_roturas_absolutas || 0) + ' / Metros: ' + (r.indicadores_indigo?.metros_indigo || 0)">{{ formatDecimal(r.indicadores_indigo?.ru103, 1) }}</td>
                 <td class="px-2 py-2.5 text-center" :class="eficClass(r.indicadores_tejeduria?.eficiencia_porcentaje)">{{ formatDecimal(r.indicadores_tejeduria?.eficiencia_porcentaje, 1) }}%</td>
                 <td class="px-2 py-2.5 text-right font-mono" :class="r.indicadores_tejeduria?.rt105_paradas_trama > 5 ? 'text-amber-600 font-bold' : 'text-slate-500'">{{ formatDecimal(r.indicadores_tejeduria?.rt105_paradas_trama, 1) }}</td>
                 <td class="px-2 py-2.5 text-right font-mono" :class="r.indicadores_tejeduria?.ru105_paradas_urdimbre > 5 ? 'text-amber-600 font-bold' : 'text-slate-500'">{{ formatDecimal(r.indicadores_tejeduria?.ru105_paradas_urdimbre, 1) }}</td>
@@ -362,7 +364,7 @@
                 </td>
               </tr>
               <tr v-if="!filteredDataset.length">
-                <td colspan="10" class="px-3 py-16 text-center text-slate-400 font-sans">
+                <td colspan="24" class="px-3 py-16 text-center text-slate-400 font-sans">
                   {{ firstRun ? 'Selecciona fechas y presiona Analizar con IA.' : 'No se encontraron partidas con los filtros especificados.' }}
                 </td>
               </tr>

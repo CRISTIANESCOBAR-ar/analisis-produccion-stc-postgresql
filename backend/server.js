@@ -8598,6 +8598,7 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
           MAX(CASE WHEN p."SELETOR" = 'INDIGO' THEN CAST(NULLIF(REPLACE(TRIM(p."VELOC"::text), ',', '.'), '') AS NUMERIC) END) AS indigo_velocidad,
           SUM(CASE WHEN p."SELETOR" = 'INDIGO' THEN CAST(NULLIF(REPLACE(TRIM(p."RUPTURAS"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS indigo_rupturas,
           SUM(CASE WHEN p."SELETOR" = 'INDIGO' THEN CAST(NULLIF(REPLACE(TRIM(p."CAVALOS"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS indigo_cavalos,
+          SUM(CASE WHEN p."SELETOR" = 'INDIGO' THEN CAST(NULLIF(REPLACE(REPLACE(TRIM(p."METRAGEM"::text), '.', ''), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS indigo_metros,
           MAX(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN p."MAQUINA" END) AS tece_telar,
           -- Nuevas agregaciones solicitadas
           AVG(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."RPM LEITURA"::text), ',', '.'), '') AS NUMERIC) END) AS rpm_real,
@@ -8701,7 +8702,9 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
             'turno_indigo', COALESCE(p.turno_indigo, ''),
             'rpm_real', COALESCE(p.rpm_real, NULL),
             'ancho_tela_padron', COALESCE(p.ancho_tela_padron, NULL),
-            'total_cavalos', COALESCE(p.total_cavalos, 0)
+            'total_cavalos', COALESCE(p.total_cavalos, 0),
+            'metros_indigo', COALESCE(p.indigo_metros, 0),
+            'ru103', CASE WHEN p.indigo_metros > 0 THEN ROUND((p.indigo_rupturas * 1000.0) / p.indigo_metros, 2) ELSE NULL END
           ),
           'indicadores_tejeduria', json_build_object(
             'seletor', 'TECELAGEM',

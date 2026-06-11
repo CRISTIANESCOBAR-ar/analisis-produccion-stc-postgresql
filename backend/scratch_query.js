@@ -31,6 +31,7 @@ async function run() {
           MAX(CASE WHEN p."SELETOR" = 'INDIGO' THEN CAST(NULLIF(REPLACE(TRIM(p."VELOC"), ',', '.'), '') AS NUMERIC) END) AS indigo_velocidad,
           SUM(CASE WHEN p."SELETOR" = 'INDIGO' THEN CAST(NULLIF(REPLACE(TRIM(p."RUPTURAS"), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS indigo_rupturas,
           SUM(CASE WHEN p."SELETOR" = 'INDIGO' THEN CAST(NULLIF(REPLACE(TRIM(p."CAVALOS"), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS indigo_cavalos,
+          SUM(CASE WHEN p."SELETOR" = 'INDIGO' THEN CAST(NULLIF(REPLACE(REPLACE(TRIM(p."METRAGEM"::text), '.', ''), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS indigo_metros,
           
           -- TECELAGEM Indicators (from SELETOR = 'TECELAGEM')
           MAX(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN p."MAQUINA" END) AS tece_telar,
@@ -90,7 +91,9 @@ async function run() {
             'seletor', 'INDIGO',
             'velocidad_nominal', COALESCE(p.indigo_velocidad, 0),
             'r103_roturas_absolutas', COALESCE(p.indigo_rupturas, 0),
-            'cav105_cavalos_absolutos', COALESCE(p.indigo_cavalos, 0)
+            'cav105_cavalos_absolutos', COALESCE(p.indigo_cavalos, 0),
+            'metros_indigo', COALESCE(p.indigo_metros, 0),
+            'ru103', CASE WHEN p.indigo_metros > 0 THEN ROUND((p.indigo_rupturas * 1000.0) / p.indigo_metros, 2) ELSE NULL END
           ),
           'indicadores_tejeduria', json_build_object(
             'seletor', 'TECELAGEM',
