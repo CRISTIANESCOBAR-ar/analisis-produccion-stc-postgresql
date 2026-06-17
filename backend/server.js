@@ -8573,7 +8573,25 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
     }
 
     const querySql = `
-      WITH partidas_list AS (
+      WITH uster_metrics AS (
+        SELECT 
+          CAST(NULLIF(substring(p.lote from '[0-9]+'), '') AS BIGINT) AS uster_lot,
+          AVG(t.cvm_percent) AS uster_cvm,
+          AVG(t.delg_minus50_km) AS uster_thin_nodes,
+          AVG(t.neps_200_km) AS uster_neps
+        FROM public.tb_uster_par p
+        JOIN public.tb_uster_tbl t ON p.testnr = t.testnr
+        GROUP BY CAST(NULLIF(substring(p.lote from '[0-9]+'), '') AS BIGINT)
+      ),
+      tensorapid_metrics AS (
+        SELECT 
+          CAST(NULLIF(substring(p.lote from '[0-9]+'), '') AS BIGINT) AS tensorapid_lot,
+          AVG(t.tenacidad) AS yarn_tenacity
+        FROM public.tb_tensorapid_par p
+        JOIN public.tb_tensorapid_tbl t ON p.testnr = t.testnr
+        GROUP BY CAST(NULLIF(substring(p.lote from '[0-9]+'), '') AS BIGINT)
+      ),
+      partidas_list AS (
         SELECT DISTINCT TRIM(BOTH FROM "PARTIDA") AS target_partida
         FROM public.tb_calidad
         WHERE "EMP" = 'STC'
@@ -8587,9 +8605,64 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
             END
           ) BETWEEN $1::date AND $2::date
       ),
+      partidas_mapping AS (
+        SELECT 
+          target_partida,
+          target_partida AS part_0,
+          CASE 
+            WHEN length(target_partida) >= 7 AND substring(target_partida from length(target_partida)-6 for 1) ~ '^[1-9]$' THEN 
+              substring(target_partida from 1 for length(target_partida)-7) || 
+              (CAST(substring(target_partida from length(target_partida)-6 for 1) AS INTEGER) - 1)::TEXT || 
+              substring(target_partida from length(target_partida)-5)
+          END AS part_1,
+          CASE 
+            WHEN length(target_partida) >= 7 AND substring(target_partida from length(target_partida)-6 for 1) ~ '^[1-9]$' THEN 
+              substring(target_partida from 1 for length(target_partida)-7) || 
+              '0' || 
+              substring(target_partida from length(target_partida)-5)
+          END AS part_2
+        FROM partidas_list
+      ),
+      prod_partidas_existentes AS (
+        SELECT DISTINCT TRIM(BOTH FROM "PARTIDA") AS p_exist
+        FROM public.tb_produccion
+        WHERE "SELETOR" IN ('TECELAGEM', 'INDIGO')
+          AND TRIM(BOTH FROM "PARTIDA") IN (
+          SELECT part_0 FROM partidas_mapping
+          UNION
+          SELECT part_1 FROM partidas_mapping WHERE part_1 IS NOT NULL
+          UNION
+          SELECT part_2 FROM partidas_mapping WHERE part_2 IS NOT NULL
+        )
+      ),
+      partidas_matched AS (
+        SELECT
+          m.target_partida,
+          COALESCE(
+            (SELECT p_exist FROM prod_partidas_existentes WHERE p_exist = m.part_0 LIMIT 1),
+            (SELECT p_exist FROM prod_partidas_existentes WHERE p_exist = m.part_1 LIMIT 1),
+            (SELECT p_exist FROM prod_partidas_existentes WHERE p_exist = m.part_2 LIMIT 1)
+          ) AS matched_partida
+        FROM partidas_mapping m
+      ),
+      roladas_lotes AS (
+        SELECT
+          "ROLADA" AS rolada,
+          STRING_AGG(DISTINCT NULLIF(TRIM("LOTE FIACAO"::text), ''), ', ') AS lote_fiacao,
+          STRING_AGG(DISTINCT CAST(NULLIF(regexp_replace(trim(right(COALESCE("MAQ  FIACAO", "MAQUINA"::text), 2)), '\\D', '', 'g'), '') AS INTEGER)::text, ', ') AS maq_oe,
+          ROUND(((SUM(CAST(NULLIF(REPLACE(TRIM("RUPTURAS"::text), ',', '.'), '') AS NUMERIC)) * 1000000) / NULLIF(SUM(CAST(NULLIF(REPLACE(REPLACE(TRIM("METRAGEM"::text), '.', ''), ',', '.'), '') AS NUMERIC)) * MAX(CAST(NULLIF(REPLACE(TRIM("NUM_FIOS"::text), ',', '.'), '') AS NUMERIC)), 0))::numeric, 2) AS rot_106
+        FROM public.tb_produccion
+        WHERE "SELETOR" IN ('URDIDEIRA', 'URDIDORA')
+          AND "ROLADA" IN (
+            SELECT DISTINCT substring(target_partida from length(target_partida)-5 for 4) 
+            FROM partidas_list 
+            WHERE length(target_partida) >= 6
+          )
+        GROUP BY "ROLADA"
+      ),
       partida_prod AS (
         SELECT 
-          TRIM(BOTH FROM p."PARTIDA") AS partida,
+          m.target_partida AS partida,
           COALESCE(
             MAX(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN p."ARTIGO" END),
             MAX(p."ARTIGO")
@@ -8600,29 +8673,35 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
           SUM(CASE WHEN p."SELETOR" = 'INDIGO' THEN CAST(NULLIF(REPLACE(TRIM(p."CAVALOS"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS indigo_cavalos,
           SUM(CASE WHEN p."SELETOR" = 'INDIGO' THEN CAST(NULLIF(REPLACE(REPLACE(TRIM(p."METRAGEM"::text), '.', ''), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS indigo_metros,
           MAX(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN p."MAQUINA" END) AS tece_telar,
-          -- Nuevas agregaciones solicitadas
+          MAX(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN NULLIF(TRIM(p."MODELO TEAR"::text), '') END) AS modelo_tear,
+          MAX(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN NULLIF(TRIM(p."BASE URDUME"::text), '') END) AS base_urdume,
+          COALESCE(
+            (SELECT lote_fiacao FROM roladas_lotes rl WHERE length(m.target_partida) >= 6 AND rl.rolada = substring(m.target_partida from length(m.target_partida)-5 for 4) LIMIT 1),
+            MAX(NULLIF(TRIM(p."LOTE FIACAO"::text), ''))
+          ) AS lote_fiacao,
+          (SELECT maq_oe FROM roladas_lotes rl WHERE length(m.target_partida) >= 6 AND rl.rolada = substring(m.target_partida from length(m.target_partida)-5 for 4) LIMIT 1) AS maq_oe,
+          (SELECT rot_106 FROM roladas_lotes rl WHERE length(m.target_partida) >= 6 AND rl.rolada = substring(m.target_partida from length(m.target_partida)-5 for 4) LIMIT 1) AS rot_106,
           AVG(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."RPM LEITURA"::text), ',', '.'), '') AS NUMERIC) END) AS rpm_real,
           AVG(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."LARG PAD"::text), ',', '.'), '') AS NUMERIC) END) AS ancho_tela_padron,
           SUM(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."QTDE_CAVALO"::text), ',', ''), '') AS INTEGER) ELSE 0 END) AS total_cavalos,
-          -- Turnos INDIGO distintos agrupados (ej: partida que cruza turnos A y B → "A / B")
           STRING_AGG(DISTINCT NULLIF(TRIM(COALESCE(
             CASE WHEN p."SELETOR" = 'INDIGO' AND NULLIF(TRIM(p."TURNO_INDIGO"::text),'') IS NOT NULL THEN p."TURNO_INDIGO" END,
             CASE WHEN p."SELETOR" = 'INDIGO' AND NULLIF(TRIM(p."TURNO"::text),'') IS NOT NULL THEN p."TURNO" END
           )), ''), ' / ') AS turno_indigo,
-          -- Trama desde tb_produccion (fallback si no hay ficha técnica)
           STRING_AGG(DISTINCT NULLIF(TRIM(p."TRAMA REDUZIDA 1"::text), ''), ' / ') AS trama_prod_reduz1,
           SUM(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."PONTOS_LIDOS"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS puntos_lidos,
           SUM(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."PONTOS_100%"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS puntos_100,
           SUM(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."PARADA TEC TRAMA"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS suma_paradas_trama,
           SUM(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."PARADA TEC URDUME"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS suma_paradas_urdimbre
-        FROM public.tb_produccion p
-        WHERE TRIM(BOTH FROM p."PARTIDA") IN (SELECT target_partida FROM partidas_list)
-        GROUP BY TRIM(BOTH FROM p."PARTIDA")
+        FROM partidas_matched m
+        LEFT JOIN public.tb_produccion p ON TRIM(BOTH FROM p."PARTIDA") = m.matched_partida
+        GROUP BY m.target_partida
       ),
       partida_calidad AS (
         SELECT 
           TRIM(BOTH FROM c."PARTIDA") AS partida,
           STRING_AGG(DISTINCT NULLIF(TRIM(c."TRAMA"), ''), ' / ') AS trama_calidad,
+          STRING_AGG(DISTINCT NULLIF(TRIM(c."URDUME"), ''), ' / ') AS urdume_calidad,
           MIN(c."DT INI TEC") AS dt_ini_tec,
           MIN(c."HR INI TEC") AS hr_ini_tec,
           MAX(c."DT FIM TEC") AS dt_fim_tec,
@@ -8670,6 +8749,8 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
           'partida', ctx.target_partida,
           'articulo', COALESCE(p.articulo, (SELECT "ARTIGO" FROM public.tb_calidad WHERE TRIM(BOTH FROM "PARTIDA") = ctx.target_partida LIMIT 1)),
           'grupo_tear', p.grupo_tear,
+          'maq_oe', p.maq_oe,
+          'rot_106_urd', p.rot_106,
           'cronologia_tejeduria', json_build_object(
              'inicio', COALESCE(c.dt_ini_tec || ' ' || c.hr_ini_tec, ''),
              'fin', COALESCE(c.dt_fim_tec || ' ' || c.hr_fim_tec, '')
@@ -8709,6 +8790,9 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
           'indicadores_tejeduria', json_build_object(
             'seletor', 'TECELAGEM',
             'telar_asignado', p.tece_telar,
+            'modelo_tear', COALESCE(p.modelo_tear, ''),
+            'base_urdume', COALESCE(p.base_urdume, c.urdume_calidad, ''),
+            'lote_fiacao', COALESCE(p.lote_fiacao, ''),
             'eficiencia_porcentaje', CASE WHEN p.puntos_100 > 0 THEN ROUND((p.puntos_lidos * 100.0 / p.puntos_100), 2) ELSE 0 END,
             'rt105_paradas_trama', CASE WHEN p.puntos_lidos > 0 THEN ROUND((p.suma_paradas_trama * 100000.0) / (p.puntos_lidos * 1000.0), 2) ELSE 0 END,
             'ru105_paradas_urdimbre', CASE WHEN p.puntos_lidos > 0 THEN ROUND((p.suma_paradas_urdimbre * 100000.0) / (p.puntos_lidos * 1000.0), 2) ELSE 0 END,
@@ -8719,6 +8803,10 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
             'ancho_tela_padron', COALESCE(p.ancho_tela_padron, NULL),
             'total_cavalos', COALESCE(p.total_cavalos, 0)
           ),
+          'uster_cvm', ROUND(lab.uster_cvm::numeric, 2),
+          'uster_thin_nodes', ROUND(lab.uster_thin_nodes::numeric, 2),
+          'uster_neps', ROUND(lab.uster_neps::numeric, 2),
+          'yarn_tenacity', ROUND(lab.yarn_tenacity::numeric, 2),
           'conteo_defectos_revisadora', json_build_object(
             'origen_tabla', 'tb_defectos',
             'total_defectos_trama', COALESCE(d.total_defectos_trama, 0),
@@ -8748,6 +8836,19 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
       LEFT JOIN partida_calidad c ON c.partida = ctx.target_partida
       LEFT JOIN partida_defectos d ON d.partida = ctx.target_partida
       LEFT JOIN partida_ficha f ON TRIM(BOTH FROM f.artigo_codigo) = TRIM(BOTH FROM p.articulo)
+      LEFT JOIN (
+        SELECT 
+          p2.partida,
+          AVG(um.uster_cvm) AS uster_cvm,
+          AVG(um.uster_thin_nodes) AS uster_thin_nodes,
+          AVG(um.uster_neps) AS uster_neps,
+          AVG(tm.yarn_tenacity) AS yarn_tenacity
+        FROM partida_prod p2
+        LEFT JOIN LATERAL unnest(regexp_split_to_array(p2.lote_fiacao, '[,\\s/\\-]+')) AS lot_str(val) ON true
+        LEFT JOIN uster_metrics um ON um.uster_lot = CAST(NULLIF(substring(lot_str.val from '[0-9]+'), '') AS BIGINT)
+        LEFT JOIN tensorapid_metrics tm ON tm.tensorapid_lot = CAST(NULLIF(substring(lot_str.val from '[0-9]+'), '') AS BIGINT)
+        GROUP BY p2.partida
+      ) lab ON lab.partida = ctx.target_partida
       ORDER BY (CASE WHEN c.metros_primeira > 0 THEN ROUND((COALESCE(d.total_pontos, 0) / c.metros_primeira) * 100, 2) ELSE 0 END) DESC;
     `;
 

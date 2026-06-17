@@ -25,7 +25,7 @@
           <CustomDatepicker v-model="fechaFin" :show-buttons="false" placeholder="Fecha Fin" />
         </div>
 
-        <div class="flex items-center h-full">
+        <div class="flex items-center h-full gap-2">
           <button
             @click="ejecutarAnalisis"
             :disabled="(loadingData || loadingIA) || !fechaInicio || !fechaFin"
@@ -39,6 +39,19 @@
               <path stroke-linecap="round" stroke-linejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
             </svg>
             <span>{{ loadingData ? 'Cargando datos...' : (loadingIA ? 'Analizando...' : 'Analizar con IA') }}</span>
+          </button>
+
+          <button
+            v-if="dataset.length"
+            @click="exportarExcel"
+            :disabled="loadingData || loadingIA"
+            class="h-9 px-4 flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-all duration-150 shadow-md hover:shadow-lg select-none border border-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Exportar tabla filtrada a Excel"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span>Exportar Excel</span>
           </button>
         </div>
       </div>
@@ -310,12 +323,20 @@
                 <th class="w-20 px-2 py-2 text-left font-bold text-slate-500">Artículo</th>
                 <th class="w-14 px-2 py-2 text-center font-bold text-slate-500">Grupo</th>
                 <th class="w-20 px-2 py-2 text-center font-bold text-slate-500">Trama</th>
-                <th class="w-12 px-2 py-2 text-center font-bold text-slate-500">Telar</th>
-                <th class="w-12 px-2 py-2 text-center font-bold text-slate-500">RPM</th>
-                <th class="w-14 px-2 py-2 text-center font-bold text-slate-500">Ancho</th>
+                <th class="w-14 px-2 py-2 text-center font-bold text-slate-500" title="Base Urdimbre">Base U.</th>
+                <th class="w-14 px-2 py-2 text-center font-bold text-slate-500" title="Máquina de Urdido">Maq. OE</th>
+                <th class="w-16 px-2 py-2 text-center font-bold text-slate-500" title="Lote Fiação">Lote F.</th>
+                <th class="w-12 px-2 py-2 text-center font-bold text-indigo-600" title="Tenacidad Hilo (cN/tex)">Tenac.</th>
+                <th class="w-12 px-2 py-2 text-center font-bold text-indigo-600" title="Irregularidad de Masa (CVm%)">CVm%</th>
+                <th class="w-12 px-2 py-2 text-center font-bold text-indigo-600" title="Neps +200% (/km)">Neps</th>
+                <th class="w-12 px-2 py-2 text-center font-bold text-indigo-600" title="Lugares Delgados -50% (/km)">Delg.</th>
+                <th class="w-14 px-2 py-2 text-center font-bold text-emerald-600" title="Roturas en Urdido (cada 10⁶ m)">Rot 10⁶</th>
                 <th class="w-12 px-2 py-2 text-center font-bold text-slate-500">Cav.</th>
                 <th class="w-12 px-2 py-2 text-center font-bold text-slate-500">Turno</th>
                 <th class="w-12 px-2 py-2 text-right font-bold text-slate-500" title="Roturas Índigo cada 1000m (RU 10³)">RU10³</th>
+                <th class="w-14 px-2 py-2 text-center font-bold text-slate-500" title="Modelo Telar">Mod.</th>
+                <th class="w-12 px-2 py-2 text-center font-bold text-slate-500">Telar</th>
+                <th class="w-12 px-2 py-2 text-center font-bold text-slate-500">RPM</th>
                 <th class="w-12 px-2 py-2 text-center font-bold text-slate-500">Efic.%</th>
                 <th class="w-12 px-2 py-2 text-right font-bold text-slate-500">RT105</th>
                 <th class="w-12 px-2 py-2 text-right font-bold text-slate-500">RU105</th>
@@ -324,6 +345,7 @@
                 <th class="w-10 px-2 py-2 text-right font-bold text-slate-500" title="Total Defectos Trama (Revisadora)">Def.T</th>
                 <th class="w-10 px-2 py-2 text-right font-bold text-slate-500" title="Total Defectos Urdimbre (Revisadora)">Def.U</th>
                 <th class="w-14 px-2 py-2 text-right font-bold text-slate-500">Metros</th>
+                <th class="w-14 px-2 py-2 text-center font-bold text-slate-500">Ancho</th>
                 <th class="w-12 px-2 py-2 text-center font-bold text-slate-500" title="Pts Parada Tear">Pts 333</th>
                 <th class="w-12 px-2 py-2 text-center font-bold text-slate-500" title="Pts Trama Mole">Pts 340</th>
                 <th class="w-12 px-2 py-2 text-center font-bold text-slate-500" title="Pts Trama Curta">Pts 382</th>
@@ -339,21 +361,30 @@
                   <div class="font-bold font-mono text-[11px] leading-tight">{{ formatArtigo(r.articulo) }}</div>
                 </td>
                 <td class="px-2 py-2.5 text-slate-700 text-center font-mono text-[11px] font-bold">{{ r.grupo_tear || '—' }}</td>
-                <td class="px-2 py-2.5 text-slate-700 text-center font-mono text-[10px] whitespace-nowrap">{{ r.caracteristicas_trama?.tipo_trama_filtro || r.caracteristicas_trama?.titulo || '—' }}</td>
-                <td class="px-2 py-2.5 text-slate-700 font-bold text-center">{{ formatMaquina(r.indicadores_tejeduria?.telar_asignado) }}</td>
-                <td class="px-2 py-2.5 text-center">{{ formatDecimal(r.indicadores_tejeduria?.rpm_real, 1) || '—' }}</td>
-                <td class="px-2 py-2.5 text-center">{{ formatDecimal(r.indicadores_tejeduria?.ancho_tela_padron, 1) || '—' }}</td>
+                <td class="px-2 py-2.5 text-slate-700 text-center font-mono text-[10px] whitespace-nowrap" :title="r.caracteristicas_trama?.titulo">{{ r.caracteristicas_trama?.tipo_trama_filtro || r.caracteristicas_trama?.titulo || '—' }}</td>
+                <td class="px-2 py-2.5 text-slate-700 text-center font-mono text-[10px] whitespace-nowrap">{{ r.indicadores_tejeduria?.base_urdume || '—' }}</td>
+                <td class="px-2 py-2.5 text-slate-700 text-center font-mono text-[10px]">{{ r.maq_oe || '—' }}</td>
+                <td class="px-2 py-2.5 text-slate-700 text-center font-mono text-[10px]">{{ r.indicadores_tejeduria?.lote_fiacao || '—' }}</td>
+                <td class="px-2 py-2.5 text-indigo-700 font-bold text-center font-mono text-[10px]">{{ r.yarn_tenacity ? formatDecimal(r.yarn_tenacity, 1) : '—' }}</td>
+                <td class="px-2 py-2.5 text-indigo-700 font-bold text-center font-mono text-[10px]">{{ r.uster_cvm ? formatDecimal(r.uster_cvm, 1) : '—' }}</td>
+                <td class="px-2 py-2.5 text-indigo-700 font-bold text-center font-mono text-[10px]">{{ r.uster_neps ? formatDecimal(r.uster_neps, 0) : '—' }}</td>
+                <td class="px-2 py-2.5 text-indigo-700 font-bold text-center font-mono text-[10px]">{{ r.uster_thin_nodes ? formatDecimal(r.uster_thin_nodes, 0) : '—' }}</td>
+                <td class="px-2 py-2.5 text-emerald-700 font-bold text-center font-mono text-[10px]">{{ r.rot_106_urd ? formatDecimal(r.rot_106_urd, 2) : '—' }}</td>
                 <td class="px-2 py-2.5 text-center">{{ formatInteger(r.indicadores_tejeduria?.total_cavalos) }}</td>
                 <td class="px-2 py-2.5 text-center">{{ r.indicadores_indigo?.turno_indigo || '—' }}</td>
                 <td class="px-2 py-2.5 text-right font-mono text-purple-600 font-bold" :title="'Roturas Índigo: ' + (r.indicadores_indigo?.r103_roturas_absolutas || 0) + ' / Metros: ' + (r.indicadores_indigo?.metros_indigo || 0)">{{ formatDecimal(r.indicadores_indigo?.ru103, 1) }}</td>
-                <td class="px-2 py-2.5 text-center" :class="eficClass(r.indicadores_tejeduria?.eficiencia_porcentaje)">{{ formatDecimal(r.indicadores_tejeduria?.eficiencia_porcentaje, 1) }}%</td>
+                <td class="px-2 py-2.5 text-slate-700 text-center font-mono text-[10px]">{{ formatModelo(r.indicadores_tejeduria?.modelo_tear) }}</td>
+                <td class="px-2 py-2.5 text-slate-700 font-bold text-center">{{ formatMaquina(r.indicadores_tejeduria?.telar_asignado) }}</td>
+                <td class="px-2 py-2.5 text-center">{{ formatDecimal(r.indicadores_tejeduria?.rpm_real, 0) || '—' }}</td>
+                <td class="px-2 py-2.5 text-center" :class="eficClass(r.indicadores_tejeduria?.eficiencia_porcentaje)">{{ formatDecimal(r.indicadores_tejeduria?.eficiencia_porcentaje, 1) }}</td>
                 <td class="px-2 py-2.5 text-right font-mono" :class="r.indicadores_tejeduria?.rt105_paradas_trama > 5 ? 'text-amber-600 font-bold' : 'text-slate-500'">{{ formatDecimal(r.indicadores_tejeduria?.rt105_paradas_trama, 1) }}</td>
                 <td class="px-2 py-2.5 text-right font-mono" :class="r.indicadores_tejeduria?.ru105_paradas_urdimbre > 5 ? 'text-amber-600 font-bold' : 'text-slate-500'">{{ formatDecimal(r.indicadores_tejeduria?.ru105_paradas_urdimbre, 1) }}</td>
                 <td class="px-2 py-2.5 text-right font-mono text-slate-600">{{ r.indicadores_tejeduria?.suma_paradas_trama || 0 }}</td>
                 <td class="px-2 py-2.5 text-right font-mono text-slate-600">{{ r.indicadores_tejeduria?.suma_paradas_urdimbre || 0 }}</td>
                 <td class="px-2 py-2.5 text-right font-mono text-blue-600 font-bold" :title="r.conteo_defectos_revisadora?.total_defectos_trama_4ptos + ' fallas graves (4 pts)'">{{ r.conteo_defectos_revisadora?.total_defectos_trama || 0 }}</td>
                 <td class="px-2 py-2.5 text-right font-mono text-blue-600 font-bold" :title="r.conteo_defectos_revisadora?.total_defectos_urdimbre_4ptos + ' fallas graves (4 pts)'">{{ r.conteo_defectos_revisadora?.total_defectos_urdimbre || 0 }}</td>
-                <td class="px-2 py-2.5 text-right text-slate-600">{{ formatInteger(r.indicadores_tejeduria?.metros_primeira) }}m</td>
+                <td class="px-2 py-2.5 text-right text-slate-600">{{ formatInteger(r.indicadores_tejeduria?.metros_primeira) }}</td>
+                <td class="px-2 py-2.5 text-center">{{ formatAutoDecimal(r.indicadores_tejeduria?.ancho_tela_padron) }}</td>
                 <td class="px-2 py-2.5 text-center font-mono" :class="r.conteo_defectos_revisadora?.pts_100m2_333 > 0 ? 'text-red-600 font-bold' : 'text-slate-300'" :title="r.conteo_defectos_revisadora?.detalle_frecuencia_codigo?.['333_parada_tear'] + ' eventos'">{{ formatDecimal(r.conteo_defectos_revisadora?.pts_100m2_333, 1) || '-' }}</td>
                 <td class="px-2 py-2.5 text-center font-mono" :class="r.conteo_defectos_revisadora?.pts_100m2_340 > 0 ? 'text-amber-600 font-bold' : 'text-slate-300'" :title="r.conteo_defectos_revisadora?.detalle_frecuencia_codigo?.['340_trama_mole'] + ' eventos'">{{ formatDecimal(r.conteo_defectos_revisadora?.pts_100m2_340, 1) || '-' }}</td>
                 <td class="px-2 py-2.5 text-center font-mono" :class="r.conteo_defectos_revisadora?.pts_100m2_382 > 0 ? 'text-orange-600 font-bold' : 'text-slate-300'" :title="r.conteo_defectos_revisadora?.detalle_frecuencia_codigo?.['382_trama_curta'] + ' eventos'">{{ formatDecimal(r.conteo_defectos_revisadora?.pts_100m2_382, 1) || '-' }}</td>
@@ -364,7 +395,7 @@
                 </td>
               </tr>
               <tr v-if="!filteredDataset.length">
-                <td colspan="24" class="px-3 py-16 text-center text-slate-400 font-sans">
+                <td colspan="33" class="px-3 py-16 text-center text-slate-400 font-sans">
                   {{ firstRun ? 'Selecciona fechas y presiona Analizar con IA.' : 'No se encontraron partidas con los filtros especificados.' }}
                 </td>
               </tr>
@@ -382,6 +413,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import Swal from 'sweetalert2'
+import ExcelJS from 'exceljs'
 import CustomDatepicker from '../CustomDatepicker.vue'
 
 const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
@@ -638,6 +670,271 @@ async function ejecutarAnalisis() {
   }
 }
 
+async function exportarExcel() {
+  if (!filteredDataset.value.length) return
+
+  try {
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet('Patrones de Tejeduría')
+
+    // Anchos de columna
+    ws.columns = [
+      { width: 14 }, // Partida
+      { width: 22 }, // Artículo
+      { width: 8 },  // Grupo
+      { width: 18 }, // Trama
+      { width: 12 }, // Base U.
+      { width: 10 }, // Maq. OE
+      { width: 12 }, // Lote F.
+      { width: 10 }, // Tenac.
+      { width: 10 }, // CVm%
+      { width: 10 }, // Neps
+      { width: 10 }, // Delg.
+      { width: 12 }, // Rot 10⁶
+      { width: 8 },  // Cav.
+      { width: 8 },  // Turno
+      { width: 10 }, // RU10³
+      { width: 10 }, // Mod.
+      { width: 10 }, // Telar
+      { width: 10 }, // RPM
+      { width: 10 }, // Efic.%
+      { width: 10 }, // RT105
+      { width: 10 }, // RU105
+      { width: 10 }, // Par.T
+      { width: 10 }, // Par.U
+      { width: 10 }, // Def.T
+      { width: 10 }, // Def.U
+      { width: 14 }, // Metros
+      { width: 10 }, // Ancho
+      { width: 10 }, // Pts 333
+      { width: 10 }, // Pts 340
+      { width: 10 }, // Pts 382
+      { width: 10 }, // Pts 387
+      { width: 10 }, // Pts 386
+      { width: 14 }  // Pts/100m²
+    ]
+
+    const thin = { style: 'thin', color: { argb: 'FFE2E8F0' } }
+    const BDR = { top: thin, left: thin, bottom: thin, right: thin }
+    const HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF312E81' } } // Indigo 900
+    const TITLE_FONT = { name: 'Segoe UI', size: 16, bold: true, color: { argb: 'FF1E1B4B' } }
+    const SUBTITLE_FONT = { name: 'Segoe UI', size: 11, italic: true, color: { argb: 'FF64748B' } }
+    const HEADER_FONT = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } }
+    const DATA_FONT = { name: 'Segoe UI', size: 10 }
+
+    // Colores condicionales en ARGB
+    const COLOR_GREEN = 'FF047857' // emerald-700
+    const COLOR_AMBER = 'FFB45309' // amber-700
+    const COLOR_RED = 'FFBE123C'   // rose-700
+    const COLOR_PURPLE = 'FF7C3AED' // violet-600
+
+    // Titulo
+    ws.mergeCells('A2:AG2')
+    const titleCell = ws.getCell('A2')
+    titleCell.value = 'Detalle de Partidas Críticas y Patrones de Defectos'
+    titleCell.font = TITLE_FONT
+    titleCell.alignment = { horizontal: 'left', vertical: 'middle' }
+    ws.getRow(2).height = 30
+
+    // Subtítulo con el período
+    ws.mergeCells('A3:AG3')
+    const subtitleCell = ws.getCell('A3')
+    subtitleCell.value = `Período: ${friendlyPeriodLabel.value} | Total partidas: ${filteredDataset.value.length}`
+    subtitleCell.font = SUBTITLE_FONT
+    subtitleCell.alignment = { horizontal: 'left', vertical: 'middle' }
+    ws.getRow(3).height = 20
+
+    // Fila 5: Encabezados de tabla
+    const headers = [
+      'Partida', 'Artículo', 'Grupo', 'Trama', 'Base U.', 'Maq. OE', 'Lote F.', 'Tenac.', 'CVm%', 'Neps', 'Delg.', 'Rot 10⁶',
+      'Cav.', 'Turno', 'RU10³', 'Mod.', 'Telar', 'RPM', 'Efic.%', 'RT105', 'RU105',
+      'Par.T', 'Par.U', 'Def.T', 'Def.U', 'Metros', 'Ancho',
+      'Pts 333', 'Pts 340', 'Pts 382', 'Pts 387', 'Pts 386', 'Pts/100m²'
+    ]
+
+    ws.getRow(5).height = 28
+    headers.forEach((h, idx) => {
+      const colNum = idx + 1
+      const cell = ws.getCell(5, colNum)
+      cell.value = h
+      cell.fill = HEADER_FILL
+      cell.font = HEADER_FONT
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+      cell.border = BDR
+    })
+
+    // Llenar datos
+    let curRow = 6
+    filteredDataset.value.forEach((r, rowIdx) => {
+      ws.getRow(curRow).height = 22
+
+      const isZebra = rowIdx % 2 === 1
+      const fill = isZebra ? { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } } : null
+
+      // Mapear valores
+      const rowData = [
+        formatPartida(r.partida),
+        formatArtigo(r.articulo),
+        r.grupo_tear || '—',
+        r.caracteristicas_trama?.tipo_trama_filtro || r.caracteristicas_trama?.titulo || '—',
+        r.indicadores_tejeduria?.base_urdume || '—',
+        r.maq_oe || '—',
+        r.indicadores_tejeduria?.lote_fiacao || '—',
+        r.yarn_tenacity != null ? Number(Number(r.yarn_tenacity).toFixed(1)) : null,
+        r.uster_cvm != null ? Number(Number(r.uster_cvm).toFixed(1)) : null,
+        r.uster_neps != null ? Math.round(Number(r.uster_neps)) : null,
+        r.uster_thin_nodes != null ? Math.round(Number(r.uster_thin_nodes)) : null,
+        r.rot_106_urd != null ? Number(Number(r.rot_106_urd).toFixed(2)) : null,
+        r.indicadores_tejeduria?.total_cavalos != null ? Number(r.indicadores_tejeduria.total_cavalos) : null,
+        r.indicadores_indigo?.turno_indigo || '—',
+        r.indicadores_indigo?.ru103 != null ? Number(Number(r.indicadores_indigo.ru103).toFixed(1)) : null,
+        formatModelo(r.indicadores_tejeduria?.modelo_tear),
+        formatMaquina(r.indicadores_tejeduria?.telar_asignado),
+        r.indicadores_tejeduria?.rpm_real != null ? Math.round(Number(r.indicadores_tejeduria.rpm_real)) : null,
+        r.indicadores_tejeduria?.eficiencia_porcentaje != null ? Number(Number(r.indicadores_tejeduria.eficiencia_porcentaje).toFixed(1)) : null,
+        r.indicadores_tejeduria?.rt105_paradas_trama != null ? Number(Number(r.indicadores_tejeduria.rt105_paradas_trama).toFixed(1)) : null,
+        r.indicadores_tejeduria?.ru105_paradas_urdimbre != null ? Number(Number(r.indicadores_tejeduria.ru105_paradas_urdimbre).toFixed(1)) : null,
+        r.indicadores_tejeduria?.suma_paradas_trama != null ? Number(r.indicadores_tejeduria.suma_paradas_trama) : 0,
+        r.indicadores_tejeduria?.suma_paradas_urdimbre != null ? Number(r.indicadores_tejeduria.suma_paradas_urdimbre) : 0,
+        r.conteo_defectos_revisadora?.total_defectos_trama != null ? Number(r.conteo_defectos_revisadora.total_defectos_trama) : 0,
+        r.conteo_defectos_revisadora?.total_defectos_urdimbre != null ? Number(r.conteo_defectos_revisadora.total_defectos_urdimbre) : 0,
+        r.indicadores_tejeduria?.metros_primeira != null ? Number(r.indicadores_tejeduria.metros_primeira) : null,
+        r.indicadores_tejeduria?.ancho_tela_padron != null ? Number(Number(r.indicadores_tejeduria.ancho_tela_padron).toFixed(2)) : null,
+        r.conteo_defectos_revisadora?.pts_100m2_333 != null ? Number(Number(r.conteo_defectos_revisadora.pts_100m2_333).toFixed(1)) : null,
+        r.conteo_defectos_revisadora?.pts_100m2_340 != null ? Number(Number(r.conteo_defectos_revisadora.pts_100m2_340).toFixed(1)) : null,
+        r.conteo_defectos_revisadora?.pts_100m2_382 != null ? Number(Number(r.conteo_defectos_revisadora.pts_100m2_382).toFixed(1)) : null,
+        r.conteo_defectos_revisadora?.pts_100m2_387 != null ? Number(Number(r.conteo_defectos_revisadora.pts_100m2_387).toFixed(1)) : null,
+        r.conteo_defectos_revisadora?.pts_100m2_386 != null ? Number(Number(r.conteo_defectos_revisadora.pts_100m2_386).toFixed(1)) : null,
+        r.conteo_defectos_revisadora?.pts_por_100m2 != null ? Number(Number(r.conteo_defectos_revisadora.pts_por_100m2).toFixed(2)) : null
+      ]
+
+      rowData.forEach((val, colIdx) => {
+        const colNum = colIdx + 1
+        const cell = ws.getCell(curRow, colNum)
+        cell.value = val !== null ? val : '—'
+        cell.font = DATA_FONT
+        if (fill) cell.fill = fill
+        cell.border = BDR
+
+        // Alineación por tipo
+        if (typeof val === 'number') {
+          cell.alignment = { horizontal: 'right', vertical: 'middle' }
+        } else {
+          cell.alignment = { horizontal: 'center', vertical: 'middle' }
+        }
+
+        // Formato de número
+        if (typeof val === 'number') {
+          if (colNum === 12 || colNum === 27 || colNum === 33) {
+            cell.numFmt = '0.00'
+          } else if (colNum === 10 || colNum === 11 || colNum === 13 || colNum === 18 || colNum === 22 || colNum === 23 || colNum === 24 || colNum === 25) {
+            cell.numFmt = '0'
+          } else if (colNum === 8 || colNum === 9 || colNum === 15 || colNum === 19 || colNum === 20 || colNum === 21 || (colNum >= 28 && colNum <= 32)) {
+            cell.numFmt = '0.0'
+          } else if (colNum === 26) {
+            cell.numFmt = '#,##0'
+          }
+        }
+
+        // Estilos Condicionales
+        // Lab metrics (Col 8, 9, 10, 11)
+        if (colNum >= 8 && colNum <= 11 && val != null) {
+          cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FF4338CA' } } // indigo-700
+        }
+        // Rot 106 Urd (Col 12)
+        if (colNum === 12 && val != null) {
+          cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: COLOR_GREEN } }
+        }
+        // RU103 (Col 15)
+        if (colNum === 15 && val != null) {
+          cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: COLOR_PURPLE } }
+        }
+        // Eficiencia (Col 19)
+        if (colNum === 19 && val != null) {
+          if (val < 75) {
+            cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: COLOR_RED } }
+          } else if (val < 85) {
+            cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: COLOR_AMBER } }
+          } else {
+            cell.font = { name: 'Segoe UI', size: 10, color: { argb: COLOR_GREEN } }
+          }
+        }
+        // RT105 (Col 20)
+        if (colNum === 20 && val != null && val > 5) {
+          cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: COLOR_AMBER } }
+        }
+        // RU105 (Col 21)
+        if (colNum === 21 && val != null && val > 5) {
+          cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: COLOR_AMBER } }
+        }
+        // Def.T y Def.U (Col 24, 25)
+        if ((colNum === 24 || colNum === 25) && val > 0) {
+          cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: COLOR_PURPLE } }
+        }
+        // Pts 333 (Col 28)
+        if (colNum === 28 && val > 0) {
+          cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: COLOR_RED } }
+        }
+        // Pts 340 (Col 29)
+        if (colNum === 29 && val > 0) {
+          cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: COLOR_AMBER } }
+        }
+        // Pts 382 (Col 30)
+        if (colNum === 30 && val > 0) {
+          cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: COLOR_RED } }
+        }
+        // Pts 387 (Col 31)
+        if (colNum === 31 && val > 0) {
+          cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: COLOR_AMBER } }
+        }
+        // Pts 386 (Col 32)
+        if (colNum === 32 && val > 0) {
+          cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: COLOR_RED } }
+        }
+        // Pts/100m² (Col 33)
+        if (colNum === 33 && val != null) {
+          if (val > 10) {
+            cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: COLOR_RED } }
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE4E6' } } // rose-50
+          } else if (val > 7) {
+            cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: COLOR_AMBER } }
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFDF2F8' } } // amber-50
+          } else {
+            cell.font = { name: 'Segoe UI', size: 10, color: { argb: COLOR_GREEN } }
+          }
+        }
+      })
+      curRow++
+    })
+
+    const buffer = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+
+    const timestamp = new Date().toISOString().slice(0, 10)
+    link.download = `Patrones_Tejeduria_${fechaInicio.value}_a_${fechaFin.value}_${timestamp}.xlsx`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Exportación Exitosa',
+      text: 'Se ha descargado el archivo Excel.',
+      timer: 1500,
+      showConfirmButton: false
+    })
+  } catch (err) {
+    console.error('Error exportando a Excel:', err)
+    Swal.fire({
+      icon: 'error',
+      title: 'Error de Exportación',
+      text: err.message || 'No se pudo exportar la tabla a Excel.'
+    })
+  }
+}
+
 // Clases condicionales de estilo
 function sectorClass(sec) {
   if (sec === 'TEJE') return 'bg-rose-50 text-rose-700 border border-rose-100'
@@ -697,10 +994,28 @@ function formatMaquina(maquina) {
   return lastThree.replace(/^0+/, '') || '0'
 }
 
+function formatModelo(modelo) {
+  if (!modelo) return '—'
+  const str = String(modelo).trim()
+  const parts = str.split('-')
+  if (parts.length > 1) {
+    const prefix = str.substring(0, 2)
+    const suffix = parts[parts.length - 1]
+    return `${prefix}${suffix}`
+  }
+  return str
+}
+
 function formatDecimal(val, dec = 2) {
   if (val == null || val === '') return '—'
   const n = Number(val)
   return Number.isFinite(n) ? n.toFixed(dec) : '—'
+}
+
+function formatAutoDecimal(val, dec = 2) {
+  if (val == null || val === '') return '—'
+  const n = Number(val)
+  return Number.isFinite(n) ? String(Number(n.toFixed(dec))) : '—'
 }
 
 function formatInteger(val) {
