@@ -1574,8 +1574,8 @@ app.get('/api/produccion/calidad/articulos-mesa-test', async (req, res) => {
     const calDatProdDate = sqlParseDate('"DAT_PROD"')
     const calMetragemNum = sqlParseNumberIntl('"METRAGEM"')
 
-    const testesDtProdDate = sqlParseDate('dt_prod')
-    const testesMetragemNum = sqlParseNumberIntl('metragem')
+    const testesDtProdDate = sqlParseDate('"DT_PROD"')
+    const testesMetragemNum = sqlParseNumberIntl('"METRAGEM"')
 
     const sql = `
       WITH MetricasCalidad AS (
@@ -1592,13 +1592,13 @@ app.get('/api/produccion/calidad/articulos-mesa-test', async (req, res) => {
       ),
       MetricasTestesPartida AS (
         SELECT
-          artigo AS ARTIGO,
-          btrim(partida) AS PARTIDA,
+          "ARTIGO" AS ARTIGO,
+          btrim("PARTIDA") AS PARTIDA,
           AVG(COALESCE(${testesMetragemNum}, 0)) AS METRAGEM_AVG
         FROM tb_testes
         WHERE
           ${testesDtProdDate} BETWEEN $1::date AND $2::date
-        GROUP BY artigo, btrim(partida)
+        GROUP BY "ARTIGO", btrim("PARTIDA")
       ),
       MetricasTestes AS (
         SELECT
@@ -1619,7 +1619,7 @@ app.get('/api/produccion/calidad/articulos-mesa-test', async (req, res) => {
         F."COR" AS "Color",
         F."NOME DE MERCADO" AS "Nombre",
         F."TRAMA REDUZIDO" AS "Trama",
-        F."PRODUCAO" AS "Prod",
+        F."PRODUÇÃO" AS "Prod",
         COALESCE(MT.METROS_TEST, 0) AS "Metros_TEST",
         COALESCE(MC.METROS_REV, 0) AS "Metros_REV"
       FROM AllArtigos AU
@@ -1658,13 +1658,13 @@ app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
     const startDate = String(fecha_inicial)
     const endDate = fecha_final ? String(fecha_final) : '2099-12-31'
 
-    const testesDtProdDate = sqlParseDate('dt_prod')
+    const testesDtProdDate = sqlParseDate('"DT_PROD"')
     const calDatProdDate = sqlParseDate('"DAT_PROD"')
 
-    const tMetragemNum = sqlParseNumberIntl('metragem')
-    const tLargAlNum = sqlParseNumberIntl('larg_al')
-    const tGramatNum = sqlParseNumberIntl('gramat')
-    const tPotenNum = sqlParseNumberIntl('poten')
+    const tMetragemNum = sqlParseNumberIntl('"METRAGEM"')
+    const tLargAlNum = sqlParseNumberIntl('"LARG_AL"')
+    const tGramatNum = sqlParseNumberIntl('"GRAMAT"')
+    const tPotenNum = sqlParseNumberIntl('"POTEN"')
     const tEncUrdNum = sqlParseNumberIntl('"%_ENC_URD"')
     const tEncTramaNum = sqlParseNumberIntl('"%_ENC_TRAMA"')
     const tSk1Num = sqlParseNumberIntl('"%_SK1"')
@@ -1686,26 +1686,26 @@ app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
     const fEncAcabUrdNum = sqlParseNumberIntl('"ENC.ACAB URD"')
     const fSkewMinNum = sqlParseNumberIntl('"SKEW MIN"')
     const fSkewMaxNum = sqlParseNumberIntl('"SKEW MAX"')
-    const fUrdMinNum = sqlParseNumberIntl('"URD#MIN"')
-    const fUrdMaxNum = sqlParseNumberIntl('"URD#MAX"')
+    const fUrdMinNum = sqlParseNumberIntl('"URD.MIN"')
+    const fUrdMaxNum = sqlParseNumberIntl('"URD.MAX"')
     const fTraMinNum = sqlParseNumberIntl('"TRAMA MIN"')
     const fTraMaxNum = sqlParseNumberIntl('"TRAMA MAX"')
-    const fVarTrMinNum = sqlParseNumberIntl('"VAR STR#MIN TRAMA"')
-    const fVarTrMaxNum = sqlParseNumberIntl('"VAR STR#MAX TRAMA"')
-    const fVarUrMinNum = sqlParseNumberIntl('"VAR STR#MIN URD"')
-    const fVarUrMaxNum = sqlParseNumberIntl('"VAR STR#MAX URD"')
+    const fVarTrMinNum = sqlParseNumberIntl('"VAR STR.MIN TRAMA"')
+    const fVarTrMaxNum = sqlParseNumberIntl('"VAR STR.MAX TRAMA"')
+    const fVarUrMinNum = sqlParseNumberIntl('"VAR STR.MIN URD"')
+    const fVarUrMaxNum = sqlParseNumberIntl('"VAR STR.MAX URD"')
 
     const sql = `
       WITH TESTES AS (
         SELECT
-          maquina,
-          artigo AS art_test,
-          btrim(partida) AS partida,
-          artigo AS testes,
-          dt_prod,
-          aprov,
-          obs,
-          reprocesso,
+          "MAQUINA" AS maquina,
+          "ARTIGO" AS art_test,
+          btrim("PARTIDA") AS partida,
+          "ARTIGO" AS testes,
+          "DT_PROD" AS dt_prod,
+          "APROV" AS aprov,
+          "OBS" AS obs,
+          "REPROCESSO" AS reprocesso,
           ${tMetragemNum} AS metragem_num,
           ${tLargAlNum} AS larg_al_num,
           ${tGramatNum} AS gramat_num,
@@ -1721,7 +1721,7 @@ app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
           ${tSkmNum} AS skm_num
         FROM tb_testes
         WHERE
-          artigo = $1
+          "ARTIGO" = $1
           AND ${testesDtProdDate} BETWEEN $2::date AND $3::date
       ),
       CALIDAD AS (

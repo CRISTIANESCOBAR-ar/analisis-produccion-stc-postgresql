@@ -42,20 +42,18 @@
           </div>
           <div class="flex items-center gap-2">
             <label class="text-sm text-slate-600">Desde:</label>
-            <input 
+            <CustomDatepicker 
               v-model="fechaInicial" 
-              type="date" 
+              :show-buttons="false"
               @change="cargarListaArticulos"
-              class="px-2 py-1 border border-slate-300 rounded-md text-sm"
             />
           </div>
           <div class="flex items-center gap-2">
             <label class="text-sm text-slate-600">Hasta:</label>
-            <input 
+            <CustomDatepicker 
               v-model="fechaFinal" 
-              type="date" 
+              :show-buttons="false"
               @change="cargarListaArticulos"
-              class="px-2 py-1 border border-slate-300 rounded-md text-sm"
             />
           </div>
         </div>
@@ -143,19 +141,17 @@
           <div class="flex-1 flex flex-nowrap items-center gap-2">
             <div class="flex items-center gap-2">
               <label class="text-xs text-slate-600 font-medium whitespace-nowrap">Inicio:</label>
-              <input 
+              <CustomDatepicker 
                 v-model="fechaInicial" 
-                type="date" 
-                class="px-2 py-1 border border-slate-300 rounded-md text-sm"
+                :show-buttons="false"
               />
             </div>
 
             <div class="flex items-center gap-2">
               <label class="text-xs text-slate-600 font-medium whitespace-nowrap">Hasta:</label>
-              <input 
+              <CustomDatepicker 
                 v-model="fechaFinal" 
-                type="date" 
-                class="px-2 py-1 border border-slate-300 rounded-md text-sm"
+                :show-buttons="false"
               />
             </div>
 
@@ -224,10 +220,16 @@
           <!-- Gráfico -->
           <div v-else-if="datos.length > 0" class="flex-1 min-h-0 flex flex-col">
             <!-- Stats resumen -->
-            <div class="mb-2 p-2 bg-slate-50 border border-slate-200 rounded-md flex items-center gap-6 text-sm flex-shrink-0">
+            <div class="mb-2 p-2 bg-slate-50 border border-slate-200 rounded-md flex flex-wrap items-center gap-x-6 gap-y-2 text-sm flex-shrink-0">
               <div class="font-semibold text-slate-700">{{ articuloSeleccionado.Articulo }} - {{ articuloSeleccionado.Nombre || 'Sin nombre' }}</div>
               <div class="text-slate-600"><span class="font-semibold">Total ensayos:</span> {{ datosGrafico.length }}</div>
               <div class="text-slate-600"><span class="font-semibold">Período:</span> {{ periodoTexto }}</div>
+              <div class="flex items-center gap-4 border-l border-slate-300 pl-4">
+                <div v-if="statsGrafico.min !== null" class="text-slate-600"><span class="font-semibold text-red-500">Mín:</span> {{ formatNumber(statsGrafico.min, 2) }}</div>
+                <div v-if="statsGrafico.std !== null" class="text-slate-600"><span class="font-semibold text-green-600">Estándar:</span> {{ formatNumber(statsGrafico.std, 2) }}</div>
+                <div v-if="promedioGrafico !== null" class="text-slate-600"><span class="font-semibold text-orange-500">Promedio:</span> {{ formatNumber(promedioGrafico, 2) }}</div>
+                <div v-if="statsGrafico.max !== null" class="text-slate-600"><span class="font-semibold text-red-500">Máx:</span> {{ formatNumber(statsGrafico.max, 2) }}</div>
+              </div>
             </div>
 
             <!-- Canvas para Chart.js -->
@@ -245,6 +247,7 @@
 import { ref, onMounted, onBeforeUnmount, watch, nextTick, computed } from 'vue'
 import { Chart, registerables } from 'chart.js'
 import { formatNumber as formatNum } from '@/utils/formatters'
+import CustomDatepicker from '../CustomDatepicker.vue'
 
 Chart.register(...registerables)
 
@@ -264,7 +267,13 @@ const filtroEnProduccion = ref(true)
 const articuloSeleccionado = ref(null)
 
 // Estado reactivo - Gráfico
-const fechaInicial = ref('2024-01-01')
+const getDefaultStartDate = () => {
+  const d = new Date()
+  d.setMonth(d.getMonth() - 3)
+  d.setDate(1)
+  return d.toISOString().split('T')[0]
+}
+const fechaInicial = ref(getDefaultStartDate())
 const fechaFinal = ref(new Date().toISOString().split('T')[0])
 const metricaActiva = ref('Ancho_MESA')
 const filtroAprobacion = ref('A')
@@ -274,6 +283,9 @@ const loading = ref(false)
 const error = ref(null)
 const chartCanvas = ref(null)
 let chartInstance = null
+
+const promedioGrafico = ref(null)
+const statsGrafico = ref({ min: null, std: null, max: null })
 
 // Métricas disponibles con campos MIN/STD/MAX
 const metricas = [
@@ -525,11 +537,30 @@ const renderChart = () => {
   const metricaConfig = metricas.find(m => m.value === metricaActiva.value)
   if (!metricaConfig) return
 
+  const parseChartNum = (val) => {
+    if (val === null || val === undefined || val === '') return null
+    const num = Number(val)
+    return isNaN(num) ? null : num
+  }
+
   const labels = datosGrafico.value.map(d => d.Fecha || '-')
-  const valoresReales = datosGrafico.value.map(d => d[metricaActiva.value])
-  const valoresMin = datosGrafico.value.map(d => d[metricaConfig.min])
-  const valoresStd = datosGrafico.value.map(d => d[metricaConfig.std])
-  const valoresMax = datosGrafico.value.map(d => d[metricaConfig.max])
+  const valoresReales = datosGrafico.value.map(d => parseChartNum(d[metricaActiva.value]))
+  const valoresMin = datosGrafico.value.map(d => parseChartNum(d[metricaConfig.min]))
+  const valoresStd = datosGrafico.value.map(d => parseChartNum(d[metricaConfig.std]))
+  const valoresMax = datosGrafico.value.map(d => parseChartNum(d[metricaConfig.max]))
+  
+  const validValores = valoresReales.filter(v => v !== null)
+  if (validValores.length > 0) {
+    promedioGrafico.value = validValores.reduce((a, b) => a + b, 0) / validValores.length
+  } else {
+    promedioGrafico.value = null
+  }
+
+  statsGrafico.value = {
+    min: valoresMin.find(v => v !== null) ?? null,
+    std: valoresStd.find(v => v !== null) ?? null,
+    max: valoresMax.find(v => v !== null) ?? null
+  }
   
   const calcularRotacion = () => {
     const numLabels = labels.length
@@ -591,6 +622,15 @@ const renderChart = () => {
             borderColor: 'rgb(239, 68, 68)',
             borderWidth: 2,
             borderDash: [5, 5],
+            pointRadius: 0,
+            fill: false
+          },
+          {
+            label: 'Promedio',
+            data: labels.map(() => promedioGrafico.value),
+            borderColor: 'rgb(249, 115, 22)', // orange-500
+            borderWidth: 2,
+            borderDash: [3, 3],
             pointRadius: 0,
             fill: false
           }
