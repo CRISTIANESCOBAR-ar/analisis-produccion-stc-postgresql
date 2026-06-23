@@ -827,7 +827,7 @@ function renderVelocidadChart() {
               const p = piezas[idx]
               return [
                 `${p.NombreArticulo || '-'}`,
-                `${formatHora(p.Hora)}  |  ${p.Qualidade}  |  ${formatPartida(p.Partida)}`
+                `${formatHora(p.Hora)}  |  ${p.Qualidade}  |  ${formatPartida(p.Partida)} (${formatSecuencia(p)})`
               ]
             },
             label(item) {
@@ -1101,7 +1101,7 @@ function renderCronologicoChart() {
             title(items) {
               const idx = items[0].dataIndex
               const p = piezas[idx]
-              return [`${p.NombreArticulo || '-'}`, `${formatHora(p.Hora)}  |  ${p.Qualidade}  |  ${formatPartida(p.Partida)}`]
+              return [`${p.NombreArticulo || '-'}`, `${formatHora(p.Hora)}  |  ${p.Qualidade}  |  ${formatPartida(p.Partida)} (${formatSecuencia(p)})`]
             },
             label(item) {
               return `  Metros: ${item.parsed.y} m`
@@ -1240,6 +1240,14 @@ function formatPartida(partida) {
   const s = String(partida || '').replace(/\D/g, '')
   if (s.length === 7) return `${s[0]}-${s.slice(1, 5)}.${s.slice(5)}`
   return String(partida || '-')
+}
+
+function formatSecuencia(piezaObj) {
+  const val = piezaObj.Peca || piezaObj.PECA || piezaObj['PEÇA'] || piezaObj['PEçA'] || piezaObj.peca || piezaObj['peça'] || piezaObj.Pieza || piezaObj.PIEZA
+  if (!val) return '000'
+  const str = String(val).trim()
+  if (str.length < 3) return str.padStart(3, '0')
+  return str.slice(-3)
 }
 
 function formatMinutos(mins) {

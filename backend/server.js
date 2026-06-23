@@ -1133,6 +1133,7 @@ app.get('/api/produccion/calidad/desempeno-piezas', async (req, res) => {
         DISTINCT
         PV."NombreArticulo" AS "NombreArticulo",
         PV."Partida" AS "Partida",
+        PV."Peca" AS "Peca",
         PV."Hora" AS "Hora",
         PV."Qualidade" AS "Qualidade",
         PV."Metragem" AS "Metragem",
@@ -1530,17 +1531,17 @@ app.get('/api/produccion/calidad/defectos-detalle', async (req, res) => {
 
     const sql = `
       SELECT
-        partida as "PARTIDA",
-        peca as "PECA",
-        etiqueta as "ETIQUETA",
-        cod_def as "COD_DEF",
-        desc_defeito as "DESC_DEFEITO",
-        pontos as "PONTOS",
-        qualidade as "QUALIDADE",
-        data_prod as "DATA_PROD"
+        "PARTIDA",
+        "PECA",
+        "ETIQUETA",
+        "COD_DEF",
+        "DESC_DEFEITO",
+        "PONTOS",
+        "QUALIDADE",
+        "DATA_PROD"
       FROM tb_defectos
-      WHERE btrim(etiqueta) = $1
-      ORDER BY peca ASC, cod_def ASC
+      WHERE btrim("ETIQUETA") = $1
+      ORDER BY "PECA" ASC, "COD_DEF" ASC
     `
 
     const result = await query(sql, [etiqueta], 'calidad/defectos-detalle')
