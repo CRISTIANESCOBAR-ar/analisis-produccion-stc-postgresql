@@ -184,6 +184,11 @@ const routes = [
     meta: { title: 'Análisis de Patrones de Defectos (IA)' }
   },
   {
+    path: '/relato-ia-teje',
+    component: () => import('./components/produccion/RelatoIaTejeView.vue'),
+    meta: { title: 'Relato de Calidad y Patrones (IA)' }
+  },
+  {
     path: '/residuos-indigo-tejeduria',
     component: () => import('./components/ResiduosIndigoTejeduria.vue'),
     meta: { title: 'Residuos INDIGO y TEJEDURIA' }

@@ -120,6 +120,7 @@ const groups = [
       { to: '/caida-telares', icon: '📉', label: 'Caída de Telares' },
       { to: '/performance-revisores', icon: '📊', label: 'Performance Mensual' },
       { to: '/analisis-patrones-teje', icon: '🤖', label: 'Análisis Patrones (IA)' },
+      { to: '/relato-ia-teje', icon: '✨', label: 'Relato IA (Tejeduría)' },
     ],
   },
   {

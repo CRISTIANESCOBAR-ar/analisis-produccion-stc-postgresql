@@ -8649,7 +8649,7 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
       roladas_lotes AS (
         SELECT
           "ROLADA" AS rolada,
-          STRING_AGG(DISTINCT NULLIF(TRIM("LOTE FIACAO"::text), ''), ', ') AS lote_fiacao,
+          STRING_AGG(DISTINCT NULLIF(regexp_replace(trim("LOTE FIACAO"::text), '^0+([0-9])', '\\1'), ''), ', ') AS lote_fiacao,
           STRING_AGG(DISTINCT CAST(NULLIF(regexp_replace(trim(right(COALESCE("MAQ  FIACAO", "MAQUINA"::text), 2)), '\\D', '', 'g'), '') AS INTEGER)::text, ', ') AS maq_oe,
           ROUND(((SUM(CAST(NULLIF(REPLACE(TRIM("RUPTURAS"::text), ',', '.'), '') AS NUMERIC)) * 1000000) / NULLIF(SUM(CAST(NULLIF(REPLACE(REPLACE(TRIM("METRAGEM"::text), '.', ''), ',', '.'), '') AS NUMERIC)) * MAX(CAST(NULLIF(REPLACE(TRIM("NUM_FIOS"::text), ',', '.'), '') AS NUMERIC)), 0))::numeric, 2) AS rot_106
         FROM public.tb_produccion
@@ -8678,7 +8678,7 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
           MAX(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN NULLIF(TRIM(p."BASE URDUME"::text), '') END) AS base_urdume,
           COALESCE(
             (SELECT lote_fiacao FROM roladas_lotes rl WHERE length(m.target_partida) >= 6 AND rl.rolada = substring(m.target_partida from length(m.target_partida)-5 for 4) LIMIT 1),
-            MAX(NULLIF(TRIM(p."LOTE FIACAO"::text), ''))
+            MAX(NULLIF(regexp_replace(trim(p."LOTE FIACAO"::text), '^0+([0-9])', '\\1'), ''))
           ) AS lote_fiacao,
           (SELECT maq_oe FROM roladas_lotes rl WHERE length(m.target_partida) >= 6 AND rl.rolada = substring(m.target_partida from length(m.target_partida)-5 for 4) LIMIT 1) AS maq_oe,
           (SELECT rot_106 FROM roladas_lotes rl WHERE length(m.target_partida) >= 6 AND rl.rolada = substring(m.target_partida from length(m.target_partida)-5 for 4) LIMIT 1) AS rot_106,
@@ -8945,7 +8945,7 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
 
 app.post('/api/calidad/ia-patrones-teje', async (req, res) => {
   try {
-    const { dataset, defects, totalMetros, totalAreaM2, fechaInicio, fechaFin } = req.body;
+    const { dataset, defects, totalMetros, totalAreaM2, fechaInicio, fechaFin, formato, forceRefresh } = req.body;
     
     if (!dataset || !defects || !fechaInicio || !fechaFin) {
       return res.status(400).json({ error: 'Faltan parámetros requeridos para el análisis de IA.' });
@@ -8953,8 +8953,9 @@ app.post('/api/calidad/ia-patrones-teje', async (req, res) => {
 
     const isoInicio = fechaInicio;
     const isoFin = fechaFin;
+    const formatReq = formato || 'actual';
 
-    let analisisIA = 'El motor de diagnóstico de IA de Gemini se encuentra temporalmente desactivado durante la fase de alineación de datos de PostgreSQL.';
+    let analisisIA = '';
     if (process.env.GOOGLE_API_KEY) {
       try {
         const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
@@ -8972,7 +8973,36 @@ app.post('/api/calidad/ia-patrones-teje', async (req, res) => {
 
         const cleanDefectsForAI = defects.slice(0, 10);
 
-        const prompt = `Actúa como un Ingeniero de Control de Calidad Textil y Auditor de Planta de Alta Performance. El volumen de metros analizados corresponde estrictamente a los "Metros Revisados de Primera" de tb_calidad. Analiza el siguiente JSON de datos consolidados:
+        let systemInstruction = '';
+        let prompt = '';
+
+        if (formatReq === 'estrategico') {
+          systemInstruction = `Actúa como Gerente de Planta y Auditor Senior de Control de Calidad Industrial. Tu objetivo es redactar un Resumen Ejecutivo Directivo que resuma los principales cuellos de botella de calidad del período, su impacto económico y operativo, y las directrices estratégicas de mejora.`;
+          prompt = `Consolida un informe de nivel gerencial para el Directorio basándote en el dataset consolidado:
+   
+1. RESUMEN GLOBAL DE DEFECTOS DEL PERIODO (Total metros: ${Number(totalMetros).toFixed(1)}m):
+${JSON.stringify(cleanDefectsForAI)}
+
+2. DETALLE DE PARTIDAS CRÍTICAS (15 más representativas):
+${JSON.stringify(cleanDataForAI)}
+
+Instrucciones de Diagnóstico Estratégico:
+1. **Visión Macrogrupo / Cuello de Botella**: Identifica cuál es el principal sector/proceso responsable del mayor impacto en puntos/100m² (Hilandería vs. Tejeduría).
+2. **Evaluación de Lotes Críticos**: Cuantifica qué lotes de hilado OE y orígenes explican la mayor caída de rendimiento del período.
+3. **Impacto en Eficiencias**: Analiza el impacto general en la eficiencia promedio de tejeduría y cómo impactan los desvíos técnicos (como la reducción de velocidad RPM).
+
+Estructura Obligatoria del Output (en Markdown):
+# 🚦 Resumen Ejecutivo Gerencial
+(Veredicto de 2-3 oraciones resumiendo el estado general de calidad del período).
+## 📊 Indicadores Clave e Impacto
+(Tabla o resumen cuantitativo de las principales desviaciones y pérdidas de rendimiento).
+## 🧠 Diagnóstico Estratégico de Calidad
+(Explicación concisa de las causas principales, enfocada en resolver problemas recurrentes a nivel de planta).
+## 🛠️ Directivas y Plan de Acción Corporativo
+(Estrategias prioritarias de corto y mediano plazo para estabilizar la producción).`;
+        } else {
+          systemInstruction = `Actúa como un Ingeniero de Procesos Textiles Senior y Auditor de Calidad Industrial. Tu objetivo es emitir un informe de causa-raíz técnico, definitivo e irrefutable para el Jefe de Tejeduría Plana basándote en el histórico de datos.`;
+          prompt = `Analiza el siguiente dataset consolidado que une las variables de Hilandería (Lote F., Rot 10⁶, Maq. OE), Urdido y Tejeduría (RPM, Eficiencia, Telares JAT710, Metros, Códigos de defecto 333, 340, 382, 387):
 
 1. RESUMEN GLOBAL DE DEFECTOS DEL PERIODO (Total metros: ${Number(totalMetros).toFixed(1)}m):
 ${JSON.stringify(cleanDefectsForAI)}
@@ -8980,50 +9010,49 @@ ${JSON.stringify(cleanDefectsForAI)}
 2. DETALLE DE PARTIDAS CRÍTICAS (JSON Consolidados):
 ${JSON.stringify(cleanDataForAI)}
 
-Instrucciones Críticas de Análisis:
-
-1. Análisis de Correlación Mecánica vs. Revisación (El Núcleo):
-Calcula y analiza los ratios por partida crítica:
-- Ratio de Traspaso de Trama: Compara las paradas mecánicas de trama (rt105_paradas_trama) contra el conteo físico de defectos (340_trama_mole, 382_trama_curta, 387_trama_dobrada).
-- Ratio de Traspaso de Urdimbre: Compara las paradas de urdimbre (ru105_paradas_urdimbre) contra (313_fio_quebrado, 333_parada_tear).
-Diagnóstico: Si paradas son altas pero defectos bajos, el operario trabaja bien. Si defectos superan o igualan paradas, detalla la falla en arranque o sensor.
-
-2. Segmentación Física por Matriz de Trama:
-Agrupa por tipo_trama_filtro. Da un dictamen sobre tramas 100% Algodón (Ne 9/1 vs Ne 7/1). Cruza esto con Índigo (r103_roturas_absolutas, cav105_cavalos_absolutos, velocidad_nominal) para saber si títulos finos venían penalizados desde la preparación.
-
-3. Análisis Temporal y de Coincidencia (Clusters):
-Revisa la cronologia_tejeduria (inicio/fin) de las partidas afectadas. Determina si los picos en ciertos telares fueron simultáneos. Si fueron contemporáneos, dicta si el patrón apunta a materia prima defectuosa (aislando la culpa del telar). Cruza con grupo_tear para identificar si la falla se mueve con el equipo humano o si es estática en la máquina.
+Instrucciones de Diagnóstico (Obligatorias):
+1. **Identificación de Telares Crónicos**: Filtra los telares con mayor puntuación de Pts/100m. Determina si el telar falla con múltiples lotes de hilado, o si solo falló con un Lote F. en particular.
+2. **Matriz Trama-Lote-Origen**: Identifica qué composición de trama y qué Lote F. concentra más del 50% de las paradas (Pts 333). Rastrea si el origen (Maq. OE) muestra un patrón repetitivo.
+3. **Análisis de Esfuerzo (RPM y Metraje)**: Determina si existe un punto crítico donde la velocidad (RPM) sobrepasa la resistencia del hilado pesado, y si los metrajes largos exacerban los defectos por fricción.
 
 Estructura Obligatoria del Output (en Markdown):
-Sección 1: Diagnóstico de Correlación Matemática (Ratios de Traspaso por Partida).
-Sección 2: Impacto Físico del Hilado (Dictamen de Composición y Títulos cruzado con Índigo).
-Sección 3: Análisis Cronológico y Factor Humano (Simultaneidad y Grupo Tear).
-Sección 4: Directivas Quirúrgicas de Planta (Acciones directas sin teoría genérica).`;
+# ⚙️ Diagnóstico Causa-Raíz Técnico (Planta)
+(Análisis técnico riguroso de ingeniería textil demostrando si el colapso de calidad o las paradas se deben a desajustes mecánicos del telar o a baja tenacidad/elongación del lote de hilado).
+# 🛠️ Acciones Inmediatas en Tejeduría
+(Instrucciones operativas directas al Jefe de Tejeduría Plana, p. ej. reducción/aumento de velocidad RPM, ajuste de pretensores, limpieza de boquillas o cambio de telar).
+# 📋 Reclamo Formal a Preparación e Hilandería
+(Si se determina responsabilidad de hilandería o el lote OE, redacta la argumentación técnica detallada y los lotes/máquinas OE involucrados para reclamar a dicho sector).`;
+        }
 
         const origenStr = 'Tejeduría - Patrones de Defectos';
-        const formatoKey = 'patrones-teje';
+        const formatoKey = `patrones-teje-${formatReq}`;
         const modeloKey = 'gemini-2.5-flash';
         const dataHash = hashRowsPayload(cleanDataForAI);
         const cacheKey = buildCacheKey({ lotes: 'teje_patrones', fecha: `${isoInicio}_${isoFin}`, formato: formatoKey, modelo: modeloKey, dataHash, origen: origenStr });
 
-        try {
+        if (!forceRefresh) {
+          try {
             const hit = await pool.query('SELECT narrativa, json_analisis_ia, modelo_usado, token_info FROM tb_narrativa_cache WHERE cache_key = $1 AND origen = $2', [cacheKey, origenStr]);
             if (hit.rows.length) {
-                await pool.query('UPDATE tb_narrativa_cache SET hits = hits + 1, last_hit_at = NOW() WHERE cache_key = $1 AND origen = $2', [cacheKey, origenStr]);
-                const cached = hit.rows[0];
-                return res.json({
-                    success: true, narrativa: cached.narrativa, fuente: 'cache', modelo: cached.modelo_usado,
-                    tokenInfo: cached.token_info || null,
-                    ...buildNarrativaStructuredFields(cached.narrativa)
-                });
+              await pool.query('UPDATE tb_narrativa_cache SET hits = hits + 1, last_hit_at = NOW() WHERE cache_key = $1 AND origen = $2', [cacheKey, origenStr]);
+              const cached = hit.rows[0];
+              return res.json({
+                success: true, narrativa: cached.narrativa, fuente: 'cache', modelo: cached.modelo_usado,
+                tokenInfo: cached.token_info || null,
+                ...buildNarrativaStructuredFields(cached.narrativa)
+              });
             }
-        } catch (e) { console.warn('Cache check fail:', e.message); }
+          } catch (e) { console.warn('Cache check fail:', e.message); }
+        }
 
-        const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+        const FALLBACK_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
         let lastErr = null;
         for (const modelName of FALLBACK_MODELS) {
           try {
-            const model = genAI.getGenerativeModel({ model: modelName });
+            const model = genAI.getGenerativeModel({ 
+              model: modelName,
+              systemInstruction: systemInstruction 
+            });
             const result = await model.generateContent(prompt);
             const response = await result.response;
             analisisIA = response.text();
