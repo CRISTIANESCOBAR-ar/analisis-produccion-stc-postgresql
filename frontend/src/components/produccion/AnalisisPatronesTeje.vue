@@ -630,9 +630,8 @@ async function ejecutarAnalisis() {
     }
 
     // 2. Ejecutar IA (Apagado temporalmente)
-    loadingIA.value = false;
-    analisis.value = '**Análisis de IA en pausa** mientras se ajustan las visualizaciones de tabla.';
-    /*
+    loadingIA.value = true;
+    
     const resIA = await fetch(`${API_BASE}/api/calidad/ia-patrones-teje`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -654,7 +653,7 @@ async function ejecutarAnalisis() {
     tokenInfo.value = dataIA.tokenInfo || null;
     fuente.value = dataIA.fuente || '';
     modelo.value = dataIA.modelo || '';
-    */
+    loadingIA.value = false;
 
   } catch (err) {
     console.error('[analisis-patrones-teje] failed:', err)

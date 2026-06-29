@@ -69,9 +69,10 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRouter } from 'vue-router'
 
-const route = useRoute()
+const router = useRouter()
+const route = computed(() => router.currentRoute.value)
 const openGroup = ref(null)
 
 const groups = [
@@ -166,14 +167,14 @@ const currentGroup = computed(() =>
 )
 
 function isGroupActive(group) {
-  return group.links?.some(l => l.to === route.path) ?? false
+  return group.links?.some(l => l.to === route.value?.path) ?? false
 }
 
 function toggleGroup(id) {
   openGroup.value = openGroup.value === id ? null : id
 }
 
-watch(() => route.path, () => { openGroup.value = null })
+watch(() => route.value?.path, () => { openGroup.value = null })
 
 function handleKeydown(e) {
   if (e.key === 'Escape') openGroup.value = null

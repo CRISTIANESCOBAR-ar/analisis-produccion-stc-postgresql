@@ -9,11 +9,11 @@
 
 <script setup>
 import { computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRouter } from 'vue-router'
 import SidebarCompact from './components/SidebarCompact.vue'
 
-const route = useRoute()
-const isEmbeddedMode = computed(() => String(route.query.embed || '') === '1')
+const router = useRouter()
+const isEmbeddedMode = computed(() => String(router.currentRoute.value?.query?.embed || '') === '1')
 </script>
 
 <style scoped>
