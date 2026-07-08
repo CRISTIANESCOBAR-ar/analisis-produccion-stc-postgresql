@@ -230,8 +230,8 @@ function formatPct(v) {
 }
 
 function formatPts(v) {
-  if (v == null) return '0,0'
-  return Number(v).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+  if (v == null) return '0,00'
+  return Number(v).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 function formatMeta(v) {

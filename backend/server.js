@@ -2842,6 +2842,8 @@ app.get('/api/metas/mes', async (req, res) => {
       const larguraNum = sqlParseNumberIntl('c."LARGURA"')
       const pontuacaoNum = sqlParseNumberIntl('c."PONTUACAO"')
 
+      const larguraFichaNum = sqlParseNumberIntl('f."LARGURA"')
+
       // Generar serie de fechas y hacer LEFT JOIN con metas y con tb_calidad agregada
       const sql = `
         WITH dias AS (
@@ -2883,11 +2885,37 @@ app.get('/api/metas/mes', async (req, res) => {
         calidad_kpis AS (
           SELECT 
             to_char(${datProdDate}, 'YYYY-MM-DD') AS dia,
-            ROUND(COALESCE(SUM(CASE WHEN c."QUALIDADE" ILIKE 'PRIMEIRA%' THEN ${metragemNum} ELSE 0 END) / NULLIF(SUM(${metragemNum}), 0) * 100, 0)::numeric, 1) AS pct_1ra,
-            ROUND(COALESCE((SUM(CASE WHEN c."QUALIDADE" ILIKE 'PRIMEIRA%' THEN COALESCE(${pontuacaoNum}, 0) ELSE 0 END) * 100.0) / NULLIF(SUM(CASE WHEN c."QUALIDADE" ILIKE 'PRIMEIRA%' THEN ${metragemNum} * COALESCE(${larguraNum}, 0) / 100.0 ELSE 0 END), 0), 0)::numeric, 1) AS pts_100m2
+            ROUND(COALESCE(SUM(CASE WHEN c."QUALIDADE" ILIKE 'PRIMEIRA%' THEN ${metragemNum} ELSE 0 END) / NULLIF(SUM(${metragemNum}), 0) * 100, 0)::numeric, 1) AS pct_1ra
           FROM tb_calidad c
           WHERE ${datProdDate} >= $1::date AND ${datProdDate} <= $2::date
           GROUP BY to_char(${datProdDate}, 'YYYY-MM-DD')
+        ),
+        pts_nivel1 AS (
+          SELECT 
+            ${datProdDate} AS dia_raw,
+            c."PEÇA" AS peca,
+            btrim(c."QUALIDADE") AS qualidade,
+            SUM(${metragemNum}) AS metros_pieza,
+            AVG(${pontuacaoNum}) AS puntos_pieza,
+            AVG(${larguraFichaNum}) AS largura_patron
+          FROM tb_calidad c
+          INNER JOIN tb_fichas f ON c."ARTIGO" = f."ARTIGO CODIGO"
+          WHERE ${datProdDate} >= $1::date AND ${datProdDate} <= $2::date
+            AND btrim(c."QUALIDADE") = 'PRIMEIRA'
+          GROUP BY ${datProdDate}, c."PEÇA", btrim(c."QUALIDADE")
+        ),
+        pts_nivel2 AS (
+          SELECT 
+            to_char(dia_raw, 'YYYY-MM-DD') AS dia,
+            ROUND(
+              CASE
+                WHEN SUM(metros_pieza * largura_patron) > 0 THEN
+                  (SUM(puntos_pieza) * 10000) / SUM(metros_pieza * largura_patron)
+                ELSE 0
+              END, 2
+            ) AS pts_100m2
+          FROM pts_nivel1
+          GROUP BY to_char(dia_raw, 'YYYY-MM-DD')
         )
         SELECT 
           to_char(d.dia, 'YYYY-MM-DD') AS dia, 
@@ -2895,11 +2923,12 @@ app.get('/api/metas/mes', async (req, res) => {
           c.metros_revisados AS metros_revisados,
           c.revisores AS revisores,
           k.pct_1ra AS pct_1ra,
-          k.pts_100m2 AS pts_100m2
+          COALESCE(p.pts_100m2, 0) AS pts_100m2
         FROM dias d
         LEFT JOIN metas m ON m.dia = to_char(d.dia, 'YYYY-MM-DD')
         LEFT JOIN calidad_dia c ON c.dia = to_char(d.dia, 'YYYY-MM-DD')
         LEFT JOIN calidad_kpis k ON k.dia = to_char(d.dia, 'YYYY-MM-DD')
+        LEFT JOIN pts_nivel2 p ON p.dia = to_char(d.dia, 'YYYY-MM-DD')
         ORDER BY d.dia
       `
 
@@ -2972,79 +3001,71 @@ app.get('/api/calidad/pts100m2', async (req, res) => {
     const pontuacaoNum = sqlParseNumberIntl('c."PONTUACAO"')
     const larguraNum = sqlParseNumberIntl('c."LARGURA"')
 
+    const larguraFichaNum = sqlParseNumberIntl('f."LARGURA"')
+
     const sqlDia = `
-      WITH pts AS (
-        SELECT
-          dat_prod,
-          SUM(pontuacao_avg) AS pontuacao
-        FROM (
-          SELECT
-            c."EMP",
-            ${datProdDate} AS dat_prod,
-            btrim(c."QUALIDADE") AS qualidade,
-            c."PEÇA" AS peca,
-            AVG(${pontuacaoNum}) AS pontuacao_avg
-          FROM tb_calidad c
-          WHERE ${datProdDate} = $1::date
-            AND btrim(c."QUALIDADE") = 'PRIMEIRA'
-          GROUP BY c."EMP", ${datProdDate}, btrim(c."QUALIDADE"), c."PEÇA"
-        ) sub
-        GROUP BY dat_prod
-      ),
-      ancho AS (
-        SELECT
-          ${datProdDate} AS fecha,
-          SUM(${metragemNum}) AS metros,
-          SUM(${metragemNum} * ${larguraNum}) / NULLIF(SUM(${metragemNum}), 0) AS ancho_pond
+      WITH Nivel1 AS (
+        SELECT 
+          ${datProdDate} AS dat_prod,
+          c."PEÇA" AS peca,
+          btrim(c."QUALIDADE") AS qualidade,
+          SUM(${metragemNum}) AS metros_pieza,
+          AVG(${pontuacaoNum}) AS puntos_pieza,
+          AVG(${larguraFichaNum}) AS largura_patron
         FROM tb_calidad c
+        INNER JOIN tb_fichas f ON c."ARTIGO" = f."ARTIGO CODIGO"
         WHERE ${datProdDate} = $1::date
           AND btrim(c."QUALIDADE") = 'PRIMEIRA'
-        GROUP BY ${datProdDate}
+        GROUP BY ${datProdDate}, c."PEÇA", btrim(c."QUALIDADE")
+      ),
+      Nivel2 AS (
+        SELECT 
+          dat_prod,
+          SUM(metros_pieza) AS metros,
+          SUM(puntos_pieza) AS pontuacao,
+          SUM(metros_pieza * largura_patron) AS divisor
+        FROM Nivel1
+        GROUP BY dat_prod
       )
       SELECT
         CASE
-          WHEN ancho.metros > 0 AND ancho.ancho_pond > 0 THEN
-            (pts.pontuacao * 100) / (ancho.metros * ancho.ancho_pond) * 100
+          WHEN divisor > 0 THEN
+            (pontuacao * 10000) / divisor
           ELSE 0
         END AS pts1002
-      FROM ancho
-      LEFT JOIN pts ON ancho.fecha = pts.dat_prod
+      FROM Nivel2
     `
 
     const sqlMes = `
-      WITH pts AS (
-        SELECT
-          SUM(pontuacao_avg) AS pontuacao
-        FROM (
-          SELECT
-            c."EMP",
-            ${datProdDate} AS dat_prod,
-            btrim(c."QUALIDADE") AS qualidade,
-            c."PEÇA" AS peca,
-            AVG(${pontuacaoNum}) AS pontuacao_avg
-          FROM tb_calidad c
-          WHERE ${datProdDate} >= $1::date
-            AND ${datProdDate} <= $2::date
-            AND btrim(c."QUALIDADE") = 'PRIMEIRA'
-          GROUP BY c."EMP", ${datProdDate}, btrim(c."QUALIDADE"), c."PEÇA"
-        ) sub
-      ),
-      ancho AS (
-        SELECT
-          SUM(${metragemNum}) AS metros,
-          SUM(${metragemNum} * ${larguraNum}) / NULLIF(SUM(${metragemNum}), 0) AS ancho_pond
+      WITH Nivel1 AS (
+        SELECT 
+          ${datProdDate} AS dat_prod,
+          c."PEÇA" AS peca,
+          btrim(c."QUALIDADE") AS qualidade,
+          SUM(${metragemNum}) AS metros_pieza,
+          AVG(${pontuacaoNum}) AS puntos_pieza,
+          AVG(${larguraFichaNum}) AS largura_patron
         FROM tb_calidad c
+        INNER JOIN tb_fichas f ON c."ARTIGO" = f."ARTIGO CODIGO"
         WHERE ${datProdDate} >= $1::date
           AND ${datProdDate} <= $2::date
           AND btrim(c."QUALIDADE") = 'PRIMEIRA'
+        GROUP BY ${datProdDate}, c."PEÇA", btrim(c."QUALIDADE")
+      ),
+      Nivel2 AS (
+        SELECT 
+          SUM(metros_pieza) AS metros,
+          SUM(puntos_pieza) AS pontuacao,
+          SUM(metros_pieza * largura_patron) AS divisor
+        FROM Nivel1
       )
       SELECT
         CASE
-          WHEN ancho.metros > 0 AND ancho.ancho_pond > 0 THEN
-            (pts.pontuacao * 100) / (ancho.metros * ancho.ancho_pond) * 100
+          WHEN divisor > 0 THEN
+            (pontuacao * 10000) / divisor
           ELSE 0
         END AS pts1002
-      FROM ancho, pts
+      FROM Nivel2
     `
 
     const resultDia = await query(sqlDia, [datePattern], 'calidad/pts100m2-dia')
