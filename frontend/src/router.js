@@ -98,6 +98,11 @@ const routes = [
     component: () => import('./components/ensayos/InformeAuditoriaLote.vue'),
     meta: { title: 'Informe Auditoría por Lote' }
   },
+  {
+    path: '/database-explorer',
+    component: () => import('./components/produccion/DatabaseExplorer.vue'),
+    meta: { title: 'Explorador Base de Datos' }
+  },
   { 
     path: '/resumen-diario', 
     component: () => import('./components/ensayos/ResumenDiario.vue'), 

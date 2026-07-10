@@ -156,6 +156,7 @@ const groups = [
       { to: '/relato-ia-integral', icon: '💡', label: 'Relato Integral IA' },
       { to: '/detalle-mistura-lote', icon: '📊', label: 'Detalle MISTURA' },
       { to: '/configuracion-estandares', icon: '⚙️', label: 'Estándares y Mezclas' },
+      { to: '/database-explorer', icon: '🗄️', label: 'Explorador DB' },
     ],
   },
 ]

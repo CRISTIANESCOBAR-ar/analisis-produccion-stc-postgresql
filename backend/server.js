@@ -14,6 +14,7 @@ import { optimizeBlend } from './services/blendomat-optimizer.js';
 import { triggerFullBackup, getFullBackupStatus } from './services/fullBackupTrigger.js';
 import { getEficienciasResumen, getEficienciasDetalle } from './routes/eficiencias-tecelaje.mjs';
 import { parseNarrativaStructure } from '../shared/narrativaSections.js';
+import databaseExplorerRouter from './routes/databaseExplorer.mjs';
 
 const { Pool } = pg
 const app = express()
@@ -98,6 +99,8 @@ const pool = new Pool({
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
 })
+
+app.use('/api/database', databaseExplorerRouter(pool));
 
 function hrMs() {
   return Number(process.hrtime.bigint()) / 1_000_000
