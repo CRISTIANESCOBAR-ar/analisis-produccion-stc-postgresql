@@ -2746,22 +2746,22 @@ app.get('/api/calidad/sectores-resumen', async (req, res) => {
       ),
       calidad_dia AS (
         SELECT
-          c."GRP_DEF" AS sector,
+          CASE WHEN c."GRP_DEF" IN ('ACABAMENTO', 'ACABAMENRO') THEN 'ACABMTO' ELSE c."GRP_DEF" END AS sector,
           SUM(${metragemNum}) AS metros
         FROM tb_calidad c
         WHERE c."EMP" = 'STC'
           AND ${datProdDate} = $1::date
-        GROUP BY c."GRP_DEF"
+        GROUP BY 1
       ),
       calidad_mes AS (
         SELECT
-          c."GRP_DEF" AS sector,
+          CASE WHEN c."GRP_DEF" IN ('ACABAMENTO', 'ACABAMENRO') THEN 'ACABMTO' ELSE c."GRP_DEF" END AS sector,
           SUM(${metragemNum}) AS metros
         FROM tb_calidad c
         WHERE c."EMP" = 'STC'
           AND ${datProdDate} >= $2::date
           AND ${datProdDate} <= $3::date
-        GROUP BY c."GRP_DEF"
+        GROUP BY 1
       )
       SELECT
         s.sector AS "SECTOR",
@@ -3565,23 +3565,23 @@ app.get('/api/produccion/acabamento-resumen', async (req, res) => {
     const mesFin = monthEnd || datePattern
 
     const dtBaseDate = sqlParseDate('p."DT_BASE_PRODUCAO"')
-    const dtProdDate = sqlParseDate('t."DT_PROD"')
+    const dtProdDate = sqlParseDate('t.dt_prod')
     const metragemNum = sqlParseNumberIntl('p."METRAGEM"')
-    const testeMetragemNum = sqlParseNumberIntl('t."METRAGEM"')
+    const testeMetragemNum = sqlParseNumberIntl('t.metragem')
     const encUrdNum = sqlParseNumberIntl('t."%_ENC_URD"')
 
     const sqlMetrosDia = `
       SELECT COALESCE(SUM(${metragemNum}), 0) AS metros
       FROM tb_produccion p
       WHERE ${dtBaseDate} = $1::date
-        AND p."MAQUINA" = '165001'
+        AND p."SELETOR" IN ('ACABAMENTO', 'ACABAMENRO')
     `
     const sqlMetrosMes = `
       SELECT COALESCE(SUM(${metragemNum}), 0) AS metros
       FROM tb_produccion p
       WHERE ${dtBaseDate} >= $1::date
         AND ${dtBaseDate} <= $2::date
-        AND p."MAQUINA" = '165001'
+        AND p."SELETOR" IN ('ACABAMENTO', 'ACABAMENRO')
     `
 
     const sqlEncUrdDia = `
@@ -3593,8 +3593,8 @@ app.get('/api/produccion/acabamento-resumen', async (req, res) => {
         END AS enc_urd_pct
       FROM tb_testes t
       WHERE ${dtProdDate} = $1::date
-        AND t."MAQUINA" = '165001'
-        AND t."APROV" = 'A'
+        AND t.maquina IN ('165001', '125010')
+        AND t.aprov = 'A'
     `
     const sqlEncUrdMes = `
       SELECT
@@ -3606,8 +3606,8 @@ app.get('/api/produccion/acabamento-resumen', async (req, res) => {
       FROM tb_testes t
       WHERE ${dtProdDate} >= $1::date
         AND ${dtProdDate} <= $2::date
-        AND t."MAQUINA" = '165001'
-        AND t."APROV" = 'A'
+        AND t.maquina IN ('165001', '125010')
+        AND t.aprov = 'A'
     `
 
     const resultMetrosDia = await query(sqlMetrosDia, [datePattern], 'acabamento/metros-dia')
@@ -9232,7 +9232,7 @@ app.get('/api/informe-diario', async (req, res) => {
       FROM tb_produccion p
       WHERE ${dtProd} >= $1::date
         AND ${dtProd} <= $2::date
-        AND p."MAQUINA" = '165001'
+        AND p."SELETOR" IN ('ACABAMENTO', 'ACABAMENRO')
       GROUP BY to_char(${dtProd}, 'YYYY-MM-DD')
     `
 
