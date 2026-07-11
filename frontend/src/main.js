@@ -12,7 +12,8 @@ const app = createApp(App)
 const pinia = createPinia()
 
 app.use(pinia)
-app.use(router)
+// VueTippy debe registrarse ANTES del router para que el directive v-tippy
+// esté disponible cuando se renderice por primera vez SidebarCompact.
 app.use(VueTippy, {
   directive: 'tippy',
   defaultProps: {
@@ -21,5 +22,10 @@ app.use(VueTippy, {
     theme: 'light'
   }
 })
+app.use(router)
 
-app.mount('#app')
+// Esperar a que el router termine su primera navegación antes de montar la app.
+// Esto evita que useRouter()/useRoute() fallen durante el render inicial.
+router.isReady().then(() => {
+  app.mount('#app')
+})
