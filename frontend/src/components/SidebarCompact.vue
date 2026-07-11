@@ -153,7 +153,6 @@ const groups = [
       { to: '/resumen-hvi-datos', icon: '📊', label: 'Resumen Datos HVI' },
       { to: '/correlacion-mezcla-hilo', icon: '🔬', label: 'Correlación Mezcla → Hilo' },
       { to: '/dashboard-mezcla', icon: '🏭', label: 'Dashboard Mezcla → Hilo' },
-      { to: '/relato-ia-integral', icon: '💡', label: 'Relato Integral IA' },
       { to: '/detalle-mistura-lote', icon: '📊', label: 'Detalle MISTURA' },
       { to: '/configuracion-estandares', icon: '⚙️', label: 'Estándares y Mezclas' },
       { to: '/database-explorer', icon: '🗄️', label: 'Explorador DB' },
