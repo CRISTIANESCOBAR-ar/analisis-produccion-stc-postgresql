@@ -2679,6 +2679,76 @@ app.get('/api/calidad/heatmap-telar-defecto', async (req, res) => {
 })
 
 
+// GET /api/calidad/partida/:partidaId - Detalle de una partida para consulta de calidad
+app.get('/api/calidad/partida/:partidaId', async (req, res) => {
+  try {
+    const t0 = hrMs()
+    const partidaId = String(req.params.partidaId).trim()
+    if (!partidaId) {
+      return res.status(400).json({ error: 'Se requiere el parámetro "partidaId"' })
+    }
+
+    const metragemNum = sqlParseNumberIntl('"METRAGEM"')
+    const sql = `
+      SELECT
+        "PEÇA",
+        "DAT_PROD",
+        "GRP_DEF",
+        "COD_DE",
+        "DEFEITO",
+        ${metragemNum} AS "METRAGEM",
+        "QUALIDADE",
+        "REVISOR FINAL",
+        "HORA",
+        "PARTIDA",
+        "EMENDAS",
+        "ETIQUETA",
+        "ARTIGO",
+        "COR",
+        "NM MERC" AS "NM_MERC",
+        "TRAMA"
+      FROM tb_calidad
+      WHERE "EMP" = 'STC'
+        AND ("PARTIDA" = $1 OR "PARTIDA" = '0' || $1)
+      ORDER BY "HORA" ASC, "PEÇA" ASC
+    `
+
+    const result = await query(sql, [partidaId], 'calidad/partida')
+    const rows = result.rows || []
+
+    let header = rows.length > 0 ? {
+      ARTIGO: rows[0].ARTIGO,
+      COR: rows[0].COR,
+      NM_MERC: rows[0].NM_MERC,
+      TRAMA: rows[0].TRAMA
+    } : null
+
+    if (!header) {
+      const fallbackSql = `
+        SELECT
+          "ARTIGO",
+          "COR",
+          "NM MERCADO" AS "NM_MERC",
+          "TRAMA REDUZIDA 1" AS "TRAMA"
+        FROM tb_produccion
+        WHERE ("PARTIDA" = $1 OR "PARTIDA" = '0' || $1)
+        LIMIT 1
+      `;
+      const fallbackResult = await query(fallbackSql, [partidaId], 'calidad/partida-fallback')
+      if (fallbackResult.rows && fallbackResult.rows.length > 0) {
+        header = fallbackResult.rows[0]
+      }
+    }
+
+    res.json({ header, rows })
+    console.log(`[PERF] GET /calidad/partida/${partidaId} rows=${rows.length} total=${(hrMs() - t0).toFixed(1)}ms`)
+  } catch (err) {
+    console.error(`Error en /api/calidad/partida/${req.params.partidaId}:`, err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+
 // GET /api/calidad/available-dates - Fechas disponibles en tb_calidad
 app.get('/api/calidad/available-dates', async (req, res) => {
   try {
@@ -8674,7 +8744,7 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
         SELECT
           "ROLADA" AS rolada,
           STRING_AGG(DISTINCT NULLIF(regexp_replace(trim("LOTE FIACAO"::text), '^0+([0-9])', '\\1'), ''), ', ') AS lote_fiacao,
-          STRING_AGG(DISTINCT CAST(NULLIF(regexp_replace(trim(right(COALESCE("MAQ  FIACAO", "MAQUINA"::text), 2)), '\\D', '', 'g'), '') AS INTEGER)::text, ', ') AS maq_oe,
+          STRING_AGG(DISTINCT CAST(NULLIF(regexp_replace(trim(right(COALESCE("MAQ FIACAO", "MAQUINA"::text), 2)), '\\D', '', 'g'), '') AS INTEGER)::text, ', ') AS maq_oe,
           ROUND(((SUM(CAST(NULLIF(REPLACE(TRIM("RUPTURAS"::text), ',', '.'), '') AS NUMERIC)) * 1000000) / NULLIF(SUM(CAST(NULLIF(REPLACE(REPLACE(TRIM("METRAGEM"::text), '.', ''), ',', '.'), '') AS NUMERIC)) * MAX(CAST(NULLIF(REPLACE(TRIM("NUM_FIOS"::text), ',', '.'), '') AS NUMERIC)), 0))::numeric, 2) AS rot_106
         FROM public.tb_produccion
         WHERE "SELETOR" IN ('URDIDEIRA', 'URDIDORA')
@@ -8709,10 +8779,9 @@ app.get('/api/calidad/datos-patrones-teje', async (req, res) => {
           AVG(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."RPM LEITURA"::text), ',', '.'), '') AS NUMERIC) END) AS rpm_real,
           AVG(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."LARG PAD"::text), ',', '.'), '') AS NUMERIC) END) AS ancho_tela_padron,
           SUM(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."QTDE_CAVALO"::text), ',', ''), '') AS INTEGER) ELSE 0 END) AS total_cavalos,
-          STRING_AGG(DISTINCT NULLIF(TRIM(COALESCE(
-            CASE WHEN p."SELETOR" = 'INDIGO' AND NULLIF(TRIM(p."TURNO_INDIGO"::text),'') IS NOT NULL THEN p."TURNO_INDIGO" END,
+          STRING_AGG(DISTINCT NULLIF(TRIM(
             CASE WHEN p."SELETOR" = 'INDIGO' AND NULLIF(TRIM(p."TURNO"::text),'') IS NOT NULL THEN p."TURNO" END
-          )), ''), ' / ') AS turno_indigo,
+          ), ''), ' / ') AS turno_indigo,
           STRING_AGG(DISTINCT NULLIF(TRIM(p."TRAMA REDUZIDA 1"::text), ''), ' / ') AS trama_prod_reduz1,
           SUM(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."PONTOS_LIDOS"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS puntos_lidos,
           SUM(CASE WHEN p."SELETOR" = 'TECELAGEM' THEN CAST(NULLIF(REPLACE(TRIM(p."PONTOS_100%"::text), ',', '.'), '') AS NUMERIC) ELSE 0 END) AS puntos_100,
@@ -9094,7 +9163,7 @@ Estructura Obligatoria del Output (en Markdown):
                     `INSERT INTO tb_narrativa_cache (cache_key, lotes, fecha, formato, modelo, data_hash, narrativa, json_analisis_ia, modelo_usado, token_info, origen)
                      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
                      ON CONFLICT (cache_key) DO UPDATE SET narrativa=EXCLUDED.narrativa, json_analisis_ia=EXCLUDED.json_analisis_ia, modelo_usado=EXCLUDED.modelo_usado, token_info=EXCLUDED.token_info, last_hit_at=NOW(), origen=EXCLUDED.origen`,
-                    [cacheKey, 'teje_patrones', `${isoInicio}_${isoFin}`, formatoKey, modeloKey, dataHash, analisisIA, dataset, modelName, JSON.stringify(tokenInfo), origenStr]
+                    [cacheKey, 'teje_patrones', `${isoInicio}_${isoFin}`, formatoKey, modeloKey, dataHash, analisisIA, JSON.stringify(dataset), modelName, JSON.stringify(tokenInfo), origenStr]
                 );
                 await pool.query(
                     `INSERT INTO tb_narrativa_log (lotes, fecha_corte, formato, idioma, modelo, tokens_entrada, tokens_salida, tokens_total, costo_usd, fuente, desde_cache, origen)
