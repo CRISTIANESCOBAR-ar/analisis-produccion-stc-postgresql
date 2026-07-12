@@ -121,7 +121,7 @@
                       <!-- Tooltip de Defectos (Diseño Light Premium alineado con el proyecto) -->
                       <div 
                         v-if="getDefectosPieza(row).length" 
-                        class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 rounded-lg shadow-xl border border-slate-200 z-50 pointer-events-none w-64 overflow-hidden transition-all duration-200"
+                        class="absolute bottom-full left-0 mb-2 hidden group-hover/tooltip:block bg-white text-slate-800 rounded-lg shadow-xl border border-slate-200 z-50 pointer-events-none w-64 overflow-hidden transition-all duration-200"
                       >
                         <!-- Cabecera -->
                         <div class="px-3 py-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between text-slate-700">
@@ -150,7 +150,7 @@
                         </div>
                         
                         <!-- Flecha indicadora apuntando hacia abajo -->
-                        <div class="absolute bottom-[-5px] left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-white rotate-45 border-r border-b border-slate-200"></div>
+                        <div class="absolute bottom-[-5px] left-6 w-2.5 h-2.5 bg-white rotate-45 border-r border-b border-slate-200"></div>
                       </div>
                     </div>
                   </td>
