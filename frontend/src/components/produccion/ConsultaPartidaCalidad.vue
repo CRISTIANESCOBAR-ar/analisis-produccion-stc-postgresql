@@ -62,7 +62,7 @@
       <template v-else-if="headerData">
         <!-- Ficha de Encabezado -->
         <section class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden shrink-0">
-          <div class="p-3 grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div class="p-3 grid grid-cols-2 md:grid-cols-6 gap-4">
             <div class="flex flex-col gap-1">
               <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Artigo</span>
               <span class="text-sm font-bold text-slate-900 break-words">{{ headerData.ARTIGO || '—' }}</span>
@@ -78,6 +78,18 @@
             <div class="flex flex-col gap-1">
               <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Trama</span>
               <div class="text-sm font-bold text-slate-900 leading-tight">{{ headerData.TRAMA || '—' }}</div>
+            </div>
+            <div class="flex flex-col gap-1 md:border-l md:border-slate-100 md:pl-4">
+              <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">% Calidad (1ª)</span>
+              <span class="text-sm font-bold" :class="getCalidadColor(headerData.Calidad_Perc)">
+                {{ headerData.Calidad_Perc !== null && headerData.Calidad_Perc !== undefined ? headerData.Calidad_Perc + '%' : '—' }}
+              </span>
+            </div>
+            <div class="flex flex-col gap-1 md:border-l md:border-slate-100 md:pl-4">
+              <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Pts/100m²</span>
+              <span class="text-sm font-bold" :class="getPtsColor(headerData.Pts_100m2)">
+                {{ headerData.Pts_100m2 !== null && headerData.Pts_100m2 !== undefined ? headerData.Pts_100m2 : '—' }}
+              </span>
             </div>
           </div>
         </section>
@@ -231,5 +243,23 @@ const formatTime = (val) => {
       return `${s.substring(0,2)}:${s.substring(2)}`;
    }
    return val;
+};
+
+const getCalidadColor = (val) => {
+  if (val === null || val === undefined) return 'text-slate-900';
+  const num = parseFloat(val);
+  if (isNaN(num)) return 'text-slate-900';
+  if (num >= 90) return 'text-emerald-600';
+  if (num >= 80) return 'text-amber-600';
+  return 'text-rose-600';
+};
+
+const getPtsColor = (val) => {
+  if (val === null || val === undefined) return 'text-slate-900';
+  const num = parseFloat(val);
+  if (isNaN(num)) return 'text-slate-900';
+  if (num < 20) return 'text-emerald-600';
+  if (num < 40) return 'text-amber-600';
+  return 'text-rose-600';
 };
 </script>
