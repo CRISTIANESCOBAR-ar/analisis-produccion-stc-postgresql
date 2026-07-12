@@ -38,19 +38,36 @@
             >
               {{ selectedTable }}
             </button>
-            <span v-if="selectedMonth" class="text-slate-300">/</span>
+            <span class="text-slate-300">/</span>
             <button 
-              v-if="selectedMonth" 
-              @click="currentView = 'days'; selectedDay = null; fetchSummary(selectedMonth);" 
-              class="hover:text-blue-600 transition-colors font-semibold"
-              :class="{ 'text-slate-700 font-bold': !selectedDay }"
+              @click="currentView = 'months'; selectedMonth = null; selectedDay = null; fetchSummary();" 
+              class="hover:text-blue-600 transition-colors font-medium text-slate-500"
+              :class="{ 'text-slate-700 font-bold': currentView === 'months' }"
             >
-              {{ formatPeriod(selectedMonth, 'months') }}
+              Resumen Temporal
             </button>
-            <span v-if="selectedDay" class="text-slate-300">/</span>
-            <span v-if="selectedDay" class="text-slate-700 font-bold">
-              Día {{ formatPeriod(selectedDay, 'days').split('/')[0] }}
-            </span>
+            <template v-if="selectedMonth">
+              <span class="text-slate-300">/</span>
+              <button 
+                @click="currentView = 'days'; selectedDay = null; fetchSummary(selectedMonth);" 
+                class="hover:text-blue-600 transition-colors font-semibold"
+                :class="{ 'text-slate-700 font-bold': currentView === 'days' }"
+              >
+                {{ formatPeriod(selectedMonth, 'months') }}
+              </button>
+            </template>
+            <template v-if="selectedDay">
+              <span class="text-slate-300">/</span>
+              <span class="text-slate-700 font-bold">
+                Día {{ formatPeriod(selectedDay, 'days').split('/')[0] }}
+              </span>
+            </template>
+            <template v-else-if="currentView === 'records'">
+              <span class="text-slate-300">/</span>
+              <span class="text-slate-700 font-bold">
+                Todos los registros
+              </span>
+            </template>
           </div>
 
           <div class="flex items-center justify-between w-full">
@@ -68,6 +85,32 @@
             
             <!-- Buscador y recargar (solo visibles en vista de registros final) -->
             <div v-if="currentView === 'records'" class="flex items-center gap-3">
+              <!-- Switch back to temporal summary -->
+              <button 
+                v-if="hasSummary" 
+                @click="goBackToSummary"
+                class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors shadow-sm"
+                title="Volver al Resumen Temporal (Meses o Días)"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                Resumen Temporal
+              </button>
+
+              <!-- Switch to View All (only visible if we are currently filtering by a specific day) -->
+              <button 
+                v-if="hasSummary && selectedDay" 
+                @click="viewAllRecords"
+                class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors shadow-sm"
+                title="Ver todos los registros de la tabla"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                </svg>
+                Ver todos los registros
+              </button>
+
               <div class="relative">
                 <input 
                   type="text" 
@@ -480,6 +523,16 @@ const viewAllRecords = () => {
   tableData.value = []
   currentView.value = 'records'
   fetchTableData()
+}
+
+const goBackToSummary = () => {
+  if (selectedMonth.value) {
+    currentView.value = 'days'
+    fetchSummary(selectedMonth.value)
+  } else {
+    currentView.value = 'months'
+    fetchSummary()
+  }
 }
 
 const handleSearch = () => {
