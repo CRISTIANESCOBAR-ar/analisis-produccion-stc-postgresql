@@ -115,12 +115,12 @@ const routes = [
   },
   { 
     path: '/import-control', 
-    component: () => import('./components/produccion/ImportControl.vue'), 
+    component: () => import('./components/configuracion/ImportControl.vue'), 
     meta: { title: 'Control de Importaciones' } 
   },
   { 
     path: '/importaciones', 
-    component: () => import('./components/produccion/ImportControl.vue'), 
+    component: () => import('./components/configuracion/ImportControl.vue'), 
     meta: { title: 'Control de Importaciones' } 
   },
   {

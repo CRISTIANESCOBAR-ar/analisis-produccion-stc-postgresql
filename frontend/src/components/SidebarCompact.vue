@@ -9,7 +9,7 @@
         <div v-if="item.sep" class="w-5 h-px bg-gray-300 my-1"></div>
         <button
           v-else
-          @click="toggleGroup(item.id)"
+          @click="toggleGroup(item.id, $event)"
           v-tippy="{ content: item.label, placement: 'right', theme: 'light', delay: [120, 0] }"
           class="group relative w-full flex items-center justify-center h-10 rounded-lg transition-all"
           :class="isGroupActive(item) || openGroup === item.id
@@ -34,7 +34,8 @@
     <aside
       v-if="openGroup !== null && currentGroup"
       key="panel"
-      class="fixed top-0 left-12 w-56 h-auto max-h-screen bg-gray-100 text-gray-700 z-40 flex flex-col border-r border-gray-200 shadow-xl font-sans overflow-hidden"
+      class="fixed left-12 w-56 h-auto max-h-screen bg-gray-100 text-gray-700 z-40 flex flex-col border border-gray-200 rounded-r-xl shadow-2xl font-sans overflow-hidden"
+      :style="panelStyle"
     >
       <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-none">
         <div class="flex items-center gap-2">
@@ -97,7 +98,6 @@ const groups = [
     icon: '🏭',
     label: 'Producción',
     links: [
-      { to: '/import-control', icon: '📥', label: 'Importar Datos' },
       { to: '/informe-diario', icon: '📊', label: 'Informe STC Diario' },
     ],
   },
@@ -148,13 +148,7 @@ const groups = [
     icon: '⚙️',
     label: 'Configuración',
     links: [
-      { to: '/parametros-hvi', icon: '🎛️', label: 'Parámetros HVI' },
-      { to: '/hvi', icon: '🧬', label: 'Carga HVI (Mistura)' },
-      { to: '/resumen-hvi-datos', icon: '📊', label: 'Resumen Datos HVI' },
-      { to: '/correlacion-mezcla-hilo', icon: '🔬', label: 'Correlación Mezcla → Hilo' },
-      { to: '/dashboard-mezcla', icon: '🏭', label: 'Dashboard Mezcla → Hilo' },
-      { to: '/detalle-mistura-lote', icon: '📊', label: 'Detalle MISTURA' },
-      { to: '/configuracion-estandares', icon: '⚙️', label: 'Estándares y Mezclas' },
+      { to: '/import-control', icon: '📥', label: 'Importar Datos' },
       { to: '/database-explorer', icon: '🗄️', label: 'Explorador DB' },
     ],
   },
@@ -170,8 +164,36 @@ function isGroupActive(group) {
   return group.links?.some(l => l.to === route?.path) ?? false
 }
 
-function toggleGroup(id) {
-  openGroup.value = openGroup.value === id ? null : id
+const activeTopOffset = ref(0)
+
+const panelStyle = computed(() => {
+  if (activeTopOffset.value === 0) return { top: '0px' }
+  
+  const linkCount = currentGroup.value?.links?.length || 0
+  const estimatedHeight = 45 + (linkCount * 38) + 16
+  const viewportHeight = window.innerHeight
+  
+  let top = activeTopOffset.value
+  
+  if (top + estimatedHeight > viewportHeight) {
+    top = Math.max(10, viewportHeight - estimatedHeight - 10)
+  }
+  
+  return {
+    top: `${top}px`
+  }
+})
+
+function toggleGroup(id, event) {
+  if (openGroup.value === id) {
+    openGroup.value = null
+  } else {
+    openGroup.value = id
+    if (event) {
+      const rect = event.currentTarget.getBoundingClientRect()
+      activeTopOffset.value = rect.top
+    }
+  }
 }
 
 watch(() => route?.path, () => { openGroup.value = null })

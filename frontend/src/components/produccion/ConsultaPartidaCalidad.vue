@@ -39,7 +39,7 @@
         <button 
           @click="handleSearch"
           :disabled="!searchQuery.trim() || loading"
-          class="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-4 py-2 rounded-md text-sm font-semibold shadow-sm transition-all flex items-center gap-2"
+          class="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-sm transition-all flex items-center gap-2"
         >
           <span>Buscar</span>
         </button>

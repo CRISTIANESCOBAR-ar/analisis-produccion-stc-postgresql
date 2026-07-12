@@ -19,31 +19,56 @@
 
         <!-- Navegación de fecha -->
         <div class="flex items-center gap-2">
-          <button @click="previousMonth" class="px-3 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors" title="Mes anterior">
+          <button 
+            @click="previousMonth" 
+            class="inline-flex items-center justify-center w-9 h-9 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md" 
+            title="Mes anterior"
+          >
             ≪
           </button>
-          <button @click="previousDay" class="px-3 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors" title="Día anterior">
+          <button 
+            @click="previousDay" 
+            class="inline-flex items-center justify-center w-9 h-9 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md" 
+            title="Día anterior"
+          >
             ‹
           </button>
           <input
             type="date"
             v-model="selectedDate"
             @change="loadData"
-            class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            class="px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 w-40"
           />
-          <button @click="nextDay" class="px-3 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors" title="Día siguiente">
+          <button 
+            @click="nextDay" 
+            class="inline-flex items-center justify-center w-9 h-9 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md" 
+            title="Día siguiente"
+          >
             ›
           </button>
-          <button @click="nextMonth" class="px-3 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors" title="Mes siguiente">
+          <button 
+            @click="nextMonth" 
+            class="inline-flex items-center justify-center w-9 h-9 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md" 
+            title="Mes siguiente"
+          >
             ≫
           </button>
-          <button @click="goToYesterday" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+          <button 
+            @click="goToYesterday" 
+            class="inline-flex items-center justify-center px-3.5 py-2 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md"
+          >
             Ayer
           </button>
-          <button @click="loadData" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors">
+          <button 
+            @click="loadData" 
+            class="inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm"
+          >
             ↻ Actualizar
           </button>
-          <button @click="exportToExcel" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors flex items-center gap-2">
+          <button 
+            @click="exportToExcel" 
+            class="inline-flex items-center gap-1.5 px-3 py-2 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md"
+          >
             📊 Exportar Excel
           </button>
         </div>
@@ -61,7 +86,12 @@
         <span class="text-5xl">📊</span>
         <p class="text-lg font-semibold text-gray-600">No hay datos para este período</p>
         <p class="text-sm">No se encontraron datos de producción para el mes seleccionado.</p>
-        <button @click="loadData" class="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Actualizar</button>
+        <button 
+          @click="loadData" 
+          class="inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm mt-2"
+        >
+          Actualizar
+        </button>
       </div>
 
       <!-- Tabla de datos -->

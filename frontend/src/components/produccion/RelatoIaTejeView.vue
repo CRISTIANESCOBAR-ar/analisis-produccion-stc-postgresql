@@ -148,19 +148,37 @@
             <!-- Herramientas de Exportación -->
             <div class="space-y-1.5">
               <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Exportar Informe</p>
-              <button @click="copiarTexto" class="w-full text-left px-2.5 py-2 rounded-lg text-xs font-semibold bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 transition-all flex items-center gap-2">
+              <button 
+                @click="copiarTexto" 
+                class="w-full text-left px-3 py-2 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md flex items-center gap-2"
+              >
                 📋 {{ copiado ? 'Copiado!' : 'Copiar Texto' }}
               </button>
-              <button @click="descargarMD" class="w-full text-left px-2.5 py-2 rounded-lg text-xs font-semibold bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 transition-all flex items-center gap-2">
+              <button 
+                @click="descargarMD" 
+                class="w-full text-left px-3 py-2 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md flex items-center gap-2"
+              >
                 📝 Descargar Markdown
               </button>
-              <button @click="exportarPNG" :disabled="!!exportando" class="w-full text-left px-2.5 py-2 rounded-lg text-xs font-semibold bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 transition-all flex items-center gap-2 disabled:opacity-50">
+              <button 
+                @click="exportarPNG" 
+                :disabled="!!exportando" 
+                class="w-full text-left px-3 py-2 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md flex items-center gap-2 disabled:opacity-40 disabled:pointer-events-none"
+              >
                 🖼️ {{ exportando === 'png' ? 'Generando PNG...' : 'Exportar Imagen (PNG)' }}
               </button>
-              <button @click="exportarPDF" :disabled="!!exportando" class="w-full text-left px-2.5 py-2 rounded-lg text-xs font-semibold bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 transition-all flex items-center gap-2 disabled:opacity-50">
+              <button 
+                @click="exportarPDF" 
+                :disabled="!!exportando" 
+                class="w-full text-left px-3 py-2 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md flex items-center gap-2 disabled:opacity-40 disabled:pointer-events-none"
+              >
                 📄 {{ exportando === 'pdf' ? 'Generando PDF...' : 'Exportar PDF (A4)' }}
               </button>
-              <button @click="exportarDOCX" :disabled="!!exportando" class="w-full text-left px-2.5 py-2 rounded-lg text-xs font-semibold bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 transition-all flex items-center gap-2 disabled:opacity-50">
+              <button 
+                @click="exportarDOCX" 
+                :disabled="!!exportando" 
+                class="w-full text-left px-3 py-2 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md flex items-center gap-2 disabled:opacity-40 disabled:pointer-events-none"
+              >
                 📝 {{ exportando === 'docx' ? 'Generando Word...' : 'Exportar Word (DOCX)' }}
               </button>
             </div>
