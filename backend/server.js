@@ -2689,7 +2689,39 @@ app.get('/api/calidad/partida/:partidaId', async (req, res) => {
     }
 
     const metragemNum = sqlParseNumberIntl('"METRAGEM"')
+    const pontuacaoNum = sqlParseNumber('"PONTUACAO"')
+    const larguraNum = sqlParseNumber('"LARGURA"')
+    
     const sql = `
+      WITH RAW_PIECES AS (
+        SELECT
+          "PEÇA",
+          "ETIQUETA",
+          "QUALIDADE",
+          MAX(${metragemNum}) AS "METRAGEM",
+          MAX(${pontuacaoNum}) AS "PONTUACAO",
+          MAX(${larguraNum}) AS "LARGURA"
+        FROM tb_calidad
+        WHERE "EMP" = 'STC'
+          AND ("PARTIDA" = $1 OR "PARTIDA" = '0' || $1)
+          AND "QUALIDADE" NOT ILIKE '%RETALHO%'
+        GROUP BY "PEÇA", "ETIQUETA", "QUALIDADE"
+      ),
+      STATS AS (
+        SELECT
+          ROUND(
+            SUM(CASE WHEN "QUALIDADE" ILIKE 'PRIMEIRA%' THEN "METRAGEM" ELSE 0 END)
+            / NULLIF(SUM("METRAGEM"), 0) * 100
+          , 1) AS "Calidad_Perc",
+          ROUND(
+            (SUM(CASE WHEN "QUALIDADE" ILIKE 'PRIMEIRA%' THEN COALESCE("PONTUACAO", 0) ELSE 0 END) * 100)
+            /
+            NULLIF(
+              SUM(CASE WHEN "QUALIDADE" ILIKE 'PRIMEIRA%' THEN "METRAGEM" * COALESCE("LARGURA", 0) ELSE 0 END) / 100
+            , 0)
+          , 1) AS "Pts_100m2"
+        FROM RAW_PIECES
+      )
       SELECT
         "PEÇA",
         "DAT_PROD",
@@ -2706,7 +2738,9 @@ app.get('/api/calidad/partida/:partidaId', async (req, res) => {
         "ARTIGO",
         "COR",
         "NM MERC" AS "NM_MERC",
-        "TRAMA"
+        "TRAMA",
+        (SELECT "Calidad_Perc" FROM STATS) AS "Calidad_Perc",
+        (SELECT "Pts_100m2" FROM STATS) AS "Pts_100m2"
       FROM tb_calidad
       WHERE "EMP" = 'STC'
         AND ("PARTIDA" = $1 OR "PARTIDA" = '0' || $1)
@@ -2720,7 +2754,9 @@ app.get('/api/calidad/partida/:partidaId', async (req, res) => {
       ARTIGO: rows[0].ARTIGO,
       COR: rows[0].COR,
       NM_MERC: rows[0].NM_MERC,
-      TRAMA: rows[0].TRAMA
+      TRAMA: rows[0].TRAMA,
+      Calidad_Perc: rows[0].Calidad_Perc,
+      Pts_100m2: rows[0].Pts_100m2
     } : null
 
     if (!header) {
