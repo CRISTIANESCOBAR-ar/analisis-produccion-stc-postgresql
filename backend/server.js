@@ -2776,8 +2776,24 @@ app.get('/api/calidad/partida/:partidaId', async (req, res) => {
       }
     }
 
-    res.json({ header, rows })
-    console.log(`[PERF] GET /calidad/partida/${partidaId} rows=${rows.length} total=${(hrMs() - t0).toFixed(1)}ms`)
+    let defectos = []
+    if (header) {
+      const defectosSql = `
+        SELECT
+          "PECA" AS "peça",
+          "ETIQUETA" AS "etiqueta",
+          "COD_DEF" AS "cod_def",
+          "DESC_DEFEITO" AS "desc_defeito",
+          "PONTOS" AS "pontos"
+        FROM tb_defectos
+        WHERE "PARTIDA" = $1 OR "PARTIDA" = '0' || $1
+      `
+      const defectosResult = await query(defectosSql, [partidaId], 'calidad/partida-defectos')
+      defectos = defectosResult.rows || []
+    }
+
+    res.json({ header, rows, defectos })
+    console.log(`[PERF] GET /calidad/partida/${partidaId} rows=${rows.length} defectos=${defectos.length} total=${(hrMs() - t0).toFixed(1)}ms`)
   } catch (err) {
     console.error(`Error en /api/calidad/partida/${req.params.partidaId}:`, err)
     res.status(500).json({ error: err.message })

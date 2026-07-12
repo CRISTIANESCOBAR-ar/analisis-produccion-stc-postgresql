@@ -114,7 +114,38 @@
               </thead>
               <tbody class="divide-y divide-slate-100">
                 <tr v-for="(row, idx) in rowsData" :key="idx" class="hover:bg-indigo-50/50 transition-colors group">
-                  <td class="px-4 py-2 text-xs font-mono font-medium text-slate-700 group-hover:text-indigo-700">{{ row.PEÇA }}</td>
+                  <td class="px-4 py-2 text-xs font-mono font-medium text-slate-700 group-hover:text-indigo-700 relative group/tooltip cursor-help">
+                    {{ row.PEÇA }}
+                    
+                    <!-- Tooltip de Defectos -->
+                    <div 
+                      v-if="getDefectosPieza(row.PEÇA).length" 
+                      class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2.5 hidden group-hover/tooltip:block bg-slate-900 text-slate-100 rounded-lg p-3 text-xs w-64 shadow-xl z-50 pointer-events-none border border-slate-700/80 transition-all duration-200"
+                    >
+                      <div class="font-bold border-b border-slate-700 pb-1.5 mb-2 flex items-center justify-between text-indigo-400">
+                        <span>Defectos de la Pieza</span>
+                        <span class="text-[10px] bg-indigo-950 text-indigo-300 px-2 py-0.5 rounded border border-indigo-850">
+                          {{ getDefectosPieza(row.PEÇA).length }}
+                        </span>
+                      </div>
+                      <ul class="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                        <li 
+                          v-for="(def, idx) in getDefectosPieza(row.PEÇA)" 
+                          :key="idx" 
+                          class="flex justify-between items-start gap-2 border-b border-slate-800/40 pb-1.5 last:border-0 last:pb-0"
+                        >
+                          <span class="text-slate-300 font-medium leading-tight text-left">
+                            {{ def.cod_def }} - {{ def.desc_defeito }}
+                          </span>
+                          <span class="font-bold text-amber-400 shrink-0 font-mono text-[10px] bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/10">
+                            {{ def.pontos }} pts
+                          </span>
+                        </li>
+                      </ul>
+                      <!-- Flecha indicadora apuntando hacia abajo -->
+                      <div class="absolute top-full left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-slate-900 rotate-45 border-r border-b border-slate-700/80"></div>
+                    </div>
+                  </td>
                   <td class="px-4 py-2 text-xs text-slate-600 whitespace-nowrap">{{ formatDate(row.DAT_PROD) }}</td>
                   <td class="px-4 py-2 text-xs text-slate-600 whitespace-nowrap">
                     <span :class="{'bg-green-100 text-green-700': row.GRP_DEF === 'S/ Def.', 'bg-red-100 text-red-700': row.GRP_DEF !== 'S/ Def.'}" class="px-1.5 py-0.5 rounded font-semibold text-[10px]">
@@ -161,13 +192,14 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 
 const searchQuery = ref('');
 const loading = ref(false);
 const hasSearched = ref(false);
 const headerData = ref(null);
 const rowsData = ref([]);
+const defectosData = ref([]);
 
 const columns = [
   { key: 'PEÇA', label: 'Peça' },
@@ -191,6 +223,7 @@ const handleSearch = async () => {
   hasSearched.value = true;
   headerData.value = null;
   rowsData.value = [];
+  defectosData.value = [];
 
   try {
     // Quita ceros a la izquierda
@@ -209,9 +242,11 @@ const handleSearch = async () => {
     if (data.header) {
       headerData.value = data.header;
       rowsData.value = data.rows || [];
+      defectosData.value = data.defectos || [];
     } else {
       // No encontrado
       headerData.value = null;
+      defectosData.value = [];
     }
   } catch (error) {
     console.error(error);
@@ -261,5 +296,32 @@ const getPtsColor = (val) => {
   if (num < 20) return 'text-emerald-600';
   if (num < 40) return 'text-amber-600';
   return 'text-rose-600';
+};
+
+// Agrupación reactiva de defectos por pieza/etiqueta
+const defectosPorPieza = computed(() => {
+  const map = {};
+  defectosData.value.forEach(d => {
+    const piezaKey = d.peça ? String(d.peça).trim().replace(/^0+/, '') : '';
+    const etiquetaKey = d.etiqueta ? String(d.etiqueta).trim() : '';
+
+    if (piezaKey) {
+      if (!map[piezaKey]) map[piezaKey] = [];
+      map[piezaKey].push(d);
+    }
+    if (etiquetaKey) {
+      if (!map[etiquetaKey]) map[etiquetaKey] = [];
+      if (!piezaKey || !map[etiquetaKey].some(item => item.cod_def === d.cod_def && item.peça === d.peça)) {
+        map[etiquetaKey].push(d);
+      }
+    }
+  });
+  return map;
+});
+
+const getDefectosPieza = (pecaVal) => {
+  if (!pecaVal) return [];
+  const key = String(pecaVal).trim().replace(/^0+/, '');
+  return defectosPorPieza.value[key] || [];
 };
 </script>
