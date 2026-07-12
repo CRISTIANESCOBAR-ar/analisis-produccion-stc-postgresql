@@ -119,18 +119,18 @@
                     
                     <!-- Tooltip de Defectos -->
                     <div 
-                      v-if="getDefectosPieza(row.PEÇA).length" 
+                      v-if="getDefectosPieza(row).length" 
                       class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2.5 hidden group-hover/tooltip:block bg-slate-900 text-slate-100 rounded-lg p-3 text-xs w-64 shadow-xl z-50 pointer-events-none border border-slate-700/80 transition-all duration-200"
                     >
                       <div class="font-bold border-b border-slate-700 pb-1.5 mb-2 flex items-center justify-between text-indigo-400">
                         <span>Defectos de la Pieza</span>
                         <span class="text-[10px] bg-indigo-950 text-indigo-300 px-2 py-0.5 rounded border border-indigo-850">
-                          {{ getDefectosPieza(row.PEÇA).length }}
+                          {{ getDefectosPieza(row).length }}
                         </span>
                       </div>
                       <ul class="space-y-1.5 max-h-40 overflow-y-auto pr-1">
                         <li 
-                          v-for="(def, idx) in getDefectosPieza(row.PEÇA)" 
+                          v-for="(def, idx) in getDefectosPieza(row)" 
                           :key="idx" 
                           class="flex justify-between items-start gap-2 border-b border-slate-800/40 pb-1.5 last:border-0 last:pb-0"
                         >
@@ -319,9 +319,25 @@ const defectosPorPieza = computed(() => {
   return map;
 });
 
-const getDefectosPieza = (pecaVal) => {
-  if (!pecaVal) return [];
-  const key = String(pecaVal).trim().replace(/^0+/, '');
-  return defectosPorPieza.value[key] || [];
+const getDefectosPieza = (row) => {
+  if (!row) return [];
+  
+  // 1. Intentar buscar por etiqueta (label) - Es el más unívoco
+  const etiquetaKey = row.ETIQUETA ? String(row.ETIQUETA).trim() : '';
+  if (etiquetaKey && defectosPorPieza.value[etiquetaKey]) {
+    return defectosPorPieza.value[etiquetaKey];
+  }
+  
+  // 2. Intentar buscar por el número corto de pieza (los últimos 3 dígitos de row.PEÇA)
+  if (row.PEÇA) {
+    const fullPecaStr = String(row.PEÇA).trim();
+    const shortPeca = fullPecaStr.length >= 3 ? fullPecaStr.substring(fullPecaStr.length - 3) : fullPecaStr;
+    const key = shortPeca.replace(/^0+/, '');
+    if (key && defectosPorPieza.value[key]) {
+      return defectosPorPieza.value[key];
+    }
+  }
+  
+  return [];
 };
 </script>
