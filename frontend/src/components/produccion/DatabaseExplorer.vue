@@ -89,23 +89,89 @@
         </div>
 
         <!-- Paginación -->
-        <footer class="p-3 border-t border-slate-200 bg-white shrink-0 flex items-center justify-between">
-          <span class="text-sm text-slate-500">Filas por página: {{ itemsPerPage }}</span>
-          <div class="flex gap-2">
-            <button 
-              @click="changePage(currentPage - 1)" 
-              :disabled="currentPage <= 1 || loading"
-              class="px-3 py-1.5 rounded text-sm font-medium border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:pointer-events-none transition-colors"
-            >
-              Anterior
-            </button>
-            <button 
-              @click="changePage(currentPage + 1)" 
-              :disabled="currentPage >= totalPages || loading"
-              class="px-3 py-1.5 rounded text-sm font-medium border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:pointer-events-none transition-colors bg-white shadow-sm"
-            >
-              Siguiente
-            </button>
+        <footer class="p-4 border-t border-slate-200 bg-white shrink-0 flex flex-wrap items-center justify-between gap-4 select-none">
+          <!-- Left: Showing records range -->
+          <div class="text-sm text-slate-600 font-medium">
+            <span v-if="totalRows > 0">
+              Mostrando <span class="text-slate-800 font-semibold">{{ startRange }}–{{ endRange }}</span> de <span class="text-slate-800 font-semibold">{{ totalRows }}</span>
+            </span>
+            <span v-else>No hay registros</span>
+          </div>
+
+          <!-- Center/Right: Controls -->
+          <div class="flex flex-wrap items-center gap-6">
+            <!-- Records per page -->
+            <div class="flex items-center gap-2 text-sm text-slate-600">
+              <span>Registros por página:</span>
+              <select 
+                v-model="itemsPerPage" 
+                @change="handleLimitChange"
+                class="border border-slate-300 rounded px-2.5 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-700 cursor-pointer shadow-sm"
+              >
+                <option :value="10">10</option>
+                <option :value="25">25</option>
+                <option :value="50">50</option>
+                <option :value="100">100</option>
+              </select>
+            </div>
+
+            <!-- Navigation Buttons -->
+            <div class="flex items-center gap-1">
+              <button 
+                @click="changePage(1)" 
+                :disabled="currentPage <= 1 || loading"
+                class="px-2.5 py-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition-colors shadow-sm"
+              >
+                « Primera
+              </button>
+              <button 
+                @click="changePage(currentPage - 1)" 
+                :disabled="currentPage <= 1 || loading"
+                class="px-2.5 py-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition-colors shadow-sm"
+              >
+                ‹ Anterior
+              </button>
+
+              <!-- Go to page -->
+              <div class="flex items-center gap-1.5 text-sm text-slate-600 mx-2">
+                <span>Ir a página</span>
+                <input 
+                  type="number" 
+                  v-model="goToPageInput"
+                  min="1"
+                  :max="totalPages"
+                  @keyup.enter="handleGoToPage"
+                  class="w-12 text-center border border-slate-300 rounded px-1.5 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-slate-700"
+                >
+                <button 
+                  @click="handleGoToPage"
+                  :disabled="loading"
+                  class="px-2.5 py-1 text-xs font-semibold bg-slate-100 border border-slate-300 rounded hover:bg-slate-200 active:bg-slate-300 disabled:opacity-50 transition-colors shadow-sm text-slate-700"
+                >
+                  Ir
+                </button>
+              </div>
+
+              <!-- Current / Total Pages -->
+              <span class="text-sm text-slate-600 mx-2 font-semibold bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1 shadow-inner">
+                Página {{ currentPage }} / {{ totalPages }}
+              </span>
+
+              <button 
+                @click="changePage(currentPage + 1)" 
+                :disabled="currentPage >= totalPages || loading"
+                class="px-2.5 py-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition-colors shadow-sm"
+              >
+                Siguiente ›
+              </button>
+              <button 
+                @click="changePage(totalPages)" 
+                :disabled="currentPage >= totalPages || loading"
+                class="px-2.5 py-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none transition-colors shadow-sm"
+              >
+                Última »
+              </button>
+            </div>
           </div>
         </footer>
       </div>
@@ -123,7 +189,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 
 const tables = ref([])
 const selectedTable = ref(null)
@@ -135,9 +201,19 @@ const searchQuery = ref('')
 
 // Pagination
 const currentPage = ref(1)
-const itemsPerPage = ref(50)
+const itemsPerPage = ref(25)
 const totalPages = ref(1)
 const totalRows = ref(0)
+const goToPageInput = ref(1)
+
+const startRange = computed(() => {
+  if (totalRows.value === 0) return 0
+  return (currentPage.value - 1) * itemsPerPage.value + 1
+})
+
+const endRange = computed(() => {
+  return Math.min(currentPage.value * itemsPerPage.value, totalRows.value)
+})
 
 const fetchTables = async () => {
   try {
@@ -173,6 +249,7 @@ const fetchTableData = async () => {
       totalPages.value = json.pagination.totalPages
       totalRows.value = json.pagination.total
       currentPage.value = json.pagination.page
+      goToPageInput.value = json.pagination.page
     }
   } catch (e) {
     console.error(`Error al cargar datos de ${selectedTable.value}:`, e)
@@ -194,6 +271,18 @@ const selectTable = (tableName) => {
 const handleSearch = () => {
   currentPage.value = 1
   fetchTableData()
+}
+
+const handleLimitChange = () => {
+  currentPage.value = 1
+  fetchTableData()
+}
+
+const handleGoToPage = () => {
+  let val = parseInt(goToPageInput.value)
+  if (isNaN(val) || val < 1) val = 1
+  if (val > totalPages.value) val = totalPages.value
+  changePage(val)
 }
 
 const changePage = (newPage) => {

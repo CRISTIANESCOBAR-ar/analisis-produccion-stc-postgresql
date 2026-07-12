@@ -85,42 +85,12 @@ if ($status -eq "healthy") {
   PostgreSQL listo
 ------------------------------------------------------------
   Host:     localhost
-  Puerto:   5433 (contenedor) / 5434 (túnel SSH para backend)
+  Puerto:   5433
   BD:       stc_produccion
   Usuario:  stc_user
   Password: stc_password_2026
 ============================================================
 "@ -ForegroundColor Green
-
-    # ---------- 4. Tunel SSH (Windows → container via Podman SSH) ----------
-    # El wslrelay no reenvía correctamente el protocolo postgres cuando hay
-    # múltiples distros WSL. El túnel SSH bypasea este problema.
-    Write-Host "`n[+] Levantando túnel SSH postgres (localhost:5434 → container:5432)..." -ForegroundColor Cyan
-    $containerIP = podman inspect stc_postgres --format "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}" 2>$null
-    $sshKey = "$env:USERPROFILE\.local\share\containers\podman\machine\machine"
-    $sshPort = Get-PodmanSshPort
-    if (-not $sshPort) { $sshPort = 64061 }
-
-    # Matar túnel previo en port 5434 si existe
-    Stop-Process -Name ssh -ErrorAction SilentlyContinue
-
-    $sshArgs = @(
-        "-o", "StrictHostKeyChecking=no",
-        "-o", "BatchMode=yes",
-        "-i", $sshKey,
-        "-N",
-        "-L", "5434:${containerIP}:5432",
-        "user@127.0.0.1",
-        "-p", $sshPort
-    )
-    $tunnelProc = Start-Process ssh -ArgumentList $sshArgs -WindowStyle Hidden -PassThru
-    Start-Sleep -Seconds 2
-
-    if (Test-NetConnection -ComputerName localhost -Port 5434 -WarningAction SilentlyContinue | Select-Object -ExpandProperty TcpTestSucceeded) {
-        Write-Host "     Túnel activo (PID $($tunnelProc.Id)) en localhost:5434" -ForegroundColor Green
-    } else {
-        Write-Host "     [WARN] Túnel no respondió en port 5434. Verificar manualmente." -ForegroundColor Yellow
-    }
 } else {
     Write-Host "`n[ERROR] El contenedor no alcanzó estado 'healthy' en $maxWait s." -ForegroundColor Red
     Write-Host "Revisa los logs con:  podman logs stc_postgres" -ForegroundColor Yellow

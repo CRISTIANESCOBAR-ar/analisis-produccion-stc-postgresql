@@ -670,20 +670,15 @@ async function scanDirectory(dirHandle) {
   let newScanList = Object.values(map).sort((a, b) => a.testnr.localeCompare(b.testnr));
 
   if (newScanList.length > 0) {
-    console.log('Llamando a checkExistingTests...');
     try {
       const existingTests = await checkExistingTests(newScanList.map(item => item.testnr));
-      console.log('existingTests recibido:', existingTests);
-      console.log('Tipo de existingTests:', typeof existingTests, Array.isArray(existingTests));
 
       const existingSet = new Set(existingTests);
-      console.log('existingSet creado:', existingSet);
 
       // **LA CORRECCIÓN ESTÁ AQUÍ**
       // Creamos un array completamente nuevo usando .map() para asegurar la reactividad
       newScanList = newScanList.map(item => {
         const isInDb = existingSet.has(item.testnr);
-        console.log(`Verificando ${item.testnr}: existingSet.has() = ${isInDb}`);
         return {
           ...item, // Copiamos todas las propiedades existentes del item
           imp: isInDb // Sobrescribimos 'imp' con el valor correcto
