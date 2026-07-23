@@ -1,6 +1,38 @@
 <template>
-  <div class="w-full h-screen flex flex-col p-1">
-    <main class="w-full flex-1 min-h-0 bg-white rounded-2xl shadow-xl px-4 py-3 border border-slate-200 flex flex-col">
+  <div class="w-full h-screen flex flex-col p-1 bg-slate-100">
+    <!-- Header con Barra de Pestañas Principal -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 px-4 py-2 mb-1 flex items-center justify-between flex-shrink-0">
+      <div class="flex items-center gap-2">
+        <span class="text-xl">🧪</span>
+        <h3 class="text-base font-bold text-slate-800">Mesa de Test & Revisión</h3>
+      </div>
+
+      <!-- Tabs Nav -->
+      <div class="flex items-center gap-2 bg-slate-100 p-1 rounded-lg border border-slate-200">
+        <button 
+          @click="tabActivo = 'seguimiento'"
+          class="px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5"
+          :class="tabActivo === 'seguimiento' ? 'bg-white shadow text-blue-700 font-extrabold' : 'text-slate-600 hover:text-slate-900'"
+        >
+          <span>📊</span> Seguimiento & Tendencias
+        </button>
+        <button 
+          @click="tabActivo = 'analisis'"
+          class="px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5"
+          :class="tabActivo === 'analisis' ? 'bg-white shadow text-blue-700 font-extrabold' : 'text-slate-600 hover:text-slate-900'"
+        >
+          <span>📉</span> Análisis Gráfico por Artículo
+        </button>
+      </div>
+    </div>
+
+    <!-- Contenido Pestaña 1: Seguimiento & Tendencias Global / Día Anterior -->
+    <div v-if="tabActivo === 'seguimiento'" class="flex-1 min-h-0 flex flex-col">
+      <SeguimientoMesaTest />
+    </div>
+
+    <!-- Contenido Pestaña 2: Análisis por Artículo Individual (Vista previa) -->
+    <main v-else class="w-full flex-1 min-h-0 bg-white rounded-2xl shadow-xl px-4 py-3 border border-slate-200 flex flex-col">
       <!-- Header con filtros -->
       <div v-if="!articuloSeleccionado" class="flex items-center justify-between gap-4 flex-shrink-0 mb-2">
         <h3 class="text-lg font-semibold text-slate-800">Análisis de Mesa de Test</h3>
@@ -248,8 +280,11 @@ import { ref, onMounted, onBeforeUnmount, watch, nextTick, computed } from 'vue'
 import { Chart, registerables } from 'chart.js'
 import { formatNumber as formatNum } from '@/utils/formatters'
 import CustomDatepicker from '../CustomDatepicker.vue'
+import SeguimientoMesaTest from './SeguimientoMesaTest.vue'
 
 Chart.register(...registerables)
+
+const tabActivo = ref('seguimiento') // 'seguimiento' | 'analisis'
 
 // Estrategia despliegue (Podman/servidor): usar misma origin y rutas relativas.
 // En dev, Vite ya proxyfía /api hacia el backend. Si alguna vez se necesita,
@@ -578,6 +613,123 @@ const renderChart = () => {
   
   const rotacion = calcularRotacion()
   
+  const getOrCreateTooltip = (chart) => {
+    let tooltipEl = chart.canvas.parentNode.querySelector('div.custom-chart-tooltip')
+    if (!tooltipEl) {
+      tooltipEl = document.createElement('div')
+      tooltipEl.className = 'custom-chart-tooltip'
+      tooltipEl.style.background = 'rgba(255, 255, 255, 0.97)'
+      tooltipEl.style.borderRadius = '8px'
+      tooltipEl.style.border = '1px solid #cbd5e1'
+      tooltipEl.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1)'
+      tooltipEl.style.color = '#334155'
+      tooltipEl.style.fontFamily = "'Segoe UI', 'Ubuntu', system-ui, -apple-system, sans-serif"
+      tooltipEl.style.opacity = '0'
+      tooltipEl.style.pointerEvents = 'none'
+      tooltipEl.style.position = 'absolute'
+      tooltipEl.style.transition = 'all .1s ease'
+      tooltipEl.style.padding = '10px 14px'
+      tooltipEl.style.zIndex = '50'
+      chart.canvas.parentNode.appendChild(tooltipEl)
+    }
+    return tooltipEl
+  }
+
+  const externalTooltipHandler = (context) => {
+    const { chart, tooltip } = context
+    const tooltipEl = getOrCreateTooltip(chart)
+
+    if (tooltip.opacity === 0) {
+      tooltipEl.style.opacity = '0'
+      return
+    }
+
+    const index = tooltip.dataPoints[0]?.dataIndex
+    const dato = (index !== undefined && datosGrafico.value[index]) ? datosGrafico.value[index] : null
+
+    let innerHtml = '<div style="min-width: 175px;">'
+
+    // Encabezado: Partida en la posición superior sobre la línea divisoria
+    const partidaVal = dato?.Partida || '-'
+    innerHtml += `<div style="font-weight: 700; color: #0f172a; font-size: 13px; margin-bottom: 6px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">Partida: ${partidaVal}</div>`
+
+    innerHtml += '<div style="font-size: 12px; display: flex; flex-direction: column; gap: 4px;">'
+
+    // 1. Fecha Prod, 2. Hora Prod, 3. Turno
+    innerHtml += `
+      <div style="display: flex; justify-content: space-between; gap: 12px;">
+        <span style="font-weight: 400; color: #475569;">Fecha Prod:</span>
+        <span style="font-weight: 500; color: #334155; font-family: monospace;">${formatFechaCorta(dato?.Fecha || dato?.dt_prod)}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; gap: 12px;">
+        <span style="font-weight: 400; color: #475569;">Hora Prod:</span>
+        <span style="font-weight: 500; color: #334155; font-family: monospace;">${dato?.Hora || dato?.hora_prod || '-'}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; gap: 12px; margin-bottom: 2px;">
+        <span style="font-weight: 400; color: #475569;">Turno:</span>
+        <span style="font-weight: 500; color: #334155; font-family: monospace;">${dato?.Turno || dato?.turno || '-'}</span>
+      </div>
+    `
+
+    // Puntos graficados: Valor Real, Promedio Período, Límite Mínimo, Estándar, Límite Máximo
+    if (tooltip.body) {
+      tooltip.dataPoints.forEach((point) => {
+        const label = point.dataset.label || ''
+        const value = point.parsed.y
+        const color = point.dataset.borderColor || '#334155'
+        const formattedVal = (value === null || value === undefined || isNaN(value))
+          ? '-'
+          : (Number.isInteger(value) ? value : Number(value).toFixed(2))
+
+        const isBold = (label === 'Valor Real' || label === 'Promedio Período' || label === 'Promedio')
+        const labelWeight = isBold ? '700' : '400'
+        const labelColor = isBold ? '#0f172a' : '#475569'
+        const valWeight = isBold ? '700' : '500'
+        const valColor = isBold ? '#0f172a' : '#334155'
+
+        innerHtml += `
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="display: inline-block; width: 10px; height: 10px; border-radius: 2px; background-color: ${color}; flex-shrink: 0;"></span>
+              <span style="font-weight: ${labelWeight}; color: ${labelColor};">${label}:</span>
+            </div>
+            <span style="font-weight: ${valWeight}; color: ${valColor}; font-family: monospace;">${formattedVal}</span>
+          </div>
+        `
+      })
+    }
+
+    // Máquina al final
+    innerHtml += `
+      <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #e2e8f0; display: flex; justify-content: space-between; gap: 12px;">
+        <span style="font-weight: 400; color: #475569;">Máquina:</span>
+        <span style="font-weight: 500; color: #334155; font-family: monospace;">${dato?.Maquina || '-'}</span>
+      </div>
+    `
+
+    innerHtml += '</div></div>'
+    tooltipEl.innerHTML = innerHtml
+
+    const parentRect = chart.canvas.parentNode.getBoundingClientRect()
+    const tooltipWidth = tooltipEl.offsetWidth || 185
+    const tooltipHeight = tooltipEl.offsetHeight || 220
+
+    let left = tooltip.caretX + 12
+    let top = tooltip.caretY - tooltipHeight / 2
+
+    if (left + tooltipWidth > parentRect.width - 10) {
+      left = tooltip.caretX - tooltipWidth - 12
+    }
+    if (top < 10) top = 10
+    if (top + tooltipHeight > parentRect.height - 10) {
+      top = parentRect.height - tooltipHeight - 10
+    }
+
+    tooltipEl.style.opacity = '1'
+    tooltipEl.style.left = left + 'px'
+    tooltipEl.style.top = top + 'px'
+  }
+
   try {
     const ctx = chartCanvas.value.getContext('2d')
     
@@ -598,6 +750,15 @@ const renderChart = () => {
             pointHoverBackgroundColor: 'rgb(37, 99, 235)',
             pointHoverBorderColor: 'white',
             tension: 0.3
+          },
+          {
+            label: 'Promedio Período',
+            data: labels.map(() => promedioGrafico.value),
+            borderColor: 'rgb(249, 115, 22)', // orange-500
+            borderWidth: 2,
+            borderDash: [3, 3],
+            pointRadius: 0,
+            fill: false
           },
           {
             label: 'Límite Mínimo',
@@ -622,15 +783,6 @@ const renderChart = () => {
             borderColor: 'rgb(239, 68, 68)',
             borderWidth: 2,
             borderDash: [5, 5],
-            pointRadius: 0,
-            fill: false
-          },
-          {
-            label: 'Promedio',
-            data: labels.map(() => promedioGrafico.value),
-            borderColor: 'rgb(249, 115, 22)', // orange-500
-            borderWidth: 2,
-            borderDash: [3, 3],
             pointRadius: 0,
             fill: false
           }
@@ -660,44 +812,13 @@ const renderChart = () => {
             display: false
           },
           tooltip: {
-            backgroundColor: 'rgba(0, 0, 0, 0.85)',
-            padding: 12,
-            titleColor: 'white',
-            titleFont: {
-              size: 13,
-              weight: 'bold'
-            },
-            bodyColor: 'white',
-            bodyFont: {
-              size: 12
-            },
-            bodySpacing: 6,
-            borderColor: 'rgba(255, 255, 255, 0.2)',
-            borderWidth: 1,
-            displayColors: true,
+            enabled: false,
+            external: externalTooltipHandler,
             callbacks: {
               title: (items) => {
                 if (!items || items.length === 0) return ''
                 const lbl = items[0].label
                 return formatFechaCorta(lbl)
-              },
-              label: (context) => {
-                const datasetLabel = context.dataset.label || ''
-                const value = context.parsed.y
-                if (datasetLabel === 'Valor Real') {
-                  return `${datasetLabel}: ${value.toFixed(2)}`
-                }
-                return `${datasetLabel}: ${value}`
-              },
-              afterBody: (items) => {
-                if (!items || items.length === 0) return []
-                const index = items[0].dataIndex
-                const dato = datosGrafico.value[index]
-                return [
-                  '',
-                  `Partida: ${dato.Partida || '-'}`,
-                  `Máquina: ${dato.Maquina || '-'}`
-                ]
               }
             }
           }

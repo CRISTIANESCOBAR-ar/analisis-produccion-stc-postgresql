@@ -1578,8 +1578,8 @@ app.get('/api/produccion/calidad/articulos-mesa-test', async (req, res) => {
     const calDatProdDate = sqlParseDate('"DAT_PROD"')
     const calMetragemNum = sqlParseNumberIntl('"METRAGEM"')
 
-    const testesDtProdDate = sqlParseDate('"DT_PROD"')
-    const testesMetragemNum = sqlParseNumberIntl('"METRAGEM"')
+    const testesDtProdDate = sqlParseDate('"dt_prod"')
+    const testesMetragemNum = sqlParseNumberIntl('"metragem"')
 
     const sql = `
       WITH MetricasCalidad AS (
@@ -1596,13 +1596,13 @@ app.get('/api/produccion/calidad/articulos-mesa-test', async (req, res) => {
       ),
       MetricasTestesPartida AS (
         SELECT
-          "ARTIGO" AS ARTIGO,
-          btrim("PARTIDA") AS PARTIDA,
+          "artigo" AS ARTIGO,
+          btrim("partida") AS PARTIDA,
           AVG(COALESCE(${testesMetragemNum}, 0)) AS METRAGEM_AVG
         FROM tb_testes
         WHERE
           ${testesDtProdDate} BETWEEN $1::date AND $2::date
-        GROUP BY "ARTIGO", btrim("PARTIDA")
+        GROUP BY "artigo", btrim("partida")
       ),
       MetricasTestes AS (
         SELECT
@@ -1662,13 +1662,13 @@ app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
     const startDate = String(fecha_inicial)
     const endDate = fecha_final ? String(fecha_final) : '2099-12-31'
 
-    const testesDtProdDate = sqlParseDate('"DT_PROD"')
+    const testesDtProdDate = sqlParseDate('"dt_prod"')
     const calDatProdDate = sqlParseDate('"DAT_PROD"')
 
-    const tMetragemNum = sqlParseNumberIntl('"METRAGEM"')
-    const tLargAlNum = sqlParseNumberIntl('"LARG_AL"')
-    const tGramatNum = sqlParseNumberIntl('"GRAMAT"')
-    const tPotenNum = sqlParseNumberIntl('"POTEN"')
+    const tMetragemNum = sqlParseNumberIntl('"metragem"')
+    const tLargAlNum = sqlParseNumberIntl('"larg_al"')
+    const tGramatNum = sqlParseNumberIntl('"gramat"')
+    const tPotenNum = sqlParseNumberIntl('"poten"')
     const tEncUrdNum = sqlParseNumberIntl('"%_ENC_URD"')
     const tEncTramaNum = sqlParseNumberIntl('"%_ENC_TRAMA"')
     const tSk1Num = sqlParseNumberIntl('"%_SK1"')
@@ -1702,14 +1702,16 @@ app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
     const sql = `
       WITH TESTES AS (
         SELECT
-          "MAQUINA" AS maquina,
-          "ARTIGO" AS art_test,
-          btrim("PARTIDA") AS partida,
-          "ARTIGO" AS testes,
-          "DT_PROD" AS dt_prod,
-          "APROV" AS aprov,
-          "OBS" AS obs,
-          "REPROCESSO" AS reprocesso,
+          "maquina" AS maquina,
+          "artigo" AS art_test,
+          btrim("partida") AS partida,
+          "artigo" AS testes,
+          "dt_prod" AS dt_prod,
+          "hora_prod" AS hora_prod,
+          "turno" AS turno,
+          "aprov" AS aprov,
+          "obs" AS obs,
+          "reprocesso" AS reprocesso,
           ${tMetragemNum} AS metragem_num,
           ${tLargAlNum} AS larg_al_num,
           ${tGramatNum} AS gramat_num,
@@ -1725,7 +1727,7 @@ app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
           ${tSkmNum} AS skm_num
         FROM tb_testes
         WHERE
-          "ARTIGO" = $1
+          "artigo" = $1
           AND ${testesDtProdDate} BETWEEN $2::date AND $3::date
       ),
       CALIDAD AS (
@@ -1786,6 +1788,8 @@ app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
         TC.partida AS "Partida",
         TC.testes AS "C",
         TC.dt_prod AS "Fecha",
+        TC.hora_prod AS "Hora",
+        TC.turno AS "Turno",
         TC.aprov AS "Ap",
         TC.obs AS "Obs",
         TC.reprocesso AS "R",
@@ -1867,6 +1871,393 @@ app.get('/api/produccion/calidad/analisis-mesa-test', async (req, res) => {
     )
   } catch (err) {
     console.error('Error en /calidad/analisis-mesa-test:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/produccion/calidad/resumen-dia-anterior?fecha=YYYY-MM-DD
+// Retorna los ensayos individuales del día (o la última fecha con datos en tb_testes)
+// con valores reales de tb_testes, datos de tb_calidad si disponibles por partida,
+// y especificaciones de tb_fichas para comparar contra rangos.
+app.get('/api/produccion/calidad/resumen-dia-anterior', async (req, res) => {
+  try {
+    const t0 = hrMs()
+    const { fecha } = req.query
+
+    const testesDtProdDate = sqlParseDate('"dt_prod"')
+    const calDatProdDate = sqlParseDate('"DAT_PROD"')
+
+    const tEncUrdNum = sqlParseNumberIntl('"%_ENC_URD"')
+    const tEncTramaNum = sqlParseNumberIntl('"%_ENC_TRAMA"')
+    const tLargAlNum = sqlParseNumberIntl('"larg_al"')
+    const tGramatNum = sqlParseNumberIntl('"gramat"')
+    const tMetragemNum = sqlParseNumberIntl('"metragem"')
+    const tPotenNum = sqlParseNumberIntl('"poten"')
+
+    const cLarguraNum = sqlParseNumberIntl('"LARGURA"')
+    const cGrm2Num = sqlParseNumberIntl('"GR/M2"')
+    const cMetragemNum = sqlParseNumberIntl('"METRAGEM"')
+
+    const fLargMinNum = sqlParseNumberIntl('"LARGURA MIN"')
+    const fLargStdNum = sqlParseNumberIntl('"LARGURA"')
+    const fLargMaxNum = sqlParseNumberIntl('"LARGURA MAX"')
+    const fPesoM2Num = sqlParseNumberIntl('"Peso/m2"')
+    const fUrdMinNum = sqlParseNumberIntl('"URD.MIN"')
+    const fUrdMaxNum = sqlParseNumberIntl('"URD.MAX"')
+
+    // 1. Determinar la fecha objetivo (la última fecha con datos si no viene como parámetro)
+    let targetDateStr = fecha ? String(fecha).split('T')[0] : null
+    if (!targetDateStr) {
+      const maxDateRes = await query(
+        `SELECT MAX(${testesDtProdDate})::text AS max_fecha FROM tb_testes WHERE "dt_prod" IS NOT NULL`,
+        [],
+        'calidad/max-fecha-testes'
+      )
+      targetDateStr = maxDateRes.rows[0]?.max_fecha ? maxDateRes.rows[0].max_fecha.split('T')[0] : new Date().toISOString().split('T')[0]
+    }
+
+    // 2. Traer las fechas vecinas disponibles (para navegación prev/next)
+    const vecinasRes = await query(
+      `SELECT DISTINCT ${testesDtProdDate} AS dt 
+       FROM tb_testes 
+       WHERE ${testesDtProdDate} IS NOT NULL 
+       ORDER BY dt DESC 
+       LIMIT 30`,
+      [],
+      'calidad/fechas-disponibles'
+    )
+    const fechasDisponibles = vecinasRes.rows.map(r => r.dt?.toISOString?.() ? r.dt.toISOString().split('T')[0] : String(r.dt).split('T')[0])
+
+    // 3. Consulta principal: cada ensayo individual del día
+    const sql = `
+      WITH TESTES AS (
+        SELECT
+          "maquina" AS maquina,
+          "artigo" AS artigo,
+          btrim("partida") AS partida,
+          "dt_prod" AS dt_prod_raw,
+          ${testesDtProdDate} AS dt_prod,
+          "hora_prod" AS hora_prod,
+          "turno" AS turno,
+          "aprov" AS aprov,
+          "obs" AS obs,
+          "reprocesso" AS reprocesso,
+          ${tMetragemNum} AS metragem,
+          ${tLargAlNum} AS ancho_test,
+          ${tGramatNum} AS peso_test,
+          ${tPotenNum} AS potencial,
+          ${tEncUrdNum} AS enc_urd,
+          ${tEncTramaNum} AS enc_trama
+        FROM tb_testes
+        WHERE ${testesDtProdDate} = $1::date
+          AND "artigo" IS NOT NULL
+      ),
+      CALIDAD_POR_PARTIDA AS (
+        SELECT
+          "ARTIGO" AS artigo,
+          btrim("PARTIDA") AS partida,
+          ROUND(AVG(COALESCE(${cLarguraNum}, 0)), 1) AS ancho_mesa,
+          ROUND(AVG(COALESCE(${cGrm2Num}, 0)), 1) AS peso_mesa,
+          ROUND(SUM(COALESCE(${cMetragemNum}, 0)), 0) AS metros_mesa,
+          MIN(${calDatProdDate})::text AS fecha_calidad
+        FROM tb_calidad
+        WHERE "ARTIGO" IN (SELECT DISTINCT artigo FROM TESTES)
+          AND btrim("PARTIDA") IN (SELECT DISTINCT partida FROM TESTES)
+        GROUP BY "ARTIGO", btrim("PARTIDA")
+      ),
+      FICHAS AS (
+        SELECT
+          "ARTIGO CODIGO" AS codigo,
+          "NOME DE MERCADO" AS nombre,
+          "COR" AS color,
+          "TRAMA REDUZIDO" AS trama,
+          ROUND(CASE WHEN ${fLargMinNum} < (${fLargStdNum} * 0.5) THEN ${fLargStdNum} - ${fLargMinNum} ELSE ${fLargMinNum} END, 1) AS ancho_min,
+          ROUND(${fLargStdNum}, 1) AS ancho_std,
+          ROUND(CASE WHEN ${fLargMaxNum} < (${fLargStdNum} * 0.5) THEN ${fLargStdNum} + ${fLargMaxNum} ELSE ${fLargMaxNum} END, 1) AS ancho_max,
+          ROUND(${fPesoM2Num} * 0.95, 1) AS peso_min,
+          ROUND(${fPesoM2Num}, 1) AS peso_std,
+          ROUND(${fPesoM2Num} * 1.05, 1) AS peso_max,
+          ROUND(${fUrdMinNum}, 2) AS urd_min,
+          ROUND(${fUrdMaxNum}, 2) AS urd_max
+        FROM tb_fichas
+      )
+      SELECT
+        T.artigo AS "Articulo",
+        F.nombre AS "Nombre",
+        F.color AS "Color",
+        F.trama AS "Trama",
+        CASE WHEN T.maquina ~ '^[0-9]+$' THEN T.maquina::int ELSE NULL END AS "Maquina",
+        T.partida AS "Partida",
+        T.hora_prod AS "Hora",
+        T.turno AS "Turno",
+        T.aprov AS "Ap",
+        T.obs AS "Obs",
+        T.reprocesso AS "R",
+
+        -- Variables de Mesa de TEST (tb_testes)
+        ROUND(T.enc_urd::numeric, 2) AS "EncUrd",
+        ROUND(T.enc_trama::numeric, 2) AS "EncTrama",
+        ROUND(T.ancho_test::numeric, 1) AS "AnchoTest",
+        ROUND(T.peso_test::numeric, 1) AS "PesoTest",
+        ROUND(T.metragem::numeric, 0) AS "MetrosTest",
+        ROUND(T.potencial::numeric, 2) AS "Potencial",
+
+        -- Variables de Mesa de Revisión (tb_calidad) - si hay datos disponibles
+        C.ancho_mesa AS "AnchoMesa",
+        C.peso_mesa AS "PesoMesa",
+        C.metros_mesa AS "MetrosMesa",
+        C.fecha_calidad AS "FechaCalidad",
+
+        -- Especificaciones (tb_fichas) para comparación
+        F.ancho_min AS "AnchoMin",
+        F.ancho_std AS "AnchoStd",
+        F.ancho_max AS "AnchoMax",
+        F.peso_min AS "PesoMin",
+        F.peso_std AS "PesoStd",
+        F.peso_max AS "PesoMax",
+        F.urd_min AS "UrdMin",
+        F.urd_max AS "UrdMax",
+        -1.5::numeric AS "UrdMetaMin",
+        -1.0::numeric AS "UrdMetaMax"
+
+      FROM TESTES T
+      LEFT JOIN CALIDAD_POR_PARTIDA C ON T.artigo = C.artigo AND T.partida = C.partida
+      LEFT JOIN FICHAS F ON T.artigo = F.codigo
+      ORDER BY T.artigo, T.hora_prod;
+    `
+
+    const result = await query(sql, [targetDateStr], 'calidad/resumen-dia-anterior')
+    const ensayos = result.rows
+
+    // Estadísticas rápidas del día
+    const articulosUnicos = [...new Set(ensayos.map(e => e.Articulo))]
+    const conCalidad = ensayos.filter(e => e.AnchoMesa !== null).length
+    const encUrdValues = ensayos.map(e => parseFloat(e.EncUrd)).filter(v => !isNaN(v))
+    const encUrdCritico = encUrdValues.filter(v => v > -1.0).length
+    const encUrdAlerta = encUrdValues.filter(v => v > -1.2 && v <= -1.0).length
+    const encUrdOk = encUrdValues.filter(v => v >= -1.5 && v <= -1.0).length
+
+    res.json({
+      target_date: targetDateStr,
+      fechas_disponibles: fechasDisponibles,
+      totales: {
+        total_ensayos: ensayos.length,
+        total_articulos: articulosUnicos.length,
+        con_datos_calidad: conCalidad,
+        enc_urd_critico: encUrdCritico,
+        enc_urd_alerta: encUrdAlerta,
+        enc_urd_ok: encUrdOk,
+        enc_urd_promedio: encUrdValues.length > 0 ? Number((encUrdValues.reduce((a, b) => a + b, 0) / encUrdValues.length).toFixed(2)) : null
+      },
+      ensayos
+    })
+
+    console.log(
+      `[PERF] GET /calidad/resumen-dia-anterior target=${targetDateStr} rows=${ensayos.length} total=${(
+        hrMs() - t0
+      ).toFixed(1)}ms`
+    )
+  } catch (err) {
+    console.error('Error en /calidad/resumen-dia-anterior:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/produccion/calidad/seguimiento-tendencias?articulo=XXX&fecha_inicial=YYYY-MM-DD&fecha_final=YYYY-MM-DD
+app.get('/api/produccion/calidad/seguimiento-tendencias', async (req, res) => {
+  try {
+    const t0 = hrMs()
+    const { articulo, fecha_inicial, fecha_final } = req.query
+
+    // Rango por defecto: últimos 90 días
+    const endDate = fecha_final ? String(fecha_final) : new Date().toISOString().split('T')[0]
+    let startDate = fecha_inicial ? String(fecha_inicial) : null
+    if (!startDate) {
+      const d = new Date(endDate)
+      d.setDate(d.getDate() - 90)
+      startDate = d.toISOString().split('T')[0]
+    }
+
+    const testesDtProdDate = sqlParseDate('"dt_prod"')
+    const calDatProdDate = sqlParseDate('"DAT_PROD"')
+
+    const tEncUrdNum = sqlParseNumberIntl('"%_ENC_URD"')
+    const tEncTramaNum = sqlParseNumberIntl('"%_ENC_TRAMA"')
+    const tLargAlNum = sqlParseNumberIntl('"larg_al"')
+    const tGramatNum = sqlParseNumberIntl('"gramat"')
+    const tSk1Num = sqlParseNumberIntl('"%_SK1"')
+    const tSkeNum = sqlParseNumberIntl('"%_SKE"')
+
+    const cLarguraNum = sqlParseNumberIntl('"LARGURA"')
+    const cGrm2Num = sqlParseNumberIntl('"GR/M2"')
+
+    const articleFilterTestes = articulo ? `AND "artigo" = $3` : ''
+    const articleFilterCalidad = articulo ? `AND "ARTIGO" = $3` : ''
+    const queryParams = articulo ? [startDate, endDate, String(articulo)] : [startDate, endDate]
+
+    // 1. Agregación Semanal (Evolución a largo plazo de 60-90 días)
+    const sqlSemanal = `
+      WITH TestesSemanal AS (
+        SELECT
+          date_trunc('week', ${testesDtProdDate})::date AS semana_inicio,
+          COUNT(*)::int AS ensayos_count,
+          AVG(${tEncUrdNum}) AS enc_urd_avg,
+          MIN(${tEncUrdNum}) AS enc_urd_min,
+          MAX(${tEncUrdNum}) AS enc_urd_max,
+          AVG(${tEncTramaNum}) AS enc_trama_avg,
+          AVG(${tLargAlNum}) AS ancho_test_avg,
+          AVG(${tGramatNum}) AS peso_test_avg,
+          AVG(${tSk1Num}) AS sk1_avg,
+          AVG(${tSkeNum}) AS ske_avg
+        FROM tb_testes
+        WHERE
+          ${testesDtProdDate} BETWEEN $1::date AND $2::date
+          ${articleFilterTestes}
+        GROUP BY date_trunc('week', ${testesDtProdDate})::date
+      ),
+      CalidadSemanal AS (
+        SELECT
+          date_trunc('week', ${calDatProdDate})::date AS semana_inicio,
+          AVG(COALESCE(${cLarguraNum}, 0)) AS ancho_mesa_avg,
+          AVG(COALESCE(${cGrm2Num}, 0)) AS peso_mesa_avg
+        FROM tb_calidad
+        WHERE
+          ${calDatProdDate} BETWEEN $1::date AND $2::date
+          ${articleFilterCalidad}
+        GROUP BY date_trunc('week', ${calDatProdDate})::date
+      )
+      SELECT
+        TS.semana_inicio AS "SemanaInicio",
+        to_char(TS.semana_inicio, '"Sem "IW (Mon dd)') AS "SemanaLabel",
+        TS.ensayos_count AS "EnsayosCount",
+        ROUND(TS.enc_urd_avg::numeric, 2) AS "EncUrdAvg",
+        ROUND(TS.enc_urd_min::numeric, 2) AS "EncUrdMin",
+        ROUND(TS.enc_urd_max::numeric, 2) AS "EncUrdMax",
+        ROUND(TS.enc_trama_avg::numeric, 2) AS "EncTramaAvg",
+        ROUND(TS.ancho_test_avg::numeric, 1) AS "AnchoTestAvg",
+        ROUND(CS.ancho_mesa_avg::numeric, 1) AS "AnchoMesaAvg",
+        ROUND(TS.peso_test_avg::numeric, 1) AS "PesoTestAvg",
+        ROUND(CS.peso_mesa_avg::numeric, 1) AS "PesoMesaAvg",
+        ROUND(TS.sk1_avg::numeric, 2) AS "Sk1Avg",
+        ROUND(TS.ske_avg::numeric, 2) AS "SkeAvg"
+      FROM TestesSemanal TS
+      LEFT JOIN CalidadSemanal CS ON TS.semana_inicio = CS.semana_inicio
+      ORDER BY TS.semana_inicio ASC;
+    `
+
+    // 2. Agregación Diaria (Evolución diaria para análisis de casos puntuales)
+    const sqlDiaria = `
+      WITH TestesDiario AS (
+        SELECT
+          ${testesDtProdDate}::date AS fecha,
+          COUNT(*)::int AS ensayos_count,
+          AVG(${tEncUrdNum}) AS enc_urd_avg,
+          MIN(${tEncUrdNum}) AS enc_urd_min,
+          MAX(${tEncUrdNum}) AS enc_urd_max,
+          AVG(${tEncTramaNum}) AS enc_trama_avg,
+          AVG(${tLargAlNum}) AS ancho_test_avg,
+          AVG(${tGramatNum}) AS peso_test_avg
+        FROM tb_testes
+        WHERE
+          ${testesDtProdDate} BETWEEN $1::date AND $2::date
+          ${articleFilterTestes}
+        GROUP BY ${testesDtProdDate}::date
+      ),
+      CalidadDiario AS (
+        SELECT
+          ${calDatProdDate}::date AS fecha,
+          AVG(COALESCE(${cLarguraNum}, 0)) AS ancho_mesa_avg,
+          AVG(COALESCE(${cGrm2Num}, 0)) AS peso_mesa_avg
+        FROM tb_calidad
+        WHERE
+          ${calDatProdDate} BETWEEN $1::date AND $2::date
+          ${articleFilterCalidad}
+        GROUP BY ${calDatProdDate}::date
+      )
+      SELECT
+        TD.fecha AS "Fecha",
+        TD.ensayos_count AS "EnsayosCount",
+        ROUND(TD.enc_urd_avg::numeric, 2) AS "EncUrdAvg",
+        ROUND(TD.enc_urd_min::numeric, 2) AS "EncUrdMin",
+        ROUND(TD.enc_urd_max::numeric, 2) AS "EncUrdMax",
+        ROUND(TD.enc_trama_avg::numeric, 2) AS "EncTramaAvg",
+        ROUND(TD.ancho_test_avg::numeric, 1) AS "AnchoTestAvg",
+        ROUND(CD.ancho_mesa_avg::numeric, 1) AS "AnchoMesaAvg",
+        ROUND(TD.peso_test_avg::numeric, 1) AS "PesoTestAvg",
+        ROUND(CD.peso_mesa_avg::numeric, 1) AS "PesoMesaAvg"
+      FROM TestesDiario TD
+      LEFT JOIN CalidadDiario CD ON TD.fecha = CD.fecha
+      ORDER BY TD.fecha ASC;
+    `
+
+    // 3. Ficha Técnica de Especificación si hay artículo seleccionado
+    let especificacion = null
+    if (articulo) {
+      const sqlFicha = `
+        SELECT
+          "ARTIGO CODIGO" AS "Articulo",
+          "NOME DE MERCADO" AS "Nombre",
+          "COR" AS "Color",
+          "TRAMA REDUZIDO" AS "Trama",
+          ROUND(${sqlParseNumberIntl('"LARGURA MIN"')}, 1) AS "AnchoMin",
+          ROUND(${sqlParseNumberIntl('"LARGURA"')}, 1) AS "AnchoStd",
+          ROUND(${sqlParseNumberIntl('"LARGURA MAX"')}, 1) AS "AnchoMax",
+          ROUND(${sqlParseNumberIntl('"Peso/m2"')}, 1) AS "PesoStd",
+          ROUND(${sqlParseNumberIntl('"URD.MIN"')}, 2) AS "UrdMin",
+          ROUND(${sqlParseNumberIntl('"URD.MAX"')}, 2) AS "UrdMax",
+          -1.5 AS "EncUrdMetaMin",
+          -1.0 AS "EncUrdMetaMax"
+        FROM tb_fichas
+        WHERE "ARTIGO CODIGO" = $1
+      `
+      const fichaRes = await query(sqlFicha, [articulo], 'calidad/ficha-especificacion')
+      if (fichaRes.rows.length > 0) {
+        especificacion = fichaRes.rows[0]
+      }
+    }
+
+    const [resSemanal, resDiario] = await Promise.all([
+      query(sqlSemanal, queryParams, 'calidad/seguimiento-semanal'),
+      query(sqlDiaria, queryParams, 'calidad/seguimiento-diario')
+    ])
+
+    // Calcular la tendencia lineal del encogimiento urdido sobre las semanas
+    const semanas = resSemanal.rows
+    let encUrdSlope = 0
+    if (semanas.length >= 2) {
+      const n = semanas.length
+      const xAvg = (n - 1) / 2
+      const yAvg = semanas.reduce((sum, s) => sum + (parseFloat(s.EncUrdAvg) || 0), 0) / n
+      let num = 0
+      let den = 0
+      semanas.forEach((s, i) => {
+        const y = parseFloat(s.EncUrdAvg) || 0
+        num += (i - xAvg) * (y - yAvg)
+        den += (i - xAvg) ** 2
+      })
+      encUrdSlope = den !== 0 ? num / den : 0
+    }
+
+    res.json({
+      articulo: articulo || 'TODOS',
+      fecha_inicial: startDate,
+      fecha_final: endDate,
+      especificacion,
+      tendencia_general: {
+        enc_urd_slope: Number(encUrdSlope.toFixed(4)),
+        enc_urd_direccion: encUrdSlope > 0.03 ? 'SUBIENDO_A_CERO' : encUrdSlope < -0.03 ? 'DISMINUYENDO' : 'ESTABLE'
+      },
+      semanal: semanas,
+      diario: resDiario.rows
+    })
+
+    console.log(
+      `[PERF] GET /calidad/seguimiento-tendencias articulo=${articulo || 'TODOS'} ${startDate}..${endDate} semanas=${semanas.length} dias=${resDiario.rows.length} total=${(
+        hrMs() - t0
+      ).toFixed(1)}ms`
+    )
+  } catch (err) {
+    console.error('Error en /calidad/seguimiento-tendencias:', err)
     res.status(500).json({ error: err.message })
   }
 })
@@ -10608,6 +10999,45 @@ app.get('/api/benninger-impacto', async (req, res) => {
 // =====================================================
 // INICIAR SERVIDOR
 // =====================================================
+async function syncSequences() {
+  try {
+    const queryStr = `
+      SELECT 
+        t.relname AS table_name,
+        a.attname AS column_name,
+        s.relname AS sequence_name
+      FROM pg_class s
+      JOIN pg_depend d ON d.objid = s.oid AND d.classid = 'pg_class'::regclass AND d.refclassid = 'pg_class'::regclass
+      JOIN pg_class t ON t.oid = d.refobjid
+      JOIN pg_attribute a ON a.attrelid = d.refobjid AND a.attnum = d.refobjsubid
+      WHERE s.relkind = 'S'
+      ORDER BY t.relname;
+    `;
+    const res = await pool.query(queryStr)
+    for (const row of res.rows) {
+      const { table_name, column_name, sequence_name } = row
+      try {
+        const maxIdRes = await pool.query(`SELECT MAX("${column_name}") FROM "${table_name}"`)
+        const maxId = maxIdRes.rows[0].max
+        if (maxId != null) {
+          const maxIdNum = parseInt(maxId, 10)
+          const seqValRes = await pool.query(`SELECT last_value FROM "${sequence_name}"`)
+          const seqValNum = parseInt(seqValRes.rows[0].last_value, 10)
+          if (maxIdNum > seqValNum) {
+            console.log(`[SYS] Sincronizando secuencia ${sequence_name} para la tabla ${table_name}: max ID (${maxIdNum}) > valor secuencia (${seqValNum})`)
+            await pool.query(`SELECT setval('${sequence_name}', ${maxIdNum})`)
+          }
+        }
+      } catch (err) {
+        console.warn(`[SYS] Error al sincronizar secuencia para tabla ${table_name}:`, err.message)
+      }
+    }
+    console.log('✓ Sincronización de secuencias completada')
+  } catch (err) {
+    console.warn('[SYS] Error al obtener secuencias:', err.message)
+  }
+}
+
 async function startServer() {
   try {
     // Esperar a PostgreSQL (en Podman/compose puede tardar unos segundos)
@@ -10630,6 +11060,9 @@ async function startServer() {
 
     if (lastErr) throw lastErr
     console.log('✓ Conexión a PostgreSQL exitosa')
+
+    // Sincronizar secuencias para evitar errores de llave duplicada
+    await syncSequences().catch((e) => console.warn('syncSequences falló:', e.message))
 
     // Índices para endpoints de calidad (impacta en performance con muchos datos)
     ensureCalidadIndexes().catch((e) => console.warn('ensureCalidadIndexes falló:', e.message))
