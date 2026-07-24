@@ -29,6 +29,7 @@
           <span v-else class="text-xs font-bold">🔄</span>
         </button>
       </div>
+
       <!-- KPIs -->
       <div v-if="totales" class="flex items-center gap-3 text-xs flex-wrap">
         <span class="px-2.5 py-1 bg-slate-50 rounded-lg border border-slate-200 font-semibold text-slate-700">
@@ -47,10 +48,10 @@
       </div>
     </div>
 
-    <!-- TABLA DE ARTÍCULOS DEL DÍA (agrupados) -->
+    <!-- TABLA DE ARTÍCULOS DEL DÍA -->
     <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex-1 min-h-0 flex flex-col overflow-hidden">
       <div class="px-3 py-2 border-b border-slate-200 bg-slate-50 flex items-center justify-between text-[11px] flex-shrink-0">
-        <span class="font-bold text-slate-800">Artículos del día — Promedios y Estado de Variables</span>
+        <span class="font-bold text-slate-800">Artículos del día — Click en "📈 Tendencia" o en Enc.Urd % para abrir gráfico</span>
         <div class="flex items-center gap-3 text-slate-600">
           <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span> En meta [-1.5, -1.0]</span>
           <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span> Alerta/Deriva</span>
@@ -64,7 +65,8 @@
             <tr>
               <th class="px-3 py-2 text-left font-bold text-slate-700 border-b-2 border-slate-200 min-w-[180px]">Artículo</th>
               <th class="px-2 py-2 text-center font-bold text-slate-600 border-b-2 border-slate-200">Ensayos</th>
-              <th class="px-2 py-2 text-center font-extrabold text-blue-800 border-b-2 border-blue-300 bg-blue-50/60 min-w-[90px]">Enc.Urd %</th>
+              <!-- Enc.Urd % -->
+              <th class="px-2 py-2 text-center font-extrabold text-blue-800 border-b-2 border-blue-300 bg-blue-50/60 min-w-[100px]">Enc.Urd %</th>
               <th class="px-2 py-2 text-center font-bold text-slate-600 border-b-2 border-slate-200">Enc.Tra %</th>
               <th class="px-2 py-2 text-center font-bold text-slate-700 border-b-2 border-slate-200">Ancho TEST</th>
               <th class="px-2 py-2 text-center font-bold text-blue-700 border-b-2 border-blue-200 bg-blue-50/30">Ancho MESA</th>
@@ -72,7 +74,7 @@
               <th class="px-2 py-2 text-center font-bold text-slate-700 border-b-2 border-slate-200">Peso TEST</th>
               <th class="px-2 py-2 text-center font-bold text-blue-700 border-b-2 border-blue-200 bg-blue-50/30">Peso MESA</th>
               <th class="px-2 py-2 text-center font-bold text-slate-500 border-b-2 border-slate-200">Peso Espec</th>
-              <th class="px-2 py-2 text-center font-bold text-slate-700 border-b-2 border-slate-200">Estado</th>
+              <th class="px-2 py-2 text-center font-bold text-slate-700 border-b-2 border-slate-200">Acción</th>
             </tr>
           </thead>
           <tbody>
@@ -86,29 +88,42 @@
               <td colspan="11" class="py-8 text-center text-slate-500">No hay ensayos registrados para esta fecha</td>
             </tr>
             <tr v-for="art in articulosAgrupados" :key="art.articulo"
-              class="border-b border-slate-100 hover:bg-blue-50/30 transition-colors cursor-pointer"
-              :class="articuloExpandido === art.articulo ? 'bg-blue-50/50' : ''"
-              @click="toggleDetalle(art.articulo)">
+              class="border-b border-slate-100 hover:bg-blue-50/30 transition-colors"
+              :class="articuloExpandido === art.articulo ? 'bg-blue-50/50' : ''">
               <!-- Artículo -->
               <td class="px-3 py-2.5">
                 <div class="flex items-center gap-2">
-                  <span class="text-[10px] text-slate-400">{{ articuloExpandido === art.articulo ? '▼' : '▶' }}</span>
+                  <button @click="toggleDetalle(art.articulo)" class="text-[10px] text-slate-400 hover:text-blue-600">
+                    {{ articuloExpandido === art.articulo ? '▼' : '▶' }}
+                  </button>
                   <div>
-                    <div class="font-mono font-extrabold text-slate-900">{{ art.articuloCorto }}</div>
+                    <div class="font-mono font-extrabold text-slate-900 cursor-pointer hover:text-blue-700" @click="abrirGrafico(art, 'enc_urd')">
+                      {{ art.articuloCorto }}
+                    </div>
                     <div class="text-[10px] text-slate-500">{{ art.nombre }} · {{ art.trama || '' }}</div>
                   </div>
                 </div>
               </td>
               <!-- Ensayos -->
-              <td class="px-2 py-2.5 text-center font-mono font-bold text-slate-700">{{ art.count }}</td>
-              <!-- Enc.Urd % -->
-              <td class="px-2 py-2.5 text-center font-mono font-extrabold text-sm bg-blue-50/40" :class="encUrdColorClass(art.encUrdAvg)">
-                {{ art.encUrdAvg !== null ? art.encUrdAvg.toFixed(2) + '%' : '-' }}
+              <td class="px-2 py-2.5 text-center font-mono font-bold text-slate-700 cursor-pointer" @click="toggleDetalle(art.articulo)">
+                {{ art.count }}
+              </td>
+              <!-- Enc.Urd % - Clic para ver gráfico -->
+              <td class="px-2 py-2.5 text-center font-mono font-extrabold text-sm bg-blue-50/40 cursor-pointer hover:bg-blue-100 transition-colors"
+                :class="encUrdColorClass(art.encUrdAvg)"
+                @click="abrirGrafico(art, 'enc_urd')"
+                title="Haga clic para ver gráfico de tendencia de Enc.Urd %">
+                <div class="flex items-center justify-center gap-1">
+                  <span>{{ art.encUrdAvg !== null ? art.encUrdAvg.toFixed(2) + '%' : '-' }}</span>
+                  <span class="text-[10px]">📈</span>
+                </div>
               </td>
               <!-- Enc.Trama % -->
               <td class="px-2 py-2.5 text-center font-mono text-slate-700">{{ art.encTramaAvg !== null ? art.encTramaAvg.toFixed(2) : '-' }}</td>
               <!-- Ancho TEST -->
-              <td class="px-2 py-2.5 text-center font-mono" :class="rangoColorClass(art.anchoTestAvg, art.anchoMin, art.anchoMax)">
+              <td class="px-2 py-2.5 text-center font-mono cursor-pointer hover:bg-slate-100"
+                :class="rangoColorClass(art.anchoTestAvg, art.anchoMin, art.anchoMax)"
+                @click="abrirGrafico(art, 'ancho')">
                 {{ art.anchoTestAvg !== null ? art.anchoTestAvg.toFixed(1) : '-' }}
               </td>
               <!-- Ancho MESA -->
@@ -120,7 +135,9 @@
                 {{ art.anchoMin ? `${art.anchoMin}-` : '' }}<strong>{{ art.anchoStd || '-' }}</strong>{{ art.anchoMax ? `-${art.anchoMax}` : '' }}
               </td>
               <!-- Peso TEST -->
-              <td class="px-2 py-2.5 text-center font-mono" :class="rangoColorClass(art.pesoTestAvg, art.pesoMin, art.pesoMax)">
+              <td class="px-2 py-2.5 text-center font-mono cursor-pointer hover:bg-slate-100"
+                :class="rangoColorClass(art.pesoTestAvg, art.pesoMin, art.pesoMax)"
+                @click="abrirGrafico(art, 'peso')">
                 {{ art.pesoTestAvg !== null ? art.pesoTestAvg.toFixed(1) : '-' }}
               </td>
               <!-- Peso MESA -->
@@ -131,12 +148,19 @@
               <td class="px-2 py-2.5 text-center text-[10px] text-slate-500">
                 {{ art.pesoMin ? `${art.pesoMin}-` : '' }}<strong>{{ art.pesoStd || '-' }}</strong>{{ art.pesoMax ? `-${art.pesoMax}` : '' }}
               </td>
-              <!-- Estado global -->
+              <!-- Acciones -->
               <td class="px-2 py-2.5 text-center">
-                <span class="px-2 py-1 rounded-full text-[10px] font-extrabold border inline-flex items-center gap-1"
-                  :class="estadoBadgeClass(art)">
-                  {{ estadoIcon(art) }} {{ estadoLabel(art) }}
-                </span>
+                <div class="flex items-center justify-center gap-1">
+                  <button @click="abrirGrafico(art, 'enc_urd')"
+                    class="px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded text-[11px] font-bold flex items-center gap-1 transition-colors"
+                    title="Ver tendencia histórica de Enc.Urd %">
+                    📈 Tendencia
+                  </button>
+                  <button @click="toggleDetalle(art.articulo)"
+                    class="px-1.5 py-1 bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200 rounded text-[11px] font-bold">
+                    {{ articuloExpandido === art.articulo ? 'Ocultar' : 'Partidas' }}
+                  </button>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -146,8 +170,11 @@
       <!-- Detalle expandido: partidas del artículo seleccionado -->
       <div v-if="articuloExpandido && partidasExpandidas.length > 0"
         class="border-t-2 border-blue-300 bg-blue-50/30 px-4 py-3 flex-shrink-0 max-h-60 overflow-auto">
-        <div class="text-xs font-bold text-blue-800 mb-2">
-          Detalle de ensayos: {{ articuloExpandido }} ({{ partidasExpandidas.length }} registros)
+        <div class="flex items-center justify-between mb-2">
+          <div class="text-xs font-bold text-blue-800">
+            Detalle de ensayos del día: {{ articuloExpandido }} ({{ partidasExpandidas.length }} registros)
+          </div>
+          <button @click="articuloExpandido = null" class="text-xs text-slate-500 hover:text-slate-800">✕ Cerrar</button>
         </div>
         <table class="w-full text-[11px] table-auto">
           <thead class="bg-blue-100/50">
@@ -189,11 +216,105 @@
         </table>
       </div>
     </div>
+
+    <!-- MODAL DE GRÁFICO DE TENDENCIA DINÁMICA -->
+    <div v-if="modalGraficoAbierto" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+      <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-fade-in">
+        
+        <!-- Modal Header -->
+        <div class="px-5 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between flex-shrink-0">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-xl">📈</span>
+              <h3 class="text-base font-bold text-slate-800">
+                Tendencia de Variable: <span class="font-mono text-blue-700">{{ articuloSeleccionadoGrafico?.articulo }}</span>
+              </h3>
+              <span v-if="articuloSeleccionadoGrafico?.nombre" class="text-xs text-slate-500 font-semibold">
+                ({{ articuloSeleccionadoGrafico.nombre }})
+              </span>
+            </div>
+            <p class="text-xs text-slate-500 mt-0.5">
+              Fecha analizada: <strong class="text-slate-800 font-mono">{{ fechaActual }}</strong> 
+              · Ventana: <span class="font-mono font-semibold">{{ rangoGrafico.inicio }}</span> a <span class="font-mono font-semibold">{{ rangoGrafico.fin }}</span>
+              <span v-if="esUltimoDiaGrafico" class="ml-2 px-2 py-0.5 bg-blue-100 text-blue-800 rounded font-bold text-[10px]">
+                📅 (30 días atrás hasta hoy)
+              </span>
+              <span v-else class="ml-2 px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-[10px]">
+                📅 (Centrado ±15 días de fecha analizada)
+              </span>
+            </p>
+          </div>
+          <button @click="cerrarGrafico" class="p-1.5 rounded-lg hover:bg-slate-200 text-slate-500 text-lg font-bold">
+            ✕
+          </button>
+        </div>
+
+        <!-- Selector de Variable (Tabs inside Modal) -->
+        <div class="px-5 py-2 bg-slate-100 border-b border-slate-200 flex items-center justify-between flex-shrink-0">
+          <div class="flex items-center gap-2">
+            <button @click="variableGrafico = 'enc_urd'; renderizarGrafico()"
+              class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+              :class="variableGrafico === 'enc_urd' ? 'bg-blue-600 text-white shadow' : 'bg-white text-slate-700 hover:bg-slate-200 border'">
+              🎯 Encogimiento Urdido %
+            </button>
+            <button @click="variableGrafico = 'ancho'; renderizarGrafico()"
+              class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+              :class="variableGrafico === 'ancho' ? 'bg-blue-600 text-white shadow' : 'bg-white text-slate-700 hover:bg-slate-200 border'">
+              📏 Ancho (TEST vs MESA)
+            </button>
+            <button @click="variableGrafico = 'peso'; renderizarGrafico()"
+              class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+              :class="variableGrafico === 'peso' ? 'bg-blue-600 text-white shadow' : 'bg-white text-slate-700 hover:bg-slate-200 border'">
+              ⚖️ Peso (g/m²)
+            </button>
+          </div>
+          <div class="text-xs text-slate-600 flex items-center gap-3">
+            <span class="flex items-center gap-1 font-semibold"><span class="w-3 h-0.5 bg-blue-600 inline-block"></span> Promedio</span>
+            <span class="flex items-center gap-1 font-semibold"><span class="w-3 h-0.5 bg-slate-400 border-t border-dashed inline-block"></span> Min / Max</span>
+            <span v-if="variableGrafico === 'enc_urd'" class="flex items-center gap-1 font-semibold text-emerald-700"><span class="w-3 h-0.5 bg-emerald-500 inline-block"></span> Meta (-1.5%)</span>
+            <span v-if="variableGrafico === 'enc_urd'" class="flex items-center gap-1 font-semibold text-red-700"><span class="w-3 h-0.5 bg-red-500 inline-block"></span> Crítico (-1.0%)</span>
+          </div>
+        </div>
+
+        <!-- Body con Canvas de Chart.js -->
+        <div class="p-4 flex-1 min-h-[340px] flex flex-col justify-center relative bg-white">
+          <div v-if="cargandoGrafico" class="absolute inset-0 flex items-center justify-center bg-white/80 z-10">
+            <div class="text-center">
+              <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-slate-300 border-t-blue-600"></div>
+              <p class="mt-2 text-xs font-semibold text-slate-600">Cargando serie histórica de tendencias...</p>
+            </div>
+          </div>
+          <div class="w-full h-full min-h-[320px] relative">
+            <canvas ref="chartCanvas"></canvas>
+          </div>
+        </div>
+
+        <!-- Footer del Modal -->
+        <div class="px-5 py-2.5 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-xs text-slate-600 flex-shrink-0">
+          <div class="flex items-center gap-4">
+            <span v-if="especificacionGrafico?.UrdMin">
+              Ficha Urdido: <strong class="font-mono text-slate-800">{{ especificacionGrafico.UrdMin }}%</strong> a <strong class="font-mono text-slate-800">{{ especificacionGrafico.UrdMax }}%</strong>
+            </span>
+            <span v-if="especificacionGrafico?.AnchoStd">
+              Ficha Ancho: <strong class="font-mono text-slate-800">{{ especificacionGrafico.AnchoStd }} cm</strong> (Min: {{ especificacionGrafico.AnchoMin }} / Max: {{ especificacionGrafico.AnchoMax }})
+            </span>
+          </div>
+          <button @click="cerrarGrafico" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-bold">
+            Cerrar
+          </button>
+        </div>
+
+      </div>
+    </div>
+
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
+import { Chart, registerables } from 'chart.js'
+
+Chart.register(...registerables)
 
 const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
 const apiUrl = (path) => `${API_BASE}${path}`
@@ -204,6 +325,18 @@ const fechasDisponibles = ref([])
 const totales = ref(null)
 const ensayos = ref([])
 const articuloExpandido = ref(null)
+
+// Estado del Modal de Gráfico
+const modalGraficoAbierto = ref(false)
+const cargandoGrafico = ref(false)
+const articuloSeleccionadoGrafico = ref(null)
+const variableGrafico = ref('enc_urd') // 'enc_urd' | 'ancho' | 'peso'
+const datosGrafico = ref(null)
+const rangoGrafico = ref({ inicio: '', fin: '' })
+const esUltimoDiaGrafico = ref(false)
+const especificacionGrafico = ref(null)
+const chartCanvas = ref(null)
+let chartInstance = null
 
 // Navegación de fechas
 const fechaAnterior = computed(() => {
@@ -267,7 +400,6 @@ const articulosAgrupados = computed(() => {
     anchoMesaAvg: a.anchoMesaCount > 0 ? a.anchoMesaSum / a.anchoMesaCount : null,
     pesoMesaAvg: a.pesoMesaCount > 0 ? a.pesoMesaSum / a.pesoMesaCount : null,
   })).sort((a, b) => {
-    // Mostrar primero los que tienen desvío
     const sa = estadoPrioridad(a)
     const sb = estadoPrioridad(b)
     if (sa !== sb) return sa - sb
@@ -285,7 +417,7 @@ const toggleDetalle = (articulo) => {
   articuloExpandido.value = articuloExpandido.value === articulo ? null : articulo
 }
 
-// Cargar datos
+// Cargar datos principales del día
 const cargarDatos = async () => {
   loading.value = true
   articuloExpandido.value = null
@@ -306,9 +438,250 @@ const cargarDatos = async () => {
   }
 }
 
+// ===== LÓGICA Y MANEJO DEL GRÁFICO DE TENDENCIAS =====
+
+const abrirGrafico = async (art, variable = 'enc_urd') => {
+  articuloSeleccionadoGrafico.value = art
+  variableGrafico.value = variable
+  modalGraficoAbierto.value = true
+  cargandoGrafico.value = true
+
+  try {
+    const url = apiUrl(`/api/produccion/calidad/seguimiento-tendencias?articulo=${encodeURIComponent(art.articulo)}&fecha_referencia=${fechaActual.value}`)
+    const res = await fetch(url)
+    const data = await res.json()
+    
+    datosGrafico.value = data.diario || []
+    rangoGrafico.value = data.rango || { inicio: '', fin: '' }
+    esUltimoDiaGrafico.value = data.es_ultimo_dia || false
+    especificacionGrafico.value = data.especificacion || null
+
+    await nextTick()
+    renderizarGrafico()
+  } catch (err) {
+    console.error('Error cargando tendencia para el gráfico:', err)
+  } finally {
+    cargandoGrafico.value = false
+  }
+}
+
+const cerrarGrafico = () => {
+  if (chartInstance) {
+    chartInstance.destroy()
+    chartInstance = null
+  }
+  modalGraficoAbierto.value = false
+}
+
+const renderizarGrafico = async () => {
+  if (!chartCanvas.value || !datosGrafico.value) return
+
+  if (chartInstance) {
+    chartInstance.destroy()
+    chartInstance = null
+  }
+
+  const diario = datosGrafico.value
+  const labels = diario.map(d => {
+    const parts = String(d.Fecha).split('T')[0].split('-')
+    return `${parts[2]}/${parts[1]}`
+  })
+
+  let datasets = []
+  let yMin = undefined
+  let yMax = undefined
+
+  if (variableGrafico.value === 'enc_urd') {
+    const avgData = diario.map(d => d.EncUrdAvg !== null ? parseFloat(d.EncUrdAvg) : null)
+    const minData = diario.map(d => d.EncUrdMin !== null ? parseFloat(d.EncUrdMin) : null)
+    const maxData = diario.map(d => d.EncUrdMax !== null ? parseFloat(d.EncUrdMax) : null)
+
+    // Resaltar la fecha analizada con punto gigante
+    const targetIdx = diario.findIndex(d => String(d.Fecha).split('T')[0] === fechaActual.value)
+    const pointRadius = labels.map((_, i) => i === targetIdx ? 8 : 4)
+    const pointHoverRadius = labels.map((_, i) => i === targetIdx ? 11 : 6)
+    const pointBackgroundColor = labels.map((_, i) => i === targetIdx ? '#1d4ed8' : '#3b82f6')
+    const pointBorderColor = labels.map((_, i) => i === targetIdx ? '#ffffff' : '#ffffff')
+    const pointBorderWidth = labels.map((_, i) => i === targetIdx ? 3 : 1.5)
+
+    datasets = [
+      {
+        label: 'Enc.Urd Promedio %',
+        data: avgData,
+        borderColor: '#2563eb',
+        backgroundColor: 'rgba(37, 99, 235, 0.1)',
+        borderWidth: 3,
+        tension: 0.2,
+        fill: false,
+        pointRadius,
+        pointHoverRadius,
+        pointBackgroundColor,
+        pointBorderColor,
+        pointBorderWidth
+      },
+      {
+        label: 'Mínimo %',
+        data: minData,
+        borderColor: '#94a3b8',
+        borderWidth: 1.5,
+        borderDash: [4, 4],
+        pointRadius: 2,
+        fill: false
+      },
+      {
+        label: 'Máximo %',
+        data: maxData,
+        borderColor: '#94a3b8',
+        borderWidth: 1.5,
+        borderDash: [4, 4],
+        pointRadius: 2,
+        fill: false
+      },
+      {
+        label: 'Meta Ideal (-1.5%)',
+        data: labels.map(() => -1.5),
+        borderColor: '#10b981',
+        borderWidth: 2,
+        borderDash: [6, 4],
+        pointRadius: 0,
+        fill: false
+      },
+      {
+        label: 'Crítico (-1.0%)',
+        data: labels.map(() => -1.0),
+        borderColor: '#ef4444',
+        borderWidth: 2,
+        borderDash: [6, 4],
+        pointRadius: 0,
+        fill: false
+      }
+    ]
+  } else if (variableGrafico.value === 'ancho') {
+    const testData = diario.map(d => d.AnchoTestAvg !== null ? parseFloat(d.AnchoTestAvg) : null)
+    const mesaData = diario.map(d => d.AnchoMesaAvg !== null ? parseFloat(d.AnchoMesaAvg) : null)
+    const stdVal = especificacionGrafico.value?.AnchoStd ? parseFloat(especificacionGrafico.value.AnchoStd) : null
+    const minVal = especificacionGrafico.value?.AnchoMin ? parseFloat(especificacionGrafico.value.AnchoMin) : null
+    const maxVal = especificacionGrafico.value?.AnchoMax ? parseFloat(especificacionGrafico.value.AnchoMax) : null
+
+    datasets = [
+      {
+        label: 'Ancho TEST (cm)',
+        data: testData,
+        borderColor: '#2563eb',
+        borderWidth: 3,
+        tension: 0.2,
+        fill: false
+      },
+      {
+        label: 'Ancho MESA Revisión (cm)',
+        data: mesaData,
+        borderColor: '#8b5cf6',
+        borderWidth: 2.5,
+        tension: 0.2,
+        fill: false
+      }
+    ]
+    if (stdVal) {
+      datasets.push({
+        label: `Especificación (${stdVal} cm)`,
+        data: labels.map(() => stdVal),
+        borderColor: '#10b981',
+        borderWidth: 2,
+        borderDash: [6, 4],
+        pointRadius: 0,
+        fill: false
+      })
+    }
+    if (minVal && maxVal) {
+      datasets.push({
+        label: `Límites (${minVal} - ${maxVal} cm)`,
+        data: labels.map(() => minVal),
+        borderColor: '#ef4444',
+        borderWidth: 1,
+        borderDash: [4, 4],
+        pointRadius: 0,
+        fill: false
+      })
+    }
+  } else if (variableGrafico.value === 'peso') {
+    const testData = diario.map(d => d.PesoTestAvg !== null ? parseFloat(d.PesoTestAvg) : null)
+    const mesaData = diario.map(d => d.PesoMesaAvg !== null ? parseFloat(d.PesoMesaAvg) : null)
+    const stdVal = especificacionGrafico.value?.PesoStd ? parseFloat(especificacionGrafico.value.PesoStd) : null
+
+    datasets = [
+      {
+        label: 'Peso TEST (g/m²)',
+        data: testData,
+        borderColor: '#2563eb',
+        borderWidth: 3,
+        tension: 0.2,
+        fill: false
+      },
+      {
+        label: 'Peso MESA Revisión (g/m²)',
+        data: mesaData,
+        borderColor: '#059669',
+        borderWidth: 2.5,
+        tension: 0.2,
+        fill: false
+      }
+    ]
+    if (stdVal) {
+      datasets.push({
+        label: `Std (${stdVal} g/m²)`,
+        data: labels.map(() => stdVal),
+        borderColor: '#f59e0b',
+        borderWidth: 2,
+        borderDash: [6, 4],
+        pointRadius: 0,
+        fill: false
+      })
+    }
+  }
+
+  const ctx = chartCanvas.value.getContext('2d')
+  chartInstance = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: 'index',
+        intersect: false
+      },
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: { font: { size: 11, weight: 'bold' } }
+        },
+        tooltip: {
+          callbacks: {
+            title: (items) => {
+              if (!items.length) return ''
+              const idx = items[0].dataIndex
+              const d = diario[idx]
+              return `Fecha: ${d.Fecha} (${d.EnsayosCount} ensayo${d.EnsayosCount > 1 ? 's' : ''})`
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: '#f1f5f9' },
+          ticks: { font: { size: 10, weight: '600' } }
+        },
+        y: {
+          grid: { color: '#e2e8f0' },
+          ticks: { font: { size: 11, weight: '600' } }
+        }
+      }
+    }
+  })
+}
+
 // ===== Helpers de color y estado =====
 
-// Encogimiento Urdido: Meta [-1.5, -1.0], Crítico > -1.0
 const encUrdColorClass = (val) => {
   if (val === null || isNaN(val)) return 'text-slate-400'
   if (val > -1.0) return 'text-red-700'
@@ -317,7 +690,6 @@ const encUrdColorClass = (val) => {
   return 'text-slate-700'
 }
 
-// Genérico: comparar valor contra min/max
 const rangoColorClass = (val, min, max) => {
   if (val === null || isNaN(val)) return 'text-slate-400'
   if (min !== null && val < min) return 'text-red-700 font-bold'
@@ -325,40 +697,26 @@ const rangoColorClass = (val, min, max) => {
   return 'text-slate-800'
 }
 
-// Estado global del artículo (prioridad para ordenar: menor = peor)
 const estadoPrioridad = (art) => {
-  if (art.encUrdAvg !== null && art.encUrdAvg > -1.0) return 0 // CRÍTICO
+  if (art.encUrdAvg !== null && art.encUrdAvg > -1.0) return 0
   const anchoFuera = art.anchoTestAvg !== null && art.anchoMin !== null && art.anchoMax !== null &&
     (art.anchoTestAvg < art.anchoMin || art.anchoTestAvg > art.anchoMax)
   const pesoFuera = art.pesoTestAvg !== null && art.pesoMin !== null && art.pesoMax !== null &&
     (art.pesoTestAvg < art.pesoMin || art.pesoTestAvg > art.pesoMax)
-  if (anchoFuera || pesoFuera) return 1 // FUERA DE RANGO
-  if (art.encUrdAvg !== null && art.encUrdAvg > -1.2) return 2 // ALERTA
-  return 3 // OK
-}
-
-const estadoIcon = (art) => {
-  const p = estadoPrioridad(art)
-  if (p === 0) return '🔴'
-  if (p === 1) return '🔴'
-  if (p === 2) return '🟡'
-  return '🟢'
-}
-
-const estadoLabel = (art) => {
-  const p = estadoPrioridad(art)
-  if (p === 0) return 'Enc.Urd CRÍTICO'
-  if (p === 1) return 'FUERA RANGO'
-  if (p === 2) return 'Alerta'
-  return 'OK'
-}
-
-const estadoBadgeClass = (art) => {
-  const p = estadoPrioridad(art)
-  if (p <= 1) return 'bg-red-100 text-red-800 border-red-300'
-  if (p === 2) return 'bg-amber-100 text-amber-800 border-amber-300'
-  return 'bg-emerald-100 text-emerald-800 border-emerald-300'
+  if (anchoFuera || pesoFuera) return 1
+  if (art.encUrdAvg !== null && art.encUrdAvg > -1.2) return 2
+  return 3
 }
 
 onMounted(() => { cargarDatos() })
 </script>
+
+<style scoped>
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+.animate-fade-in {
+  animation: fadeIn 0.18s ease-out forwards;
+}
+</style>

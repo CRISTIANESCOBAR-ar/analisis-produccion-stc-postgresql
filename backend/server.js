@@ -2063,20 +2063,11 @@ app.get('/api/produccion/calidad/resumen-dia-anterior', async (req, res) => {
   }
 })
 
-// GET /api/produccion/calidad/seguimiento-tendencias?articulo=XXX&fecha_inicial=YYYY-MM-DD&fecha_final=YYYY-MM-DD
+// GET /api/produccion/calidad/seguimiento-tendencias?articulo=XXX&fecha_referencia=YYYY-MM-DD&dias_ventana=30
 app.get('/api/produccion/calidad/seguimiento-tendencias', async (req, res) => {
   try {
     const t0 = hrMs()
-    const { articulo, fecha_inicial, fecha_final } = req.query
-
-    // Rango por defecto: últimos 90 días
-    const endDate = fecha_final ? String(fecha_final) : new Date().toISOString().split('T')[0]
-    let startDate = fecha_inicial ? String(fecha_inicial) : null
-    if (!startDate) {
-      const d = new Date(endDate)
-      d.setDate(d.getDate() - 90)
-      startDate = d.toISOString().split('T')[0]
-    }
+    const { articulo, fecha_referencia, fecha_inicial, fecha_final, dias_ventana } = req.query
 
     const testesDtProdDate = sqlParseDate('"dt_prod"')
     const calDatProdDate = sqlParseDate('"DAT_PROD"')
@@ -2091,11 +2082,50 @@ app.get('/api/produccion/calidad/seguimiento-tendencias', async (req, res) => {
     const cLarguraNum = sqlParseNumberIntl('"LARGURA"')
     const cGrm2Num = sqlParseNumberIntl('"GR/M2"')
 
+    // 1. Determinar fecha máxima de la base de datos
+    const maxDateRes = await query(
+      `SELECT MAX(${testesDtProdDate})::text AS max_fecha FROM tb_testes WHERE "dt_prod" IS NOT NULL`,
+      [],
+      'calidad/max-fecha-testes'
+    )
+    const maxFechaStr = maxDateRes.rows[0]?.max_fecha ? maxDateRes.rows[0].max_fecha.split('T')[0] : new Date().toISOString().split('T')[0]
+
+    // 2. Determinar ventana de fechas dinámica
+    let targetDateStr = fecha_referencia ? String(fecha_referencia).split('T')[0] : maxFechaStr
+    let startDate = null
+    let endDate = null
+
+    if (fecha_inicial && fecha_final) {
+      startDate = String(fecha_inicial)
+      endDate = String(fecha_final)
+    } else {
+      const isUltimoDia = targetDateStr >= maxFechaStr
+      const windowDays = parseInt(dias_ventana || '30', 10)
+
+      if (isUltimoDia) {
+        // Si es el día actual o la última fecha: 30 días previos a la fecha
+        endDate = targetDateStr
+        const d = new Date(targetDateStr)
+        d.setDate(d.getDate() - windowDays)
+        startDate = d.toISOString().split('T')[0]
+      } else {
+        // Si es una fecha antigua: centrado 15 días antes y 15 días después
+        const halfWindow = Math.floor(windowDays / 2)
+        const dStart = new Date(targetDateStr)
+        dStart.setDate(dStart.getDate() - halfWindow)
+        startDate = dStart.toISOString().split('T')[0]
+
+        const dEnd = new Date(targetDateStr)
+        dEnd.setDate(dEnd.getDate() + halfWindow)
+        endDate = dEnd.toISOString().split('T')[0]
+      }
+    }
+
     const articleFilterTestes = articulo ? `AND "artigo" = $3` : ''
     const articleFilterCalidad = articulo ? `AND "ARTIGO" = $3` : ''
     const queryParams = articulo ? [startDate, endDate, String(articulo)] : [startDate, endDate]
 
-    // 1. Agregación Semanal (Evolución a largo plazo de 60-90 días)
+    // 3. Agregación Semanal (Evolución a largo plazo de 60-90 días)
     const sqlSemanal = `
       WITH TestesSemanal AS (
         SELECT
@@ -2145,7 +2175,7 @@ app.get('/api/produccion/calidad/seguimiento-tendencias', async (req, res) => {
       ORDER BY TS.semana_inicio ASC;
     `
 
-    // 2. Agregación Diaria (Evolución diaria para análisis de casos puntuales)
+    // 4. Agregación Diaria (Evolución diaria con Min, Max, Avg)
     const sqlDiaria = `
       WITH TestesDiario AS (
         SELECT
@@ -2156,7 +2186,11 @@ app.get('/api/produccion/calidad/seguimiento-tendencias', async (req, res) => {
           MAX(${tEncUrdNum}) AS enc_urd_max,
           AVG(${tEncTramaNum}) AS enc_trama_avg,
           AVG(${tLargAlNum}) AS ancho_test_avg,
-          AVG(${tGramatNum}) AS peso_test_avg
+          MIN(${tLargAlNum}) AS ancho_test_min,
+          MAX(${tLargAlNum}) AS ancho_test_max,
+          AVG(${tGramatNum}) AS peso_test_avg,
+          MIN(${tGramatNum}) AS peso_test_min,
+          MAX(${tGramatNum}) AS peso_test_max
         FROM tb_testes
         WHERE
           ${testesDtProdDate} BETWEEN $1::date AND $2::date
@@ -2175,22 +2209,26 @@ app.get('/api/produccion/calidad/seguimiento-tendencias', async (req, res) => {
         GROUP BY ${calDatProdDate}::date
       )
       SELECT
-        TD.fecha AS "Fecha",
+        TD.fecha::text AS "Fecha",
         TD.ensayos_count AS "EnsayosCount",
         ROUND(TD.enc_urd_avg::numeric, 2) AS "EncUrdAvg",
         ROUND(TD.enc_urd_min::numeric, 2) AS "EncUrdMin",
         ROUND(TD.enc_urd_max::numeric, 2) AS "EncUrdMax",
         ROUND(TD.enc_trama_avg::numeric, 2) AS "EncTramaAvg",
         ROUND(TD.ancho_test_avg::numeric, 1) AS "AnchoTestAvg",
+        ROUND(TD.ancho_test_min::numeric, 1) AS "AnchoTestMin",
+        ROUND(TD.ancho_test_max::numeric, 1) AS "AnchoTestMax",
         ROUND(CD.ancho_mesa_avg::numeric, 1) AS "AnchoMesaAvg",
         ROUND(TD.peso_test_avg::numeric, 1) AS "PesoTestAvg",
+        ROUND(TD.peso_test_min::numeric, 1) AS "PesoTestMin",
+        ROUND(TD.peso_test_max::numeric, 1) AS "PesoTestMax",
         ROUND(CD.peso_mesa_avg::numeric, 1) AS "PesoMesaAvg"
       FROM TestesDiario TD
       LEFT JOIN CalidadDiario CD ON TD.fecha = CD.fecha
       ORDER BY TD.fecha ASC;
     `
 
-    // 3. Ficha Técnica de Especificación si hay artículo seleccionado
+    // 5. Ficha Técnica de Especificación si hay artículo seleccionado
     let especificacion = null
     if (articulo) {
       const sqlFicha = `
@@ -2239,20 +2277,23 @@ app.get('/api/produccion/calidad/seguimiento-tendencias', async (req, res) => {
     }
 
     res.json({
-      articulo: articulo || 'TODOS',
-      fecha_inicial: startDate,
-      fecha_final: endDate,
-      especificacion,
-      tendencia_general: {
-        enc_urd_slope: Number(encUrdSlope.toFixed(4)),
-        enc_urd_direccion: encUrdSlope > 0.03 ? 'SUBIENDO_A_CERO' : encUrdSlope < -0.03 ? 'DISMINUYENDO' : 'ESTABLE'
+      articulo: articulo || null,
+      fecha_referencia: targetDateStr,
+      max_fecha_db: maxFechaStr,
+      es_ultimo_dia: targetDateStr >= maxFechaStr,
+      rango: {
+        inicio: startDate,
+        fin: endDate
       },
-      semanal: semanas,
+      especificacion,
+      tendencia_slope: Number(encUrdSlope.toFixed(4)),
+      tendencia_direccion: encUrdSlope > 0.05 ? 'ALTA' : encUrdSlope < -0.05 ? 'BAJA' : 'ESTABLE',
+      semanas,
       diario: resDiario.rows
     })
 
     console.log(
-      `[PERF] GET /calidad/seguimiento-tendencias articulo=${articulo || 'TODOS'} ${startDate}..${endDate} semanas=${semanas.length} dias=${resDiario.rows.length} total=${(
+      `[PERF] GET /calidad/seguimiento-tendencias art=${articulo || 'ALL'} range=${startDate}..${endDate} target=${targetDateStr} rows=${resDiario.rows.length} total=${(
         hrMs() - t0
       ).toFixed(1)}ms`
     )
