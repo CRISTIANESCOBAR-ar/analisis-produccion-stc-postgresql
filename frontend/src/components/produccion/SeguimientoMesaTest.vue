@@ -1005,7 +1005,10 @@ const renderizarGrafico = async () => {
       const val = esModoTodos ? d.AnchoTest : d.AnchoTestAvg
       return val !== null && val !== undefined ? parseFloat(val) : null
     })
-    const mesaData = fuenteDatos.map(d => d.AnchoMesaAvg !== null && d.AnchoMesaAvg !== undefined ? parseFloat(d.AnchoMesaAvg) : null)
+    const mesaData = fuenteDatos.map(d => {
+      const val = d.AnchoMesaAvg ?? d.AnchoMesa
+      return val !== null && val !== undefined ? parseFloat(val) : null
+    })
     const stdVal = especificacionGrafico.value?.AnchoStd ? parseFloat(especificacionGrafico.value.AnchoStd) : null
     const minVal = especificacionGrafico.value?.AnchoMin ? parseFloat(especificacionGrafico.value.AnchoMin) : null
     const maxVal = especificacionGrafico.value?.AnchoMax ? parseFloat(especificacionGrafico.value.AnchoMax) : null
@@ -1032,7 +1035,7 @@ const renderizarGrafico = async () => {
         borderWidth: 2,
         tension: 0,
         fill: false,
-        pointRadius: 0,
+        pointRadius: esModoTodos ? 4 : 0,
         pointHoverRadius: 5
       }
     ]
@@ -1073,7 +1076,10 @@ const renderizarGrafico = async () => {
       const val = esModoTodos ? d.PesoTest : d.PesoTestAvg
       return val !== null && val !== undefined ? parseFloat(val) : null
     })
-    const mesaData = fuenteDatos.map(d => d.PesoMesaAvg !== null && d.PesoMesaAvg !== undefined ? parseFloat(d.PesoMesaAvg) : null)
+    const mesaData = fuenteDatos.map(d => {
+      const val = d.PesoMesaAvg ?? d.PesoMesa
+      return val !== null && val !== undefined ? parseFloat(val) : null
+    })
     const stdVal = especificacionGrafico.value?.PesoStd ? parseFloat(especificacionGrafico.value.PesoStd) : null
     let minVal = especificacionGrafico.value?.PesoMin ? parseFloat(especificacionGrafico.value.PesoMin) : null
     let maxVal = especificacionGrafico.value?.PesoMax ? parseFloat(especificacionGrafico.value.PesoMax) : null
@@ -1110,7 +1116,7 @@ const renderizarGrafico = async () => {
         borderWidth: 2,
         tension: 0,
         fill: false,
-        pointRadius: 0,
+        pointRadius: esModoTodos ? 4 : 0,
         pointHoverRadius: 5
       }
     ]

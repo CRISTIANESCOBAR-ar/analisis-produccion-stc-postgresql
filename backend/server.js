@@ -1988,6 +1988,7 @@ app.get('/api/produccion/calidad/resumen-dia-anterior', async (req, res) => {
         F.trama AS "Trama",
         CASE WHEN T.maquina ~ '^[0-9]+$' THEN T.maquina::int ELSE NULL END AS "Maquina",
         T.partida AS "Partida",
+        COALESCE(TO_CHAR(T.dt_prod, 'YYYY-MM-DD'), T.dt_prod_raw) AS "Fecha",
         T.hora_prod AS "Hora",
         T.turno AS "Turno",
         T.aprov AS "Ap",
@@ -2127,7 +2128,16 @@ app.get('/api/produccion/calidad/seguimiento-tendencias', async (req, res) => {
 
     // 3. Agregación Semanal (Evolución a largo plazo de 60-90 días)
     const sqlSemanal = `
-      WITH TestesSemanal AS (
+      WITH CalidadPorPartida AS (
+        SELECT
+          "ARTIGO" AS artigo,
+          btrim("PARTIDA") AS partida,
+          AVG(COALESCE(${cLarguraNum}, 0)) AS ancho_mesa,
+          AVG(COALESCE(${cGrm2Num}, 0)) AS peso_mesa
+        FROM tb_calidad
+        GROUP BY "ARTIGO", btrim("PARTIDA")
+      ),
+      TestesSemanal AS (
         SELECT
           date_trunc('week', ${testesDtProdDate})::date AS semana_inicio,
           COUNT(*)::int AS ensayos_count,
@@ -2136,25 +2146,17 @@ app.get('/api/produccion/calidad/seguimiento-tendencias', async (req, res) => {
           MAX(${tEncUrdNum}) AS enc_urd_max,
           AVG(${tEncTramaNum}) AS enc_trama_avg,
           AVG(${tLargAlNum}) AS ancho_test_avg,
+          AVG(C.ancho_mesa) AS ancho_mesa_avg,
           AVG(${tGramatNum}) AS peso_test_avg,
+          AVG(C.peso_mesa) AS peso_mesa_avg,
           AVG(${tSk1Num}) AS sk1_avg,
           AVG(${tSkeNum}) AS ske_avg
-        FROM tb_testes
+        FROM tb_testes T
+        LEFT JOIN CalidadPorPartida C ON T."artigo" = C.artigo AND btrim(T."partida") = C.partida
         WHERE
           ${testesDtProdDate} BETWEEN $1::date AND $2::date
-          ${articleFilterTestes}
+          ${articulo ? `AND T."artigo" = $3` : ''}
         GROUP BY date_trunc('week', ${testesDtProdDate})::date
-      ),
-      CalidadSemanal AS (
-        SELECT
-          date_trunc('week', ${calDatProdDate})::date AS semana_inicio,
-          AVG(COALESCE(${cLarguraNum}, 0)) AS ancho_mesa_avg,
-          AVG(COALESCE(${cGrm2Num}, 0)) AS peso_mesa_avg
-        FROM tb_calidad
-        WHERE
-          ${calDatProdDate} BETWEEN $1::date AND $2::date
-          ${articleFilterCalidad}
-        GROUP BY date_trunc('week', ${calDatProdDate})::date
       )
       SELECT
         TS.semana_inicio AS "SemanaInicio",
@@ -2165,19 +2167,27 @@ app.get('/api/produccion/calidad/seguimiento-tendencias', async (req, res) => {
         ROUND(TS.enc_urd_max::numeric, 2) AS "EncUrdMax",
         ROUND(TS.enc_trama_avg::numeric, 2) AS "EncTramaAvg",
         ROUND(TS.ancho_test_avg::numeric, 1) AS "AnchoTestAvg",
-        ROUND(CS.ancho_mesa_avg::numeric, 1) AS "AnchoMesaAvg",
+        ROUND(TS.ancho_mesa_avg::numeric, 1) AS "AnchoMesaAvg",
         ROUND(TS.peso_test_avg::numeric, 1) AS "PesoTestAvg",
-        ROUND(CS.peso_mesa_avg::numeric, 1) AS "PesoMesaAvg",
+        ROUND(TS.peso_mesa_avg::numeric, 1) AS "PesoMesaAvg",
         ROUND(TS.sk1_avg::numeric, 2) AS "Sk1Avg",
         ROUND(TS.ske_avg::numeric, 2) AS "SkeAvg"
       FROM TestesSemanal TS
-      LEFT JOIN CalidadSemanal CS ON TS.semana_inicio = CS.semana_inicio
       ORDER BY TS.semana_inicio ASC;
     `
 
     // 4. Agregación Diaria (Evolución diaria con Min, Max, Avg)
     const sqlDiaria = `
-      WITH TestesDiario AS (
+      WITH CalidadPorPartida AS (
+        SELECT
+          "ARTIGO" AS artigo,
+          btrim("PARTIDA") AS partida,
+          AVG(COALESCE(${cLarguraNum}, 0)) AS ancho_mesa,
+          AVG(COALESCE(${cGrm2Num}, 0)) AS peso_mesa
+        FROM tb_calidad
+        GROUP BY "ARTIGO", btrim("PARTIDA")
+      ),
+      TestesDiario AS (
         SELECT
           ${testesDtProdDate}::date AS fecha,
           COUNT(*)::int AS ensayos_count,
@@ -2188,28 +2198,20 @@ app.get('/api/produccion/calidad/seguimiento-tendencias', async (req, res) => {
           AVG(${tLargAlNum}) AS ancho_test_avg,
           MIN(${tLargAlNum}) AS ancho_test_min,
           MAX(${tLargAlNum}) AS ancho_test_max,
+          AVG(C.ancho_mesa) AS ancho_mesa_avg,
           AVG(${tGramatNum}) AS peso_test_avg,
           MIN(${tGramatNum}) AS peso_test_min,
-          MAX(${tGramatNum}) AS peso_test_max
-        FROM tb_testes
+          MAX(${tGramatNum}) AS peso_test_max,
+          AVG(C.peso_mesa) AS peso_mesa_avg
+        FROM tb_testes T
+        LEFT JOIN CalidadPorPartida C ON T."artigo" = C.artigo AND btrim(T."partida") = C.partida
         WHERE
           ${testesDtProdDate} BETWEEN $1::date AND $2::date
-          ${articleFilterTestes}
+          ${articulo ? `AND T."artigo" = $3` : ''}
         GROUP BY ${testesDtProdDate}::date
-      ),
-      CalidadDiario AS (
-        SELECT
-          ${calDatProdDate}::date AS fecha,
-          AVG(COALESCE(${cLarguraNum}, 0)) AS ancho_mesa_avg,
-          AVG(COALESCE(${cGrm2Num}, 0)) AS peso_mesa_avg
-        FROM tb_calidad
-        WHERE
-          ${calDatProdDate} BETWEEN $1::date AND $2::date
-          ${articleFilterCalidad}
-        GROUP BY ${calDatProdDate}::date
       )
       SELECT
-        TD.fecha::text AS "Fecha",
+        to_char(TD.fecha, 'YYYY-MM-DD') AS "Fecha",
         TD.ensayos_count AS "EnsayosCount",
         ROUND(TD.enc_urd_avg::numeric, 2) AS "EncUrdAvg",
         ROUND(TD.enc_urd_min::numeric, 2) AS "EncUrdMin",
@@ -2218,17 +2220,49 @@ app.get('/api/produccion/calidad/seguimiento-tendencias', async (req, res) => {
         ROUND(TD.ancho_test_avg::numeric, 1) AS "AnchoTestAvg",
         ROUND(TD.ancho_test_min::numeric, 1) AS "AnchoTestMin",
         ROUND(TD.ancho_test_max::numeric, 1) AS "AnchoTestMax",
-        ROUND(CD.ancho_mesa_avg::numeric, 1) AS "AnchoMesaAvg",
+        ROUND(TD.ancho_mesa_avg::numeric, 1) AS "AnchoMesaAvg",
         ROUND(TD.peso_test_avg::numeric, 1) AS "PesoTestAvg",
         ROUND(TD.peso_test_min::numeric, 1) AS "PesoTestMin",
         ROUND(TD.peso_test_max::numeric, 1) AS "PesoTestMax",
-        ROUND(CD.peso_mesa_avg::numeric, 1) AS "PesoMesaAvg"
+        ROUND(TD.peso_mesa_avg::numeric, 1) AS "PesoMesaAvg"
       FROM TestesDiario TD
-      LEFT JOIN CalidadDiario CD ON TD.fecha = CD.fecha
       ORDER BY TD.fecha ASC;
     `
 
-    // 5. Ficha Técnica de Especificación si hay artículo seleccionado
+    // 5. Ensayos individuales (Detalle punto a punto para cada medición)
+    const sqlDetalle = `
+      WITH CalidadPorPartida AS (
+        SELECT
+          "ARTIGO" AS artigo,
+          btrim("PARTIDA") AS partida,
+          AVG(COALESCE(${cLarguraNum}, 0)) AS ancho_mesa,
+          AVG(COALESCE(${cGrm2Num}, 0)) AS peso_mesa
+        FROM tb_calidad
+        GROUP BY "ARTIGO", btrim("PARTIDA")
+      )
+      SELECT
+        btrim(T."partida") AS "Partida",
+        to_char(${testesDtProdDate}, 'YYYY-MM-DD') AS "Fecha",
+        COALESCE(T."hora_prod"::text, '-') AS "Hora",
+        COALESCE(T."turno"::text, '-') AS "Turno",
+        COALESCE(T."maquina"::text, '-') AS "Maquina",
+        ROUND(${tEncUrdNum}::numeric, 2) AS "EncUrd",
+        ROUND(${tEncTramaNum}::numeric, 2) AS "EncTrama",
+        ROUND(${tLargAlNum}::numeric, 1) AS "AnchoTest",
+        ROUND(${tGramatNum}::numeric, 1) AS "PesoTest",
+        ROUND(C.ancho_mesa::numeric, 1) AS "AnchoMesaAvg",
+        ROUND(C.peso_mesa::numeric, 1) AS "PesoMesaAvg",
+        ROUND(C.ancho_mesa::numeric, 1) AS "AnchoMesa",
+        ROUND(C.peso_mesa::numeric, 1) AS "PesoMesa"
+      FROM tb_testes T
+      LEFT JOIN CalidadPorPartida C ON T."artigo" = C.artigo AND btrim(T."partida") = C.partida
+      WHERE
+        ${testesDtProdDate} BETWEEN $1::date AND $2::date
+        ${articulo ? `AND T."artigo" = $3` : ''}
+      ORDER BY ${testesDtProdDate} ASC, T."hora_prod" ASC;
+    `
+
+    // 6. Ficha Técnica de Especificación si hay artículo seleccionado
     let especificacion = null
     if (articulo) {
       const sqlFicha = `
@@ -2254,9 +2288,10 @@ app.get('/api/produccion/calidad/seguimiento-tendencias', async (req, res) => {
       }
     }
 
-    const [resSemanal, resDiario] = await Promise.all([
+    const [resSemanal, resDiario, resDetalle] = await Promise.all([
       query(sqlSemanal, queryParams, 'calidad/seguimiento-semanal'),
-      query(sqlDiaria, queryParams, 'calidad/seguimiento-diario')
+      query(sqlDiaria, queryParams, 'calidad/seguimiento-diario'),
+      query(sqlDetalle, queryParams, 'calidad/seguimiento-detalle')
     ])
 
     // Calcular la tendencia lineal del encogimiento urdido sobre las semanas
@@ -2289,7 +2324,8 @@ app.get('/api/produccion/calidad/seguimiento-tendencias', async (req, res) => {
       tendencia_slope: Number(encUrdSlope.toFixed(4)),
       tendencia_direccion: encUrdSlope > 0.05 ? 'ALTA' : encUrdSlope < -0.05 ? 'BAJA' : 'ESTABLE',
       semanas,
-      diario: resDiario.rows
+      diario: resDiario.rows,
+      ensayos_detalle: resDetalle.rows
     })
 
     console.log(
