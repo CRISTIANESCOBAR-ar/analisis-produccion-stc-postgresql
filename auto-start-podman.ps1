@@ -5,6 +5,10 @@
 # Log: C:\stc-produccion-v2\podman-autostart.log
 # ============================================================
 
+param(
+    [switch]$ServiceOnly
+)
+
 $logFile = "C:\stc-produccion-v2\podman-autostart.log"
 $startDbScript = "C:\stc-produccion-v2\start-db.ps1"
 
@@ -46,6 +50,12 @@ try {
     }
 } catch {
     Write-Log "[WARN] Error al verificar WSLService: $_"
+}
+
+if ($ServiceOnly) {
+    Write-Log "Modo -ServiceOnly activo. Servicio WSLService asegurado. Finalizando tarea administrativa."
+    Write-Log "========== TAREA ADMINISTRATIVA COMPLETADA =========="
+    exit 0
 }
 
 # ---------- 3. Verificar que WSL responde ----------

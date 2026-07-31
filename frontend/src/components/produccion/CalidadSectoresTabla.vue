@@ -443,6 +443,121 @@ const chartData = ref([])
 const selectedTrama = ref('7/1 OE') // Trama por defecto
 const availableTramas = ref(['7/1 OE']) // Tramas disponibles para el período
 
+// Helper para convertir valores a número seguro
+const toNumber = (value) => {
+  if (value === null || value === undefined || value === '') return 0
+  const num = Number(String(value).replace(',', '.'))
+  return Number.isFinite(num) ? num : 0
+}
+
+// Algoritmo para posicionar dinámicamente las etiquetas de la línea RT105 dentro del área del gráfico
+const adjustLineLabelAlign = (context) => {
+  const value = toNumber(context.dataset.data[context.dataIndex])
+  if (value === null || value === 0) return 'top'
+  
+  const chart = context.chart
+  const scaleId = context.dataset.yAxisID || 'y1'
+  const scale = chart?.scales?.[scaleId]
+  const chartArea = chart?.chartArea
+  
+  if (chartArea && scale) {
+    const yPixel = scale.getPixelForValue(value)
+    
+    // 1. Verificar primero si choca con el tope del gráfico
+    const datasetDatalabels = context.dataset.datalabels || {}
+    const fontSize = (datasetDatalabels.font && datasetDatalabels.font.size) || 12
+    const offset = datasetDatalabels.offset || 6
+    const lineLabelHeight = fontSize + offset
+    const safetyMargin = fontSize > 20 ? 25 : 15
+    
+    if (yPixel - chartArea.top < lineLabelHeight + safetyMargin) {
+      return 'bottom'
+    }
+    
+    // 2. Si no choca con el tope, verificar colisión con la etiqueta de la barra
+    const effDataset = chart.data.datasets.find(ds => ds.label === 'Eficiencia %')
+    const scaleY = chart.scales['y']
+    
+    if (effDataset && scaleY) {
+      const effValue = toNumber(effDataset.data[context.dataIndex])
+      if (effValue !== null && effValue !== 0) {
+        const yBarPixel = scaleY.getPixelForValue(effValue)
+        
+        // Intervalo de la etiqueta de la barra (va de yBarPixel hacia arriba)
+        const barLabelHeight = fontSize * 3.2
+        const barStart = yBarPixel - barLabelHeight - 4
+        const barEnd = yBarPixel + 4
+        
+        // Intervalo si alineamos 'top' (va de yPixel hacia arriba)
+        const topStart = yPixel - lineLabelHeight - 4
+        const topEnd = yPixel - offset + 2
+        
+        // Intervalo si alineamos 'bottom' (va de yPixel hacia abajo)
+        const bottomStart = yPixel + offset - 2
+        const bottomEnd = yPixel + lineLabelHeight + 4
+        
+        const overlapsTop = Math.max(barStart, topStart) <= Math.min(barEnd, topEnd)
+        const overlapsBottom = Math.max(barStart, bottomStart) <= Math.min(barEnd, bottomEnd)
+        
+        if (overlapsTop && overlapsBottom) {
+          // Si choca en ambas direcciones verticales, alineamos horizontalmente al costado
+          if (context.dataIndex === 0) return 'right'
+          if (context.dataIndex === context.dataset.data.length - 1) return 'left'
+          
+          const prevVal = toNumber(context.dataset.data[context.dataIndex - 1])
+          return value >= prevVal ? 'right' : 'left'
+        }
+        
+        if (overlapsTop) {
+          return 'bottom'
+        }
+      }
+    }
+  } else {
+    const data = context.dataset.data.map(v => toNumber(v)).filter(v => v !== null && v !== 0)
+    const maxVal = data.length > 0 ? Math.max(...data) : 1.0
+    if (value >= maxVal * 0.80) {
+      return 'bottom'
+    }
+  }
+  return 'top'
+}
+
+// Algoritmo para posicionar dinámicamente las etiquetas de la barra Eficiencia dentro del área del gráfico
+const adjustBarLabelAlign = (context) => {
+  const value = toNumber(context.dataset.data[context.dataIndex])
+  if (value === null || value === 0) return 'end'
+  
+  const chart = context.chart
+  const scaleId = context.dataset.yAxisID || 'y'
+  const scale = chart?.scales?.[scaleId]
+  const chartArea = chart?.chartArea
+  
+  if (chartArea && scale) {
+    const yPixel = scale.getPixelForValue(value)
+    const distanceToTop = yPixel - chartArea.top
+    
+    const datasetDatalabels = context.dataset.datalabels || {}
+    const fontSize = (datasetDatalabels.font && datasetDatalabels.font.size) || 12
+    const textLength = fontSize * 3.2
+    
+    if (distanceToTop < textLength + 10) {
+      return 'start' // colocar adentro de la barra
+    }
+  } else {
+    if (value > 85) {
+      return 'start'
+    }
+  }
+  return 'end'
+}
+
+// Ajustar color del label de barra según esté adentro o afuera para asegurar buen contraste
+const adjustBarLabelColor = (context) => {
+  const alignVal = adjustBarLabelAlign(context)
+  return alignVal === 'start' ? '#1e293b' : '#64748b'
+}
+
 // Ref para la tabla Excel (para captura de imagen)
 const excelTableRef = ref(null)
 
@@ -2401,12 +2516,7 @@ async function copyChartToClipboard() {
     chartTempCanvas.width = chartWidth
     chartTempCanvas.height = chartHeight
     
-    // Helper para convertir valores a número seguro
-    const toNumber = (value) => {
-      if (value === null || value === undefined || value === '') return 0
-      const num = Number(String(value).replace(',', '.'))
-      return Number.isFinite(num) ? num : 0
-    }
+    // (Utiliza toNumber global)
 
     // Preparar datos del gráfico (igual que renderChart)
     const labels = chartData.value.map(d => {
@@ -2418,7 +2528,7 @@ async function copyChartToClipboard() {
     const eficiencias = chartData.value.map(d => toNullIfZero(d.eficiencia))
     const rt105 = chartData.value.map(d => toNullIfZero(d.rt105))
     const maxRT105 = Math.max(...rt105.map(v => v ?? 0))
-    const scaleMaxY1 = maxRT105 * 1.15
+    const scaleMaxY1 = maxRT105 * 1.25
     
     // Crear gráfico temporal con valores en la base
     const chartCtx = chartTempCanvas.getContext('2d')
@@ -2441,9 +2551,10 @@ async function copyChartToClipboard() {
             datalabels: {
               display: true,
               align: 'end',
-              anchor: 'start',
+              anchor: 'end',
               color: '#1e293b',
               rotation: -90,
+              clamp: true,
               font: { family: 'Verdana', weight: 'bold', size: 43 },
               formatter: (value) => {
                 const num = toNumber(value)
@@ -2468,11 +2579,12 @@ async function copyChartToClipboard() {
             tension: 0,
             datalabels: {
               display: true,
-              align: 'top',
+              align: adjustLineLabelAlign,
               anchor: 'end',
               offset: 12,
               color: '#f97316',
               clip: false,
+              clamp: true,
               font: { family: 'Verdana', weight: 'bold', size: 43 },
               formatter: (value) => {
                 const num = toNumber(value)
@@ -2487,6 +2599,14 @@ async function copyChartToClipboard() {
         maintainAspectRatio: false,
         animation: false,
         devicePixelRatio: scale,
+        layout: {
+          padding: {
+            top: 45,
+            bottom: 15,
+            left: 30,
+            right: 45
+          }
+        },
         plugins: {
           datalabels: { clip: false },
           legend: { display: false },
@@ -2498,10 +2618,14 @@ async function copyChartToClipboard() {
             grid: { display: false },
             ticks: {
               color: '#64748b',
-              font: { family: 'Verdana', size: 35, weight: 'bold' },
+              font: { 
+                family: 'Verdana', 
+                size: labels.length > 20 ? 24 : (labels.length > 10 ? 30 : 35), 
+                weight: 'bold' 
+              },
               autoSkip: false,
-              maxRotation: labels.length > 15 ? 90 : 0,
-              minRotation: labels.length > 15 ? 90 : 0
+              maxRotation: labels.length > 7 ? 90 : 0,
+              minRotation: labels.length > 7 ? 90 : 0
             }
           },
           y: {
@@ -2514,11 +2638,12 @@ async function copyChartToClipboard() {
               font: { family: 'Verdana', size: 39, weight: 'bold' },
               callback: (value) => {
                 const n = toNumber(value)
+                if (n > 100) return ''
                 return n.toFixed(0)
               }
             },
             min: 0,
-            max: 100
+            max: 105
           },
           y1: {
             type: 'linear',
@@ -2664,20 +2789,16 @@ function renderChart() {
     return `${day}-${month}-${year.slice(-2)}`
   })
   
-  const toNumber = (value) => {
-    if (value === null || value === undefined || value === '') return 0
-    const num = Number(String(value).replace(',', '.'))
-    return Number.isFinite(num) ? num : 0
-  }
+  // (Utiliza toNumber global)
 
   // Convertir 0 a null para omitir días sin producción en el gráfico
   const toNullIfZero = (value) => { const n = toNumber(value); return n === 0 ? null : n }
   const eficiencias = chartData.value.map(d => toNullIfZero(d.eficiencia))
   const rt105 = chartData.value.map(d => toNullIfZero(d.rt105))
   
-  // Calcular el máximo de RT105 y añadir 15% de margen para los labels
+  // Calcular el máximo de RT105 y añadir 25% de margen para los labels
   const maxRT105 = Math.max(...rt105.map(v => v ?? 0))
-  const scaleMaxY1 = maxRT105 * 1.15  // 15% de margen
+  const scaleMaxY1 = maxRT105 * 1.25  // 25% de margen
   
   console.log(`🎨 Renderizando gráfico con ${labels.length} puntos de datos`)
   console.log(`📊 Max RT105: ${maxRT105}, Scale Max: ${scaleMaxY1.toFixed(2)}`)
@@ -2712,8 +2833,9 @@ function renderChart() {
             display: true,
             align: 'end',
             anchor: 'end',
-            color: '#64748b',
+            color: '#1e293b',
             rotation: -90,
+            clamp: true,
             font: {
               family: 'Verdana',
               weight: 'normal',
@@ -2742,11 +2864,12 @@ function renderChart() {
           tension: 0,
           datalabels: {
             display: true,
-            align: 'top',
+            align: adjustLineLabelAlign,
             anchor: 'end',
             offset: 6,
             color: '#f97316',
             clip: false,
+            clamp: true,
             font: {
               family: 'Verdana',
               weight: 'normal',
@@ -2825,8 +2948,8 @@ function renderChart() {
                 size: 9
               },
               autoSkip: false,
-              maxRotation: labels.length > 15 ? 90 : 0,
-              minRotation: labels.length > 15 ? 90 : 0,
+              maxRotation: labels.length > 7 ? 90 : 0,
+              minRotation: labels.length > 7 ? 90 : 0,
               maxTicksLimit: undefined
             }
           },
@@ -2842,12 +2965,19 @@ function renderChart() {
               font: {
                 family: 'Verdana',
                 size: 9
+              },
+              callback: function(value) {
+                const n = toNumber(value)
+                if (n > 100) return ''
+                return n.toFixed(0)
               }
             },
             grid: {
               display: true,
               color: 'rgba(148, 163, 184, 0.25)'
-            }
+            },
+            min: 0,
+            max: 105
           },
           y1: {
             type: 'linear',
@@ -2871,10 +3001,10 @@ function renderChart() {
         },
         layout: {
           padding: {
-            top: 6,
-            bottom: 0,
-            left: 0,
-            right: 0
+            top: 15,
+            bottom: 5,
+            left: 10,
+            right: 15
           }
         }
       }

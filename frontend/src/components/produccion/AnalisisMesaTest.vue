@@ -1,27 +1,39 @@
 <template>
-  <div class="w-full h-screen flex flex-col p-1 bg-slate-100">
-    <!-- Header con Barra de Pestañas Principal -->
-    <div class="bg-white rounded-xl shadow-sm border border-slate-200 px-4 py-2 mb-1 flex items-center justify-between flex-shrink-0">
+  <div class="w-full h-screen flex flex-col bg-white overflow-hidden font-sans">
+    <!-- Header con Barra de Pestañas Principal Flat -->
+    <div class="bg-white border-b border-slate-100 px-6 py-2.5 flex items-center justify-between flex-shrink-0">
       <div class="flex items-center gap-2">
-        <span class="text-xl">🧪</span>
-        <h3 class="text-base font-bold text-slate-800">Mesa de Test & Revisión</h3>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+        </svg>
+        <h3 class="text-sm font-semibold text-slate-900 tracking-tight">Mesa de Test &amp; Revisión</h3>
       </div>
 
       <!-- Tabs Nav -->
-      <div class="flex items-center gap-2 bg-slate-100 p-1 rounded-lg border border-slate-200">
+      <div class="flex items-center gap-2">
         <button 
           @click="tabActivo = 'seguimiento'"
-          class="px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5"
-          :class="tabActivo === 'seguimiento' ? 'bg-white shadow text-blue-700 font-extrabold' : 'text-slate-600 hover:text-slate-900'"
+          v-tippy="{ content: 'Ver seguimiento diario y tendencias globales', placement: 'bottom', theme: 'light' }"
+          class="inline-flex items-center gap-1.5 px-3 py-1 border rounded-lg text-xs font-medium transition-colors duration-150 shadow-sm hover:shadow-md cursor-pointer"
+          :class="tabActivo === 'seguimiento' ? 'bg-blue-50 text-blue-700 border-blue-500 font-semibold' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'"
         >
-          <span>📊</span> Seguimiento & Tendencias
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M3 3v18h18" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M18 17l-5-9-4 5-3-3" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+          Seguimiento &amp; Tendencias
         </button>
         <button 
           @click="tabActivo = 'analisis'"
-          class="px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5"
-          :class="tabActivo === 'analisis' ? 'bg-white shadow text-blue-700 font-extrabold' : 'text-slate-600 hover:text-slate-900'"
+          v-tippy="{ content: 'Ver análisis gráfico por artículo individual', placement: 'bottom', theme: 'light' }"
+          class="inline-flex items-center gap-1.5 px-3 py-1 border rounded-lg text-xs font-medium transition-colors duration-150 shadow-sm hover:shadow-md cursor-pointer"
+          :class="tabActivo === 'analisis' ? 'bg-blue-50 text-blue-700 border-blue-500 font-semibold' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'"
         >
-          <span>📉</span> Análisis Gráfico por Artículo
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M21 21H4a1 1 0 0 1-1-1V3" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M7 14l4-4 4 4 6-6" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+          Análisis Gráfico por Artículo
         </button>
       </div>
     </div>
@@ -32,7 +44,7 @@
     </div>
 
     <!-- Contenido Pestaña 2: Análisis por Artículo Individual (Vista previa) -->
-    <main v-else class="w-full flex-1 min-h-0 bg-white rounded-2xl shadow-xl px-4 py-3 border border-slate-200 flex flex-col">
+    <main v-else class="w-full flex-1 min-h-0 bg-white px-6 py-4 flex flex-col">
       <!-- Header con filtros -->
       <div v-if="!articuloSeleccionado" class="flex items-center justify-between gap-4 flex-shrink-0 mb-2">
         <h3 class="text-lg font-semibold text-slate-800">Análisis de Mesa de Test</h3>
@@ -48,7 +60,7 @@
               v-model="filtroTexto" 
               type="text" 
               placeholder="Buscar por artículo, nombre, color o trama..." 
-              class="w-full pl-9 pr-8 py-1.5 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+              class="w-full pl-9 pr-8 py-1.5 border border-slate-300 rounded-lg text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
             />
             <button 
               v-if="filtroTexto" 
@@ -93,33 +105,33 @@
 
       <!-- Lista de Artículos (vista principal) -->
       <div v-if="!articuloSeleccionado" class="flex-1 min-h-0 flex flex-col">
-        <!-- Tabla de artículos -->
-        <div class="overflow-auto w-full flex-1 min-h-0 rounded-xl border border-slate-200 pb-0">
-          <table class="min-w-full w-full table-auto divide-y divide-slate-200 text-xs">
-            <thead class="bg-gradient-to-r from-slate-50 to-slate-100 sticky top-0 z-20">
+        <!-- Tabla de artículos Flat -->
+        <div class="overflow-auto _minimal-scroll w-full flex-1 min-h-0">
+          <table class="min-w-full w-full table-auto divide-y divide-slate-100 text-xs">
+            <thead class="bg-white border-b border-slate-200 sticky top-0 z-20">
               <tr>
-                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200 cursor-pointer hover:bg-slate-200" @click="toggleSort('Articulo')">
+                <th class="px-2 py-2 text-center font-semibold text-slate-600 border-b border-slate-200 cursor-pointer hover:bg-slate-50" @click="toggleSort('Articulo')">
                   Artículo {{ sortIcon('Articulo') }}
                 </th>
-                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200 cursor-pointer hover:bg-slate-200" @click="toggleSort('Color')">
+                <th class="px-2 py-2 text-center font-semibold text-slate-600 border-b border-slate-200 cursor-pointer hover:bg-slate-50" @click="toggleSort('Color')">
                   Color {{ sortIcon('Color') }}
                 </th>
-                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200 cursor-pointer hover:bg-slate-200" @click="toggleSort('Id')">
+                <th class="px-2 py-2 text-center font-semibold text-slate-600 border-b border-slate-200 cursor-pointer hover:bg-slate-50" @click="toggleSort('Id')">
                   ID {{ sortIcon('Id') }}
                 </th>
-                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200 cursor-pointer hover:bg-slate-200" @click="toggleSort('Nombre')">
+                <th class="px-2 py-2 text-center font-semibold text-slate-600 border-b border-slate-200 cursor-pointer hover:bg-slate-50" @click="toggleSort('Nombre')">
                   Nombre {{ sortIcon('Nombre') }}
                 </th>
-                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200 cursor-pointer hover:bg-slate-200" @click="toggleSort('Trama')">
+                <th class="px-2 py-2 text-center font-semibold text-slate-600 border-b border-slate-200 cursor-pointer hover:bg-slate-50" @click="toggleSort('Trama')">
                   Trama {{ sortIcon('Trama') }}
                 </th>
-                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200 cursor-pointer hover:bg-slate-200" @click="toggleSort('Metros_TEST')">
+                <th class="px-2 py-2 text-center font-semibold text-slate-600 border-b border-slate-200 cursor-pointer hover:bg-slate-50" @click="toggleSort('Metros_TEST')">
                   Metros TEST {{ sortIcon('Metros_TEST') }}
                 </th>
-                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200 cursor-pointer hover:bg-slate-200" @click="toggleSort('Metros_REV')">
+                <th class="px-2 py-2 text-center font-semibold text-slate-600 border-b border-slate-200 cursor-pointer hover:bg-slate-50" @click="toggleSort('Metros_REV')">
                   Metros REV {{ sortIcon('Metros_REV') }}
                 </th>
-                <th class="px-2 py-2 text-center font-semibold text-slate-700 border-b border-slate-200 cursor-pointer hover:bg-slate-200" @click="toggleSort('Prod')">
+                <th class="px-2 py-2 text-center font-semibold text-slate-600 border-b border-slate-200 cursor-pointer hover:bg-slate-50" @click="toggleSort('Prod')">
                   Prod. {{ sortIcon('Prod') }}
                 </th>
               </tr>
@@ -143,14 +155,14 @@
                 @click="seleccionarArticulo(item)"
                 class="border-t border-slate-100 hover:bg-blue-50/30 transition-colors duration-150 cursor-pointer"
               >
-                <td class="px-2 py-2 text-center text-slate-700 font-mono">{{ item.Articulo }}</td>
-                <td class="px-2 py-2 text-center text-slate-700">{{ item.Color || '-' }}</td>
-                <td class="px-2 py-2 text-center text-slate-700 font-semibold">{{ item.Id || '-' }}</td>
-                <td class="px-2 py-2 text-center text-slate-700">{{ item.Nombre || '-' }}</td>
-                <td class="px-2 py-2 text-center text-slate-700">{{ item.Trama || '-' }}</td>
-                <td class="px-2 py-2 text-center text-slate-700 font-mono">{{ formatNumber(item.Metros_TEST) }}</td>
-                <td class="px-2 py-2 text-center text-slate-700 font-mono">{{ formatNumber(item.Metros_REV) }}</td>
-                <td class="px-2 py-2 text-center text-slate-700">{{ item.Prod || '-' }}</td>
+                <td class="px-2 py-[0.3rem] text-center text-slate-700 font-mono">{{ item.Articulo }}</td>
+                <td class="px-2 py-[0.3rem] text-center text-slate-700">{{ item.Color || '-' }}</td>
+                <td class="px-2 py-[0.3rem] text-center text-slate-700 font-semibold">{{ item.Id || '-' }}</td>
+                <td class="px-2 py-[0.3rem] text-center text-slate-700">{{ item.Nombre || '-' }}</td>
+                <td class="px-2 py-[0.3rem] text-center text-slate-700">{{ item.Trama || '-' }}</td>
+                <td class="px-2 py-[0.3rem] text-center text-slate-700 font-mono">{{ formatNumber(item.Metros_TEST) }}</td>
+                <td class="px-2 py-[0.3rem] text-center text-slate-700 font-mono">{{ formatNumber(item.Metros_REV) }}</td>
+                <td class="px-2 py-[0.3rem] text-center text-slate-700">{{ item.Prod || '-' }}</td>
               </tr>
             </tbody>
           </table>
@@ -159,20 +171,22 @@
 
       <!-- Vista de Gráfico (cuando se selecciona un artículo) -->
       <div v-else class="flex-1 min-h-0 flex flex-col relative overflow-hidden">
-        <!-- Toolbar Flotante -->
-        <div class="bg-white/95 backdrop-blur shadow-md border-b border-slate-200 px-3 py-2 flex flex-nowrap items-center gap-2 mb-2">
+        <!-- Toolbar Flat -->
+        <div class="bg-white border-b border-slate-100 py-2 px-1 flex flex-nowrap items-center gap-2 mb-2">
           <button 
             @click="volverALista" 
-            class="p-1.5 bg-slate-600 text-white rounded-md hover:bg-slate-700 flex items-center justify-center transition-colors flex-shrink-0"
+            class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md flex-shrink-0"
+            title="Volver a lista"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
+            <span class="hidden sm:inline">Volver</span>
           </button>
           
           <div class="flex-1 flex flex-nowrap items-center gap-2">
             <div class="flex items-center gap-2">
-              <label class="text-xs text-slate-600 font-medium whitespace-nowrap">Inicio:</label>
+              <label class="text-sm text-slate-600 whitespace-nowrap">Inicio:</label>
               <CustomDatepicker 
                 v-model="fechaInicial" 
                 :show-buttons="false"
@@ -180,7 +194,7 @@
             </div>
 
             <div class="flex items-center gap-2">
-              <label class="text-xs text-slate-600 font-medium whitespace-nowrap">Hasta:</label>
+              <label class="text-sm text-slate-600 whitespace-nowrap">Hasta:</label>
               <CustomDatepicker 
                 v-model="fechaFinal" 
                 :show-buttons="false"
@@ -188,15 +202,15 @@
             </div>
 
             <div class="flex items-center gap-1.5">
-              <label class="text-xs text-slate-600 font-medium whitespace-nowrap">Métrica:</label>
-              <select v-model="metricaActiva" class="px-2 py-1.5 border border-slate-300 rounded-md text-sm max-w-[180px] truncate">
+              <label class="text-sm text-slate-600 whitespace-nowrap">Métrica:</label>
+              <select v-model="metricaActiva" class="px-2 py-1 border border-slate-200 rounded-lg text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all max-w-[180px] truncate">
                 <option v-for="m in metricas" :key="m.value" :value="m.value">{{ m.label }}</option>
               </select>
             </div>
 
             <div class="flex items-center gap-1.5">
-              <label class="text-xs text-slate-600 font-medium whitespace-nowrap">Aprob:</label>
-              <select v-model="filtroAprobacion" class="px-2 py-1.5 border border-slate-300 rounded-md text-sm max-w-[100px]">
+              <label class="text-sm text-slate-600 whitespace-nowrap">Aprob:</label>
+              <select v-model="filtroAprobacion" class="px-2 py-1 border border-slate-200 rounded-lg text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all max-w-[100px]">
                 <option value="A">Aprobado</option>
                 <option value="R">Reprobado</option>
                 <option value="all">Todos</option>
@@ -204,8 +218,8 @@
             </div>
 
             <div class="flex items-center gap-1.5">
-              <label class="text-xs text-slate-600 font-medium whitespace-nowrap">Repr:</label>
-              <select v-model="filtroReproceso" class="px-2 py-1.5 border border-slate-300 rounded-md text-sm max-w-[120px]">
+              <label class="text-sm text-slate-600 whitespace-nowrap">Repr:</label>
+              <select v-model="filtroReproceso" class="px-2 py-1 border border-slate-200 rounded-lg text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all max-w-[120px]">
                 <option value="sin">Sin Reprocesos</option>
                 <option value="con">Con Reprocesos</option>
                 <option value="all">Todos</option>
@@ -214,16 +228,18 @@
             
             <button 
               @click="loadData" 
-              class="p-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center flex-shrink-0 ml-auto"
+              class="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm hover:shadow-md flex-shrink-0 ml-auto disabled:opacity-50"
               :disabled="loading"
+              title="Refrescar datos"
             >
-              <svg v-if="loading" class="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <svg v-if="loading" class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
+              <span class="hidden sm:inline">Refrescar</span>
             </button>
           </div>
         </div>
@@ -240,10 +256,10 @@
 
           <!-- Error -->
           <div v-else-if="error" class="flex-1 flex items-center justify-center">
-            <div class="text-center p-6 bg-red-50 border border-red-200 rounded-md max-w-md">
+            <div class="text-center p-6 bg-red-50 border border-red-200 rounded-xl max-w-md shadow-sm">
               <div class="text-red-700 font-semibold mb-2">Error al cargar datos</div>
-              <div class="text-red-600 text-sm">{{ error }}</div>
-              <button @click="loadData" class="mt-4 px-4 py-2 bg-red-600 text-white rounded text-sm">
+              <div class="text-red-600 text-sm mb-3">{{ error }}</div>
+              <button @click="loadData" class="inline-flex items-center gap-1 px-4 py-2 border border-red-600 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors duration-150 shadow-sm hover:shadow-md">
                 Reintentar
               </button>
             </div>
@@ -600,14 +616,12 @@ const renderChart = () => {
   const calcularRotacion = () => {
     const numLabels = labels.length
     const canvasWidth = chartCanvas.value.clientWidth || 1000
-    const espacioPorLabel = canvasWidth / numLabels
+    const espacioPorLabel = canvasWidth / Math.max(numLabels, 1)
     
-    if (espacioPorLabel > 60) {
+    if (espacioPorLabel >= 28) {
       return { min: 0, max: 0 }
-    } else if (espacioPorLabel < 40) {
-      return { min: 90, max: 90 }
     } else {
-      return { min: 45, max: 45 }
+      return { min: 90, max: 90 }
     }
   }
   
@@ -749,7 +763,7 @@ const renderChart = () => {
             pointHoverBorderWidth: 2,
             pointHoverBackgroundColor: 'rgb(37, 99, 235)',
             pointHoverBorderColor: 'white',
-            tension: 0.3
+            tension: 0
           },
           {
             label: 'Promedio Período',
@@ -832,6 +846,7 @@ const renderChart = () => {
               maxRotation: rotacion.max,
               minRotation: rotacion.min,
               autoSkip: true,
+              autoSkipPadding: 15,
               maxTicksLimit: rotacion.max === 0 ? 20 : undefined,
               callback: (value, index) => {
                 const lbl = labels[index]
