@@ -4164,14 +4164,14 @@ app.get('/api/produccion/acabamento-resumen', async (req, res) => {
       SELECT COALESCE(SUM(${metragemNum}), 0) AS metros
       FROM tb_produccion p
       WHERE ${dtBaseDate} = $1::date
-        AND p."SELETOR" IN ('ACABAMENTO', 'ACABAMENRO')
+        AND TRIM(p."MAQUINA") = '165001'
     `
     const sqlMetrosMes = `
       SELECT COALESCE(SUM(${metragemNum}), 0) AS metros
       FROM tb_produccion p
       WHERE ${dtBaseDate} >= $1::date
         AND ${dtBaseDate} <= $2::date
-        AND p."SELETOR" IN ('ACABAMENTO', 'ACABAMENRO')
+        AND TRIM(p."MAQUINA") = '165001'
     `
 
     const sqlEncUrdDia = `
@@ -9821,7 +9821,7 @@ app.get('/api/informe-diario', async (req, res) => {
       FROM tb_produccion p
       WHERE ${dtProd} >= $1::date
         AND ${dtProd} <= $2::date
-        AND p."SELETOR" IN ('ACABAMENTO', 'ACABAMENRO')
+        AND TRIM(p."MAQUINA") = '165001'
       GROUP BY to_char(${dtProd}, 'YYYY-MM-DD')
     `
 
