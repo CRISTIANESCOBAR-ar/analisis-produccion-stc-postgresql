@@ -153,7 +153,7 @@ const db = useDatabase()
 // Revisores activos (lista blanca)
 const REVISORES_ACTIVOS = [
   'Maximiliano', 'INOCENCIO', 'GEREMIAS', 'Alejandro G',
-  'Fabio', 'Facundo', 'Hugo', 'CarlosD', 'Nahuel Jonatan'
+  'Fabio', 'Facundo', 'Hugo', 'CarlosD', 'Nahuel Jonatan', 'Lautaro Nahuel'
 ]
 
 // Velocidades mesa (m/min)
