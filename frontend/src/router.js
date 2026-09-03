@@ -239,6 +239,11 @@ const routes = [
     meta: { title: 'Grafico de Metricas Diarias' }
   },
   {
+    path: '/velocidad-maquina',
+    component: () => import('./components/produccion/MachineSpeedChart.vue'),
+    meta: { title: 'Velocidad Máquina y Tiempos Muertos' }
+  },
+  {
     path: '/configuracion-estandares',
     component: () => import('./components/configuracion/ConfiguracionEstandares.vue'),
     meta: { title: 'Configuración Estándares y Mezclas' }
@@ -280,7 +285,7 @@ const routeTitleGroups = [
   },
   {
     title: 'Producción',
-    paths: ['/import-control', '/importaciones', '/informe-diario']
+    paths: ['/import-control', '/importaciones', '/informe-diario', '/velocidad-maquina']
   },
   // Inventarios: eliminado de los grupos de título — gestionado por otra App
   {

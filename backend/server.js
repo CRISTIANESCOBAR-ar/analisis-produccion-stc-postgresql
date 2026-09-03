@@ -15,6 +15,7 @@ import { triggerFullBackup, getFullBackupStatus } from './services/fullBackupTri
 import { getEficienciasResumen, getEficienciasDetalle } from './routes/eficiencias-tecelaje.mjs';
 import { parseNarrativaStructure } from '../shared/narrativaSections.js';
 import databaseExplorerRouter from './routes/databaseExplorer.mjs';
+import velocidadMaquinaRoutes from './routes/velocidad-maquina.mjs';
 
 const { Pool } = pg
 const app = express()
@@ -708,6 +709,9 @@ app.get('/api/produccion/eficiencias/resumen', (req, res) => getEficienciasResum
 
 // POST /api/produccion/eficiencias/detalle  body: { turno: 'A'|'B'|'C'|'DIA' }
 app.post('/api/produccion/eficiencias/detalle', (req, res) => getEficienciasDetalle(req, res, query))
+
+// Velocidad Maquina
+app.use('/api/produccion', velocidadMaquinaRoutes(query));
 
 // =====================================================
 // ENDPOINTS COSTOS MENSUALES
