@@ -17,6 +17,8 @@ npm-debug.log*
 postgres_data/
 pgadmin_data/
 csv/
+HVI Crudo/
+INDIGO/
 
 # IDEs
 .vscode/

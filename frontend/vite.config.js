@@ -17,9 +17,10 @@ export default defineConfig({
         name: 'Santana Produccion',
         short_name: 'Santana',
         description: 'Gestión de Calidad y Producción - Santana',
-        theme_color: '#ffffff',
-        background_color: '#ffffff',
+        theme_color: '#0f172a',
+        background_color: '#0f172a',
         display: 'standalone',
+        display_override: ['window-controls-overlay'],
         start_url: '/',
         icons: [
           {

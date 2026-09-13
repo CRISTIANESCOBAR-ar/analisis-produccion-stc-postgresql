@@ -1,9 +1,12 @@
 <template>
-  <div class="h-screen flex flex-row bg-gray-50 overflow-hidden">
-    <SidebarCompact v-if="!isEmbeddedMode" />
-    <main class="main-scroll flex-1 overflow-auto">
-      <router-view />
-    </main>
+  <div class="h-screen flex flex-col bg-gray-50 overflow-hidden">
+    <TitleBarCommandPalette v-if="!isEmbeddedMode" />
+    <div class="flex-1 flex flex-row overflow-hidden relative">
+      <SidebarCompact v-if="!isEmbeddedMode" />
+      <main class="main-scroll flex-1 overflow-auto relative">
+        <router-view />
+      </main>
+    </div>
   </div>
 </template>
 
@@ -11,6 +14,7 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import SidebarCompact from './components/SidebarCompact.vue'
+import TitleBarCommandPalette from './components/TitleBarCommandPalette.vue'
 
 const router = useRouter()
 const isEmbeddedMode = computed(() => String(router.currentRoute.value?.query?.embed || '') === '1')

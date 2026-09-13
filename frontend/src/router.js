@@ -36,7 +36,7 @@ const routes = [
   { 
     path: '/resumen', 
     component: () => import('./components/ensayos/ResumenEnsayos.vue'), 
-    meta: { title: 'Resumen Ensayos' } 
+    meta: { title: 'Resumen Ensayos', keywords: ['laboratorio', 'uster', 'hilanderia'] } 
   },
   {
     path: '/resumen-cardas',
@@ -56,7 +56,7 @@ const routes = [
   {
     path: '/analisis-calidad-fibra',
     component: () => import('./components/ensayos/AnalisisCalidadFibra.vue'),
-    meta: { title: 'Análisis Calidad Fibra' }
+    meta: { title: 'Análisis Calidad Fibra', keywords: ['algodon', 'calidad', 'fibra'] }
   },
   {
     path: '/parametros-hvi',
@@ -66,7 +66,7 @@ const routes = [
   {
     path: '/hvi',
     component: () => import('./components/ensayos/HVI.vue'),
-    meta: { title: 'Carga HVI' }
+    meta: { title: 'Carga HVI', keywords: ['hvi', 'laboratorio', 'algodon', 'fardos'] }
   },
   {
     path: '/resumen-hvi-datos',
@@ -86,7 +86,7 @@ const routes = [
   {
     path: '/dashboard-mezcla',
     component: () => import('./components/ensayos/DashboardMezclaHilo.vue'),
-    meta: { title: 'Dashboard Mezcla → Hilo' }
+    meta: { title: 'Dashboard Mezcla → Hilo', keywords: ['mezcla', 'hilo', 'fardos', 'algodon'] }
   },
   // {
   //   path: '/relato-ia-integral',
@@ -111,7 +111,7 @@ const routes = [
   { 
     path: '/stats', 
     component: () => import('./components/UsterStatsPage.vue'), 
-    meta: { title: 'Gráficos Ensayos' } 
+    meta: { title: 'Gráficos Ensayos', keywords: ['uster', 'graficos', 'estadisticas'] } 
   },
   { 
     path: '/import-control', 
@@ -151,7 +151,7 @@ const routes = [
   {
     path: '/consulta-calidad-partida',
     component: () => import('./components/produccion/ConsultaPartidaCalidad.vue'),
-    meta: { title: 'Consulta Detalle Partida - Calidad' }
+    meta: { title: 'Consulta Detalle Partida - Calidad', keywords: ['partida', 'detalle', 'calidad'] }
   },
   {
     path: '/partida-tejeduria',
@@ -246,7 +246,7 @@ const routes = [
   {
     path: '/configuracion-estandares',
     component: () => import('./components/configuracion/ConfiguracionEstandares.vue'),
-    meta: { title: 'Configuración Estándares y Mezclas' }
+    meta: { title: 'Configuración Estándares y Mezclas', keywords: ['configuracion', 'estandares', 'mezclas', 'fichas'] }
   },
   {
     path: '/inventario',
