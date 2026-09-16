@@ -189,6 +189,11 @@ const routes = [
     meta: { title: 'Análisis de Patrones de Defectos (IA)' }
   },
   {
+    path: '/analisis-eficiencia-calidad',
+    component: () => import('./components/produccion/AnalisisEficienciaCalidad.vue'),
+    meta: { title: 'Análisis Eficiencia vs Calidad' }
+  },
+  {
     path: '/relato-ia-teje',
     component: () => import('./components/produccion/RelatoIaTejeView.vue'),
     meta: { title: 'Relato de Calidad y Patrones (IA)' }
@@ -303,7 +308,8 @@ const routeTitleGroups = [
       '/heatmap-tejeduria',
       '/caida-telares',
       '/performance-revisores',
-      '/analisis-patrones-teje'
+      '/analisis-patrones-teje',
+      '/analisis-eficiencia-calidad'
     ]
   },
   {

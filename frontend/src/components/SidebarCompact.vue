@@ -121,6 +121,7 @@ const groups = [
       { to: '/heatmap-tejeduria', icon: '🔥', label: 'Mapa Calor Telares' },
       { to: '/caida-telares', icon: '📉', label: 'Caída de Telares' },
       { to: '/performance-revisores', icon: '📊', label: 'Performance Mensual' },
+      { to: '/analisis-eficiencia-calidad', icon: '📉', label: 'Eficiencia vs Calidad' },
       { to: '/analisis-patrones-teje', icon: '🤖', label: 'Análisis Patrones (IA)' },
       { to: '/relato-ia-teje', icon: '✨', label: 'Relato IA (Tejeduría)' },
     ],

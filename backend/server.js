@@ -16,6 +16,17 @@ import { getEficienciasResumen, getEficienciasDetalle } from './routes/eficienci
 import { parseNarrativaStructure } from '../shared/narrativaSections.js';
 import databaseExplorerRouter from './routes/databaseExplorer.mjs';
 import velocidadMaquinaRoutes from './routes/velocidad-maquina.mjs';
+import {
+  buildProduccionQuery,
+  buildCalidadQuery,
+  buildMetasRangoQuery,
+  buildTramasPeriodoQuery,
+  buildDefectosPeriodoQuery,
+  buildMetricasDiariasDefectosQuery,
+  mapCalidadRows,
+  calculateRangos
+} from './services/metricasAnalisisService.mjs';
+import { getSectorByCodDef, defectoSectorMap } from './utils/defectosSectores.mjs';
 
 const { Pool } = pg
 const app = express()
@@ -4251,15 +4262,20 @@ app.get('/api/produccion/acabamento-resumen', async (req, res) => {
 // GET /api/produccion/eficiencia-roturas
 app.get('/api/produccion/eficiencia-roturas', async (req, res) => {
   try {
-    const { date, trama, monthStart, monthEnd } = req.query
-    if (!date) {
-      return res.status(400).json({ error: 'Se requiere parámetro "date" (YYYY-MM-DD)' })
-    }
+    const { date, trama, monthStart, monthEnd, fechaInicio, fechaFin } = req.query
 
-    const datePattern = String(date).split('T')[0]
-    const [year, month] = datePattern.split('-')
-    const startDate = monthStart || `${year}-${month}-01`
-    const endDate = monthEnd || datePattern
+    let startDate = fechaInicio || monthStart
+    let endDate = fechaFin || monthEnd
+
+    if (!startDate || !endDate) {
+      if (!date) {
+        return res.status(400).json({ error: 'Se requiere parámetro "date" (YYYY-MM-DD) o "fechaInicio" y "fechaFin"' })
+      }
+      const datePattern = String(date).split('T')[0]
+      const [year, month] = datePattern.split('-')
+      if (!startDate) startDate = `${year}-${month}-01`
+      if (!endDate) endDate = datePattern
+    }
 
     const dtBaseDate = sqlParseDate('p."DT_BASE_PRODUCAO"')
     const pontosLidosNum = sqlParseNumberIntl('p."PONTOS_LIDOS"')
@@ -4289,6 +4305,33 @@ app.get('/api/produccion/eficiencia-roturas', async (req, res) => {
     res.json(result.rows)
   } catch (err) {
     console.error('Error en /api/produccion/eficiencia-roturas:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/produccion/tramas — Lista DISTINCT de tramas del período
+app.get('/api/produccion/tramas', async (req, res) => {
+  try {
+    const { fechaInicio, fechaFin, date, monthStart, monthEnd } = req.query
+    let startDate = fechaInicio || monthStart
+    let endDate = fechaFin || monthEnd
+
+    if (!startDate || !endDate) {
+      if (date) {
+        const datePattern = String(date).split('T')[0]
+        const [year, month] = datePattern.split('-')
+        if (!startDate) startDate = `${year}-${month}-01`
+        if (!endDate) endDate = datePattern
+      } else {
+        return res.status(400).json({ error: 'fechaInicio y fechaFin requeridos' })
+      }
+    }
+
+    const { sql, params } = buildTramasPeriodoQuery({ fechaInicio: startDate, fechaFin: endDate })
+    const result = await query(sql, params, 'produccion/tramas')
+    res.json(result.rows.map((r) => r.trama))
+  } catch (err) {
+    console.error('Error en /api/produccion/tramas:', err)
     res.status(500).json({ error: err.message })
   }
 })
@@ -5971,54 +6014,13 @@ app.get('/api/calidad-fibra-mistura', async (req, res) => {
 
 app.get('/api/metricas-diarias-calidad', async (req, res) => {
   try {
-    const { fechaInicio, fechaFin } = req.query
+    const { fechaInicio, fechaFin, trama } = req.query
     if (!fechaInicio || !fechaFin) return res.status(400).json({ error: 'fechaInicio y fechaFin requeridos' })
 
-    const metragemNum = sqlParseNumber('"METRAGEM"')
-    const pontuacaoNum = sqlParseNumber('"PONTUACAO"')
-    const larguraNum = sqlParseNumber('"LARGURA"')
-    const sql = `
-      SELECT
-        ${sqlParseDate('"DAT_PROD"')} AS "FECHA_DB",
-        "DAT_PROD" AS "FECHA",
-        SUM(${metragemNum}) AS "METROS_TOTAL",
-        SUM(CASE WHEN "QUALIDADE" ILIKE 'PRIMEIRA%' THEN ${metragemNum} ELSE 0 END) AS "METROS_1ERA",
-        SUM(COALESCE(${pontuacaoNum}, 0)) AS "PONTOS",
-        AVG(${larguraNum}) AS "LARGURA"
-      FROM tb_calidad
-      WHERE "EMP" = 'STC'
-        AND "QUALIDADE" NOT ILIKE '%RETALHO%'
-        AND ${sqlParseDate('"DAT_PROD"')} BETWEEN $1::date AND $2::date
-      GROUP BY "FECHA_DB", "FECHA"
-      ORDER BY "FECHA_DB" ASC
-    `
-
-    const rows = (await query(sql, [fechaInicio, fechaFin], 'metricas-diarias-calidad')).rows
-    const datos = rows.map((r) => {
-      const calPct = r.METROS_TOTAL ? (Number(r.METROS_1ERA) / Number(r.METROS_TOTAL)) * 100 : null
-      const pts100 = r.METROS_TOTAL && r.LARGURA
-        ? (Number(r.PONTOS) * 100) / (Number(r.METROS_TOTAL) * Number(r.LARGURA) / 100)
-        : null
-      return {
-        FECHA_DB: r.FECHA_DB,
-        FECHA: r.FECHA,
-        CALIDAD_PERCENT: calPct,
-        PTS_100M2: pts100,
-        METROS_1ERA: r.METROS_1ERA,
-        METROS_TOTAL: r.METROS_TOTAL,
-        ROLLOS: null
-      }
-    })
-
-    const rangos = {}
-    for (const key of ['CALIDAD_PERCENT', 'PTS_100M2', 'METROS_1ERA', 'METROS_TOTAL']) {
-      const vals = datos.map((d) => Number(d[key])).filter((v) => !isNaN(v))
-      if (!vals.length) continue
-      const min = Math.min(...vals)
-      const max = Math.max(...vals)
-      const avg = vals.reduce((a, b) => a + b, 0) / vals.length
-      rangos[key] = { min, max, avg }
-    }
+    const { sql, params } = buildCalidadQuery({ fechaInicio, fechaFin, trama })
+    const rows = (await query(sql, params, 'metricas-diarias-calidad')).rows
+    const datos = mapCalidadRows(rows)
+    const rangos = calculateRangos(datos, ['CALIDAD_PERCENT', 'PTS_100M2', 'METROS_1ERA', 'METROS_TOTAL'])
 
     res.json({ datos, rangos, totalDias: datos.length })
   } catch (err) {
@@ -6029,63 +6031,11 @@ app.get('/api/metricas-diarias-calidad', async (req, res) => {
 
 app.get('/api/metricas-diarias-produccion', async (req, res) => {
   try {
-    const { fechaInicio, fechaFin } = req.query
+    const { fechaInicio, fechaFin, trama } = req.query
     if (!fechaInicio || !fechaFin) return res.status(400).json({ error: 'fechaInicio y fechaFin requeridos' })
 
-    const metragemNum = sqlParseNumber('"METRAGEM"')
-    const rupturasNum = sqlParseNumber('"RUPTURAS"')
-    const numFiosNum = sqlParseNumber('"NUM_FIOS"')
-    const velocNum = sqlParseNumber('"VELOC"')
-    const eficienciaClean = `regexp_replace("EFICIENCIA", '[^0-9,.-]', '', 'g')`
-    const eficienciaNum = sqlParseNumberIntl(eficienciaClean)
-    const puntosLidosNum = sqlParseNumber('"PONTOS_LIDOS"')
-    const puntos100Num = sqlParseNumberIntl('"PONTOS_100%"')
-    const parTraNum = sqlParseNumber('"PARADA TEC TRAMA"')
-    const parUrdNum = sqlParseNumber('"PARADA TEC URDUME"')
-
-    const sql = `
-      WITH BASE AS (
-        SELECT
-          ${sqlParseDate('"DT_BASE_PRODUCAO"')} AS FECHA_DB,
-          "DT_BASE_PRODUCAO" AS FECHA,
-          "SELETOR" AS SELETOR,
-          ${metragemNum} AS METRAGEM,
-          ${rupturasNum} AS RUPTURAS,
-          ${numFiosNum} AS NUM_FIOS,
-          ${velocNum} AS VELOC,
-          CASE
-            WHEN ${eficienciaNum} IS NULL OR ${eficienciaNum} = 0 THEN
-              (${puntosLidosNum} * 100) / NULLIF(${puntos100Num}, 0)
-            ELSE ${eficienciaNum}
-          END AS EFICIENCIA,
-          ${parTraNum} AS PARADA_TRAMA,
-          ${parUrdNum} AS PARADA_URD
-        FROM tb_produccion
-        WHERE "FILIAL" = '05'
-          AND ${sqlParseDate('"DT_BASE_PRODUCAO"')} BETWEEN $1::date AND $2::date
-      )
-      SELECT
-        FECHA_DB AS "FECHA_DB",
-        FECHA AS "FECHA",
-        SUM(CASE WHEN SELETOR IN ('URDIDEIRA','URDIDORA') THEN (RUPTURAS * 1000000) ELSE 0 END)
-          / NULLIF(SUM(CASE WHEN SELETOR IN ('URDIDEIRA','URDIDORA') THEN (METRAGEM * NUM_FIOS) ELSE 0 END), 0) AS "RU106_URDIDORA",
-        SUM(CASE WHEN SELETOR = 'INDIGO' THEN METRAGEM ELSE 0 END) AS "METROS_INDIGO",
-        SUM(CASE WHEN SELETOR = 'INDIGO' THEN RUPTURAS ELSE 0 END) * 1000
-          / NULLIF(SUM(CASE WHEN SELETOR = 'INDIGO' THEN METRAGEM ELSE 0 END), 0) AS "R103_INDIGO",
-        SUM(CASE WHEN SELETOR = 'INDIGO' THEN METRAGEM * VELOC ELSE 0 END)
-          / NULLIF(SUM(CASE WHEN SELETOR = 'INDIGO' THEN METRAGEM ELSE 0 END), 0) AS "VELOCIDAD_INDIGO",
-        SUM(CASE WHEN SELETOR = 'TECELAGEM' THEN METRAGEM * EFICIENCIA ELSE 0 END)
-          / NULLIF(SUM(CASE WHEN SELETOR = 'TECELAGEM' THEN METRAGEM ELSE 0 END), 0) AS "EFICIENCIA_TELAR",
-        SUM(CASE WHEN SELETOR = 'TECELAGEM' THEN PARADA_URD ELSE 0 END) * 100000
-          / NULLIF(SUM(CASE WHEN SELETOR = 'TECELAGEM' THEN METRAGEM ELSE 0 END) * 1000, 0) AS "RU105_TELAR",
-        SUM(CASE WHEN SELETOR = 'TECELAGEM' THEN PARADA_TRAMA ELSE 0 END) * 100000
-          / NULLIF(SUM(CASE WHEN SELETOR = 'TECELAGEM' THEN METRAGEM ELSE 0 END) * 1000, 0) AS "RT105_TELAR"
-      FROM BASE
-      GROUP BY FECHA_DB, FECHA
-      ORDER BY FECHA_DB ASC
-    `
-
-    const rows = (await query(sql, [fechaInicio, fechaFin], 'metricas-diarias-produccion')).rows
+    const { sql, params } = buildProduccionQuery({ fechaInicio, fechaFin, trama })
+    const rows = (await query(sql, params, 'metricas-diarias-produccion')).rows
     const datos = rows.map((r) => ({
       FECHA_DB: r.FECHA_DB,
       FECHA: r.FECHA,
@@ -6098,19 +6048,91 @@ app.get('/api/metricas-diarias-produccion', async (req, res) => {
       RT105_TELAR: r.RT105_TELAR
     }))
 
-    const rangos = {}
-    for (const key of ['RU106_URDIDORA','METROS_INDIGO','R103_INDIGO','VELOCIDAD_INDIGO','EFICIENCIA_TELAR','RU105_TELAR','RT105_TELAR']) {
-      const vals = datos.map((d) => Number(d[key])).filter((v) => !isNaN(v))
-      if (!vals.length) continue
-      const min = Math.min(...vals)
-      const max = Math.max(...vals)
-      const avg = vals.reduce((a, b) => a + b, 0) / vals.length
-      rangos[key] = { min, max, avg }
-    }
+    const rangos = calculateRangos(datos, ['RU106_URDIDORA','METROS_INDIGO','R103_INDIGO','VELOCIDAD_INDIGO','EFICIENCIA_TELAR','RU105_TELAR','RT105_TELAR'])
 
     res.json({ datos, rangos, totalDias: datos.length })
   } catch (err) {
     console.error('Error en metricas-diarias-produccion:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/metricas-diarias-defectos', async (req, res) => {
+  try {
+    const { fechaInicio, fechaFin, codDef, trama, sector } = req.query
+    if (!fechaInicio || !fechaFin) return res.status(400).json({ error: 'fechaInicio y fechaFin requeridos' })
+
+    let finalCodDef = codDef;
+    
+    // Si pasaron un sector, obtenemos todos los códigos de defecto para ese sector
+    if (sector && sector.trim() !== '') {
+      const targetSector = sector.trim().toUpperCase();
+      const codes = Object.entries(defectoSectorMap)
+        .filter(([_, sec]) => sec === targetSector)
+        .map(([code]) => code);
+        
+      if (codes.length > 0) {
+        // Si ya había codDef, cruzamos; sino, tomamos todos los del sector
+        if (finalCodDef) {
+          const selected = finalCodDef.split(',').map(s => s.trim());
+          finalCodDef = selected.filter(c => codes.includes(c)).join(',');
+        } else {
+          finalCodDef = codes.join(',');
+        }
+      } else {
+        // Si el sector no tiene códigos, devolvemos un código inválido para que no sume nada
+        finalCodDef = '-9999';
+      }
+    }
+
+    const { sql, params } = buildMetricasDiariasDefectosQuery({ fechaInicio, fechaFin, codDef: finalCodDef, trama })
+    const rows = (await query(sql, params, 'metricas-diarias-defectos')).rows
+    res.json({ datos: rows, totalDias: rows.length })
+  } catch (err) {
+    console.error('Error en metricas-diarias-defectos:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/produccion/defectos', async (req, res) => {
+  try {
+    const { fechaInicio, fechaFin, trama, sector } = req.query
+    if (!fechaInicio || !fechaFin) return res.status(400).json({ error: 'fechaInicio y fechaFin requeridos' })
+
+    const { sql, params } = buildDefectosPeriodoQuery({ fechaInicio, fechaFin, trama })
+    const rows = (await query(sql, params, 'produccion-defectos')).rows
+    
+    // Mapear el sector para cada defecto
+    let mappedRows = rows.map(r => ({
+      ...r,
+      SECTOR: getSectorByCodDef(r.COD_DEF)
+    }));
+
+    // Si enviaron un sector, filtramos los defectos que pertenezcan a ese sector
+    if (sector && sector.trim() !== '') {
+      mappedRows = mappedRows.filter(r => r.SECTOR === sector.trim().toUpperCase());
+    }
+
+    res.json(mappedRows)
+  } catch (err) {
+    console.error('Error en produccion-defectos:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+
+app.get('/api/metas-rango', async (req, res) => {
+  try {
+    const { fechaInicio, fechaFin } = req.query
+    if (!fechaInicio || !fechaFin) return res.status(400).json({ error: 'fechaInicio y fechaFin requeridos' })
+    if (!(await tableExists('tb_metas'))) {
+      return res.json({ datos: [] })
+    }
+    const { sql, params } = buildMetasRangoQuery({ fechaInicio, fechaFin })
+    const rows = (await query(sql, params, 'metas-rango')).rows
+    res.json({ datos: rows })
+  } catch (err) {
+    console.error('Error en metas-rango:', err)
     res.status(500).json({ error: err.message })
   }
 })
