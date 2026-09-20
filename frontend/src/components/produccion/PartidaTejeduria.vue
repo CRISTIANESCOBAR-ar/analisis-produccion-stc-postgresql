@@ -100,65 +100,61 @@
         <!-- ── Cabecera tipo formulario ───────────────────────────────────── -->
         <div class="border border-slate-300 rounded-lg overflow-hidden shadow-sm print:rounded-none">
 
-          <!-- Título -->
-          <div class="grid grid-cols-[auto_1fr_auto_auto] items-stretch bg-white border-b border-slate-200">
+          <!-- Título y Status -->
+          <div class="grid grid-cols-[auto_1fr_auto_auto_1fr] items-stretch bg-white border-b border-slate-200">
             <div class="px-3 py-2 border-r border-slate-200 flex items-center">
               <img src="/LogoSantana.jpg" alt="Logo" class="h-9 w-auto object-contain opacity-90" />
             </div>
             <div class="px-4 py-2 flex items-center justify-center font-semibold text-sm text-slate-700 border-r border-slate-200">
               SANTANA TEXTIL CHACO S.A. – UNIDAD V &nbsp;·&nbsp; "EFICIENCIA Y PARADAS"
             </div>
-            <div class="px-3 py-2 text-xs font-medium text-slate-500 border-r border-slate-200 flex items-center">Sector</div>
-            <div class="px-3 py-2 text-xs font-medium text-slate-500 flex items-center">Partida</div>
+            <div class="px-4 py-2 text-xs font-medium text-slate-500 border-r border-slate-200 flex items-center bg-slate-50 uppercase tracking-wide">Sector</div>
+            <div class="px-4 py-2 font-bold text-sm bg-slate-800 text-white border-r border-slate-200 uppercase tracking-wide flex items-center">TEJEDURÍA</div>
+            <div class="px-4 py-2 flex items-center gap-3 bg-white">
+              <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Partida:</span>
+              <span class="font-bold text-[15px] text-blue-700 tracking-tight">{{ inputPartidaBuscada }}</span>
+              <span v-if="enc.status" class="ml-auto px-2.5 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border shadow-sm" :class="colorStatus">{{ labelStatus }}</span>
+            </div>
           </div>
 
-          <!-- Sector / Partida -->
-          <div class="grid grid-cols-[auto_1fr_auto_auto] items-stretch border-b border-slate-200">
-            <div class="col-span-2 px-4 py-1.5 bg-white border-r border-slate-200 text-sm text-slate-500 italic flex items-center">&nbsp;</div>
-            <div class="px-4 py-1.5 font-bold text-sm bg-slate-800 text-white border-r border-slate-200 uppercase tracking-wide flex items-center">TEJEDURÍA</div>
-            <div class="px-4 py-1.5 font-bold text-sm text-blue-700 flex items-center">{{ inputPartidaBuscada }}</div>
+          <!-- Artículo / Nombre / Telar / Grupo -->
+          <div class="grid grid-cols-[auto_1fr_auto_1fr_auto_1fr_auto_1fr] items-stretch border-b border-slate-200 bg-slate-50/60">
+            <div class="px-3 py-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-r border-slate-200 flex items-center">Artículo</div>
+            <div class="px-3 py-1.5 text-sm font-semibold text-slate-800 border-r border-slate-200 flex items-center">{{ enc.articulo }}</div>
+            <div class="px-3 py-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-r border-slate-200 flex items-center">Nombre</div>
+            <div class="px-3 py-1.5 text-sm font-semibold text-slate-800 border-r border-slate-200 flex items-center">{{ enc.nombre }}</div>
+            <div class="px-3 py-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-r border-slate-200 flex items-center">Telar</div>
+            <div class="px-3 py-1.5 text-sm font-semibold text-blue-700 border-r border-slate-200 flex items-center">{{ enc.telar }}</div>
+            <div class="px-3 py-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-r border-slate-200 flex items-center">Grupo</div>
+            <div class="px-3 py-1.5 text-sm font-semibold text-slate-800 flex items-center">{{ enc.grupo }}</div>
           </div>
 
-          <!-- Artículo / Nombre / Telar -->
-          <div class="grid grid-cols-[80px_1fr_80px_1fr_60px_50px] items-center border-b border-slate-200 bg-slate-50/60">
-            <div class="px-2 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-r border-slate-200">Artículo</div>
-            <div class="px-2 py-1 text-sm font-semibold text-slate-800 border-r border-slate-200">{{ enc.articulo }}</div>
-            <div class="px-2 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-r border-slate-200">Nombre</div>
-            <div class="px-2 py-1 text-sm font-semibold text-slate-800 border-r border-slate-200">{{ enc.nombre }}</div>
-            <div class="px-2 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-r border-slate-200">Telar</div>
-            <div class="px-2 py-1 text-sm font-semibold text-blue-700">{{ enc.telar }}</div>
+          <!-- Trama / Base / Pasadas / OE's -->
+          <div class="grid grid-cols-[auto_1fr_auto_1fr_auto_1fr_auto_1fr] items-stretch border-b border-slate-200 bg-white">
+            <div class="px-3 py-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-r border-slate-200 flex items-center">Trama</div>
+            <div class="px-3 py-1.5 text-sm text-slate-700 border-r border-slate-200 flex items-center">{{ enc.trama }}</div>
+            <div class="px-3 py-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-r border-slate-200 flex items-center">Base</div>
+            <div class="px-3 py-1.5 text-sm text-slate-700 border-r border-slate-200 flex items-center">{{ enc.base }}</div>
+            <div class="px-3 py-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-r border-slate-200 flex items-center">Pasadas</div>
+            <div class="px-3 py-1.5 text-sm font-semibold text-slate-800 border-r border-slate-200 flex items-center">{{ enc.pasadas ?? '–' }}</div>
+            <div class="px-3 py-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-r border-slate-200 flex items-center">OE's</div>
+            <div class="px-3 py-1.5 text-sm font-semibold text-slate-800 flex items-center">{{ enc.oes || '–' }}</div>
           </div>
 
-          <!-- Trama / Pasadas / Grupo -->
-          <div class="grid grid-cols-[80px_1fr_80px_50px_60px_50px] items-center border-b border-slate-200 bg-white">
-            <div class="px-2 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-r border-slate-200">Trama</div>
-            <div class="px-2 py-1 text-sm text-slate-700 border-r border-slate-200">{{ enc.trama }}</div>
-            <div class="px-2 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-r border-slate-200">Pasadas</div>
-            <div class="px-2 py-1 text-sm font-semibold text-slate-800 border-r border-slate-200">{{ enc.pasadas ?? '–' }}</div>
-            <div class="px-2 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-r border-slate-200">Grupo</div>
-            <div class="px-2 py-1 text-sm font-semibold text-slate-800">{{ enc.grupo }}</div>
-          </div>
-
-          <!-- Base / Roturas URDIDORA / Roturas INDIGO -->
-          <div class="grid grid-cols-[80px_1fr_140px_80px_140px_80px] items-center border-b border-slate-200 bg-slate-50/60">
-            <div class="px-2 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-r border-slate-200">Base</div>
-            <div class="px-2 py-1 text-sm text-slate-700 border-r border-slate-200">{{ enc.base }}</div>
-            <div class="px-2 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-r border-slate-200">Rot. Urdidora 106</div>
-            <div class="px-2 py-1 text-sm font-semibold tabular-nums" :class="colorRotUrd">
+          <!-- Lote / Roturas URDIDORA / Roturas INDIGO / Vacío -->
+          <div class="grid grid-cols-[auto_1fr_auto_1fr_auto_1fr_auto_1fr] items-stretch border-b border-slate-200 bg-slate-50/60">
+            <div class="px-3 py-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-r border-slate-200 flex items-center">Lote</div>
+            <div class="px-3 py-1.5 text-sm font-semibold text-slate-800 border-r border-slate-200 flex items-center">{{ enc.lote || '–' }}</div>
+            <div class="px-3 py-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-r border-slate-200 flex items-center">Rot. Urdidora 106</div>
+            <div class="px-3 py-1.5 text-sm font-semibold tabular-nums border-r border-slate-200 flex items-center" :class="colorRotUrd">
               {{ enc.rot_urd_106 != null ? enc.rot_urd_106.toFixed(2).replace('.', ',') : '–' }}
             </div>
-            <div class="px-2 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-x border-slate-200">Rot. Indigo 103</div>
-            <div class="px-2 py-1 text-sm font-semibold tabular-nums" :class="colorRotInd">
+            <div class="px-3 py-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-r border-slate-200 flex items-center">Rot. Indigo 103</div>
+            <div class="px-3 py-1.5 text-sm font-semibold tabular-nums border-r border-slate-200 flex items-center" :class="colorRotInd">
               {{ enc.rot_ind_103 != null ? enc.rot_ind_103.toFixed(2).replace('.', ',') : '–' }}
             </div>
-          </div>
-
-          <!-- OE's / Lote -->
-          <div class="grid grid-cols-[80px_1fr_60px_1fr] items-center bg-white">
-            <div class="px-2 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-r border-slate-200">OE's</div>
-            <div class="px-2 py-1 text-sm font-semibold text-slate-800 border-r border-slate-200">{{ enc.oes || '–' }}</div>
-            <div class="px-2 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-r border-slate-200">Lote</div>
-            <div class="px-2 py-1 text-sm font-semibold text-slate-800">{{ enc.lote || '–' }}</div>
+            <div class="px-3 py-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-r border-slate-200 flex items-center">&nbsp;</div>
+            <div class="px-3 py-1.5 text-sm font-semibold text-slate-800 flex items-center">&nbsp;</div>
           </div>
         </div>
 
@@ -554,6 +550,25 @@ const colorRotInd = computed(() => {
   if (v <= 1) return 'text-green-700 font-bold'
   if (v <= 2) return 'text-amber-600 font-bold'
   return 'text-red-600 font-bold'
+})
+
+const colorStatus = computed(() => {
+  const s = (enc.value.status || '').toUpperCase()
+  // Asumiendo que 'N' = Normal/Producción, 'P' = Parada, etc.
+  if (s === 'N' || s.includes('PRODUC')) return 'bg-green-100 text-green-800 border-green-300'
+  if (s === 'E' || s === 'L' || s.includes('FINAL') || s.includes('BAIX')) return 'bg-slate-100 text-slate-600 border-slate-300'
+  if (s === 'P' || s.includes('PARAD')) return 'bg-amber-100 text-amber-700 border-amber-300'
+  return 'bg-blue-50 text-blue-700 border-blue-200'
+})
+
+const labelStatus = computed(() => {
+  const s = (enc.value.status || '').toUpperCase()
+  if (s === 'N') return 'PRODUCCIÓN'
+  if (s === 'P') return 'PARADA'
+  if (s === 'E') return 'FINALIZADA'
+  if (s === 'L') return 'LIBERADA'
+  if (s === 'Q') return 'CALIDAD'
+  return s // Fallback to whatever string it is
 })
 
 // ── Imprimir ─────────────────────────────────────────────────────────────────

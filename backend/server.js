@@ -7661,7 +7661,8 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
         ${pNum('p."BATIDAS"')}                         AS batidas,
         p."GRUPO TEAR"                                  AS grupo_tear,
         p."BASE URDUME"                                 AS base_urdume,
-        p."ROLADA"                                      AS rolada
+        p."ROLADA"                                      AS rolada,
+        p."S"                                           AS status
       FROM tb_produccion p
       WHERE p."FILIAL" = $2
         AND p."PARTIDA" = ANY($1::text[])
@@ -7863,7 +7864,8 @@ app.get('/api/produccion/partida-tejeduria', async (req, res) => {
       rot_ind_103,
       oes:         oesArr.join(', '),
       lote:        lotesArr.join(', '),
-      roladas
+      roladas,
+      status:      (rows.slice().reverse().find(r => r.status && String(r.status).trim() !== '') || {}).status || ''
     };
 
     // ── Q7: Historial de máquinas por las que pasó la partida ─────────────
