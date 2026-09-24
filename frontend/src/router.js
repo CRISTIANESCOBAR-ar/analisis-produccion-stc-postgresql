@@ -169,6 +169,11 @@ const routes = [
     meta: { title: 'Defecto → Partidas – Tejeduría' }
   },
   {
+    path: '/pontos-por-rolada',
+    component: () => import('./components/produccion/PontosPorRolada.vue'),
+    meta: { title: 'Evolución PONTOS por Rolada', keywords: ['pontos', 'rolada', 'defectos', 'calidad', 'evolucion'] }
+  },
+  {
     path: '/heatmap-tejeduria',
     component: () => import('./components/produccion/HeatmapTelarDefecto.vue'),
     meta: { title: 'Mapa de Calor Telar × Defecto – Tejeduría' }
@@ -309,7 +314,8 @@ const routeTitleGroups = [
       '/caida-telares',
       '/performance-revisores',
       '/analisis-patrones-teje',
-      '/analisis-eficiencia-calidad'
+      '/analisis-eficiencia-calidad',
+      '/pontos-por-rolada'
     ]
   },
   {

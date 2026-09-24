@@ -118,6 +118,7 @@ const groups = [
       { to: '/partida-tejeduria', icon: '🏭', label: 'Partida en Producción' },
       { to: '/pts-tejeduria', icon: '🔢', label: 'Pts por Partida' },
       { to: '/defecto-tejeduria', icon: '🔎', label: 'Defecto → Partidas' },
+      { to: '/pontos-por-rolada', icon: '📊', label: 'PONTOS por Rolada' },
       { to: '/heatmap-tejeduria', icon: '🔥', label: 'Mapa Calor Telares' },
       { to: '/caida-telares', icon: '📉', label: 'Caída de Telares' },
       { to: '/performance-revisores', icon: '📊', label: 'Performance Mensual' },

@@ -1,0 +1,2 @@
+const pg = require('pg'); const pool = new pg.Pool({ host: '127.0.0.1', port: 5434, database: 'stc_produccion', user: 'stc_user', password: 'stc_password_2026' }); pool.query('SELECT \
+PARTIDA\, \S\ FROM tb_produccion WHERE \PARTIDA\ = \'560625\' LIMIT 5').then(r => console.log(r.rows)).then(() => pool.query('SELECT DISTINCT \S\ FROM tb_produccion').then(r => console.log(r.rows))).finally(() => pool.end());

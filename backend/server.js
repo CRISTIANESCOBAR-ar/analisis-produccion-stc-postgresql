@@ -2593,6 +2593,309 @@ app.get('/api/calidad/defectos-por-tipo', async (req, res) => {
 })
 
 
+// GET /api/calidad/pontos-por-rolada - Evolución de PONTOS por ROLADA agrupados por defecto
+// Parámetros: fechaDesde=YYYY-MM-DD, fechaHasta=YYYY-MM-DD, sector? (INDIGO|HILANDERIA|TEJEDURIA|ACABAMENTO|GENERAL|todos)
+// ROLADA se calcula como LEFT(RIGHT(PARTIDA, 6), 4)
+app.get('/api/calidad/pontos-por-rolada', async (req, res) => {
+  try {
+    const t0 = hrMs()
+    const { fechaDesde, fechaHasta, sector } = req.query
+    if (!fechaDesde || !fechaHasta) {
+      return res.status(400).json({ error: 'Se requieren parámetros "fechaDesde" y "fechaHasta" (YYYY-MM-DD)' })
+    }
+
+    const desde = String(fechaDesde).split('T')[0]
+    const hasta = String(fechaHasta).split('T')[0]
+
+    const dataProdDate = sqlParseDate('d."DATA_PROD"')
+    const pontosNum    = sqlParseNumber('d."PONTOS"')
+
+    // Filtro de sector opcional por primer dígito de COD_DEF
+    let sectorFilter = ''
+    if (sector && sector !== 'todos') {
+      const sectorDigitMap = {
+        'INDIGO':     '1',
+        'HILANDERIA': '2',
+        'TEJEDURIA':  '3',
+        'ACABAMENTO': '4',
+      }
+      const digit = sectorDigitMap[sector.toUpperCase()]
+      if (digit) {
+        sectorFilter = `AND LEFT(BTRIM(d."COD_DEF"), 1) = '${digit}'`
+      }
+    }
+
+    // Query principal: agrega PONTOS por ROLADA y COD_DEF/DESC_DEFEITO
+    const sql = `
+      WITH defectos_filtrados AS (
+        SELECT
+          LEFT(RIGHT(BTRIM(d."PARTIDA"), 6), 4) AS rolada,
+          BTRIM(d."COD_DEF")                    AS cod_def,
+          BTRIM(d."DESC_DEFEITO")               AS desc_defeito,
+          COALESCE(${pontosNum}, 0)             AS pontos
+        FROM tb_defectos d
+        WHERE d."FILIAL" = '05'
+          AND d."QUALIDADE" = '1'
+          AND BTRIM(d."DESC_DEFEITO") <> ''
+          AND BTRIM(d."DESC_DEFEITO") <> '--'
+          AND ${dataProdDate} BETWEEN $1::date AND $2::date
+          ${sectorFilter}
+      ),
+      -- Resumen por defecto (para el panel izquierdo: ranking)
+      resumen_defectos AS (
+        SELECT
+          cod_def,
+          desc_defeito,
+          SUM(pontos)                             AS pts_totales,
+          COUNT(DISTINCT rolada)                   AS roladas_afectadas
+        FROM defectos_filtrados
+        GROUP BY cod_def, desc_defeito
+        HAVING SUM(pontos) > 0
+      ),
+      -- Detalle por rolada y defecto (para la tabla pivote / evolución)
+      detalle_rolada AS (
+        SELECT
+          rolada,
+          cod_def,
+          desc_defeito,
+          SUM(pontos) AS pts_rolada
+        FROM defectos_filtrados
+        GROUP BY rolada, cod_def, desc_defeito
+      )
+      SELECT
+        'resumen' AS tipo,
+        rd.cod_def,
+        rd.desc_defeito,
+        rd.pts_totales::integer,
+        rd.roladas_afectadas::integer,
+        NULL AS rolada,
+        NULL AS pts_rolada
+      FROM resumen_defectos rd
+
+      UNION ALL
+
+      SELECT
+        'detalle' AS tipo,
+        dr.cod_def,
+        dr.desc_defeito,
+        NULL AS pts_totales,
+        NULL AS roladas_afectadas,
+        dr.rolada,
+        dr.pts_rolada::integer
+      FROM detalle_rolada dr
+
+      ORDER BY tipo DESC, pts_totales DESC NULLS LAST, cod_def, rolada
+    `
+
+    const result = await query(sql, [desde, hasta], 'calidad/pontos-por-rolada')
+    const rows   = result.rows || []
+
+    // Separar resumen y detalle
+    const resumenRows = rows.filter(r => r.tipo === 'resumen')
+    const detalleRows = rows.filter(r => r.tipo === 'detalle')
+
+    // Obtener lista única de roladas ordenadas
+    const roladasSet = new Set()
+    detalleRows.forEach(r => { if (r.rolada) roladasSet.add(r.rolada) })
+    const roladas = [...roladasSet].sort()
+
+    // Construir mapa: cod_def -> { rolada: pts }
+    const detalleMap = {}
+    detalleRows.forEach(r => {
+      const key = r.cod_def
+      if (!detalleMap[key]) detalleMap[key] = {}
+      detalleMap[key][r.rolada] = Number(r.pts_rolada) || 0
+    })
+
+    // Formatear respuesta
+    const defectos = resumenRows.map(r => {
+      const codDef = String(r.cod_def || '').trim()
+      const first  = codDef[0] || ''
+      let sectorLabel = 'DESCONOCIDO'
+      if (first === '1') sectorLabel = 'INDIGO'
+      else if (first === '2') sectorLabel = 'HILANDERIA'
+      else if (first === '3') sectorLabel = 'TEJEDURIA'
+      else if (first === '4') sectorLabel = 'ACABAMENTO'
+      else sectorLabel = 'GENERAL'
+
+      return {
+        cod_def:            codDef,
+        desc_defeito:       r.desc_defeito,
+        sector:             sectorLabel,
+        pts_totales:        Number(r.pts_totales) || 0,
+        roladas_afectadas:  Number(r.roladas_afectadas) || 0,
+        por_rolada:         detalleMap[codDef] || {},
+      }
+    })
+
+    const basesQuery = `
+      SELECT DISTINCT
+        BTRIM("ROLADA") AS rolada,
+        BTRIM("BASE URDUME") AS base_urdume
+      FROM tb_produccion
+      WHERE "SELETOR" = 'INDIGO'
+        AND "ROLADA" IS NOT NULL
+        AND "ROLADA" <> ''
+    `
+    const basesResult = await query(basesQuery, [], 'calidad/pontos-por-rolada/bases')
+    const basesMap = {}
+    if (basesResult.rows) {
+      basesResult.rows.forEach(r => {
+        basesMap[r.rolada] = r.base_urdume
+      })
+    }
+
+    const fibraMap = {}
+    if (roladas.length > 0) {
+      const prodColsRes = await query(`SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'tb_produccion'`)
+      const prodCols = new Map((prodColsRes.rows || []).map(r => [String(r.column_name).toLowerCase(), r.column_name]))
+      
+      const maqKey = ['maq  fiacao', 'maq fiacao', 'maquina'].find(c => prodCols.has(c))
+      const loteKey = ['lote fiacao', 'lote  fiacao'].find(c => prodCols.has(c))
+      const maqCol = maqKey ? `"${prodCols.get(maqKey)}"` : 'NULL::text'
+      const loteCol = loteKey ? `"${prodCols.get(loteKey)}"` : 'NULL::text'
+
+      const prodSql = `
+        WITH IND AS (
+          SELECT "ROLADA" AS ROLADA, MAX("DT_BASE_PRODUCAO") AS FECHA
+          FROM tb_produccion
+          WHERE "SELETOR" = 'INDIGO' AND "FILIAL" = '05' AND "ROLADA" = ANY($1::text[])
+          GROUP BY "ROLADA"
+        ),
+        URD AS (
+          SELECT "ROLADA" AS ROLADA,
+            string_agg(DISTINCT CAST(NULLIF(regexp_replace(trim(right(${maqCol}, 2)), '\\D', '', 'g'), '') AS INTEGER)::text, ', ') AS MAQ_OE,
+            string_agg(DISTINCT CAST(CAST(${loteCol !== 'NULL::text' ? 'REPLACE(REPLACE(' + loteCol + ', \'.\', \'\'), \',\', \'.\')::numeric' : 'NULL::numeric'} AS INTEGER) AS TEXT), ', ') AS LOTE
+          FROM tb_produccion
+          WHERE "SELETOR" IN ('URDIDEIRA', 'URDIDORA') AND "FILIAL" = '05' AND "ROLADA" = ANY($1::text[])
+          GROUP BY "ROLADA"
+        ),
+        CAL AS (
+          SELECT
+            "ROLADA" AS ROLADA,
+            SUM(${sqlParseNumber('"METRAGEM"')}) AS MTS_CAL,
+            SUM(CASE WHEN btrim("QUALIDADE") = 'PRIMEIRA' THEN ${sqlParseNumber('"METRAGEM"')} ELSE 0 END) AS METROS_1ERA,
+            SUM(COALESCE(${sqlParseNumber('"PONTUACAO"')}, 0)) AS PONTOS,
+            AVG(${sqlParseNumber('"LARGURA"')}) AS LARGURA
+          FROM tb_calidad
+          WHERE "EMP" = 'STC'
+            AND "QUALIDADE" NOT ILIKE '%RETALHO%'
+            AND "ROLADA" = ANY($1::text[])
+          GROUP BY "ROLADA"
+        )
+        SELECT URD.ROLADA, URD.MAQ_OE, URD.LOTE, IND.FECHA,
+          CAL.MTS_CAL AS "MTS_CAL",
+          CAL.LARGURA AS "LARGURA",
+          ROUND((CAL.METROS_1ERA / NULLIF(CAL.MTS_CAL, 0) * 100)::numeric, 2) AS "CAL_PCT",
+          ROUND(((CAL.PONTOS * 100) / NULLIF((CAL.MTS_CAL * NULLIF(CAL.LARGURA, 0) / 100), 0))::numeric, 2) AS "PTS_100M2"
+        FROM URD
+        LEFT JOIN IND ON URD.ROLADA = IND.ROLADA
+        LEFT JOIN CAL ON URD.ROLADA = CAL.ROLADA
+      `
+      const prodResult = await query(prodSql, [roladas], 'calidad/pontos-por-rolada/fibra-prod')
+      const lotes = Array.from(new Set((prodResult.rows || []).map(d => String(d.lote || '').split(',')[0].trim()).filter(Boolean)))
+      
+      let hviMap = {}
+      if (lotes.length > 0) {
+        const hviSql = `
+          SELECT
+            "LOTE_FIAC", "MISTURA", "DT_ENTRADA_PROD" AS "FECHA_INGRESO",
+            ${sqlParseNumber('"SCI"')} AS "SCI", ${sqlParseNumber('"MST"')} AS "MST",
+            ${sqlParseNumber('"MIC"')} AS "MIC", ${sqlParseNumber('"MAT"')} AS "MAT",
+            ${sqlParseNumber('"UHML"')} AS "UHML", ${sqlParseNumber('"UI"')} AS "UI",
+            ${sqlParseNumber('"SF"')} AS "SF", ${sqlParseNumber('"STR"')} AS "STR",
+            ${sqlParseNumber('"ELG"')} AS "ELG", ${sqlParseNumber('"RD"')} AS "RD",
+            ${sqlParseNumber('"PLUS_B"')} AS "PLUS_B", ${sqlParseNumber('"TrCNT"')} AS "TrCNT",
+            ${sqlParseNumber('"TrAR"')} AS "TrAR", ${sqlParseNumber('"TRID"')} AS "TRID",
+            "COR",
+            CASE WHEN "PESO" IS NULL OR "PESO" = '' THEN 0 ELSE CAST(REPLACE(REPLACE("PESO", '.', ''), ',', '.') AS NUMERIC) END AS "PESO"
+          FROM tb_calidad_fibra
+          WHERE "TIPO_MOV" = 'MIST' AND "MISTURA" IS NOT NULL
+            AND CAST(NULLIF(regexp_replace("LOTE_FIAC", '[^0-9]', '', 'g'), '') AS INTEGER)::TEXT = ANY($1::text[])
+        `
+        const hviRows = await query(hviSql, [lotes], 'calidad/pontos-por-rolada/fibra-hvi')
+        
+        hviMap = hviRows.rows.reduce((acc, row) => {
+          const k2 = String(row.LOTE_FIAC || '').replace(/^0+/, '').trim()
+          if (!k2) return acc
+          if (!acc[k2]) acc[k2] = { ...row, MISTURA: [], FECHA_INGRESO: [], _peso: 0, _sum: {}, _colors: {} }
+          const target = acc[k2]
+          
+          if (row.MISTURA) {
+            const m = String(row.MISTURA).replace(/^0+/, '')
+            if (m && !target.MISTURA.includes(m)) target.MISTURA.push(m)
+          }
+          if (row.FECHA_INGRESO) {
+            const d = row.FECHA_INGRESO instanceof Date ? row.FECHA_INGRESO.toISOString().split('T')[0] : String(row.FECHA_INGRESO).split('T')[0]
+            if (d && !target.FECHA_INGRESO.includes(d)) target.FECHA_INGRESO.push(d)
+          }
+
+          const peso = Number(row.PESO) || 0
+          target._peso += peso
+
+          const cor = String(row.COR || '').toUpperCase().trim()
+          if (cor) target._colors[cor] = (target._colors[cor] || 0) + peso
+
+          for (const k of ['SCI','MST','MIC','MAT','UHML','UI','SF','STR','ELG','RD','PLUS_B','TrCNT','TrAR','TRID']) {
+            const val = Number(row[k])
+            if (!isNaN(val)) target._sum[k] = (target._sum[k] || 0) + (val * peso)
+          }
+          return acc
+        }, {})
+      }
+
+      for (const r of (prodResult.rows || [])) {
+        const loteKey = String(r.lote || '').split(',')[0].trim().replace(/^0+/, '')
+        const hvi = hviMap[loteKey]
+        
+        let resData = {
+          maq_oe: r.maq_oe,
+          lote: r.lote,
+          fecha: r.fecha instanceof Date ? r.fecha.toISOString().split('T')[0] : String(r.fecha || '').split('T')[0],
+          mts_cal: r.MTS_CAL ? Number(r.MTS_CAL) : null,
+          largura: r.LARGURA ? Number(r.LARGURA) : null,
+          cal_pct: r.CAL_PCT ? Number(r.CAL_PCT) : null,
+          pts_100m2: r.PTS_100M2 ? Number(r.PTS_100M2) : null,
+        }
+        
+        if (hvi && hvi._peso > 0) {
+          resData.mezcla = hvi.MISTURA.join(', ')
+          resData.f_ingreso = hvi.FECHA_INGRESO.length > 0 ? [...hvi.FECHA_INGRESO].sort()[0] : '—'
+          for (const k of ['SCI','MST','MIC','MAT','UHML','UI','SF','STR','ELG','RD','PLUS_B','TrCNT','TrAR','TRID']) {
+            if (hvi._sum[k] != null) resData[k.toLowerCase()] = Number((hvi._sum[k] / hvi._peso).toFixed(2))
+          }
+          let totalColors = Object.values(hvi._colors).reduce((s, c) => s + c, 0)
+          if (totalColors > 0) {
+            resData.bco_pct = Number((((hvi._colors['BRANCO'] || hvi._colors['BCO'] || 0) / totalColors) * 100).toFixed(1))
+            resData.gri_pct = Number((((hvi._colors['GRISA'] || hvi._colors['CINZA'] || hvi._colors['GRI'] || 0) / totalColors) * 100).toFixed(1))
+            resData.lg_pct = Number((((hvi._colors['LEVEMENTE GRISA'] || hvi._colors['L.GRISA'] || hvi._colors['LG'] || 0) / totalColors) * 100).toFixed(1))
+            resData.ama_pct = Number((((hvi._colors['AMARELADO'] || hvi._colors['AMA'] || 0) / totalColors) * 100).toFixed(1))
+            resData.la_pct = Number((((hvi._colors['LEVEMENTE AMARELADO'] || hvi._colors['L.AMA'] || hvi._colors['LA'] || 0) / totalColors) * 100).toFixed(1))
+          }
+        }
+        fibraMap[r.rolada] = resData
+      }
+    }
+
+    res.json({
+      fechaDesde: desde,
+      fechaHasta: hasta,
+      sectorFiltro: sector || 'todos',
+      roladas,
+      basesUrdume: basesMap,
+      fibraMap,
+      defectos,
+      totalPts: defectos.reduce((s, d) => s + d.pts_totales, 0),
+    })
+
+    console.log(`[PERF] GET /calidad/pontos-por-rolada ${desde}..${hasta} defectos=${defectos.length} roladas=${roladas.length} ${(hrMs()-t0).toFixed(1)}ms`)
+  } catch (err) {
+    console.error('Error en /api/calidad/pontos-por-rolada:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+
 // GET /api/calidad/pts-por-partida - Partidas con Pts/100m², métricas de calidad y tejeduría
 // Parámetros: date=YYYY-MM-DD, mode=day (default)|month, trama=Todas|ALG 100%|P + E|POL 100%
 app.get('/api/calidad/pts-por-partida', async (req, res) => {

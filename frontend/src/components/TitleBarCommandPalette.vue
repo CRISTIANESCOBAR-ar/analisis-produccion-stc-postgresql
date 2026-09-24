@@ -143,7 +143,7 @@ const searchableRoutes = computed(() => {
 
 function getRouteGroup(path) {
   if (path.includes('resumen') || path.includes('hvi') || path.includes('ensayos')) return 'Laboratorio'
-  if (path.includes('tejeduria') || path.includes('calidad') || path.includes('revisor')) return 'Calidad'
+  if (path.includes('tejeduria') || path.includes('calidad') || path.includes('revisor') || path.includes('pontos')) return 'Calidad'
   if (path.includes('indigo') || path.includes('rolada')) return 'Índigo'
   return 'Módulo'
 }
