@@ -130,8 +130,8 @@ async function importProduccionOE() {
         for (let i = 0; i < records.length; i++) {
             const record = records[i];
             
-            // Filtrar headers duplicados (registros donde FILIAL = "FILIAL")
-            if (record['FILIAL'] === 'FILIAL') {
+            // Filtrar headers duplicados (registros donde FILIAL = "FILIAL") y totales
+            if (record['FILIAL'] === 'FILIAL' || (record['FILIAL'] && record['FILIAL'].startsWith('TOTAL:'))) {
                 headersSkipped++;
                 continue;
             }

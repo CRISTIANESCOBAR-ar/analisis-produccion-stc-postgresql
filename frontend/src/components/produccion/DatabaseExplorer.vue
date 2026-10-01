@@ -133,6 +133,18 @@
                 </svg>
                 <span>Refrescar</span>
               </button>
+              
+              <button 
+                @click="exportToExcel" 
+                :disabled="exportLoading"
+                class="inline-flex items-center gap-1 px-2.5 py-1 border border-slate-200 bg-white text-slate-700 rounded-lg text-sm font-medium hover:bg-green-50 transition-colors duration-150 shadow-sm hover:shadow-md disabled:opacity-50" 
+                title="Exportar a Excel"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span>{{ exportLoading ? 'Exportando...' : 'Exportar Excel' }}</span>
+              </button>
             </div>
           </div>
         </header>
@@ -366,6 +378,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import * as XLSX from 'xlsx'
 
 const tables = ref([])
 const selectedTable = ref(null)
@@ -373,6 +386,7 @@ const columns = ref([])
 const tableData = ref([])
 
 const loading = ref(false)
+const exportLoading = ref(false)
 const searchQuery = ref('')
 
 // Pagination
@@ -424,6 +438,43 @@ const fetchTables = async () => {
     }
   } catch (e) {
     console.error('Error al cargar tablas:', e)
+  }
+}
+
+const exportToExcel = async () => {
+  if (!selectedTable.value) return
+  
+  exportLoading.value = true
+  try {
+    const url = new URL(`http://localhost:3001/api/database/tables/${selectedTable.value}/data`)
+    url.searchParams.set('page', 1)
+    url.searchParams.set('limit', 1000000) // Límite alto para exportar todo lo filtrado
+    if (searchQuery.value) {
+      url.searchParams.set('search', searchQuery.value)
+    }
+    if (selectedDay.value) {
+      url.searchParams.set('date', selectedDay.value)
+    }
+
+    const res = await fetch(url)
+    const json = await res.json()
+    
+    if (json.success && json.data.length > 0) {
+      // Usar SheetJS (XLSX) para crear el archivo
+      const ws = XLSX.utils.json_to_sheet(json.data)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, selectedTable.value.substring(0, 31)) // Limite de 31 caracteres para nombre de hoja
+      
+      const fileName = `${selectedTable.value}_${new Date().toISOString().slice(0,10)}.xlsx`
+      XLSX.writeFile(wb, fileName)
+    } else {
+      alert("No hay datos para exportar")
+    }
+  } catch (e) {
+    console.error('Error al exportar a Excel:', e)
+    alert("Error al exportar los datos")
+  } finally {
+    exportLoading.value = false
   }
 }
 

@@ -311,7 +311,7 @@ function toCsvField(value) {
   return s;
 }
 
-function shouldSkipRecord(record, headers) {
+export function shouldSkipRecord(record, headers) {
   if (!record || !headers || headers.length === 0) return true;
 
   const values = headers.map((h) => String(record?.[h] ?? '').trim());
@@ -321,7 +321,7 @@ function shouldSkipRecord(record, headers) {
   const isNumericLike = (val) => {
     const s = String(val ?? '').trim();
     if (!s) return false;
-    if (s === '-' || s === '--') return false;
+    if (s === '-' || s === '--') return true; // Modificado: considerar guiones como campos numéricos vacíos (skips)
     return /^-?\d{1,3}([.,]\d{3})*([.,]\d+)?$/u.test(s);
   };
 

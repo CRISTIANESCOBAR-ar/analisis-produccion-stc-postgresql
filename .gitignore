@@ -60,3 +60,10 @@ backend/scripts/test_*
 backend/scripts/inspect_*
 backend/scripts/input_metas_*.txt
 query
+backend/extract_report.cjs
+backend/insert_new_mp.cjs
+backend/schema_query.cjs
+backend/verify_insert.cjs
+backend/reporte_output.json
+*.csv
+backend/*.csv
