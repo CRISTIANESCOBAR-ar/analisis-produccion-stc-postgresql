@@ -100,6 +100,7 @@ const groups = [
     links: [
       { to: '/informe-diario', icon: '📊', label: 'Informe STC Diario' },
       { to: '/velocidad-maquina', icon: '⚙️', label: 'Velocidad Máquina' },
+      { to: '/balance-trazabilidad', icon: '⚖️', label: 'Balance Trazabilidad' },
     ],
   },
   // Inventarios oculto — Materia Prima será mostrada desde otra App

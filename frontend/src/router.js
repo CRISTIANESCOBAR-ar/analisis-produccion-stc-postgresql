@@ -199,6 +199,11 @@ const routes = [
     meta: { title: 'Análisis Eficiencia vs Calidad' }
   },
   {
+    path: '/balance-trazabilidad',
+    component: () => import('./components/produccion/BalanceTrazabilidad.vue'),
+    meta: { title: 'Balance de Trazabilidad' }
+  },
+  {
     path: '/relato-ia-teje',
     component: () => import('./components/produccion/RelatoIaTejeView.vue'),
     meta: { title: 'Relato de Calidad y Patrones (IA)' }
@@ -295,7 +300,7 @@ const routeTitleGroups = [
   },
   {
     title: 'Producción',
-    paths: ['/import-control', '/importaciones', '/informe-diario', '/velocidad-maquina']
+    paths: ['/import-control', '/importaciones', '/informe-diario', '/velocidad-maquina', '/balance-trazabilidad']
   },
   // Inventarios: eliminado de los grupos de título — gestionado por otra App
   {
