@@ -204,6 +204,16 @@ const routes = [
     meta: { title: 'Balance de Trazabilidad' }
   },
   {
+    path: '/calibracion-revisores',
+    component: () => import('./components/produccion/CalibracionRevisores.vue'),
+    meta: { title: 'Calibración Revisores' }
+  },
+  {
+    path: '/trazabilidad-causa-raiz',
+    component: () => import('./components/produccion/TrazabilidadCausaRaiz.vue'),
+    meta: { title: 'Trazabilidad Causa Raíz' }
+  },
+  {
     path: '/relato-ia-teje',
     component: () => import('./components/produccion/RelatoIaTejeView.vue'),
     meta: { title: 'Relato de Calidad y Patrones (IA)' }
@@ -300,7 +310,7 @@ const routeTitleGroups = [
   },
   {
     title: 'Producción',
-    paths: ['/import-control', '/importaciones', '/informe-diario', '/velocidad-maquina', '/balance-trazabilidad']
+    paths: ['/import-control', '/importaciones', '/informe-diario', '/velocidad-maquina', '/balance-trazabilidad', '/trazabilidad-causa-raiz', '/calibracion-revisores']
   },
   // Inventarios: eliminado de los grupos de título — gestionado por otra App
   {

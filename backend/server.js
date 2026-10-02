@@ -17,6 +17,8 @@ import { parseNarrativaStructure } from '../shared/narrativaSections.js';
 import databaseExplorerRouter from './routes/databaseExplorer.mjs';
 import velocidadMaquinaRoutes from './routes/velocidad-maquina.mjs';
 import balanceTrazabilidadRoutes from './routes/balance-trazabilidad.mjs';
+import calibracionRevisoresRoutes from './routes/calibracion-revisores.mjs';
+import trazabilidadCausaRaizRoutes from './routes/trazabilidad-causa-raiz.mjs';
 import {
   buildProduccionQuery,
   buildCalidadQuery,
@@ -727,6 +729,8 @@ app.use('/api/produccion', velocidadMaquinaRoutes(query));
 
 // Balance Trazabilidad (Tejeduría - Integrada 165001 - Calidad)
 app.use('/api/produccion', balanceTrazabilidadRoutes(query));
+app.use('/api/produccion', calibracionRevisoresRoutes(query));
+app.use('/api/produccion', trazabilidadCausaRaizRoutes(query));
 
 // =====================================================
 // ENDPOINTS COSTOS MENSUALES

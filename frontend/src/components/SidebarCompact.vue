@@ -98,6 +98,7 @@ const groups = [
     icon: '🏭',
     label: 'Producción',
     links: [
+      { to: '/trazabilidad-causa-raiz', icon: '🔍', label: 'Trazabilidad Causa Raíz' },
       { to: '/informe-diario', icon: '📊', label: 'Informe STC Diario' },
       { to: '/velocidad-maquina', icon: '⚙️', label: 'Velocidad Máquina' },
       { to: '/balance-trazabilidad', icon: '⚖️', label: 'Balance Trazabilidad' },
@@ -110,6 +111,7 @@ const groups = [
     icon: '✅',
     label: 'Control de Calidad',
     links: [
+      { to: '/calibracion-revisores', icon: '🎯', label: 'Calibración Revisores' },
       { to: '/revision-cq', icon: '📋', label: 'Metros por Revisor' },
       { to: '/meta-por-revisor', icon: '📋', label: 'Meta por Revisor' },
       { to: '/desempeno-revisores', icon: '⚡', label: 'Desempeño Revisores' },
