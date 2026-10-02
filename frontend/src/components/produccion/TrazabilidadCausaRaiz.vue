@@ -211,8 +211,10 @@
                 </td>
 
                 <!-- Maquinas Dinamicas -->
-                <td v-for="maq in maquinasOE" :key="maq" class="px-4 py-2 text-right">
-                  <span v-if="item['cortes_maq_'+maq] !== null" :class="colorCortes(item['cortes_maq_'+maq])" class="px-1.5 py-0.5 rounded font-medium">
+                <td v-for="maq in maquinasOE" :key="maq" class="px-4 py-2 text-right relative"
+                    @mouseenter="showTooltip($event, item, maq)"
+                    @mouseleave="hideTooltip">
+                  <span v-if="item['cortes_maq_'+maq] !== null" :class="colorCortes(item['cortes_maq_'+maq])" class="px-1.5 py-0.5 rounded font-medium cursor-help">
                     {{ formatNumber(item['cortes_maq_'+maq], 4) }}
                   </span>
                   <span v-else class="text-slate-300">-</span>
@@ -240,12 +242,84 @@
       </div>
     </div>
   </div>
+
+  <Teleport to="body">
+    <div v-if="hoveredTooltip && hoveredTooltip.item['detalle_maq_'+hoveredTooltip.maq]"
+         :style="tooltipStyle"
+         class="fixed z-[9999] w-max bg-white text-slate-800 text-xs text-left rounded shadow-xl border border-slate-200 pointer-events-auto"
+         @mouseenter="cancelHideTooltip"
+         @mouseleave="hideTooltip">
+      
+      <div class="font-bold border-b border-slate-200 p-2 bg-slate-50 rounded-t text-slate-700">Desglose por Lote y Turno</div>
+      
+      <div class="max-h-60 overflow-y-auto">
+        <table class="w-full text-[11px]">
+          <thead class="text-slate-500 bg-slate-50 border-b border-slate-100 sticky top-0 shadow-sm z-10">
+            <tr>
+              <th class="px-2 py-1 font-medium text-left">Lote</th>
+              <th class="px-2 py-1 font-medium text-left">Fecha (T)</th>
+              <th class="px-2 py-1 font-medium text-center">Ene.</th>
+              <th class="px-2 py-1 font-medium text-center">Cortes</th>
+              <th class="px-2 py-1 font-medium text-right">Kg Prod</th>
+              <th class="px-2 py-1 font-medium text-right">Cortes/Kg</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            <tr v-for="(det, i) in hoveredTooltip.item['detalle_maq_'+hoveredTooltip.maq]" :key="i" class="hover:bg-slate-50">
+              <td class="px-2 py-1 text-slate-600 text-left">{{ det.lote }}</td>
+              <td class="px-2 py-1 text-slate-600 text-left whitespace-nowrap">{{ formatDateStr(det.fecha) }} ({{ det.turno }})</td>
+              <td class="px-2 py-1 text-center font-medium">
+                <span v-if="det.energia > 0" class="text-red-500 font-bold bg-red-50 px-1 rounded">{{ det.energia }}</span>
+                <span v-else class="text-slate-300">-</span>
+              </td>
+              <td class="px-2 py-1 font-semibold text-slate-700 text-center">{{ formatNumber(det.cortes, 0) }}</td>
+              <td class="px-2 py-1 text-slate-600 text-right">{{ formatNumber(det.prod, 0) }}</td>
+              <td class="px-2 py-1 font-medium text-right">
+                <span :class="colorCortes(det.tasa)" class="px-1 py-0.5 rounded">{{ formatNumber(det.tasa, 2) }}</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Triangulito (flecha) abajo -->
+      <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-white"></div>
+      <div class="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-200 -z-10 translate-y-[1px]"></div>
+    </div>
+  </Teleport>
 </template>
 
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue';
 import ExcelJS from 'exceljs';
 import CustomDatepicker from '../CustomDatepicker.vue';
+
+const hoveredTooltip = ref(null);
+const tooltipStyle = ref({});
+let tooltipTimeout = null;
+
+const showTooltip = (event, item, maq) => {
+  if (tooltipTimeout) clearTimeout(tooltipTimeout);
+  const rect = event.currentTarget.getBoundingClientRect();
+  hoveredTooltip.value = { item, maq };
+  
+  // Posicionar arriba de la celda. Como es position: fixed, rect.top / rect.left son perfectos.
+  tooltipStyle.value = {
+    top: `${rect.top - 8}px`,
+    left: `${rect.left + rect.width / 2}px`,
+    transform: 'translate(-50%, -100%)'
+  };
+};
+
+const hideTooltip = () => {
+  tooltipTimeout = setTimeout(() => {
+    hoveredTooltip.value = null;
+  }, 150); // 150ms delay for smooth moving
+};
+
+const cancelHideTooltip = () => {
+  if (tooltipTimeout) clearTimeout(tooltipTimeout);
+};
 
 const activeTab = ref('lote'); // 'lote' | 'rolada'
 

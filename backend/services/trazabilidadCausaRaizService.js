@@ -453,14 +453,31 @@ export function procesarTrazabilidadPorRolada(roladasRows, oeRows, energiaRows, 
           maquinasSet.add(maquinaKey);
 
           if (!roladaMaquinas.has(maquinaKey)) {
-            roladaMaquinas.set(maquinaKey, { cortes: 0, prod: 0 });
+            roladaMaquinas.set(maquinaKey, { cortes: 0, prod: 0, detalleMap: new Map() });
           }
           const rm = roladaMaquinas.get(maquinaKey);
-          rm.cortes += parseFloat(o.cortes_nat || 0);
-          rm.prod += parseFloat(o.prod_kg || 0);
+          const curCortes = parseFloat(o.cortes_nat || 0);
+          const curProd = parseFloat(o.prod_kg || 0);
+
+          rm.cortes += curCortes;
+          rm.prod += curProd;
 
           if (o.data_producao && o.turno) {
             periodosRolada.add(`${o.data_producao}_${o.turno}`);
+            const detKey = `${lote}_${o.data_producao}_${o.turno}`;
+            if (!rm.detalleMap.has(detKey)) {
+              rm.detalleMap.set(detKey, { 
+                lote: lote,
+                fecha: o.data_producao, 
+                turno: o.turno, 
+                cortes: 0, 
+                prod: 0,
+                energia: energiaMap.get(`${o.data_producao}_${o.turno}`) || 0
+              });
+            }
+            const det = rm.detalleMap.get(detKey);
+            det.cortes += curCortes;
+            det.prod += curProd;
           }
         }
       }
@@ -493,8 +510,22 @@ export function procesarTrazabilidadPorRolada(roladasRows, oeRows, energiaRows, 
       if (roladaMaquinas.has(maq)) {
         const md = roladaMaquinas.get(maq);
         rowObj[`cortes_maq_${maq}`] = md.prod > 0 ? parseFloat((md.cortes / md.prod).toFixed(4)) : null;
+        
+        // Finalize details
+        const detailsArray = Array.from(md.detalleMap.values()).map(d => ({
+          ...d,
+          tasa: d.prod > 0 ? parseFloat((d.cortes / d.prod).toFixed(4)) : null
+        }));
+        // Sort details by date and turn
+        detailsArray.sort((a, b) => {
+          if (a.fecha !== b.fecha) return a.fecha.localeCompare(b.fecha);
+          return a.turno.localeCompare(b.turno);
+        });
+        
+        rowObj[`detalle_maq_${maq}`] = detailsArray;
       } else {
         rowObj[`cortes_maq_${maq}`] = null;
+        rowObj[`detalle_maq_${maq}`] = [];
       }
     }
 
