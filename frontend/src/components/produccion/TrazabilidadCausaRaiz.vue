@@ -1,8 +1,8 @@
 <template>
-  <div class="p-3 md:p-4 bg-slate-50 min-h-screen text-slate-800 flex flex-col gap-3">
+  <div class="p-3 md:p-4 bg-slate-50 h-full text-slate-800 flex flex-col gap-3">
 
     <!-- HEADER: una sola línea, colapso progresivo sin flex-wrap -->
-    <header class="bg-white border border-slate-200 rounded-lg shadow-sm shrink-0">
+    <header class="sticky top-3 z-40 bg-white border border-slate-200 rounded-lg shadow-sm shrink-0">
       <div class="flex items-center gap-1.5 md:gap-2 h-12 px-2 md:px-3 min-w-0">
 
         <!-- Título -->
@@ -208,7 +208,7 @@
     <div v-if="dropdownOpen || advOpen" class="fixed inset-0 z-30" @click="closeAllDropdowns"></div>
 
     <!-- Loading State -->
-    <div v-if="loading" class="flex-1 flex flex-col gap-3 relative z-0">
+    <div v-if="loading" class="flex-1 min-h-0 flex flex-col gap-3 relative z-0">
       <div v-if="activeTab === 'lote'" class="bg-white border border-slate-200 rounded-lg shadow-sm h-10 animate-pulse"></div>
       <div class="bg-white border border-slate-200 rounded-lg shadow-sm flex-1 min-h-[300px] animate-pulse"></div>
     </div>
@@ -220,7 +220,7 @@
     </div>
 
     <!-- VISTA POR LOTE -->
-    <div v-else-if="activeTab === 'lote' && dataLote" class="flex-1 flex flex-col gap-3 relative z-0">
+    <div v-else-if="activeTab === 'lote' && dataLote" class="flex-1 min-h-0 flex flex-col gap-3 relative z-0">
       <!-- KPIs: franja compacta -->
       <div class="bg-white border border-slate-200 rounded-lg shadow-sm flex items-center h-10 px-3 gap-3 md:gap-5 overflow-x-auto shrink-0">
         <div class="flex items-baseline gap-1.5 shrink-0">
@@ -245,10 +245,10 @@
       </div>
 
       <!-- Tabla Lote -->
-      <div class="bg-white border border-slate-200 rounded-lg shadow-sm flex-1 overflow-hidden flex flex-col">
-        <div class="overflow-x-auto">
+      <div class="bg-white border border-slate-200 rounded-lg shadow-sm flex-1 min-h-0 overflow-hidden flex flex-col">
+        <div class="overflow-auto flex-1 min-h-0">
           <table class="w-fit min-w-full text-[13px] text-left tabular-nums">
-            <thead class="text-[11px] text-slate-500 bg-slate-50 border-b border-slate-200 uppercase whitespace-nowrap sticky top-0">
+            <thead class="text-[11px] text-slate-500 bg-slate-50 border-b border-slate-200 uppercase whitespace-nowrap sticky top-0 z-10 shadow-sm">
               <tr>
                 <th class="pl-3 pr-2.5 py-2 font-semibold text-left w-24">Lote</th>
                 <th class="px-2.5 py-2 font-semibold text-right w-[76px]">Partidas</th>
@@ -303,11 +303,11 @@
     </div>
 
     <!-- VISTA POR ROLADA -->
-    <div v-else-if="activeTab === 'rolada' && dataRolada" class="flex-1 flex flex-col gap-3 relative z-0">
-      <div class="bg-white border border-slate-200 rounded-lg shadow-sm flex-1 overflow-hidden flex flex-col">
-        <div class="overflow-x-auto">
+    <div v-else-if="activeTab === 'rolada' && dataRolada" class="flex-1 min-h-0 flex flex-col gap-3 relative z-0">
+      <div class="bg-white border border-slate-200 rounded-lg shadow-sm flex-1 min-h-0 overflow-hidden flex flex-col">
+        <div class="overflow-auto flex-1 min-h-0" @scroll.passive="hideTooltip">
           <table class="w-fit min-w-full text-[13px] text-left tabular-nums">
-            <thead class="text-[11px] text-slate-500 bg-slate-50 border-b border-slate-200 uppercase whitespace-nowrap sticky top-0">
+            <thead class="text-[11px] text-slate-500 bg-slate-50 border-b border-slate-200 uppercase whitespace-nowrap sticky top-0 z-10 shadow-sm">
               <tr>
                 <th class="pl-3 pr-2.5 py-2 font-semibold text-left w-[72px]">Rolada</th>
                 <th class="px-2.5 py-2 font-semibold text-left w-[64px]" title="Máquina Open End">OE (Máq)</th>
