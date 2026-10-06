@@ -3,10 +3,13 @@
     <label v-if="label" class="text-sm text-slate-600 font-medium">{{ label }}</label>
     
     <div class="custom-datepicker relative" ref="datepickerRef">
-      <input 
-        type="text" 
-        :value="displayDate" 
-        class="filter-input datepicker-input w-32 px-3 py-1.5 border border-slate-300 rounded-md text-sm text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all cursor-pointer bg-white"
+      <input
+        type="text"
+        :value="displayDate"
+        :class="[
+          'filter-input datepicker-input border border-slate-300 rounded-md text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all cursor-pointer bg-white',
+          compact ? 'w-[100px] px-2 pr-7 py-1.5 text-[13px]' : 'w-32 px-3 py-1.5 text-sm'
+        ]"
         :placeholder="placeholder"
         @click="toggleCalendar"
         @keydown.left.prevent="cambiarFecha(-1)"
@@ -14,7 +17,8 @@
         dir="ltr"
         readonly
       />
-      <span class="calendar-icon absolute right-3 top-1/2 -translate-y-1/2 text-lg cursor-pointer select-none" @click="toggleCalendar">📅</span>
+      <CalendarIcon v-if="compact" class="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 cursor-pointer select-none" @click="toggleCalendar" />
+      <span v-else class="calendar-icon absolute right-3 top-1/2 -translate-y-1/2 text-lg cursor-pointer select-none" @click="toggleCalendar">📅</span>
 
       <div
         v-if="showCalendar"
@@ -72,7 +76,7 @@
       </div>
     </div>
     
-    <div v-if="showButtons" class="flex gap-1">
+    <div v-if="showButtons && !compact" class="flex gap-1">
       <button 
         class="inline-flex items-center justify-center px-2 py-1 border border-slate-200 bg-white text-slate-700 rounded-md text-sm font-medium hover:bg-slate-50 transition-colors duration-150 shadow-sm h-8.5" 
         @click="cambiarMes(-1)" 
@@ -107,6 +111,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { CalendarIcon } from '@heroicons/vue/24/outline'
 
 const props = defineProps({
   modelValue: {
@@ -124,6 +129,10 @@ const props = defineProps({
   showButtons: {
     type: Boolean,
     default: true
+  },
+  compact: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -159,7 +168,7 @@ const displayDate = computed(() => {
   const fecha = new Date(year, month - 1, day)
   const diaNum = fecha.getDate().toString().padStart(2, '0')
   const mes = (fecha.getMonth() + 1).toString().padStart(2, '0')
-  const anio = fecha.getFullYear()
+  const anio = props.compact ? fecha.getFullYear().toString().slice(-2) : fecha.getFullYear()
   return `${diaNum}/${mes}/${anio}`
 })
 
