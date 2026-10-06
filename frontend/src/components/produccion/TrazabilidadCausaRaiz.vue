@@ -67,6 +67,14 @@
           <input v-model="filters.roladas" type="text" placeholder="Ej: 5436, 5440" class="border border-slate-300 rounded px-3 py-1.5 text-sm w-48" />
         </div>
 
+        <div class="flex flex-col min-w-[150px]" v-if="activeTab === 'rolada'">
+          <label class="block text-xs font-semibold text-slate-500 mb-1">Filtro Base</label>
+          <select v-model="filters.base" class="border border-slate-300 rounded px-3 py-1.5 text-sm w-full">
+            <option value="TODAS">TODAS</option>
+            <option v-for="b in basesUnicas" :key="b" :value="b">{{ b }}</option>
+          </select>
+        </div>
+
         <div class="flex items-end h-full pt-6 gap-2">
           <button @click="fetchData" class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-1.5 rounded text-sm transition-colors h-8">
             Consultar
@@ -191,7 +199,7 @@
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
-              <tr v-for="item in dataRolada" :key="item.rolada" class="hover:bg-slate-50/50">
+              <tr v-for="item in filteredDataRolada" :key="item.rolada" class="hover:bg-slate-50/50">
                 <td class="px-4 py-2 font-bold text-slate-700">{{ item.rolada }}</td>
                 <td class="px-4 py-2">{{ item.maq_oe || '-' }}</td>
                 <td class="px-4 py-2">{{ item.lotes_oe || '-' }}</td>
@@ -233,7 +241,7 @@
                   {{ formatNumber(item.puntos_revision, 0) }}
                 </td>
               </tr>
-              <tr v-if="dataRolada.length === 0">
+              <tr v-if="filteredDataRolada.length === 0">
                 <td :colspan="9 + maquinasOE.length" class="px-4 py-8 text-center text-slate-500">No hay datos.</td>
               </tr>
             </tbody>
@@ -333,7 +341,8 @@ const filters = ref({
   sector: 'TODOS',
   codigos_defecto: [],
   lotes: '',
-  roladas: ''
+  roladas: '',
+  base: 'TODAS'
 });
 
 const loading = ref(false);
@@ -361,9 +370,28 @@ const selectedDefectosText = computed(() => {
   return `${filters.value.codigos_defecto.length} seleccionados`;
 });
 
+const basesUnicas = computed(() => {
+  if (!dataRolada.value) return [];
+  const bases = new Set();
+  dataRolada.value.forEach(item => {
+    if (item.base) {
+      bases.add(item.base.substring(0, 10).toUpperCase());
+    }
+  });
+  return Array.from(bases).sort();
+});
+
+const filteredDataRolada = computed(() => {
+  if (!dataRolada.value) return [];
+  if (filters.value.base === 'TODAS') return dataRolada.value;
+  return dataRolada.value.filter(item => {
+    return item.base && item.base.substring(0, 10).toUpperCase() === filters.value.base;
+  });
+});
+
 const hasData = computed(() => {
   if (activeTab.value === 'lote') return dataLote.value && dataLote.value.length > 0;
-  return dataRolada.value && dataRolada.value.length > 0;
+  return filteredDataRolada.value && filteredDataRolada.value.length > 0;
 });
 
 onMounted(async () => {
@@ -514,7 +542,7 @@ const fetchData = async () => {
 
 const exportarExcel = async () => {
   const isLote = activeTab.value === 'lote';
-  const data = isLote ? dataLote.value : dataRolada.value;
+  const data = isLote ? dataLote.value : filteredDataRolada.value;
   if (!data || data.length === 0) return;
 
   const workbook = new ExcelJS.Workbook();
