@@ -231,12 +231,12 @@ function parseNumber(val) {
   return Number.isFinite(n) ? n : null
 }
 
-// Extrae el número del lote (ej: HD-106-26 → 106, HV 56-25 → 56)
+// Extrae el número del lote (ej: HD-106-26 → 106, HV 56-25 → 56, HD-140/41-26 → 140/41)
 function formatLote(lote) {
   if (!lote || lote === '') return ''
   const str = String(lote).trim()
-  // Buscar patrón: separador (- o espacio) + dígitos + separador (- o espacio)
-  const match = str.match(/[\s-](\d+)[\s-]/)
+  // Buscar patrón: separador (- o espacio) + dígitos o / + opcionalmente separador o fin de string
+  const match = str.match(/[\s-]([\d\/]+)(?:[\s-]|$)/)
   if (match && match[1]) {
     return match[1]
   }

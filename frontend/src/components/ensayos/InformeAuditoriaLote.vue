@@ -214,12 +214,13 @@ function normalizeLote(value) {
   if (value == null) return ''
   const raw = String(value).trim()
   if (!raw) return ''
-  const matchMiddle = raw.match(/[\s-](\d+)[\s-]/)
+  // Buscar patrón: separador (- o espacio) + dígitos o / + opcionalmente separador o fin de string
+  const matchMiddle = raw.match(/[\s-]([\d\/]+)(?:[\s-]|$)/)
   if (matchMiddle && matchMiddle[1]) {
-    return String(parseInt(matchMiddle[1], 10))
+    return matchMiddle[1]
   }
-  const digits = raw.replace(/\D/g, '')
-  if (digits) return String(parseInt(digits, 10))
+  const digits = raw.replace(/[^\d\/]/g, '')
+  if (digits) return digits
   return raw.toLowerCase()
 }
 

@@ -1313,8 +1313,8 @@ function formatEstiraje(estiraje) {
 function formatLote(lote) {
   if (!lote || lote === '') return ''
   const str = String(lote).trim()
-  // Buscar patrón: separador (- o espacio) + dígitos + separador (- o espacio)
-  const match = str.match(/[\s-](\d+)[\s-]/)
+  // Buscar patrón: separador (- o espacio) + dígitos o / + opcionalmente separador o fin de string
+  const match = str.match(/[\s-]([\d\/]+)(?:[\s-]|$)/)
   if (match && match[1]) {
     return match[1]
   }

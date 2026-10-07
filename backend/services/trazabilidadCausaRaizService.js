@@ -131,7 +131,7 @@ export function construirQueryTrazabilidadCausaRaiz({ fechaInicio, fechaFin, cod
     LEFT JOIN uster_lote us ON us.lote = lp.lote
     LEFT JOIN tensorapid_lote ten ON ten.lote = lp.lote
     LEFT JOIN oe_lote oe ON oe.lote = lp.lote
-    ORDER BY CAST(NULLIF(lp.lote, '') AS INTEGER) ASC NULLS LAST
+    ORDER BY CAST(NULLIF(regexp_replace(lp.lote, '[^0-9].*$', ''), '') AS INTEGER) ASC NULLS LAST
   `;
 
   return { sql, values };
@@ -547,9 +547,9 @@ export function construirQueryHVI(lotes) {
   let values = [];
   let filter = 'WHERE 1=0';
   if (lotes && lotes.length > 0) {
-    // the lotes array already contains stripped short strings (e.g. "104")
+    // the lotes array already contains stripped short strings (e.g. "104" or "140/41")
     const placeholders = lotes.map((_, i) => `$${i + 1}::text`).join(', ');
-    filter = `WHERE "TIPO_MOV" = 'MIST' AND "MISTURA" IS NOT NULL AND CAST(NULLIF(regexp_replace("LOTE_FIAC", '[^0-9]', '', 'g'), '') AS INTEGER)::TEXT IN (${placeholders})`;
+    filter = `WHERE "TIPO_MOV" = 'MIST' AND "MISTURA" IS NOT NULL AND CAST(NULLIF(regexp_replace("LOTE_FIAC", '[^0-9]', '', 'g'), '') AS INTEGER)::TEXT IN (SELECT regexp_replace(u, '[^0-9].*$', '') FROM unnest(ARRAY[${placeholders}]) u)`;
     values.push(...lotes);
   }
 

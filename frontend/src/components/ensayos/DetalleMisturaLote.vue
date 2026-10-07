@@ -509,10 +509,12 @@ function formatPercent(value) {
   return `${parseFloat(value).toFixed(1)}%`
 }
 
-// Formatear LOTE_FIAC (eliminar ceros a la izquierda)
+// Formatear LOTE_FIAC (eliminar ceros a la izquierda, preservar texto y barras)
 function formatLoteFiac(value) {
   if (!value) return ''
-  return parseInt(value, 10).toString()
+  const str = String(value).trim()
+  // Si empieza con ceros seguidos de algo más, removerlos. Ej: "0140/41" -> "140/41", "007" -> "7"
+  return str.replace(/^0+(?=\w)/, '')
 }
 
 // Exportar a Excel
