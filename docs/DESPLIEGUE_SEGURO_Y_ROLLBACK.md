@@ -32,7 +32,7 @@ Si se implementa un relevo de instancias, comprobar primero health, carga de la 
 
 ## Recuperación de código
 
-El punto anterior a esta entrega es `9d9e8b3a85c56cb2e1592996ec3546316fe0e1ca`, publicado con la etiqueta `codex-baseline-20261007`.
+El punto anterior a esta entrega es `9d9e8b3a85c56cb2e1592996ec3546316fe0e1ca`, identificado por la etiqueta `codex-baseline-20261007`. Publicar esa etiqueta junto con la rama y verificar ambas referencias en el remoto antes de considerarlas un respaldo remoto.
 
 Para preparar una copia de recuperación sin borrar cambios locales:
 
