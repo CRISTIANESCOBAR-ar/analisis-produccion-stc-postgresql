@@ -14,7 +14,7 @@ const pool = new Pool({
     port: process.env.PG_PORT || 5433,
     database: process.env.PG_DATABASE || 'stc_produccion',
     user: process.env.PG_USER || 'stc_user',
-    password: process.env.PG_PASSWORD || 'stc_password_2026'
+    password: process.env.PG_PASSWORD || process.env.PGPASSWORD
 });
 
 // Auto-migración al iniciar (asegura columnas y tablas nuevas)

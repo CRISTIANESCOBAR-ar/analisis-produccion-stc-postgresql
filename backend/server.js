@@ -1,7 +1,7 @@
 /* eslint-env node */
 import 'dotenv/config'
 import express from 'express'
-import cors from 'cors'
+import { installSecurity } from './security.js'
 import pg from 'pg'
 import fs from 'fs'
 import crypto from 'crypto'
@@ -34,8 +34,8 @@ import { getSectorByCodDef, defectoSectorMap } from './utils/defectosSectores.mj
 const { Pool } = pg
 const app = express()
 
+installSecurity(app)
 app.use(express.json({ limit: '50mb' }));
-app.use(cors());
 
 // Rutas de configuración
 app.use('/api/config', configStandardsRouter);
@@ -109,7 +109,7 @@ const pool = new Pool({
   port: process.env.PG_PORT || 5433,
   database: process.env.PG_DATABASE || 'stc_produccion',
   user: process.env.PG_USER || 'stc_user',
-  password: process.env.PG_PASSWORD || 'stc_password_2026',
+  password: process.env.PG_PASSWORD || process.env.PGPASSWORD,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
@@ -278,46 +278,6 @@ async function ensureCostosSchema() {
      ON CONFLICT DO NOTHING`
   )
 }
-
-// =====================================================
-// MIDDLEWARE
-// =====================================================
-const allowedOriginRegexes = [
-  /^http:\/\/localhost(:\d+)?$/,
-  /^http:\/\/127\.0\.0\.1(:\d+)?$/
-]
-
-const allowedOriginList = (process.env.FRONTEND_ORIGIN || '')
-  .split(',')
-  .map((s) => s.trim())
-  .filter(Boolean)
-
-function isOriginAllowed(origin, host) {
-  if (!origin) return true
-  if (allowedOriginList.includes(origin)) return true
-  if (allowedOriginRegexes.some((re) => re.test(origin))) return true
-
-  // Despliegue típico (Podman + reverse proxy): el frontend sirve desde la misma origin,
-  // y /api se proxifica al backend. Permitimos Origin == http(s)://<host>.
-  if (host && (origin === `http://${host}` || origin === `https://${host}`)) return true
-
-  return false
-}
-
-const corsOptionsDelegate = (req, cb) => {
-  const origin = req.header('Origin')
-  const host = req.headers.host
-
-  const allowed = isOriginAllowed(origin, host)
-  cb(null, {
-    origin: allowed,
-    credentials: true,
-  })
-}
-
-app.use(cors(corsOptionsDelegate))
-app.options('*', cors(corsOptionsDelegate))
-app.use(express.json({ limit: '50mb' }))
 
 // =====================================================
 // FRONTEND (PRODUCCIÓN): servir SPA desde el mismo servidor
@@ -527,7 +487,7 @@ app.get('/api/health', async (req, res) => {
     await query('SELECT 1')
     res.json({ ok: true, timestamp: new Date().toISOString() })
   } catch (err) {
-    res.status(500).json({ ok: false, error: err.message })
+    res.status(503).json({ ok: false })
   }
 })
 

@@ -1,5 +1,8 @@
 {
   "type": "module",
+  "scripts": {
+    "test": "node --test tests/api/*.test.mjs tests/frontend/*.test.mjs tests/hvi/*.test.mjs backend/security.test.mjs backend/services/fullBackupTrigger.test.mjs backend/services/trazabilidadCausaRaizService.test.js && npm --prefix backend run test:vitest"
+  },
   "dependencies": {
     "@popperjs/core": "^2.11.8",
     "pg": "^8.20.0"

@@ -5,3 +5,11 @@
 **/*.log
 backups/
 uploads/
+**/.env
+**/.env.*
+!**/.env.example
+**/*.dump
+**/*.backup
+exports/
+HVI Crudo/
+INDIGO/
