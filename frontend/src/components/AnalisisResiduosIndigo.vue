@@ -51,8 +51,8 @@
       <p v-if="!tooltipDiario.Motivos?.length" class="text-xs text-slate-500">Desglose no disponible</p>
     </div>
     <dialog v-if="detalleDiario" ref="detalleDiarioDialog" class="daily-detail-dialog" aria-labelledby="daily-detail-title" @close="detalleDiario = null" @click="cerrarDetalleFondo">
-      <div class="daily-detail-header"><div><h2 id="daily-detail-title">Estopa azul · detalle del día</h2><p>Rolada, urdume y motivo de cada registro</p></div><button class="toolbar-button" aria-label="Cerrar detalle" @click="detalleDiarioDialog.close()">×</button></div>
-      <div class="daily-detail-summary"><div class="daily-detail-navigation"><button class="toolbar-button" aria-label="Día anterior" :disabled="indiceDetalleDiario <= 0 || cargando" @click="navegarDetalleDiario(-1)">&lt;</button><select aria-label="Fecha del detalle" :value="detalleDiario.Fecha" @change="cambiarDetalleDiario($event.target.value)"><option v-for="row in diasDetalleDiario" :key="row.Fecha" :value="row.Fecha">{{ row.Fecha }}</option></select><button class="toolbar-button" aria-label="Día siguiente" :disabled="indiceDetalleDiario < 0 || indiceDetalleDiario >= diasDetalleDiario.length - 1 || cargando" @click="navegarDetalleDiario(1)">&gt;</button></div><strong>{{ formatNumber(toNumber(detalleDiario.KgResiduo), 2) }} kg</strong><span>{{ detalleDiario.Registros?.length || 0 }} registros · {{ contarRoladas(detalleDiario) }} roladas · {{ contarUrdumes(detalleDiario) }} urdumes</span></div>
+      <div class="daily-detail-header"><div><h2 id="daily-detail-title">Estopa azul · detalle del día</h2><p>Rolada, urdume y motivo de cada registro</p></div><div class="daily-detail-actions"><button class="detail-copy-button" :disabled="compartiendoDetalle || cargando" @click="copiarTextoDetalle"><ChatBubbleLeftRightIcon class="w-4 h-4" />Copiar texto</button><button class="detail-copy-button" :disabled="compartiendoDetalle || cargando" @click="copiarImagenDetalle"><PhotoIcon class="w-4 h-4" />Copiar imagen</button><button class="toolbar-button" aria-label="Cerrar detalle" @click="detalleDiarioDialog.close()">×</button></div></div>
+      <div class="daily-detail-summary"><div class="daily-detail-navigation"><button class="toolbar-button" aria-label="Día anterior" :disabled="indiceDetalleDiario <= 0 || cargando || compartiendoDetalle" @click="navegarDetalleDiario(-1)">&lt;</button><select :disabled="compartiendoDetalle || cargando" aria-label="Fecha del detalle" :value="detalleDiario.Fecha" @change="cambiarDetalleDiario($event.target.value)"><option v-for="row in diasDetalleDiario" :key="row.Fecha" :value="row.Fecha">{{ row.Fecha }}</option></select><button class="toolbar-button" aria-label="Día siguiente" :disabled="indiceDetalleDiario < 0 || indiceDetalleDiario >= diasDetalleDiario.length - 1 || cargando || compartiendoDetalle" @click="navegarDetalleDiario(1)">&gt;</button></div><strong>{{ formatNumber(toNumber(detalleDiario.KgResiduo), 2) }} kg</strong><span>{{ detalleDiario.Registros?.length || 0 }} registros · {{ contarRoladas(detalleDiario) }} roladas · {{ contarUrdumes(detalleDiario) }} urdumes</span></div>
       <div class="daily-detail-table"><table><thead><tr><th>ID del residuo</th><th>Rolada</th><th>Urdume</th><th>Partida</th><th>Turno</th><th>Motivo</th><th>kg</th></tr></thead><tbody><tr v-for="(registro, index) in detalleDiario.Registros || []" :key="index"><td>{{ registro.ID || 'Sin dato' }}</td><td>{{ registro.ROLADA?.trim() || 'Sin dato' }}</td><td>{{ registro.URDUME?.trim() || 'Sin dato' }}</td><td>{{ registro.PARTIDA?.trim() || 'Sin dato' }}</td><td>{{ registro.TURNO || 'Sin dato' }}</td><td>{{ registro.DESC_MOTIVO || registro.MOTIVO || 'Sin dato' }}</td><td>{{ formatNumber(toNumber(registro.Kg), 2) }}</td></tr></tbody></table></div>
       <div class="daily-detail-footer">Todos los registros del día · Total {{ formatNumber(toNumber(detalleDiario.KgResiduo), 2) }} kg</div>
     </dialog>
@@ -67,6 +67,7 @@ import { Chart as ChartJS, Title, Tooltip, Legend, BarElement, CategoryScale, Li
 import ChartDataLabels from 'chartjs-plugin-datalabels'
 import Swal from 'sweetalert2'
 import { domToPng } from 'modern-screenshot'
+import { textoDetalleIndigo, imagenDetalleIndigo } from '../utils/indigoDetalleCompartir'
 
 ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale, LineElement, PointElement, ChartDataLabels)
 
@@ -219,6 +220,36 @@ const totalKg = (rows) => rows.reduce((sum, row) => sum + toNumber(row.TotalKg),
 const diaLabel = computed(() => fechaSeleccionada.value.split('-').reverse().join('/'))
 const periodoLabel = computed(() => '01/' + fechaSeleccionada.value.split('-').slice(0, 2).reverse().join('/') + ' al ' + diaLabel.value)
 const hayDatos = computed(() => [datos, datosDia, datosS, datosDiaS, datosEstopaAzul, datosEstopaAzulDiario].some(rows => rows.value.length))
+const compartiendoDetalle = ref(false)
+const avisoDetalle = (icon, title) => Swal.fire({ toast: true, position: 'top-end', icon, title, showConfirmButton: false, timer: 3000, target: detalleDiarioDialog.value || document.body })
+const errorDetalle = error => Swal.fire({ icon: 'error', title: 'No se pudo copiar el detalle', text: error.message || 'Revisá el permiso de acceso al portapapeles.', confirmButtonText: 'Cerrar', target: detalleDiarioDialog.value || document.body })
+const copiarTextoDetalle = async () => {
+  if (!detalleDiario.value || compartiendoDetalle.value) return
+  compartiendoDetalle.value = true
+  try {
+    await navigator.clipboard.writeText(textoDetalleIndigo(detalleDiario.value))
+    avisoDetalle('success', 'Texto copiado para WhatsApp')
+  } catch (error) { errorDetalle(error) } finally { compartiendoDetalle.value = false }
+}
+const copiarImagenDetalle = async () => {
+  if (!detalleDiario.value || compartiendoDetalle.value) return
+  const date = detalleDiario.value.Fecha
+  compartiendoDetalle.value = true
+  try {
+    const dataUrl = await imagenDetalleIndigo(detalleDiarioDialog.value, date)
+    const blob = await (await fetch(dataUrl)).blob()
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+      avisoDetalle('success', 'Imagen del detalle copiada')
+    } catch {
+      const link = document.createElement('a')
+      link.href = dataUrl
+      link.download = 'estopa-azul-detalle-' + date.replaceAll('/', '-') + '.png'
+      link.click()
+      avisoDetalle('info', 'Portapapeles no disponible: imagen descargada')
+    }
+  } catch (error) { errorDetalle(error) } finally { compartiendoDetalle.value = false }
+}
 const detalleDiario = ref(null)
 const detalleDiarioDialog = ref(null)
 const contarRoladas = row => new Set((row?.Registros || []).map(r => r.ROLADA?.trim()).filter(Boolean)).size
@@ -235,7 +266,7 @@ const diasDetalleDiario = computed(() => [...datosEstopaAzulDiario.value].sort((
 const indiceDetalleDiario = computed(() => diasDetalleDiario.value.findIndex(row => row.Fecha === detalleDiario.value?.Fecha))
 const cambiarDetalleDiario = fecha => { detalleDiario.value = diasDetalleDiario.value.find(row => row.Fecha === fecha) || detalleDiario.value }
 const navegarDetalleDiario = offset => {
-  if (cargando.value || indiceDetalleDiario.value < 0) return
+  if (cargando.value || compartiendoDetalle.value || indiceDetalleDiario.value < 0) return
   const row = diasDetalleDiario.value[indiceDetalleDiario.value + offset]
   if (row) detalleDiario.value = row
 }
@@ -511,6 +542,12 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.daily-detail-actions { display: flex; align-items: center; gap: 6px; }
+.detail-copy-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 9px; border: 1px solid #cbd5e1; border-radius: 6px; background: white; color: #475569; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.detail-copy-button:hover { background: #f8fafc; }
+.detail-copy-button:disabled { opacity: .4; cursor: not-allowed; }
+.detail-copy-button:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+@media (max-width: 640px) { .daily-detail-header { flex-wrap: wrap; gap: 10px; } }
 .daily-detail-action { display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 10px; line-height: 16px; margin-bottom: 3px; color: #64748b; }
 .daily-detail-action button { color: #4f46e5; text-decoration: underline; cursor: pointer; }
 .daily-tooltip-hint { padding-top: 8px; margin-top: 5px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; }
