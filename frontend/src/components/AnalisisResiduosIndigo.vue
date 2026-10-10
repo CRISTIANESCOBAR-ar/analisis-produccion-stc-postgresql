@@ -202,7 +202,7 @@ const totalKg = (rows) => rows.reduce((sum, row) => sum + toNumber(row.TotalKg),
 const diaLabel = computed(() => fechaSeleccionada.value.split('-').reverse().join('/'))
 const periodoLabel = computed(() => '01/' + fechaSeleccionada.value.split('-').slice(0, 2).reverse().join('/') + ' al ' + diaLabel.value)
 const hayDatos = computed(() => [datos, datosDia, datosS, datosDiaS, datosEstopaAzul, datosEstopaAzulDiario].some(rows => rows.value.length))
-const chartFont = "'Segoe UI', Ubuntu, system-ui, sans-serif"
+const chartFont = "'Trebuchet MS', 'Segoe UI', Ubuntu, system-ui, sans-serif"
 const typeColors = ['#4f46e5', '#0891b2', '#64748b', '#7c3aed', '#0d9488']
 const allTypes = computed(() => [...new Set([...datosS.value, ...datosDiaS.value].map(row => String(row.S)))].sort())
 const bars = (rows, labelKey, valueKey, types = false) => {
@@ -413,7 +413,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.analysis-view { --ui-font: 'Segoe UI', Ubuntu, system-ui, sans-serif; --heading-font: var(--ui-font); font-family: var(--ui-font); height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; padding: 16px; background: #f8fafc; color: #1e293b; }
+.analysis-view { --ui-font: 'Trebuchet MS', 'Segoe UI', Ubuntu, system-ui, sans-serif; --heading-font: var(--ui-font); font-family: var(--ui-font); height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; padding: 16px; background: #f8fafc; color: #1e293b; }
 .analysis-view :deep(button), .analysis-view :deep(input), .analysis-view :deep(select) { font-family: var(--ui-font); }
 .analysis-toolbar { position: relative; z-index: 20; flex-shrink: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 12px; min-height: 48px; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: white; box-shadow: 0 1px 2px #0f172a08; }
 .report-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
@@ -432,9 +432,9 @@ onMounted(() => {
 .analysis-section { min-height: 0; }
 .chart-grid { height: 100%; min-height: 0; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 2fr) minmax(0, 3fr); gap: 10px; }
 .chart-card { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; box-shadow: 0 1px 2px #0f172a05; }
-.panel-total { font-variant-numeric: tabular-nums; color: #4338ca; white-space: nowrap; }
-.chart-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 6px; flex-shrink: 0; }
-.chart-heading h3 { font-size: 13px; font-weight: 600; }
+.panel-total { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; color: #4338ca; white-space: nowrap; }
+.chart-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #eef2f7; flex-shrink: 0; }
+.chart-heading h3 { font-size: 15px; line-height: 1.3; font-weight: 700; letter-spacing: -.02em; color: #0f172a; }
 .chart-heading p { font-size: 11px; color: #64748b; margin-top: 3px; }
 .chart-unit { border-radius: 4px; background: #eef2ff; color: #6366f1; font-size: 10px; padding: 3px 6px; white-space: nowrap; }
 .chart-body { position: relative; min-width: 0; min-height: 0; flex: 1; }
