@@ -2,8 +2,8 @@
   <div class="analysis-view">
     <header class="analysis-toolbar" @mouseover="mostrarAyuda" @focusin="mostrarAyuda" @mouseleave="ayudaToolbar = ''" @focusout="ayudaToolbar = ''">
       <div class="flex items-center gap-2 min-w-0">
-        <img src="/LogoSantana.jpg" alt="Santana Textiles" class="h-6 w-auto object-contain shrink-0" />
-        <h1 class="text-sm font-semibold text-slate-800 truncate">Análisis Residuos de Índigo</h1>
+        <img src="/LogoSantana.jpg" alt="Santana Textiles" class="h-8 w-auto object-contain shrink-0" />
+        <h1 class="analysis-title">Análisis Residuos de Índigo</h1>
       </div>
       <div class="toolbar-actions">
         <div class="date-navigation">
@@ -439,6 +439,7 @@ onMounted(() => {
 <style scoped>
 .analysis-view { --ui-font: 'Trebuchet MS', 'Segoe UI', Ubuntu, system-ui, sans-serif; --heading-font: var(--ui-font); font-family: var(--ui-font); height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; padding: 16px; background: #f8fafc; color: #1e293b; }
 .analysis-view :deep(button), .analysis-view :deep(input), .analysis-view :deep(select) { font-family: var(--ui-font); }
+.analysis-title { margin: 0; font-size: clamp(20px, 1.8vw, 24px); line-height: 1.2; font-weight: 700; letter-spacing: -.025em; color: #0f172a; overflow-wrap: anywhere; }
 .analysis-toolbar { position: relative; z-index: 20; flex-shrink: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 12px; min-height: 48px; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: white; box-shadow: 0 1px 2px #0f172a08; }
 .report-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
 .toolbar-help-space { grid-column: 1 / -1; height: 30px; }
