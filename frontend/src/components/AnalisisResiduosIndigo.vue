@@ -1,138 +1,61 @@
 <template>
-  <div class="w-full h-screen flex flex-col p-1">
-    <main class="w-full flex-1 min-h-0 bg-white rounded-2xl shadow-xl px-4 py-3 border border-slate-200 flex flex-col relative">
-      <!-- Header -->
-      <div class="flex items-center justify-between gap-4 flex-shrink-0 mb-4">
-        <div class="flex items-center gap-6">
-          <img src="/LogoSantana.jpg" alt="Santana Textiles" class="h-10 w-auto object-contain" />
-          <h3 class="text-lg font-semibold text-slate-800">Análisis Residuos de Índigo</h3>
-        </div>
-        
-        <div class="flex items-center gap-2">
-          <button 
-            @click="imprimirPagina"
-            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-md transition-colors shadow-sm"
-            v-tippy="{ content: 'Imprimir página en orientación apaisada', placement: 'bottom' }"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="6 9 6 2 18 2 18 9"/>
-              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
-              <rect x="6" y="14" width="12" height="8"/>
-            </svg>
-            <span class="text-sm">Imprimir</span>
-          </button>
-          
-          <button 
-            @click="copiarComoImagen"
-            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md transition-colors shadow-sm"
-            v-tippy="{ content: 'Copiar gráficos como imagen', placement: 'bottom' }"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-              <circle cx="8.5" cy="8.5" r="1.5"/>
-              <polyline points="21 15 16 10 5 21"/>
-            </svg>
-            <span class="text-sm">Imagen</span>
-          </button>
-          
-          <button 
-            @click="copiarParaWhatsApp"
-            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white font-medium rounded-md transition-colors shadow-sm"
-            v-tippy="{ content: 'Copiar resumen de análisis para WhatsApp', placement: 'bottom' }"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
-            </svg>
-            <span class="text-sm">WhatsApp</span>
-          </button>
-          
-          <CustomDatepicker 
-            v-model="fechaSeleccionada" 
-            label="Hasta:" 
-            :show-buttons="true"
-            @change="cargarDatos" 
-          />
-        </div>
+  <div class="analysis-view">
+    <header class="analysis-toolbar">
+      <div class="flex items-center gap-2 min-w-0">
+        <ChartBarIcon class="w-5 h-5 text-slate-400 shrink-0" />
+        <h1 class="text-sm font-semibold text-slate-800 truncate">Análisis Residuos de Índigo</h1>
       </div>
-
-      <!-- Charts Container -->
-      <div ref="chartsContainer" class="flex-1 min-h-0 relative flex flex-col gap-4">
-        <div v-if="cargando" class="absolute inset-0 bg-white/50 backdrop-blur-sm flex items-center justify-center z-10">
-          <div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent"></div>
-        </div>
-        
-        <!-- Fila 1: Gráficos del Periodo -->
-        <div class="flex-1 flex gap-4 min-w-0">
-          <!-- Gráfico de Motivos de Residuos - Periodo -->
-          <div class="flex-[3] h-full p-4 border border-slate-200 rounded-lg min-w-0 overflow-hidden">
-            <Bar v-if="chartData" :data="chartData" :options="chartOptions" />
-            <div v-else-if="!cargando" class="h-full flex items-center justify-center text-slate-400">
-              No hay datos para el período seleccionado
-            </div>
-          </div>
-
-          <!-- Gráfico de Columna S - Periodo -->
-          <div class="flex-[1] h-full p-4 border border-slate-200 rounded-lg min-w-0 overflow-hidden">
-            <Bar v-if="chartDataS" :data="chartDataS" :options="chartOptionsS" />
-            <div v-else-if="!cargando" class="h-full flex items-center justify-center text-slate-400">
-              No hay datos disponibles
-            </div>
-          </div>
-
-          <!-- Gráfico de Estopa Azul por Mes - Periodo -->
-          <div class="flex-[1.3] h-full px-2 py-4 border border-slate-200 rounded-lg min-w-0 overflow-hidden">
-            <Bar v-if="chartDataEstopaAzul" :data="chartDataEstopaAzul" :options="chartOptionsEstopaAzul" />
-            <div v-else-if="!cargando" class="h-full flex items-center justify-center text-slate-400">
-              No hay datos disponibles
-            </div>
-          </div>
-        </div>
-
-        <!-- Fila 2: Gráficos del Día Específico -->
-        <div class="flex-1 flex gap-4 min-w-0">
-          <!-- Gráfico de Motivos de Residuos - Día -->
-          <div class="flex-[3] h-full p-4 border border-slate-200 rounded-lg min-w-0 overflow-hidden">
-            <Bar v-if="chartDataDia" :data="chartDataDia" :options="chartOptionsDia" />
-            <div v-else-if="!cargando" class="h-full flex items-center justify-center text-slate-400">
-              No hay datos para el día seleccionado
-            </div>
-          </div>
-
-          <!-- Gráfico de Columna S - Día -->
-          <div class="flex-[1] h-full p-4 border border-slate-200 rounded-lg min-w-0 overflow-hidden">
-            <Bar v-if="chartDataDiaS" :data="chartDataDiaS" :options="chartOptionsDiaS" />
-            <div v-else-if="!cargando" class="h-full flex items-center justify-center text-slate-400">
-              No hay datos disponibles
-            </div>
-          </div>
-
-          <!-- Gráfico de Estopa Azul por Mes - Día -->
-          <div class="flex-[1.3] h-full px-2 py-4 border border-slate-200 rounded-lg min-w-0 overflow-hidden">
-            <Bar v-if="chartDataEstopaAzulDia" :data="chartDataEstopaAzulDia" :options="chartOptionsEstopaAzulDia" />
-            <div v-else-if="!cargando" class="h-full flex items-center justify-center text-slate-400">
-              No hay datos disponibles
-            </div>
-          </div>
-        </div>
+      <div class="toolbar-actions">
+        <CustomDatepicker v-model="fechaSeleccionada" compact :show-buttons="false" @change="cargarDatos" />
+        <button @click="cargarDatos" :disabled="cargando" aria-label="Consultar" v-tippy="'Consultar'" class="toolbar-button toolbar-query"><MagnifyingGlassIcon class="w-4 h-4" /></button>
+        <div class="w-px h-5 bg-slate-200 mx-1"></div>
+        <button @click="imprimirPagina" :disabled="cargando || exportando || !hayDatos" aria-label="Imprimir" v-tippy="'Imprimir en orientación apaisada'" class="toolbar-button"><PrinterIcon class="w-4 h-4" /></button>
+        <button @click="copiarComoImagen" :disabled="cargando || exportando || !hayDatos" aria-label="Copiar como imagen" v-tippy="'Copiar como imagen'" class="toolbar-button"><PhotoIcon class="w-4 h-4" /></button>
+        <button @click="copiarParaWhatsApp" :disabled="cargando || !hayDatos" aria-label="Copiar resumen para WhatsApp" v-tippy="'Copiar resumen para WhatsApp'" class="toolbar-button"><ChatBubbleLeftRightIcon class="w-4 h-4" /></button>
       </div>
+    </header>
+    <div v-if="errorCarga" role="alert" class="rounded-lg border border-red-200 bg-white px-4 py-3 text-sm text-red-600">{{ errorCarga }}</div>
+    <main ref="chartsContainer" class="analysis-report" :aria-busy="cargando">
+      <div class="report-heading">
+        <div><p class="eyebrow">CONTROL DE RESIDUOS · ÍNDIGO</p><h2>Lectura del mes y del día</h2><p class="text-xs text-slate-500 mt-1">Acumulado {{ periodoLabel }} · Día {{ diaLabel }}</p></div>
+        <img src="/LogoSantana.jpg" alt="Santana Textiles" class="h-8 w-auto object-contain" />
+      </div>
+      <div class="kpi-grid">
+        <div v-for="kpi in kpis" :key="kpi.label" class="kpi-card"><p class="eyebrow">{{ kpi.label }}</p><p class="kpi-value">{{ cargando ? '—' : kpi.value }} <span>{{ cargando ? '' : kpi.unit }}</span></p><p class="text-xs text-slate-500 mt-1 truncate" :title="kpi.detail">{{ kpi.detail }}</p></div>
+      </div>
+      <section v-for="section in sections" :key="section.title" class="analysis-section">
+        <div class="section-heading"><h2>{{ section.title }}</h2><span>{{ section.subtitle }}</span></div>
+        <div class="chart-grid" :class="section.history ? 'history-grid' : ''">
+          <article v-for="panel in section.panels" :key="panel.title" class="chart-card">
+            <div class="chart-heading"><div><h3>{{ panel.title }}</h3><p>{{ panel.subtitle }}</p></div><span class="chart-unit">{{ panel.unit }}</span></div>
+            <div class="chart-body" :style="{ height: panel.height + 'px' }">
+              <div v-if="cargando" class="chart-placeholder animate-pulse" role="status">Cargando datos…</div>
+              <component v-else-if="panel.data" :is="panel.line ? Line : Bar" :data="panel.data" :options="panel.options" />
+              <div v-else class="chart-placeholder">Sin datos para esta selección</div>
+            </div>
+          </article>
+        </div>
+      </section>
     </main>
   </div>
 </template>
-
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import CustomDatepicker from './CustomDatepicker.vue'
-import { Bar } from 'vue-chartjs'
-import { Chart as ChartJS, Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale } from 'chart.js'
+import { Bar, Line } from 'vue-chartjs'
+import { ChartBarIcon, MagnifyingGlassIcon, PrinterIcon, PhotoIcon, ChatBubbleLeftRightIcon } from '@heroicons/vue/24/outline'
+import { Chart as ChartJS, Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale, LineElement, PointElement } from 'chart.js'
 import ChartDataLabels from 'chartjs-plugin-datalabels'
 import Swal from 'sweetalert2'
 import { domToPng } from 'modern-screenshot'
 
-ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale, ChartDataLabels)
+ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale, LineElement, PointElement, ChartDataLabels)
 
 const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
 const API_URL = API_BASE ? `${API_BASE}/api` : '/api'
 const cargando = ref(false)
+const exportando = ref(false)
+const errorCarga = ref('')
 const datos = ref([])
 const datosS = ref([])
 const datosDia = ref([])
@@ -191,9 +114,12 @@ const toNumber = (value) => {
 }
 
 const cargarDatos = async () => {
+  if (cargando.value) return
   cargando.value = true
+  errorCarga.value = ''
+  const fechaConsultada = fechaSeleccionada.value
   try {
-    const [year, month, day] = fechaSeleccionada.value.split('-')
+    const [year, month, day] = fechaConsultada.split('-')
     const fechaInicio = `01/${month}/${year}`
     const fechaFin = `${day}/${month}/${year}`
     const fechaDia = `${day}/${month}/${year}`
@@ -224,6 +150,7 @@ const cargarDatos = async () => {
     datosEstopaAzulDiario.value = await respEstopaAzulDiario.json()
   } catch (error) {
     console.error('Error:', error)
+    errorCarga.value = 'No se pudieron cargar los datos. Volvé a consultar.'
     datos.value = []
     datosS.value = []
     datosDia.value = []
@@ -232,644 +159,93 @@ const cargarDatos = async () => {
     datosEstopaAzulDiario.value = []
   } finally {
     cargando.value = false
+    if (fechaSeleccionada.value !== fechaConsultada) cargarDatos()
   }
 }
 
-const chartData = computed(() => {
-  if (datos.value.length === 0) return null
-  
-  // Función para dividir labels largos en múltiples líneas
-  const splitLabel = (text, maxLength = 10) => {
-    const words = text.split(' ')
-    const lines = []
-    let currentLine = ''
-    
-    words.forEach(word => {
-      if ((currentLine + ' ' + word).trim().length <= maxLength) {
-        currentLine = currentLine ? currentLine + ' ' + word : word
-      } else {
-        if (currentLine) lines.push(currentLine)
-        currentLine = word
+const formatNumber = (value, digits = 0) => Number(value).toLocaleString('es-AR', { maximumFractionDigits: digits })
+const totalKg = (rows) => rows.reduce((sum, row) => sum + toNumber(row.TotalKg), 0)
+const diaLabel = computed(() => fechaSeleccionada.value.split('-').reverse().join('/'))
+const periodoLabel = computed(() => '01/' + fechaSeleccionada.value.split('-').slice(0, 2).reverse().join('/') + ' al ' + diaLabel.value)
+const hayDatos = computed(() => [datos, datosDia, datosS, datosDiaS, datosEstopaAzul, datosEstopaAzulDiario].some(rows => rows.value.length))
+const kpis = computed(() => {
+  const total = totalKg(datos.value)
+  const principal = [...datos.value].sort((a, b) => toNumber(b.TotalKg) - toNumber(a.TotalKg))[0]
+  return [
+    { label: 'Residuos acumulados', value: formatNumber(total), unit: 'kg', detail: periodoLabel.value },
+    { label: 'Residuos del día', value: formatNumber(totalKg(datosDia.value)), unit: 'kg', detail: diaLabel.value },
+    { label: 'Motivo principal del mes', value: principal && total > 0 ? formatNumber(toNumber(principal.TotalKg) / total * 100, 1) : '—', unit: principal && total > 0 ? '%' : '', detail: principal?.DESC_MOTIVO || 'Sin registros' },
+    { label: 'Producción acumulada', value: formatNumber(datosS.value.reduce((sum, row) => sum + toNumber(row.count), 0)), unit: 'registros', detail: 'Distribución por tipo S' }
+  ]
+})
+const typeColors = ['#4f46e5', '#0891b2', '#64748b', '#7c3aed', '#0d9488']
+const allTypes = computed(() => [...new Set([...datosS.value, ...datosDiaS.value].map(row => String(row.S)))].sort())
+const bars = (rows, labelKey, valueKey, types = false) => {
+  if (!rows.length) return null
+  const sorted = [...rows].sort((a, b) => toNumber(b[valueKey]) - toNumber(a[valueKey]))
+  return { labels: sorted.map(row => String(row[labelKey] ?? 'Sin tipo')), datasets: [{ label: types ? 'Registros' : 'Residuos (kg)', data: sorted.map(row => toNumber(row[valueKey])), backgroundColor: sorted.map(row => types ? typeColors[allTypes.value.indexOf(String(row.S)) % typeColors.length] : '#4f46e5'), borderRadius: 5, maxBarThickness: 22 }] }
+}
+const options = (horizontal = false, unit = 'kg') => ({
+  responsive: true, maintainAspectRatio: false, animation: false, indexAxis: horizontal ? 'y' : 'x',
+  layout: { padding: { right: horizontal ? 92 : 12, top: 16 } },
+  plugins: {
+    legend: { display: false },
+    tooltip: { backgroundColor: '#0f172a', padding: 12, cornerRadius: 8, callbacks: { label: ctx => {
+      const value = Number(ctx.raw)
+      const total = ctx.dataset.data.reduce((sum, n) => sum + Number(n), 0)
+      return formatNumber(value, 1) + ' ' + unit + (horizontal && total > 0 ? ' · ' + formatNumber(value / total * 100, 1) + '%' : '')
+    } } },
+    datalabels: { display: horizontal, anchor: 'end', align: 'end', offset: 6, color: '#475569', font: { size: 11, weight: 500 }, formatter: (value, ctx) => {
+      const total = ctx.dataset.data.reduce((sum, n) => sum + Number(n), 0)
+      return formatNumber(value) + (total > 0 ? ' · ' + formatNumber(value / total * 100, 1) + '%' : '')
+    } }
+  },
+  scales: {
+    x: { beginAtZero: true, border: { display: false }, grid: { display: horizontal, color: '#f1f5f9' }, ticks: { color: '#64748b', font: { size: 11 }, maxRotation: 0, autoSkip: true, callback: horizontal ? value => formatNumber(value) : undefined } },
+    y: { beginAtZero: true, border: { display: false }, grid: { display: !horizontal, color: '#f1f5f9' }, ticks: { color: '#475569', font: { size: 11 }, callback: horizontal ? function(value) {
+      const label = String(this.getLabelForValue(value))
+      if (label.length <= 30) return label
+      const lines = ['']
+      for (const word of label.split(' ')) {
+        if ((lines[lines.length - 1] + ' ' + word).trim().length > 30) lines.push(word)
+        else lines[lines.length - 1] = (lines[lines.length - 1] + ' ' + word).trim()
       }
-    })
-    if (currentLine) lines.push(currentLine)
-    
-    return lines
-  }
-  
-  // Encontrar el valor máximo
-  const maxValue = Math.max(...datos.value.map(d => toNumber(d.TotalKg)))
-  
-  return {
-    labels: datos.value.map(d => splitLabel(d.DESC_MOTIVO)),
-    datasets: [
-      {
-        label: 'Kg Residuos',
-        data: datos.value.map(d => toNumber(d.TotalKg)),
-        backgroundColor: datos.value.map((d, i) => 
-          toNumber(d.TotalKg) === maxValue ? '#dc2626' : (i % 2 === 0 ? '#0f172a' : '#3b82f6')
-        ),
-        borderRadius: 4,
-      }
-    ]
+      return lines.filter(Boolean)
+    } : value => formatNumber(value) } }
   }
 })
-
-const chartOptions = computed(() => {
-  const [year, month, day] = fechaSeleccionada.value.split('-')
-  const total = datos.value.reduce((sum, d) => sum + toNumber(d.TotalKg), 0)
-  
-  // Función para formatear fecha a dd-mmm-yy
-  const formatearFecha = (d, m, y) => {
-    const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
-    return `${d}-${meses[parseInt(m) - 1]}-${y.slice(2)}`
-  }
-  
-  const fechaInicio = formatearFecha('01', month, year)
-  const fechaFin = formatearFecha(day, month, year)
-  
-  return {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        display: false
-      },
-      title: {
-        display: true,
-        text: `Residuos por Motivo del Periodo ${fechaInicio} a ${fechaFin}`,
-        font: {
-          size: 24,
-          weight: 'bold'
-        },
-        padding: {
-          bottom: 30
-        },
-        color: '#000'
-      },
-      datalabels: {
-        anchor: 'end',
-        align: 'top',
-        formatter: (value) => {
-          const porcentaje = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0'
-          return `${Math.round(value).toLocaleString()}\n(${porcentaje}%)`
-        },
-        font: {
-          weight: 'bold',
-          size: 11
-        },
-        color: '#000'
-      }
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        grid: {
-          display: false
-        },
-        ticks: {
-          display: false
-        },
-        border: {
-          display: false
-        }
-      },
-      x: {
-        grid: {
-          display: false
-        },
-        ticks: {
-          font: {
-            weight: 'bold',
-            size: 10
-          },
-          color: '#000',
-          maxRotation: 0,
-          minRotation: 0,
-          autoSkip: false,
-          padding: 5,
-          callback: function(value, index) {
-            const label = this.getLabelForValue(value);
-            return Array.isArray(label) ? label : [label];
-          }
-        }
-      }
-    }
-  }
+const trend = (rows, daily = false) => {
+  if (!rows.length) return null
+  const sorted = [...rows].sort((a, b) => {
+    const key = row => daily ? row.Fecha.split('/').reverse().join('-') : row.Mes
+    return key(a).localeCompare(key(b))
+  })
+  const values = sorted.map(row => toNumber(row.KgResiduo))
+  const average = values.reduce((sum, value) => sum + value, 0) / values.length
+  return { labels: sorted.map(row => daily ? row.Fecha.slice(0, 5) : row.Mes.split('-').reverse().join('/')), datasets: [
+    { label: 'Estopa azul (kg)', data: values, backgroundColor: sorted.map((row, index) => index === sorted.length - 1 ? '#4f46e5' : '#a5b4fc'), borderColor: '#4f46e5', borderWidth: daily ? 2 : 0, borderRadius: 4, maxBarThickness: 32, pointBackgroundColor: sorted.map(row => row.Fecha === diaLabel.value ? '#0f172a' : '#4f46e5'), pointRadius: daily ? 3 : 0, pointHoverRadius: 5, tension: 0.25 },
+    ...(!daily ? [{ type: 'line', label: 'Promedio de meses disponibles', data: values.map(() => average), borderColor: '#64748b', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, datalabels: { display: false } }] : [])
+  ] }
+}
+const historyOptions = computed(() => {
+  const config = options()
+  config.plugins.legend = { display: true, position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, color: '#64748b', font: { size: 11 } } }
+  return config
 })
-
-const chartDataS = computed(() => {
-  if (datosS.value.length === 0) return null
-  
-  // Encontrar el valor máximo
-  const maxValue = Math.max(...datosS.value.map(d => toNumber(d.count)))
-  const colores = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6']
-  
-  return {
-    labels: datosS.value.map(d => d.S),
-    datasets: [
-      {
-        label: 'Cantidad de Registros',
-        data: datosS.value.map(d => toNumber(d.count)),
-        backgroundColor: datosS.value.map((d, i) => 
-          toNumber(d.count) === maxValue ? '#dc2626' : colores[i % colores.length]
-        ),
-        borderRadius: 4,
-      }
-    ]
-  }
-})
-
-const chartOptionsS = computed(() => {
-  const total = datosS.value.reduce((sum, d) => sum + toNumber(d.count), 0)
-  
-  return {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        display: false
-      },
-      title: {
-        display: true,
-        text: 'Producción ÍNDIGO por Tipo',
-        font: {
-          size: 16,
-          weight: 'bold'
-        },
-        padding: {
-          top: 10,
-          bottom: 30
-        },
-        color: '#000'
-      },
-      datalabels: {
-        anchor: 'end',
-        align: 'end',
-        offset: 4,
-        formatter: (value) => {
-          const porcentaje = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0'
-          return `${value.toLocaleString()}\n(${porcentaje}%)`
-        },
-        font: {
-          weight: 'bold',
-          size: 11
-        },
-        color: '#000'
-      }
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        grid: {
-          display: false
-        },
-        ticks: {
-          display: false
-        },
-        border: {
-          display: false
-        }
-      },
-      x: {
-        grid: {
-          display: false
-        },
-        ticks: {
-          font: {
-            weight: 'bold',
-            size: 10
-          },
-          color: '#000'
-        }
-      }
-    }
-  }
-})
-
-// Gráficos del día específico
-const chartDataDia = computed(() => {
-  if (datosDia.value.length === 0) return null
-  
-  const splitLabel = (text, maxLength = 10) => {
-    const words = text.split(' ')
-    const lines = []
-    let currentLine = ''
-    
-    words.forEach(word => {
-      if ((currentLine + ' ' + word).trim().length <= maxLength) {
-        currentLine = currentLine ? currentLine + ' ' + word : word
-      } else {
-        if (currentLine) lines.push(currentLine)
-        currentLine = word
-      }
-    })
-    if (currentLine) lines.push(currentLine)
-    
-    return lines
-  }
-  
-  // Encontrar el valor máximo
-  const maxValue = Math.max(...datosDia.value.map(d => toNumber(d.TotalKg)))
-  
-  return {
-    labels: datosDia.value.map(d => splitLabel(d.DESC_MOTIVO)),
-    datasets: [
-      {
-        label: 'Kg Residuos',
-        data: datosDia.value.map(d => toNumber(d.TotalKg)),
-        backgroundColor: datosDia.value.map((d, i) => 
-          toNumber(d.TotalKg) === maxValue ? '#dc2626' : (i % 2 === 0 ? '#0f172a' : '#3b82f6')
-        ),
-        borderRadius: 4,
-      }
-    ]
-  }
-})
-
-const chartOptionsDia = computed(() => {
-  const [year, month, day] = fechaSeleccionada.value.split('-')
-  const total = datosDia.value.reduce((sum, d) => sum + toNumber(d.TotalKg), 0)
-  
-  const formatearFecha = (d, m, y) => {
-    const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
-    return `${d}-${meses[parseInt(m) - 1]}-${y.slice(2)}`
-  }
-  
-  const fecha = formatearFecha(day, month, year)
-  
-  return {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        display: false
-      },
-      title: {
-        display: true,
-        text: `Residuos por Motivo del Día ${fecha}`,
-        font: {
-          size: 24,
-          weight: 'bold'
-        },
-        padding: {
-          bottom: 30
-        },
-        color: '#000'
-      },
-      datalabels: {
-        anchor: 'end',
-        align: 'top',
-        formatter: (value) => {
-          const porcentaje = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0'
-          return `${Math.round(value).toLocaleString()}\n(${porcentaje}%)`
-        },
-        font: {
-          weight: 'bold',
-          size: 11
-        },
-        color: '#000'
-      }
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        grid: {
-          display: false
-        },
-        ticks: {
-          display: false
-        },
-        border: {
-          display: false
-        }
-      },
-      x: {
-        grid: {
-          display: false
-        },
-        ticks: {
-          font: {
-            weight: 'bold',
-            size: 10
-          },
-          color: '#000',
-          maxRotation: 0,
-          minRotation: 0,
-          autoSkip: false,
-          padding: 5,
-          callback: function(value, index) {
-            const label = this.getLabelForValue(value);
-            return Array.isArray(label) ? label : [label];
-          }
-        }
-      }
-    }
-  }
-})
-
-const chartDataDiaS = computed(() => {
-  if (datosDiaS.value.length === 0) return null
-  
-  // Encontrar el valor máximo
-  const maxValue = Math.max(...datosDiaS.value.map(d => toNumber(d.count)))
-  const colores = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6']
-  
-  return {
-    labels: datosDiaS.value.map(d => d.S),
-    datasets: [
-      {
-        label: 'Cantidad de Registros',
-        data: datosDiaS.value.map(d => toNumber(d.count)),
-        backgroundColor: datosDiaS.value.map((d, i) => 
-          toNumber(d.count) === maxValue ? '#dc2626' : colores[i % colores.length]
-        ),
-        borderRadius: 4,
-      }
-    ]
-  }
-})
-
-const chartOptionsDiaS = computed(() => {
-  const total = datosDiaS.value.reduce((sum, d) => sum + toNumber(d.count), 0)
-  
-  return {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        display: false
-      },
-      title: {
-        display: true,
-        text: 'Producción ÍNDIGO por Tipo',
-        font: {
-          size: 16,
-          weight: 'bold'
-        },
-        padding: {
-          top: 10,
-          bottom: 30
-        },
-        color: '#000'
-      },
-      datalabels: {
-        anchor: 'end',
-        align: 'end',
-        offset: 4,
-        formatter: (value) => {
-          const porcentaje = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0'
-          return `${value.toLocaleString()}\n(${porcentaje}%)`
-        },
-        font: {
-          weight: 'bold',
-          size: 11
-        },
-        color: '#000'
-      }
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        grid: {
-          display: false
-        },
-        ticks: {
-          display: false
-        },
-        border: {
-          display: false
-        }
-      },
-      x: {
-        grid: {
-          display: false
-        },
-        ticks: {
-          font: {
-            weight: 'bold',
-            size: 10
-          },
-          color: '#000'
-        }
-      }
-    }
-  }
-})
-
-// Gráficos de Estopa Azul por Mes
-const chartDataEstopaAzul = computed(() => {
-  if (datosEstopaAzul.value.length === 0) return null
-  
-  // Encontrar el valor máximo
-  const maxValue = Math.max(...datosEstopaAzul.value.map(d => toNumber(d.KgResiduo)))
-  
-  return {
-    labels: datosEstopaAzul.value.map(d => {
-      const [year, month] = d.Mes.split('-')
-      const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
-      return `${meses[parseInt(month) - 1]}-${year.slice(2)}`
-    }),
-    datasets: [
-      {
-        label: 'Kg de Estopa Azul',
-        data: datosEstopaAzul.value.map(d => toNumber(d.KgResiduo)),
-        backgroundColor: datosEstopaAzul.value.map((d) => 
-          toNumber(d.KgResiduo) === maxValue ? '#dc2626' : '#3b82f6'
-        ),
-        borderRadius: 4,
-      }
-    ]
-  }
-})
-
-const chartOptionsEstopaAzul = computed(() => {
-  const total = datosEstopaAzul.value.reduce((sum, d) => sum + toNumber(d.KgResiduo), 0)
-  const promedio = datosEstopaAzul.value.length > 0 ? (total / datosEstopaAzul.value.length).toFixed(0) : 0
-  
-  return {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        display: false
-      },
-      title: {
-        display: true,
-        text: `Estopa Azul por Mes (Últimos 12 Meses)`,
-        font: {
-          size: 14,
-          weight: 'bold'
-        },
-        padding: {
-          top: 5,
-          bottom: 20
-        },
-        color: '#000'
-      },
-      datalabels: {
-        display: false
-      },
-      tooltip: {
-        callbacks: {
-          afterLabel: (context) => {
-            const value = context.raw
-            const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0'
-            return `${percentage}% del total`
-          }
-        }
-      }
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        grid: {
-          display: true,
-          color: '#e5e7eb'
-        },
-        ticks: {
-          callback: function(value) {
-            return Math.round(value).toLocaleString() + ' kg'
-          },
-          font: {
-            size: 9
-          },
-          color: '#666'
-        },
-        border: {
-          display: false
-        }
-      },
-      x: {
-        grid: {
-          display: false
-        },
-        ticks: {
-          font: {
-            weight: 'bold',
-            size: 9
-          },
-          color: '#000',
-          maxRotation: 90,
-          minRotation: 90,
-          autoSkip: false,
-          padding: 5
-        }
-      }
-    }
-  }
-})
-
-const chartDataEstopaAzulDia = computed(() => {
-  // Para el día, mostrar los datos diarios del mes seleccionado
-  if (datosEstopaAzulDiario.value.length === 0) return null
-  
-  const maxValue = Math.max(...datosEstopaAzulDiario.value.map(d => toNumber(d.KgResiduo)))
-  
-  return {
-    labels: datosEstopaAzulDiario.value.map(d => {
-      // Formato: DD/MM/YYYY -> DD
-      const [dia] = d.Fecha.split('/')
-      return dia
-    }),
-    datasets: [
-      {
-        label: 'Kg de Estopa Azul',
-        data: datosEstopaAzulDiario.value.map(d => toNumber(d.KgResiduo)),
-        backgroundColor: datosEstopaAzulDiario.value.map((d) => 
-          toNumber(d.KgResiduo) === maxValue ? '#dc2626' : '#10b981'
-        ),
-        borderRadius: 4,
-      }
-    ]
-  }
-})
-
-const chartOptionsEstopaAzulDia = computed(() => {
-  const total = datosEstopaAzulDiario.value.reduce((sum, d) => sum + toNumber(d.KgResiduo), 0)
-  const [year, month, day] = fechaSeleccionada.value.split('-')
-  
-  // Función para formatear fecha a dd-mmm-yy
-  const formatearFecha = (d, m, y) => {
-    const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
-    return `${d}-${meses[parseInt(m) - 1]}-${y.slice(2)}`
-  }
-  
-  const fechaInicio = formatearFecha('01', month, year)
-  const fechaFin = formatearFecha(day, month, year)
-  
-  return {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        display: false
-      },
-      title: {
-        display: true,
-        text: `Estopa Azul por Día del Periodo ${fechaInicio} a ${fechaFin}`,
-        font: {
-          size: 14,
-          weight: 'bold'
-        },
-        padding: {
-          top: 5,
-          bottom: 20
-        },
-        color: '#000'
-      },
-      datalabels: {
-        display: false
-      },
-      tooltip: {
-        callbacks: {
-          afterLabel: (context) => {
-            const value = context.raw
-            const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0'
-            return `${percentage}% del total del mes`
-          }
-        }
-      }
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        grid: {
-          display: true,
-          color: '#e5e7eb'
-        },
-        ticks: {
-          callback: function(value) {
-            return Math.round(value).toLocaleString() + ' kg'
-          },
-          font: {
-            size: 9
-          },
-          color: '#666'
-        },
-        border: {
-          display: false
-        }
-      },
-      x: {
-        grid: {
-          display: false
-        },
-        ticks: {
-          font: {
-            weight: 'bold',
-            size: 9
-          },
-          color: '#000',
-          maxRotation: 90,
-          minRotation: 90,
-          autoSkip: false,
-          padding: 5
-        }
-      }
-    }
-  }
-})
+const sections = computed(() => [
+  { title: 'Acumulado del mes', subtitle: periodoLabel.value, panels: [
+    { title: 'Residuos por motivo', subtitle: 'Ordenados por peso · participación en el total', unit: 'kg / %', data: bars(datos.value, 'DESC_MOTIVO', 'TotalKg'), options: options(true), height: Math.max(230, datos.value.length * 34) },
+    { title: 'Producción por tipo', subtitle: 'Cantidad de registros por categoría S', unit: 'registros / %', data: bars(datosS.value, 'S', 'count', true), options: options(true, 'registros'), height: Math.max(230, datosS.value.length * 34) }
+  ] },
+  { title: 'Día seleccionado', subtitle: diaLabel.value, panels: [
+    { title: 'Residuos por motivo', subtitle: 'Distribución de los residuos del día', unit: 'kg / %', data: bars(datosDia.value, 'DESC_MOTIVO', 'TotalKg'), options: options(true), height: Math.max(230, datosDia.value.length * 34) },
+    { title: 'Producción por tipo', subtitle: 'Registros correspondientes al día seleccionado', unit: 'registros / %', data: bars(datosDiaS.value, 'S', 'count', true), options: options(true, 'registros'), height: Math.max(230, datosDiaS.value.length * 34) }
+  ] },
+  { title: 'Evolución de estopa azul', subtitle: 'Contexto histórico y detalle del mes', history: true, panels: [
+    { title: 'Últimos 12 meses', subtitle: 'Último mes disponible destacado · promedio de meses disponibles', unit: 'kg', data: trend(datosEstopaAzul.value), options: historyOptions.value, height: 240 },
+    { title: 'Evolución diaria', subtitle: periodoLabel.value, unit: 'kg', data: trend(datosEstopaAzulDiario.value, true), options: options(), line: true, height: 240 }
+  ] }
+])
 
 const copiarParaWhatsApp = async () => {
   try {
@@ -965,395 +341,46 @@ const copiarParaWhatsApp = async () => {
   }
 }
 
+const captureReport = async () => {
+  if (!chartsContainer.value) throw new Error('No se encontró el reporte')
+  await document.fonts.ready
+  const images = [...chartsContainer.value.querySelectorAll('img')]
+  await Promise.all(images.map(img => img.decode().catch(() => {})))
+  return domToPng(chartsContainer.value, { scale: 2, backgroundColor: '#f8fafc' })
+}
+const showExportError = (error) => Swal.fire({ icon: 'error', title: 'No se pudo exportar', text: error.message, confirmButtonText: 'Cerrar' })
 const copiarComoImagen = async () => {
-  if (!chartsContainer.value) return
-
-  /*
-    Genera la imagen usando un canvas off‑screen y copia al portapapeles.
-    Motivo: evitar crear elementos temporales visibles que producían un parpadeo.
-
-    Fallbacks implementados (en orden):
-      1) `navigator.clipboard.write` con `ClipboardItem` (imagen binaria).
-      2) Si falla, copiar el `dataURL` con `navigator.clipboard.writeText(dataUrl)`.
-      3) Si eso falla, abrir la imagen en una nueva pestaña para que el usuario la guarde.
-      4) (Opcional) volver al método visible con `domToPng` si se requiere — no aplicado automáticamente.
-  */
-
+  exportando.value = true
   try {
-    const pixelScale = Math.max(1, window.devicePixelRatio || 1) * 2
-    const padding = 30
-    const headerContentHeight = 40
-    const headerTop = padding
-    const headerHeight = headerContentHeight
-    const contentOffsetY = headerTop + headerHeight + padding
-
-    const containerRect = chartsContainer.value.getBoundingClientRect()
-
-    const canvases = Array.from(chartsContainer.value.querySelectorAll('canvas'))
-    if (canvases.length === 0) throw new Error('No hay canvases para copiar')
-
-    // Calcular bounding box relativo al contenedor
-    let minLeft = Infinity, minTop = Infinity, maxRight = -Infinity, maxBottom = -Infinity
-    const rects = canvases.map(c => c.getBoundingClientRect())
-    rects.forEach(r => {
-      const left = r.left - containerRect.left
-      const top = r.top - containerRect.top
-      minLeft = Math.min(minLeft, left)
-      minTop = Math.min(minTop, top)
-      maxRight = Math.max(maxRight, left + r.width)
-      maxBottom = Math.max(maxBottom, top + r.height)
-    })
-
-    const contentWidth = Math.ceil(maxRight - minLeft)
-    const contentHeight = Math.ceil(maxBottom - minTop)
-
-    const canvasWidth = Math.round((contentWidth + padding * 2) * pixelScale)
-    const canvasHeight = Math.round((contentOffsetY + contentHeight + padding) * pixelScale)
-
-    const out = document.createElement('canvas')
-    out.width = canvasWidth
-    out.height = canvasHeight
-    const ctx = out.getContext('2d')
-
-    // Fondo blanco
-    ctx.fillStyle = '#ffffff'
-    ctx.fillRect(0, 0, out.width, out.height)
-
-    // Dibujar header (logo y título) en coordenadas CSS, ajustadas por pixelScale
-    const logo = document.querySelector('main img[alt="Santana Textiles"]')
-    let currentX = padding
-    const logoHeight = 40
-    if (logo) {
-      try {
-        if (logo.complete) {
-          const logoRect = logo.getBoundingClientRect()
-          const aspect = logoRect.width && logoRect.height ? (logoRect.width / logoRect.height) : 1
-          const logoWidth = logoHeight * aspect
-          ctx.drawImage(logo, currentX * pixelScale, headerTop * pixelScale, logoWidth * pixelScale, logoHeight * pixelScale)
-          currentX += logoWidth + 16
-        } else {
-          const img = new Image()
-          img.src = logo.src
-          await new Promise(resolve => { img.onload = resolve; img.onerror = resolve })
-          const aspect = img.width && img.height ? (img.width / img.height) : 1
-          const logoWidth = logoHeight * aspect
-          ctx.drawImage(img, currentX * pixelScale, headerTop * pixelScale, logoWidth * pixelScale, logoHeight * pixelScale)
-          currentX += logoWidth + 16
-        }
-      } catch (e) {
-        // ignore
-      }
-    }
-
-    ctx.fillStyle = '#0f172a'
-    ctx.font = `${16 * pixelScale}px sans-serif`
-    ctx.fillText('Análisis Residuos de Índigo', currentX * pixelScale, (headerTop + 26) * pixelScale)
-
-    // Dibujar cada canvas con coordenadas correctas y resoluciones
-    canvases.forEach((orig, i) => {
-      const r = rects[i]
-      const leftRel = r.left - containerRect.left
-      const topRel = r.top - containerRect.top
-      const destX = (padding + (leftRel - minLeft)) * pixelScale
-      const destY = (contentOffsetY + (topRel - minTop)) * pixelScale
-      const destW = r.width * pixelScale
-      const destH = r.height * pixelScale
-
-      try {
-        const srcW = orig.width || r.width * (window.devicePixelRatio || 1)
-        const srcH = orig.height || r.height * (window.devicePixelRatio || 1)
-        ctx.drawImage(orig, 0, 0, srcW, srcH, destX, destY, destW, destH)
-      } catch (err) {
-        // fallback: usar dataURL de canvas
-        try {
-          const data = orig.toDataURL('image/png')
-          const img = new Image()
-          img.src = data
-          img.onload = () => {
-            ctx.drawImage(img, destX, destY, destW, destH)
-          }
-        } catch (e) {
-          console.warn('No se pudo dibujar canvas:', e)
-        }
-      }
-    })
-
-    // Pequeña espera por si hay onload pendientes
-    await new Promise(resolve => setTimeout(resolve, 50))
-
-    const blob = await new Promise(resolve => out.toBlob(resolve, 'image/png', 1))
-    if (!blob) throw new Error('No se pudo generar la imagen')
-
-    // Intento principal: escribir imagen binaria al portapapeles
+    const dataUrl = await captureReport()
+    const blob = await (await fetch(dataUrl)).blob()
     try {
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
-        icon: 'success',
-        title: 'Imagen copiada al portapapeles',
-        text: 'Presiona Ctrl+V para pegar',
-        showConfirmButton: false,
-        timer: 3000,
-        timerProgressBar: true
-      })
-      return
-    } catch (errWrite) {
-      console.warn('Escritura de imagen en portapapeles falló, intentando fallback:', errWrite)
+      Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Imagen copiada', showConfirmButton: false, timer: 3000 })
+    } catch {
+      const link = document.createElement('a')
+      link.href = dataUrl
+      link.download = 'residuos-indigo-' + fechaSeleccionada.value + '.png'
+      link.click()
+      Swal.fire({ toast: true, position: 'top-end', icon: 'info', title: 'Imagen descargada', showConfirmButton: false, timer: 3000 })
     }
-
-    // Fallback 1: copiar dataURL como texto
-    try {
-      const dataUrl = out.toDataURL('image/png')
-      await navigator.clipboard.writeText(dataUrl)
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
-        icon: 'success',
-        title: 'DataURL copiado al portapapeles',
-        text: 'Algunos destinos no pegarán esta entrada como imagen; guarda la imagen manualmente si es necesario.',
-        showConfirmButton: false,
-        timer: 3500,
-        timerProgressBar: true
-      })
-      return
-    } catch (errText) {
-      console.warn('Fallback writeText falló:', errText)
-    }
-
-    // Fallback 2: abrir imagen en nueva pestaña para que el usuario la guarde/pegue manualmente
-    try {
-      const dataUrl2 = out.toDataURL('image/png')
-      const w = window.open('', '_blank')
-      if (w) {
-        w.document.write(`<html><head><title>Imagen</title></head><body style="margin:0"><img src="${dataUrl2}" style="max-width:100%;height:auto;display:block;margin:0 auto;"/></body></html>`)
-        w.document.close()
-        Swal.fire({
-          toast: true,
-          position: 'top-end',
-          icon: 'info',
-          title: 'Imagen abierta en nueva pestaña',
-          text: 'Guárdala o cópiala manualmente.',
-          showConfirmButton: false,
-          timer: 3500,
-          timerProgressBar: true
-        })
-        return
-      }
-    } catch (errOpen) {
-      console.warn('Abrir nueva pestaña falló:', errOpen)
-    }
-
-    throw new Error('No se pudo copiar la imagen ni realizar fallbacks')
-  } catch (error) {
-    console.error('Error al copiar imagen:', error)
-    Swal.fire({
-      toast: true,
-      position: 'top-end',
-      icon: 'error',
-      title: 'Error al generar imagen',
-      text: error.message || 'No se pudo crear la imagen',
-      showConfirmButton: false,
-      timer: 3000
-    })
-  }
+  } catch (error) { showExportError(error) } finally { exportando.value = false }
 }
-
-async function imprimirPagina() {
-  if (!chartsContainer.value) {
-    window.print()
-    return
-  }
-  
-  /*
-    Genera la imagen usando un canvas off‑screen y abre ventana de impresión.
-    Motivo: evitar crear elementos temporales visibles que producían un parpadeo en pantalla.
-  */
-  
+const imprimirPagina = async () => {
+  const printWindow = window.open('', '_blank', 'width=1200,height=800')
+  if (!printWindow) { showExportError(new Error('Permití las ventanas emergentes para imprimir.')); return }
+  printWindow.document.write('<p>Preparando reporte…</p>')
+  exportando.value = true
   try {
-    const pixelScale = Math.max(1, window.devicePixelRatio || 1) * 2
-    const padding = 20
-    const gap = 16
-    const headerContentHeight = 35
-    const headerTop = padding
-    const headerHeight = headerContentHeight
-    const contentOffsetY = headerTop + headerHeight + padding
-
-    const containerRect = chartsContainer.value.getBoundingClientRect()
-
-    const canvases = Array.from(chartsContainer.value.querySelectorAll('canvas'))
-    if (canvases.length === 0) throw new Error('No hay canvases para imprimir')
-
-    const rects = canvases.map(c => c.getBoundingClientRect())
-    
-    // Calcular bounding box con gap incluido
-    let minLeft = Infinity, minTop = Infinity, maxRight = -Infinity, maxBottom = -Infinity
-    rects.forEach((r, idx) => {
-      const left = r.left - containerRect.left
-      const top = r.top - containerRect.top
-      minLeft = Math.min(minLeft, left)
-      minTop = Math.min(minTop, top)
-      maxRight = Math.max(maxRight, left + r.width)
-      maxBottom = Math.max(maxBottom, top + r.height)
-    })
-
-    // Escala uniforme para que todo se vea más profesional y grande
-    const uniformScale = 1.2
-    const contentWidth = Math.ceil((maxRight - minLeft) * uniformScale)
-    const contentHeight = Math.ceil((maxBottom - minTop) * uniformScale)
-
-    const canvasWidth = Math.round((contentWidth + padding * 2) * pixelScale)
-    const canvasHeight = Math.round((contentOffsetY + contentHeight + padding) * pixelScale)
-
-    const out = document.createElement('canvas')
-    out.width = canvasWidth
-    out.height = canvasHeight
-    const ctx = out.getContext('2d')
-
-    // Fondo blanco
-    ctx.fillStyle = '#ffffff'
-    ctx.fillRect(0, 0, out.width, out.height)
-
-    // Dibujar header (logo y título)
-    const logo = document.querySelector('main img[alt="Santana Textiles"]')
-    let currentX = padding
-    const logoHeight = 35
-    if (logo) {
-      try {
-        if (logo.complete) {
-          const logoRect = logo.getBoundingClientRect()
-          const aspect = logoRect.width && logoRect.height ? (logoRect.width / logoRect.height) : 1
-          const logoWidth = logoHeight * aspect
-          ctx.drawImage(logo, currentX * pixelScale, headerTop * pixelScale, logoWidth * pixelScale, logoHeight * pixelScale)
-          currentX += logoWidth + 16
-        } else {
-          const img = new Image()
-          img.src = logo.src
-          await new Promise(resolve => { img.onload = resolve; img.onerror = resolve })
-          const aspect = img.width && img.height ? (img.width / img.height) : 1
-          const logoWidth = logoHeight * aspect
-          ctx.drawImage(img, currentX * pixelScale, headerTop * pixelScale, logoWidth * pixelScale, logoHeight * pixelScale)
-          currentX += logoWidth + 16
-        }
-      } catch (e) {
-        // ignore
-      }
-    }
-
-    ctx.fillStyle = '#0f172a'
-    ctx.font = `bold ${16 * pixelScale}px sans-serif`
-    ctx.fillText('Análisis Residuos de Índigo', currentX * pixelScale, (headerTop + 24) * pixelScale)
-
-    // Dibujar cada canvas manteniendo proporciones y con bordes
-    const borderColor = 'rgb(226, 232, 240)'
-    const borderWidth = 1 * pixelScale
-    const borderRadius = 4 * pixelScale
-    
-    canvases.forEach((orig, i) => {
-      const r = rects[i]
-      const leftRel = r.left - containerRect.left
-      const topRel = r.top - containerRect.top
-      
-      // Escalar uniformemente manteniendo proporciones
-      const destX = (padding + (leftRel - minLeft) * uniformScale) * pixelScale
-      const destY = (contentOffsetY + (topRel - minTop) * uniformScale) * pixelScale
-      const destW = r.width * uniformScale * pixelScale
-      const destH = r.height * uniformScale * pixelScale
-
-      try {
-        const srcW = orig.width || r.width * (window.devicePixelRatio || 1)
-        const srcH = orig.height || r.height * (window.devicePixelRatio || 1)
-        ctx.drawImage(orig, 0, 0, srcW, srcH, destX, destY, destW, destH)
-      } catch (err) {
-        try {
-          const data = orig.toDataURL('image/png')
-          const img = new Image()
-          img.src = data
-          img.onload = () => {
-            ctx.drawImage(img, destX, destY, destW, destH)
-          }
-        } catch (e) {
-          console.warn('No se pudo dibujar canvas:', e)
-        }
-      }
-      
-      // Dibujar borde del contenedor con esquinas redondeadas
-      ctx.strokeStyle = borderColor
-      ctx.lineWidth = borderWidth
-      ctx.beginPath()
-      ctx.moveTo(destX + borderRadius, destY)
-      ctx.lineTo(destX + destW - borderRadius, destY)
-      ctx.quadraticCurveTo(destX + destW, destY, destX + destW, destY + borderRadius)
-      ctx.lineTo(destX + destW, destY + destH - borderRadius)
-      ctx.quadraticCurveTo(destX + destW, destY + destH, destX + destW - borderRadius, destY + destH)
-      ctx.lineTo(destX + borderRadius, destY + destH)
-      ctx.quadraticCurveTo(destX, destY + destH, destX, destY + destH - borderRadius)
-      ctx.lineTo(destX, destY + borderRadius)
-      ctx.quadraticCurveTo(destX, destY, destX + borderRadius, destY)
-      ctx.closePath()
-      ctx.stroke()
-    })
-
-    // Pequeña espera por si hay onload pendientes
-    await new Promise(resolve => setTimeout(resolve, 50))
-
-    const dataUrl = out.toDataURL('image/png', 1)
-    
-    // Abrir ventana de impresión con la imagen
-    const printWindow = window.open('', '_blank', 'width=1200,height=800')
-    if (!printWindow) {
-      throw new Error('No se pudo abrir la ventana de impresión. Verifica que los pop-ups estén permitidos.')
-    }
-    
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Análisis Residuos Índigo - Impresión</title>
-        <style>
-          @page {
-            size: landscape;
-            margin: 5mm 5mm 10mm 5mm;
-          }
-          body {
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-          }
-          img {
-            max-width: 100%;
-            max-height: 100vh;
-            object-fit: contain;
-          }
-          @media print {
-            body {
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
-            }
-          }
-        </style>
-      </head>
-      <body>
-        <img src="${dataUrl}" onload="setTimeout(function() { window.print(); window.close(); }, 200);" />
-      </body>
-      </html>
-    `)
+    const dataUrl = await captureReport()
+    printWindow.document.open()
+    printWindow.document.write('<!doctype html><html><head><title>Residuos de Índigo</title><style>@page{size:landscape;margin:5mm}body{margin:0}img{width:100%;height:auto}</style></head><body><img src="' + dataUrl + '" /></body></html>')
     printWindow.document.close()
-    
-  } catch (error) {
-    console.error('Error al imprimir:', error)
-    Swal.fire({
-      toast: true,
-      position: 'top-end',
-      icon: 'error',
-      title: 'Error al preparar impresión',
-      text: error.message || 'No se pudo generar la imagen para imprimir',
-      showConfirmButton: false,
-      timer: 3000
-    })
-  }
+    const image = printWindow.document.querySelector('img')
+    await image.decode()
+    printWindow.focus()
+    printWindow.print()
+  } catch (error) { printWindow.close(); showExportError(error) } finally { exportando.value = false }
 }
 
 onMounted(() => {
@@ -1361,26 +388,39 @@ onMounted(() => {
 })
 </script>
 
-<style>
-/* Estilos globales de impresión */
-@media print {
-  /* Ocultar TODOS los botones, sidebar y navegación */
-  button,
-  .fixed,
-  aside,
-  nav,
-  [role="button"] {
-    display: none !important;
-    visibility: hidden !important;
-  }
-}
-</style>
-
 <style scoped>
-@media print {
-  @page {
-    size: landscape;
-    margin: 5mm 5mm 10mm 5mm;
-  }
-}
+.analysis-view { height: 100%; overflow-y: auto; padding: 16px; background: #f8fafc; color: #1e293b; }
+.analysis-toolbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: white; box-shadow: 0 1px 2px #0f172a08; }
+.toolbar-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.toolbar-button { height: 32px; width: 32px; border-radius: 6px; border: 1px solid #cbd5e1; background: white; color: #475569; display: flex; align-items: center; justify-content: center; transition: background-color .15s; cursor: pointer; }
+.toolbar-button:hover { background: #f8fafc; }
+.toolbar-query { border-color: #bfdbfe; background: #eff6ff; color: #2563eb; }
+.toolbar-query:hover { background: #dbeafe; }
+.toolbar-button:disabled { opacity: .4; cursor: not-allowed; }
+.toolbar-button:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+.analysis-report { padding: 16px 0; }
+.report-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.report-heading h2 { font-size: 20px; font-weight: 600; margin-top: 4px; letter-spacing: -.025em; }
+.eyebrow { font-size: 10px; font-weight: 600; letter-spacing: .08em; color: #64748b; text-transform: uppercase; }
+.kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 24px; }
+.kpi-card, .chart-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 2px #0f172a05; min-width: 0; }
+.kpi-card { padding: 14px 16px; }
+.kpi-value { font-size: 26px; font-weight: 600; letter-spacing: -.03em; color: #312e81; font-variant-numeric: tabular-nums; margin-top: 6px; }
+.kpi-value span { font-size: 12px; color: #64748b; font-weight: 400; letter-spacing: 0; }
+.analysis-section + .analysis-section { margin-top: 22px; }
+.section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.section-heading h2 { font-size: 13px; font-weight: 600; }
+.section-heading span { font-size: 11px; color: #64748b; }
+.chart-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 12px; }
+.history-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.chart-card { padding: 16px; }
+.chart-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
+.chart-heading h3 { font-size: 13px; font-weight: 600; }
+.chart-heading p { font-size: 11px; color: #64748b; margin-top: 3px; }
+.chart-unit { border-radius: 4px; background: #eef2ff; color: #6366f1; font-size: 10px; padding: 3px 6px; white-space: nowrap; }
+.chart-body { position: relative; min-width: 0; }
+.chart-placeholder { height: 100%; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: #f8fafc; color: #94a3b8; font-size: 12px; }
+@media (max-width: 900px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .chart-grid { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .analysis-view { padding: 10px; } .analysis-toolbar { flex-wrap: wrap; } .toolbar-actions { width: 100%; justify-content: flex-end; } .section-heading { flex-wrap: wrap; } .kpi-card { padding: 12px; } .kpi-value { font-size: 22px; } }
+@media print { .analysis-toolbar { display: none; } .analysis-view { height: auto; overflow: visible; padding: 0; } .chart-card { break-inside: avoid; } @page { size: landscape; margin: 5mm; } }
 </style>
