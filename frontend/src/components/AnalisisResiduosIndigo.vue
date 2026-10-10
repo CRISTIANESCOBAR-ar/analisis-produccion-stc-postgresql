@@ -2,7 +2,7 @@
   <div class="analysis-view">
     <header class="analysis-toolbar" @mouseover="mostrarAyuda" @focusin="mostrarAyuda" @mouseleave="ayudaToolbar = ''" @focusout="ayudaToolbar = ''">
       <div class="flex items-center gap-2 min-w-0">
-        <ChartBarIcon class="w-5 h-5 text-slate-400 shrink-0" />
+        <img src="/LogoSantana.jpg" alt="Santana Textiles" class="h-6 w-auto object-contain shrink-0" />
         <h1 class="text-sm font-semibold text-slate-800 truncate">Análisis Residuos de Índigo</h1>
       </div>
       <div class="toolbar-actions">
@@ -25,19 +25,12 @@
     <div v-if="errorCarga" role="alert" class="rounded-lg border border-red-200 bg-white px-4 py-3 text-sm text-red-600">{{ errorCarga }}</div>
     <div class="report-scroll">
     <main ref="chartsContainer" class="analysis-report" :aria-busy="cargando">
-      <div class="report-heading">
-        <div><p class="eyebrow">CONTROL DE RESIDUOS · ÍNDIGO</p><h2>Lectura del mes y del día</h2><p class="text-xs text-slate-500 mt-1">Acumulado {{ periodoLabel }} · Día {{ diaLabel }}</p></div>
-        <img src="/LogoSantana.jpg" alt="Santana Textiles" class="h-8 w-auto object-contain" />
-      </div>
-      <div class="kpi-grid">
-        <div v-for="kpi in kpis" :key="kpi.label" class="kpi-card"><p class="eyebrow">{{ kpi.label }}</p><p class="kpi-value">{{ cargando ? '—' : kpi.value }} <span>{{ cargando ? '' : kpi.unit }}</span></p><p class="text-xs text-slate-500 mt-1 truncate" :title="kpi.detail">{{ kpi.detail }}</p></div>
-      </div>
       <section v-for="section in sections" :key="section.title" class="analysis-section">
-        <div class="section-heading"><h2>{{ section.title }}</h2><span>{{ section.subtitle }}</span></div>
-        <div class="chart-grid" :class="section.history ? 'history-grid' : ''">
+
+        <div class="chart-grid" >
           <article v-for="panel in section.panels" :key="panel.title" class="chart-card">
-            <div class="chart-heading"><div><h3>{{ panel.title }}</h3><p>{{ panel.subtitle }}</p></div><span class="chart-unit">{{ panel.unit }}</span></div>
-            <div class="chart-body" :style="{ height: panel.height + 'px' }">
+            <div class="chart-heading"><div><h3>{{ panel.title }}<span v-if="panel.total" class="panel-total"> · {{ cargando ? '—' : panel.total }}</span></h3><p>{{ panel.subtitle }}</p></div><span class="chart-unit">{{ panel.unit }}</span></div>
+            <div class="chart-body">
               <div v-if="cargando" class="chart-placeholder animate-pulse" role="status">Cargando datos…</div>
               <component v-else-if="panel.data" :is="panel.line ? Line : Bar" :data="panel.data" :options="panel.options" />
               <div v-else class="chart-placeholder">Sin datos para esta selección</div>
@@ -53,7 +46,7 @@
 import { ref, computed, onMounted, nextTick } from 'vue'
 import CustomDatepicker from './CustomDatepicker.vue'
 import { Bar, Line } from 'vue-chartjs'
-import { ChartBarIcon, MagnifyingGlassIcon, PrinterIcon, PhotoIcon, ChatBubbleLeftRightIcon } from '@heroicons/vue/24/outline'
+import { MagnifyingGlassIcon, PrinterIcon, PhotoIcon, ChatBubbleLeftRightIcon } from '@heroicons/vue/24/outline'
 import { Chart as ChartJS, Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale, LineElement, PointElement } from 'chart.js'
 import ChartDataLabels from 'chartjs-plugin-datalabels'
 import Swal from 'sweetalert2'
@@ -164,7 +157,7 @@ const cargarDatos = async () => {
     const fechaInicio = `01/${month}/${year}`
     const fechaFin = `${day}/${month}/${year}`
     const fechaDia = `${day}/${month}/${year}`
-    
+
     // Cargar datos del periodo y del día específico en paralelo
     const [respMotivos, respS, respMotivosDia, respSDia, respEstopaAzul, respEstopaAzulDiario] = await Promise.all([
       fetch(`${API_URL}/residuos-indigo-analisis?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`),
@@ -174,19 +167,19 @@ const cargarDatos = async () => {
       fetch(`${API_URL}/residuos-indigo-estopa-por-mes`),
       fetch(`${API_URL}/residuos-indigo-estopa-por-dia?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`)
     ])
-    
+
     if (!respMotivos.ok || !respS.ok || !respMotivosDia.ok || !respSDia.ok || !respEstopaAzul.ok || !respEstopaAzulDiario.ok) {
       throw new Error('Error al cargar datos')
     }
-    
+
     datos.value = await respMotivos.json()
     const dataS = await respS.json()
     datosS.value = dataS.s_valores || []
-    
+
     datosDia.value = await respMotivosDia.json()
     const dataSDia = await respSDia.json()
     datosDiaS.value = dataSDia.s_valores || []
-    
+
     datosEstopaAzul.value = await respEstopaAzul.json()
     datosEstopaAzulDiario.value = await respEstopaAzulDiario.json()
   } catch (error) {
@@ -209,22 +202,12 @@ const totalKg = (rows) => rows.reduce((sum, row) => sum + toNumber(row.TotalKg),
 const diaLabel = computed(() => fechaSeleccionada.value.split('-').reverse().join('/'))
 const periodoLabel = computed(() => '01/' + fechaSeleccionada.value.split('-').slice(0, 2).reverse().join('/') + ' al ' + diaLabel.value)
 const hayDatos = computed(() => [datos, datosDia, datosS, datosDiaS, datosEstopaAzul, datosEstopaAzulDiario].some(rows => rows.value.length))
-const kpis = computed(() => {
-  const total = totalKg(datos.value)
-  const principal = [...datos.value].sort((a, b) => toNumber(b.TotalKg) - toNumber(a.TotalKg))[0]
-  return [
-    { label: 'Residuos acumulados', value: formatNumber(total), unit: 'kg', detail: periodoLabel.value },
-    { label: 'Residuos del día', value: formatNumber(totalKg(datosDia.value)), unit: 'kg', detail: diaLabel.value },
-    { label: 'Motivo principal del mes', value: principal && total > 0 ? formatNumber(toNumber(principal.TotalKg) / total * 100, 1) : '—', unit: principal && total > 0 ? '%' : '', detail: principal?.DESC_MOTIVO || 'Sin registros' },
-    { label: 'Producción acumulada', value: formatNumber(datosS.value.reduce((sum, row) => sum + toNumber(row.count), 0)), unit: 'registros', detail: 'Distribución por tipo S' }
-  ]
-})
 const typeColors = ['#4f46e5', '#0891b2', '#64748b', '#7c3aed', '#0d9488']
 const allTypes = computed(() => [...new Set([...datosS.value, ...datosDiaS.value].map(row => String(row.S)))].sort())
 const bars = (rows, labelKey, valueKey, types = false) => {
   if (!rows.length) return null
   const sorted = [...rows].sort((a, b) => toNumber(b[valueKey]) - toNumber(a[valueKey]))
-  return { labels: sorted.map(row => String(row[labelKey] ?? 'Sin tipo')), datasets: [{ label: types ? 'Registros' : 'Residuos (kg)', data: sorted.map(row => toNumber(row[valueKey])), backgroundColor: sorted.map(row => types ? typeColors[allTypes.value.indexOf(String(row.S)) % typeColors.length] : '#4f46e5'), borderRadius: 5, maxBarThickness: 22 }] }
+  return { labels: sorted.map(row => String(row[labelKey] ?? 'Sin tipo')), datasets: [{ label: types ? 'Registros' : 'Residuos (kg)', data: sorted.map(row => toNumber(row[valueKey])), backgroundColor: sorted.map((row, index) => types ? typeColors[allTypes.value.indexOf(String(row.S)) % typeColors.length] : index === 0 ? '#4f46e5' : '#a5b4fc'), borderRadius: 5, maxBarThickness: 22 }] }
 }
 const options = (horizontal = false, unit = 'kg') => ({
   responsive: true, maintainAspectRatio: false, animation: false, indexAxis: horizontal ? 'y' : 'x',
@@ -242,7 +225,7 @@ const options = (horizontal = false, unit = 'kg') => ({
     } }
   },
   scales: {
-    x: { beginAtZero: true, border: { display: false }, grid: { display: horizontal, color: '#f1f5f9' }, ticks: { color: '#64748b', font: { size: 11 }, maxRotation: 0, autoSkip: true, callback: horizontal ? value => formatNumber(value) : undefined } },
+    x: { beginAtZero: true, border: { display: false }, grid: { display: horizontal, color: '#f1f5f9' }, ticks: { color: '#64748b', font: { size: 11 }, maxRotation: 0, autoSkip: true, callback: horizontal ? value => formatNumber(value) : function(value) { return this.getLabelForValue(value) } } },
     y: { beginAtZero: true, border: { display: false }, grid: { display: !horizontal, color: '#f1f5f9' }, ticks: { color: '#475569', font: { size: 11 }, callback: horizontal ? function(value) {
       const label = String(this.getLabelForValue(value))
       if (label.length <= 30) return label
@@ -273,18 +256,17 @@ const historyOptions = computed(() => {
   config.plugins.legend = { display: true, position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, color: '#64748b', font: { size: 11 } } }
   return config
 })
+const productionTotal = rows => formatNumber(rows.reduce((sum, row) => sum + toNumber(row.count), 0)) + ' registros'
 const sections = computed(() => [
-  { title: 'Acumulado del mes', subtitle: periodoLabel.value, panels: [
-    { title: 'Residuos por motivo', subtitle: 'Ordenados por peso · participación en el total', unit: 'kg / %', data: bars(datos.value, 'DESC_MOTIVO', 'TotalKg'), options: options(true), height: Math.max(230, datos.value.length * 34) },
-    { title: 'Producción por tipo', subtitle: 'Cantidad de registros por categoría S', unit: 'registros / %', data: bars(datosS.value, 'S', 'count', true), options: options(true, 'registros'), height: Math.max(230, datosS.value.length * 34) }
+  { title: 'Acumulado del mes', panels: [
+    { title: 'Residuos del mes', total: formatNumber(totalKg(datos.value)) + ' kg', subtitle: periodoLabel.value, unit: 'kg / %', data: bars(datos.value, 'DESC_MOTIVO', 'TotalKg'), options: options(true) },
+    { title: 'Producción del mes', total: productionTotal(datosS.value), subtitle: periodoLabel.value, unit: 'registros / %', data: bars(datosS.value, 'S', 'count', true), options: options(true, 'registros') },
+    { title: 'Estopa azul · 12 meses', subtitle: 'Último mes destacado · línea de promedio', unit: 'kg', data: trend(datosEstopaAzul.value), options: historyOptions.value }
   ] },
-  { title: 'Día seleccionado', subtitle: diaLabel.value, panels: [
-    { title: 'Residuos por motivo', subtitle: 'Distribución de los residuos del día', unit: 'kg / %', data: bars(datosDia.value, 'DESC_MOTIVO', 'TotalKg'), options: options(true), height: Math.max(230, datosDia.value.length * 34) },
-    { title: 'Producción por tipo', subtitle: 'Registros correspondientes al día seleccionado', unit: 'registros / %', data: bars(datosDiaS.value, 'S', 'count', true), options: options(true, 'registros'), height: Math.max(230, datosDiaS.value.length * 34) }
-  ] },
-  { title: 'Evolución de estopa azul', subtitle: 'Contexto histórico y detalle del mes', history: true, panels: [
-    { title: 'Últimos 12 meses', subtitle: 'Último mes disponible destacado · promedio de meses disponibles', unit: 'kg', data: trend(datosEstopaAzul.value), options: historyOptions.value, height: 240 },
-    { title: 'Evolución diaria', subtitle: periodoLabel.value, unit: 'kg', data: trend(datosEstopaAzulDiario.value, true), options: options(), line: true, height: 240 }
+  { title: 'Día seleccionado', panels: [
+    { title: 'Residuos del día', total: formatNumber(totalKg(datosDia.value)) + ' kg', subtitle: diaLabel.value, unit: 'kg / %', data: bars(datosDia.value, 'DESC_MOTIVO', 'TotalKg'), options: options(true) },
+    { title: 'Producción del día', total: productionTotal(datosDiaS.value), subtitle: diaLabel.value, unit: 'registros / %', data: bars(datosDiaS.value, 'S', 'count', true), options: options(true, 'registros') },
+    { title: 'Estopa azul · evolución diaria', subtitle: periodoLabel.value, unit: 'kg', data: trend(datosEstopaAzulDiario.value, true), options: options(), line: true }
   ] }
 ])
 
@@ -293,70 +275,70 @@ const copiarParaWhatsApp = async () => {
     const [year, month, day] = fechaSeleccionada.value.split('-')
     const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
     const mesNombre = meses[parseInt(month) - 1]
-    
+
     // Construir mensaje
     let mensaje = `📊 *ANÁLISIS RESIDUOS DE ÍNDIGO*\n`
     mensaje += `📅 Período: 01/${month}/${year} - ${day}/${month}/${year}\n`
     mensaje += `━━━━━━━━━━━━━━━━━━━━━━\n\n`
-    
+
     // Residuos del periodo
     if (datos.value.length > 0) {
       const total = datos.value.reduce((sum, d) => sum + toNumber(d.TotalKg), 0)
       mensaje += `📦 *RESIDUOS DEL PERIODO (${mesNombre})*\n`
       mensaje += `Total: *${Math.round(total).toLocaleString()} kg*\n\n`
-      
+
       datos.value.forEach(d => {
         const porcentaje = total > 0 ? ((toNumber(d.TotalKg) / total) * 100).toFixed(1) : '0.0'
         mensaje += `• ${d.DESC_MOTIVO}: ${Math.round(toNumber(d.TotalKg)).toLocaleString()} kg (${porcentaje}%)\n`
       })
       mensaje += `\n`
     }
-    
+
     // Producción del periodo
     if (datosS.value.length > 0) {
       const total = datosS.value.reduce((sum, d) => sum + toNumber(d.count), 0)
       mensaje += `🏭 *PRODUCCIÓN ÍNDIGO DEL PERIODO*\n`
       mensaje += `Total registros: *${total.toLocaleString()}*\n\n`
-      
+
       datosS.value.forEach(d => {
         const porcentaje = total > 0 ? ((toNumber(d.count) / total) * 100).toFixed(1) : '0.0'
         mensaje += `• ${d.S}: ${toNumber(d.count).toLocaleString()} (${porcentaje}%)\n`
       })
       mensaje += `\n`
     }
-    
+
     // Residuos del día
     if (datosDia.value.length > 0) {
       const total = datosDia.value.reduce((sum, d) => sum + toNumber(d.TotalKg), 0)
       mensaje += `━━━━━━━━━━━━━━━━━━━━━━\n`
       mensaje += `📦 *RESIDUOS DEL DÍA ${day}/${month}/${year}*\n`
       mensaje += `Total: *${Math.round(total).toLocaleString()} kg*\n\n`
-      
+
       datosDia.value.forEach(d => {
         const porcentaje = total > 0 ? ((toNumber(d.TotalKg) / total) * 100).toFixed(1) : '0.0'
         mensaje += `• ${d.DESC_MOTIVO}: ${Math.round(toNumber(d.TotalKg)).toLocaleString()} kg (${porcentaje}%)\n`
       })
       mensaje += `\n`
     }
-    
+
     // Producción del día
     if (datosDiaS.value.length > 0) {
       const total = datosDiaS.value.reduce((sum, d) => sum + toNumber(d.count), 0)
       mensaje += `🏭 *PRODUCCIÓN ÍNDIGO DEL DÍA*\n`
       mensaje += `Total registros: *${total.toLocaleString()}*\n\n`
-      
+
       datosDiaS.value.forEach(d => {
         const porcentaje = total > 0 ? ((toNumber(d.count) / total) * 100).toFixed(1) : '0.0'
         mensaje += `• ${d.S}: ${toNumber(d.count).toLocaleString()} (${porcentaje}%)\n`
       })
     }
-    
+
     mensaje += `\n━━━━━━━━━━━━━━━━━━━━━━\n`
     mensaje += `📊 Reporte generado: ${new Date().toLocaleString('es-ES')}`
-    
+
     // Copiar al portapapeles
     await navigator.clipboard.writeText(mensaje)
-    
+
     // Mostrar notificación
     Swal.fire({
       toast: true,
@@ -444,29 +426,18 @@ onMounted(() => {
 .toolbar-query:hover { background: #dbeafe; }
 .toolbar-button:disabled { opacity: .4; cursor: not-allowed; }
 .toolbar-button:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
-.analysis-report { padding: 16px 0; }
-.report-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
-.report-heading h2 { font-size: 20px; font-weight: 600; margin-top: 4px; letter-spacing: -.025em; }
-.eyebrow { font-size: 10px; font-weight: 600; letter-spacing: .08em; color: #64748b; text-transform: uppercase; }
-.kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 24px; }
-.kpi-card, .chart-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 2px #0f172a05; min-width: 0; }
-.kpi-card { padding: 14px 16px; }
-.kpi-value { font-size: 26px; font-weight: 600; letter-spacing: -.03em; color: #312e81; font-variant-numeric: tabular-nums; margin-top: 6px; }
-.kpi-value span { font-size: 12px; color: #64748b; font-weight: 400; letter-spacing: 0; }
-.analysis-section + .analysis-section { margin-top: 22px; }
-.section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
-.section-heading h2 { font-size: 13px; font-weight: 600; }
-.section-heading span { font-size: 11px; color: #64748b; }
-.chart-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 12px; }
-.history-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.chart-card { padding: 16px; }
-.chart-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
+.analysis-report { height: 100%; min-height: 0; padding: 10px 0 0; display: grid; grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.analysis-section { min-height: 0; }
+.chart-grid { height: 100%; min-height: 0; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 2fr) minmax(0, 3fr); gap: 10px; }
+.chart-card { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; box-shadow: 0 1px 2px #0f172a05; }
+.panel-total { font-variant-numeric: tabular-nums; color: #4338ca; white-space: nowrap; }
+.chart-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 6px; flex-shrink: 0; }
 .chart-heading h3 { font-size: 13px; font-weight: 600; }
 .chart-heading p { font-size: 11px; color: #64748b; margin-top: 3px; }
 .chart-unit { border-radius: 4px; background: #eef2ff; color: #6366f1; font-size: 10px; padding: 3px 6px; white-space: nowrap; }
-.chart-body { position: relative; min-width: 0; }
+.chart-body { position: relative; min-width: 0; min-height: 0; flex: 1; }
 .chart-placeholder { height: 100%; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: #f8fafc; color: #94a3b8; font-size: 12px; }
-@media (max-width: 900px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .chart-grid { grid-template-columns: 1fr; } }
-@media (max-width: 640px) { .analysis-view { padding: 10px; } .analysis-toolbar { grid-template-columns: 1fr; } .toolbar-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; } .section-heading { flex-wrap: wrap; } .kpi-card { padding: 12px; } .kpi-value { font-size: 22px; } }
-@media print { .analysis-toolbar { display: none; } .analysis-view { height: auto; overflow: visible; padding: 0; } .report-scroll { overflow: visible; } .chart-card { break-inside: avoid; } @page { size: landscape; margin: 5mm; } }
+@media (max-width: 900px) { .analysis-report { height: auto; display: block; } .analysis-section + .analysis-section { margin-top: 10px; } .chart-grid { height: auto; grid-template-columns: 1fr; } .chart-body { flex: none; height: 240px; } }
+@media (max-width: 640px) { .analysis-view { padding: 10px; } .analysis-toolbar { grid-template-columns: 1fr; } .toolbar-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; } }
+@media print { .analysis-toolbar { display: none; } .analysis-view { height: auto; overflow: visible; padding: 0; } .report-scroll { overflow: visible; } .analysis-report { height: 180mm; } .chart-card { break-inside: avoid; } @page { size: landscape; margin: 5mm; } }
 </style>
