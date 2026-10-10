@@ -202,6 +202,7 @@ const totalKg = (rows) => rows.reduce((sum, row) => sum + toNumber(row.TotalKg),
 const diaLabel = computed(() => fechaSeleccionada.value.split('-').reverse().join('/'))
 const periodoLabel = computed(() => '01/' + fechaSeleccionada.value.split('-').slice(0, 2).reverse().join('/') + ' al ' + diaLabel.value)
 const hayDatos = computed(() => [datos, datosDia, datosS, datosDiaS, datosEstopaAzul, datosEstopaAzulDiario].some(rows => rows.value.length))
+const chartFont = "'Segoe UI', Ubuntu, system-ui, sans-serif"
 const typeColors = ['#4f46e5', '#0891b2', '#64748b', '#7c3aed', '#0d9488']
 const allTypes = computed(() => [...new Set([...datosS.value, ...datosDiaS.value].map(row => String(row.S)))].sort())
 const bars = (rows, labelKey, valueKey, types = false) => {
@@ -214,19 +215,19 @@ const options = (horizontal = false, unit = 'kg') => ({
   layout: { padding: { right: horizontal ? 92 : 12, top: 16 } },
   plugins: {
     legend: { display: false },
-    tooltip: { backgroundColor: '#ffffff', titleColor: '#334155', bodyColor: '#475569', borderColor: '#cbd5e1', borderWidth: 1, padding: 10, cornerRadius: 6, displayColors: false, titleFont: { size: 12, weight: '500' }, bodyFont: { size: 11 }, callbacks: { label: ctx => {
+    tooltip: { backgroundColor: '#ffffff', titleColor: '#334155', bodyColor: '#475569', borderColor: '#cbd5e1', borderWidth: 1, padding: 10, cornerRadius: 6, displayColors: false, titleFont: { family: chartFont, size: 12, weight: '500' }, bodyFont: { family: chartFont, size: 11 }, callbacks: { label: ctx => {
       const value = Number(ctx.raw)
       const total = ctx.dataset.data.reduce((sum, n) => sum + Number(n), 0)
       return formatNumber(value, 1) + ' ' + unit + (horizontal && total > 0 ? ' · ' + formatNumber(value / total * 100, 1) + '%' : '')
     } } },
-    datalabels: { display: horizontal, anchor: 'end', align: 'end', offset: 6, color: '#475569', font: { size: 11, weight: 500 }, formatter: (value, ctx) => {
+    datalabels: { display: horizontal, anchor: 'end', align: 'end', offset: 6, color: '#475569', font: { family: chartFont, size: 11, weight: 500 }, formatter: (value, ctx) => {
       const total = ctx.dataset.data.reduce((sum, n) => sum + Number(n), 0)
       return formatNumber(value) + (total > 0 ? ' · ' + formatNumber(value / total * 100, 1) + '%' : '')
     } }
   },
   scales: {
-    x: { beginAtZero: true, border: { display: false }, grid: { display: horizontal, color: '#f1f5f9' }, ticks: { color: '#64748b', font: { size: 11 }, maxRotation: 0, autoSkip: true, callback: horizontal ? value => formatNumber(value) : function(value) { return this.getLabelForValue(value) } } },
-    y: { beginAtZero: true, border: { display: false }, grid: { display: !horizontal, color: '#f1f5f9' }, ticks: { color: '#475569', font: { size: 11 }, callback: horizontal ? function(value) {
+    x: { beginAtZero: true, border: { display: false }, grid: { display: horizontal, color: '#f1f5f9' }, ticks: { color: '#64748b', font: { family: chartFont, size: 11 }, maxRotation: 0, autoSkip: true, callback: horizontal ? value => formatNumber(value) : function(value) { return this.getLabelForValue(value) } } },
+    y: { beginAtZero: true, border: { display: false }, grid: { display: !horizontal, color: '#f1f5f9' }, ticks: { color: '#475569', font: { family: chartFont, size: 11 }, callback: horizontal ? function(value) {
       const label = String(this.getLabelForValue(value))
       if (label.length <= 30) return label
       const lines = ['']
@@ -253,7 +254,7 @@ const trend = (rows, daily = false) => {
 }
 const historyOptions = computed(() => {
   const config = options()
-  config.plugins.legend = { display: true, position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, color: '#64748b', font: { size: 11 } } }
+  config.plugins.legend = { display: true, position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, color: '#64748b', font: { family: chartFont, size: 11 } } }
   return config
 })
 const productionTotal = rows => formatNumber(rows.reduce((sum, row) => sum + toNumber(row.count), 0)) + ' registros'
@@ -412,7 +413,8 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.analysis-view { height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; padding: 16px; background: #f8fafc; color: #1e293b; }
+.analysis-view { --ui-font: 'Segoe UI', Ubuntu, system-ui, sans-serif; --heading-font: var(--ui-font); font-family: var(--ui-font); height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; padding: 16px; background: #f8fafc; color: #1e293b; }
+.analysis-view :deep(button), .analysis-view :deep(input), .analysis-view :deep(select) { font-family: var(--ui-font); }
 .analysis-toolbar { position: relative; z-index: 20; flex-shrink: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 12px; min-height: 48px; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: white; box-shadow: 0 1px 2px #0f172a08; }
 .report-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
 .toolbar-help-space { grid-column: 1 / -1; height: 30px; }
