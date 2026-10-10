@@ -50,11 +50,11 @@
       <p class="daily-tooltip-hint">{{ tooltipDiario.Registros?.length || 0 }} registros · {{ contarRoladas(tooltipDiario) }} roladas · {{ contarUrdumes(tooltipDiario) }} urdumes · Clic para ver detalle</p>
       <p v-if="!tooltipDiario.Motivos?.length" class="text-xs text-slate-500">Desglose no disponible</p>
     </div>
-    <dialog v-if="detalleDiario" ref="detalleDiarioDialog" class="daily-detail-dialog" aria-labelledby="daily-detail-title" @close="detalleDiario = null" @click="cerrarDetalleFondo">
+    <dialog v-if="detalleDiario" ref="detalleDiarioDialog" class="daily-detail-dialog" aria-labelledby="daily-detail-title" @close="detalleDiario = null" @click="cerrarDetalleFondo" @keydown="navegarDetalleConTeclado">
       <div class="daily-detail-header"><div><h2 id="daily-detail-title">Estopa azul · detalle del día</h2><p>Rolada, urdume y motivo de cada registro</p></div><div class="daily-detail-actions"><button class="detail-copy-button" :disabled="compartiendoDetalle || cargando" @click="copiarTextoDetalle"><ChatBubbleLeftRightIcon class="w-4 h-4" />Copiar texto</button><button class="detail-copy-button" :disabled="compartiendoDetalle || cargando" @click="copiarImagenDetalle"><PhotoIcon class="w-4 h-4" />Copiar imagen</button><button class="toolbar-button" aria-label="Cerrar detalle" @click="detalleDiarioDialog.close()">×</button></div></div>
       <div class="daily-detail-summary"><div class="daily-detail-navigation"><button class="toolbar-button" aria-label="Día anterior" :disabled="indiceDetalleDiario <= 0 || cargando || compartiendoDetalle" @click="navegarDetalleDiario(-1)">&lt;</button><select :disabled="compartiendoDetalle || cargando" aria-label="Fecha del detalle" :value="detalleDiario.Fecha" @change="cambiarDetalleDiario($event.target.value)"><option v-for="row in diasDetalleDiario" :key="row.Fecha" :value="row.Fecha">{{ row.Fecha }}</option></select><button class="toolbar-button" aria-label="Día siguiente" :disabled="indiceDetalleDiario < 0 || indiceDetalleDiario >= diasDetalleDiario.length - 1 || cargando || compartiendoDetalle" @click="navegarDetalleDiario(1)">&gt;</button></div><strong>{{ formatNumber(toNumber(detalleDiario.KgResiduo), 2) }} kg</strong><span>{{ detalleDiario.Registros?.length || 0 }} registros · {{ contarRoladas(detalleDiario) }} roladas · {{ contarUrdumes(detalleDiario) }} urdumes</span></div>
       <div class="daily-detail-table"><table><thead><tr><th>ID del residuo</th><th>Rolada</th><th>Urdume</th><th>Partida</th><th>Turno</th><th>Motivo</th><th>kg</th></tr></thead><tbody><tr v-for="(registro, index) in detalleDiario.Registros || []" :key="index"><td>{{ registro.ID || 'Sin dato' }}</td><td>{{ registro.ROLADA?.trim() || 'Sin dato' }}</td><td>{{ registro.URDUME?.trim() || 'Sin dato' }}</td><td>{{ registro.PARTIDA?.trim() || 'Sin dato' }}</td><td>{{ registro.TURNO || 'Sin dato' }}</td><td>{{ registro.DESC_MOTIVO || registro.MOTIVO || 'Sin dato' }}</td><td>{{ formatNumber(toNumber(registro.Kg), 2) }}</td></tr></tbody></table></div>
-      <div class="daily-detail-footer">Todos los registros del día · Total {{ formatNumber(toNumber(detalleDiario.KgResiduo), 2) }} kg</div>
+      <div class="daily-detail-footer">Todos los registros del día · Total {{ formatNumber(toNumber(detalleDiario.KgResiduo), 2) }} kg<span class="daily-detail-keyboard-hint">← → para cambiar de día</span></div>
     </dialog>
   </div>
 </template>
@@ -269,6 +269,14 @@ const navegarDetalleDiario = offset => {
   if (cargando.value || compartiendoDetalle.value || indiceDetalleDiario.value < 0) return
   const row = diasDetalleDiario.value[indiceDetalleDiario.value + offset]
   if (row) detalleDiario.value = row
+}
+const navegarDetalleConTeclado = event => {
+  if (!detalleDiarioDialog.value?.open || event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+  const target = event.target
+  if (target instanceof Element && (target.closest('input, textarea, select') || target.isContentEditable)) return
+  event.preventDefault()
+  navegarDetalleDiario(event.key === 'ArrowLeft' ? -1 : 1)
 }
 const cerrarDetalleFondo = event => {
   if (event.target !== detalleDiarioDialog.value) return
@@ -568,6 +576,7 @@ onMounted(() => {
 .daily-detail-table th, .daily-detail-table td { padding: 9px 12px; border-bottom: 1px solid #e2e8f0; }
 .daily-detail-table td:last-child, .daily-detail-table th:last-child { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .daily-detail-footer { flex-shrink: 0; padding: 12px 16px; font-size: 12px; font-weight: 600; background: #f8fafc; }
+.daily-detail-keyboard-hint { display: inline-block; margin-left: 16px; color: #64748b; font-weight: 400; }
 .daily-tooltip { position: fixed; z-index: 60; width: max-content; max-width: 360px; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: white; color: #475569; box-shadow: 0 4px 14px #0f172a14; font-size: 12px; line-height: 1.4; pointer-events: none; overflow: auto; }
 .daily-tooltip > strong { color: #0f172a; font-size: 13px; }
 .daily-tooltip-total { padding: 5px 0 8px; margin-bottom: 5px; border-bottom: 1px solid #e2e8f0; color: #4338ca; font-weight: 600; }
