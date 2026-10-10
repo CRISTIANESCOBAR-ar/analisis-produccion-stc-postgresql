@@ -5462,22 +5462,24 @@ app.get('/api/residuos-indigo-estopa-por-dia', async (req, res) => {
     const fechaInicio = dateVariants(fecha_inicio).iso
     const fechaFin = dateVariants(fecha_fin).iso
     const sql = `
-      WITH motivos AS (
+      WITH base AS (
         SELECT ${sqlParseDate('"DT_MOV"')} AS dia,
-               "MOTIVO", "DESC_MOTIVO",
-               SUM(${sqlParseNumber('"PESO LIQUIDO (KG)"')}) AS kg
+               "ID", "ROLADA", "URDUME", "PARTIDA", "TURNO", "MOTIVO", "DESC_MOTIVO",
+               ${sqlParseNumber('"PESO LIQUIDO (KG)"')} AS kg
         FROM tb_residuos_indigo
         WHERE btrim("DESCRICAO") = 'ESTOPA AZUL'
           AND ${sqlParseDate('"DT_MOV"')} BETWEEN $1::date AND $2::date
-        GROUP BY 1, "MOTIVO", "DESC_MOTIVO"
+      ), motivos AS (
+        SELECT dia, "MOTIVO", "DESC_MOTIVO", SUM(kg) AS kg
+        FROM base GROUP BY dia, "MOTIVO", "DESC_MOTIVO"
       )
-      SELECT to_char(dia, 'DD/MM/YYYY') AS "Fecha",
-             SUM(kg) AS "KgResiduo",
-             jsonb_agg(jsonb_build_object('MOTIVO', "MOTIVO", 'DESC_MOTIVO', "DESC_MOTIVO", 'TotalKg', kg)
-                       ORDER BY kg DESC, "DESC_MOTIVO") AS "Motivos"
-      FROM motivos
-      GROUP BY dia
-      ORDER BY dia
+      SELECT to_char(m.dia, 'DD/MM/YYYY') AS "Fecha", SUM(m.kg) AS "KgResiduo",
+             jsonb_agg(jsonb_build_object('MOTIVO', m."MOTIVO", 'DESC_MOTIVO', m."DESC_MOTIVO", 'TotalKg', m.kg)
+                       ORDER BY m.kg DESC, m."DESC_MOTIVO") AS "Motivos",
+             (SELECT jsonb_agg(jsonb_build_object('ID', b."ID", 'ROLADA', b."ROLADA", 'URDUME', b."URDUME", 'PARTIDA', b."PARTIDA",
+                       'TURNO', b."TURNO", 'MOTIVO', b."MOTIVO", 'DESC_MOTIVO', b."DESC_MOTIVO", 'Kg', b.kg)
+                       ORDER BY b.kg DESC, b."ID") FROM base b WHERE b.dia = m.dia) AS "Registros"
+      FROM motivos m GROUP BY m.dia ORDER BY m.dia
     `
     const result = await query(sql, [fechaInicio, fechaFin], 'residuos-indigo-estopa-por-dia')
     res.json(result.rows)

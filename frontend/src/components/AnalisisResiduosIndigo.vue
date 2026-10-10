@@ -30,6 +30,7 @@
         <div class="chart-grid" >
           <article v-for="panel in section.panels" :key="panel.title" class="chart-card">
             <div class="chart-heading"><div class="chart-heading-content"><div class="chart-title-row"><h3>{{ panel.title }}</h3><span v-if="panel.total" class="panel-total">{{ cargando ? '—' : panel.total }}</span></div><p>{{ panel.subtitle }}</p></div><span class="chart-unit">{{ panel.unit }}</span></div>
+            <div v-if="panel.line" class="daily-detail-action"><button type="button" @click="abrirDetalleDiario(tooltipDiario || filaDiariaSeleccionada)">Ver detalle por rolada y urdume</button><span>o seleccioná un punto</span></div>
             <div class="chart-body">
               <div v-if="cargando" class="chart-placeholder animate-pulse" role="status">Cargando datos…</div>
               <component v-else-if="panel.data" :is="panel.line ? Line : Bar" :data="panel.data" :options="panel.options" />
@@ -46,8 +47,15 @@
       <div v-for="(motivo, index) in tooltipDiario.Motivos || []" :key="index" class="daily-tooltip-row">
         <span>{{ motivo.DESC_MOTIVO || ('Motivo ' + motivo.MOTIVO) }}</span><strong>{{ formatNumber(toNumber(motivo.TotalKg), 2) }} kg</strong>
       </div>
+      <p class="daily-tooltip-hint">{{ tooltipDiario.Registros?.length || 0 }} registros · {{ contarRoladas(tooltipDiario) }} roladas · {{ contarUrdumes(tooltipDiario) }} urdumes · Clic para ver detalle</p>
       <p v-if="!tooltipDiario.Motivos?.length" class="text-xs text-slate-500">Desglose no disponible</p>
     </div>
+    <dialog v-if="detalleDiario" ref="detalleDiarioDialog" class="daily-detail-dialog" aria-labelledby="daily-detail-title" @close="detalleDiario = null" @click="cerrarDetalleFondo">
+      <div class="daily-detail-header"><div><h2 id="daily-detail-title">Estopa azul · detalle del día</h2><p>Rolada, urdume y motivo de cada registro</p></div><button class="toolbar-button" aria-label="Cerrar detalle" @click="detalleDiarioDialog.close()">×</button></div>
+      <div class="daily-detail-summary"><select aria-label="Fecha del detalle" :value="detalleDiario.Fecha" @change="cambiarDetalleDiario($event.target.value)"><option v-for="row in datosEstopaAzulDiario" :key="row.Fecha" :value="row.Fecha">{{ row.Fecha }}</option></select><strong>{{ formatNumber(toNumber(detalleDiario.KgResiduo), 2) }} kg</strong><span>{{ detalleDiario.Registros?.length || 0 }} registros · {{ contarRoladas(detalleDiario) }} roladas · {{ contarUrdumes(detalleDiario) }} urdumes</span></div>
+      <div class="daily-detail-table"><table><thead><tr><th>ID del residuo</th><th>Rolada</th><th>Urdume</th><th>Partida</th><th>Turno</th><th>Motivo</th><th>kg</th></tr></thead><tbody><tr v-for="(registro, index) in detalleDiario.Registros || []" :key="index"><td>{{ registro.ID || 'Sin dato' }}</td><td>{{ registro.ROLADA?.trim() || 'Sin dato' }}</td><td>{{ registro.URDUME?.trim() || 'Sin dato' }}</td><td>{{ registro.PARTIDA?.trim() || 'Sin dato' }}</td><td>{{ registro.TURNO || 'Sin dato' }}</td><td>{{ registro.DESC_MOTIVO || registro.MOTIVO || 'Sin dato' }}</td><td>{{ formatNumber(toNumber(registro.Kg), 2) }}</td></tr></tbody></table></div>
+      <div class="daily-detail-footer">Todos los registros del día · Total {{ formatNumber(toNumber(detalleDiario.KgResiduo), 2) }} kg</div>
+    </dialog>
   </div>
 </template>
 <script setup>
@@ -211,6 +219,24 @@ const totalKg = (rows) => rows.reduce((sum, row) => sum + toNumber(row.TotalKg),
 const diaLabel = computed(() => fechaSeleccionada.value.split('-').reverse().join('/'))
 const periodoLabel = computed(() => '01/' + fechaSeleccionada.value.split('-').slice(0, 2).reverse().join('/') + ' al ' + diaLabel.value)
 const hayDatos = computed(() => [datos, datosDia, datosS, datosDiaS, datosEstopaAzul, datosEstopaAzulDiario].some(rows => rows.value.length))
+const detalleDiario = ref(null)
+const detalleDiarioDialog = ref(null)
+const contarRoladas = row => new Set((row?.Registros || []).map(r => r.ROLADA?.trim()).filter(Boolean)).size
+const contarUrdumes = row => new Set((row?.Registros || []).map(r => r.URDUME?.trim()).filter(Boolean)).size
+const filaDiariaSeleccionada = computed(() => datosEstopaAzulDiario.value.find(row => row.Fecha === diaLabel.value) || datosEstopaAzulDiario.value.at(-1))
+const abrirDetalleDiario = async row => {
+  if (!row) return
+  detalleDiario.value = row
+  tooltipDiario.value = null
+  await nextTick()
+  detalleDiarioDialog.value?.showModal()
+}
+const cambiarDetalleDiario = fecha => { detalleDiario.value = datosEstopaAzulDiario.value.find(row => row.Fecha === fecha) || detalleDiario.value }
+const cerrarDetalleFondo = event => {
+  if (event.target !== detalleDiarioDialog.value) return
+  const rect = event.target.getBoundingClientRect()
+  if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) event.target.close()
+}
 const tooltipDiario = ref(null)
 const tooltipDiarioElement = ref(null)
 const tooltipDiarioStyle = ref({})
@@ -291,6 +317,10 @@ const historyOptions = computed(() => {
 const dailyOptions = computed(() => {
   const config = options()
   config.interaction = { mode: 'nearest', intersect: false }
+  config.onClick = (event, elements, chart) => {
+    const point = elements[0]
+    if (point) abrirDetalleDiario(chart.data.datasets[point.datasetIndex].details?.[point.index])
+  }
   config.plugins.tooltip = { enabled: false, external: mostrarTooltipDiario }
   return config
 })
@@ -474,6 +504,23 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.daily-detail-action { display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 10px; line-height: 16px; margin-bottom: 3px; color: #64748b; }
+.daily-detail-action button { color: #4f46e5; text-decoration: underline; cursor: pointer; }
+.daily-tooltip-hint { padding-top: 8px; margin-top: 5px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; }
+.daily-detail-dialog { width: min(900px, 94vw); max-height: 85vh; padding: 0; margin: auto; border: 1px solid #cbd5e1; border-radius: 10px; color: #334155; background: white; font-family: var(--ui-font); }
+.daily-detail-dialog::backdrop { background: #0f172a55; }
+.daily-detail-header { display: flex; justify-content: space-between; align-items: center; padding: 16px; border-bottom: 1px solid #e2e8f0; }
+.daily-detail-header h2 { font-size: 18px; font-weight: 700; }
+.daily-detail-header p { font-size: 12px; color: #64748b; }
+.daily-detail-summary { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; padding: 12px 16px; font-size: 13px; }
+.daily-detail-summary select { padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 5px; }
+.daily-detail-summary strong { color: #4338ca; }
+.daily-detail-table { overflow: auto; max-height: 55vh; }
+.daily-detail-table table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.daily-detail-table th { position: sticky; top: 0; background: #f8fafc; text-align: left; }
+.daily-detail-table th, .daily-detail-table td { padding: 9px 12px; border-bottom: 1px solid #e2e8f0; }
+.daily-detail-table td:last-child, .daily-detail-table th:last-child { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.daily-detail-footer { padding: 12px 16px; font-size: 12px; font-weight: 600; background: #f8fafc; }
 .daily-tooltip { position: fixed; z-index: 60; width: max-content; max-width: 360px; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: white; color: #475569; box-shadow: 0 4px 14px #0f172a14; font-size: 12px; line-height: 1.4; pointer-events: none; overflow: auto; }
 .daily-tooltip > strong { color: #0f172a; font-size: 13px; }
 .daily-tooltip-total { padding: 5px 0 8px; margin-bottom: 5px; border-bottom: 1px solid #e2e8f0; color: #4338ca; font-weight: 600; }
