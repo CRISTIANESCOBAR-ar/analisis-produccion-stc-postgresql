@@ -1,20 +1,28 @@
 <template>
   <div class="analysis-view">
-    <header class="analysis-toolbar">
+    <header class="analysis-toolbar" @mouseover="mostrarAyuda" @focusin="mostrarAyuda" @mouseleave="ayudaToolbar = ''" @focusout="ayudaToolbar = ''">
       <div class="flex items-center gap-2 min-w-0">
         <ChartBarIcon class="w-5 h-5 text-slate-400 shrink-0" />
         <h1 class="text-sm font-semibold text-slate-800 truncate">Análisis Residuos de Índigo</h1>
       </div>
       <div class="toolbar-actions">
+        <div class="date-navigation">
+          <button @click="moverFecha(-1, true)" aria-label="Mes anterior" data-tooltip="Mes anterior" aria-describedby="indigo-toolbar-help" class="toolbar-button">&lt;&lt;</button>
+          <button @click="moverFecha(-1)" aria-label="Día anterior" data-tooltip="Día anterior" aria-describedby="indigo-toolbar-help" class="toolbar-button">&lt;</button>
         <CustomDatepicker v-model="fechaSeleccionada" compact :show-buttons="false" @change="cargarDatos" />
-        <button @click="cargarDatos" :disabled="cargando" aria-label="Consultar" v-tippy="'Consultar'" class="toolbar-button toolbar-query"><MagnifyingGlassIcon class="w-4 h-4" /></button>
+          <button @click="moverFecha(1)" aria-label="Día siguiente" data-tooltip="Día siguiente" aria-describedby="indigo-toolbar-help" class="toolbar-button">&gt;</button>
+          <button @click="moverFecha(1, true)" aria-label="Mes siguiente" data-tooltip="Mes siguiente" aria-describedby="indigo-toolbar-help" class="toolbar-button">&gt;&gt;</button>
+        </div>
+        <button @click="cargarDatos" :disabled="cargando" aria-label="Consultar" data-tooltip="Consultar" aria-describedby="indigo-toolbar-help" class="toolbar-button toolbar-query"><MagnifyingGlassIcon class="w-4 h-4" /></button>
         <div class="w-px h-5 bg-slate-200 mx-1"></div>
-        <button @click="imprimirPagina" :disabled="cargando || exportando || !hayDatos" aria-label="Imprimir" v-tippy="'Imprimir en orientación apaisada'" class="toolbar-button"><PrinterIcon class="w-4 h-4" /></button>
-        <button @click="copiarComoImagen" :disabled="cargando || exportando || !hayDatos" aria-label="Copiar como imagen" v-tippy="'Copiar como imagen'" class="toolbar-button"><PhotoIcon class="w-4 h-4" /></button>
-        <button @click="copiarParaWhatsApp" :disabled="cargando || !hayDatos" aria-label="Copiar resumen para WhatsApp" v-tippy="'Copiar resumen para WhatsApp'" class="toolbar-button"><ChatBubbleLeftRightIcon class="w-4 h-4" /></button>
+        <button @click="imprimirPagina" :disabled="cargando || exportando || !hayDatos" aria-label="Imprimir" data-tooltip="Imprimir en orientación apaisada" aria-describedby="indigo-toolbar-help" class="toolbar-button"><PrinterIcon class="w-4 h-4" /></button>
+        <button @click="copiarComoImagen" :disabled="cargando || exportando || !hayDatos" aria-label="Copiar como imagen" data-tooltip="Copiar como imagen" aria-describedby="indigo-toolbar-help" class="toolbar-button"><PhotoIcon class="w-4 h-4" /></button>
+        <button @click="copiarParaWhatsApp" :disabled="cargando || !hayDatos" aria-label="Copiar resumen para WhatsApp" data-tooltip="Copiar resumen para WhatsApp" aria-describedby="indigo-toolbar-help" class="toolbar-button"><ChatBubbleLeftRightIcon class="w-4 h-4" /></button>
       </div>
+      <div id="indigo-toolbar-help" class="toolbar-help" role="tooltip">{{ ayudaToolbar }}</div>
     </header>
     <div v-if="errorCarga" role="alert" class="rounded-lg border border-red-200 bg-white px-4 py-3 text-sm text-red-600">{{ errorCarga }}</div>
+    <div class="report-scroll">
     <main ref="chartsContainer" class="analysis-report" :aria-busy="cargando">
       <div class="report-heading">
         <div><p class="eyebrow">CONTROL DE RESIDUOS · ÍNDIGO</p><h2>Lectura del mes y del día</h2><p class="text-xs text-slate-500 mt-1">Acumulado {{ periodoLabel }} · Día {{ diaLabel }}</p></div>
@@ -37,6 +45,7 @@
         </div>
       </section>
     </main>
+    </div>
   </div>
 </template>
 <script setup>
@@ -63,6 +72,10 @@ const datosDiaS = ref([])
 const datosEstopaAzul = ref([])
 const datosEstopaAzulDiario = ref([])
 const chartsContainer = ref(null)
+const ayudaToolbar = ref('')
+const mostrarAyuda = (event) => {
+  ayudaToolbar.value = event.target.closest('button[data-tooltip]')?.dataset.tooltip || ''
+}
 
 // Inicializar con ayer
 const getYesterday = () => {
@@ -75,6 +88,18 @@ const getYesterday = () => {
 }
 
 const fechaSeleccionada = ref(getYesterday())
+const moverFecha = (offset, porMes = false) => {
+  const [year, month, day] = fechaSeleccionada.value.split('-').map(Number)
+  const next = new Date(year, month - 1, day, 12)
+  if (porMes) {
+    next.setDate(1)
+    next.setMonth(next.getMonth() + offset)
+    const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate()
+    next.setDate(Math.min(day, lastDay))
+  } else next.setDate(next.getDate() + offset)
+  fechaSeleccionada.value = [next.getFullYear(), String(next.getMonth() + 1).padStart(2, '0'), String(next.getDate()).padStart(2, '0')].join('-')
+  cargarDatos()
+}
 
 const toNumber = (value) => {
   if (typeof value === 'number') {
@@ -190,7 +215,7 @@ const options = (horizontal = false, unit = 'kg') => ({
   layout: { padding: { right: horizontal ? 92 : 12, top: 16 } },
   plugins: {
     legend: { display: false },
-    tooltip: { backgroundColor: '#0f172a', padding: 12, cornerRadius: 8, callbacks: { label: ctx => {
+    tooltip: { backgroundColor: '#ffffff', titleColor: '#334155', bodyColor: '#475569', borderColor: '#cbd5e1', borderWidth: 1, padding: 10, cornerRadius: 6, displayColors: false, titleFont: { size: 12, weight: '500' }, bodyFont: { size: 11 }, callbacks: { label: ctx => {
       const value = Number(ctx.raw)
       const total = ctx.dataset.data.reduce((sum, n) => sum + Number(n), 0)
       return formatNumber(value, 1) + ' ' + unit + (horizontal && total > 0 ? ' · ' + formatNumber(value / total * 100, 1) + '%' : '')
@@ -389,8 +414,11 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.analysis-view { height: 100%; overflow-y: auto; padding: 16px; background: #f8fafc; color: #1e293b; }
-.analysis-toolbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: white; box-shadow: 0 1px 2px #0f172a08; }
+.analysis-view { height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; padding: 16px; background: #f8fafc; color: #1e293b; }
+.analysis-toolbar { position: relative; z-index: 20; flex-shrink: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 12px; min-height: 48px; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: white; box-shadow: 0 1px 2px #0f172a08; }
+.report-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.toolbar-help { grid-column: 1 / -1; min-height: 18px; font-size: 11px; line-height: 18px; color: #64748b; text-align: right; overflow-wrap: anywhere; }
+.date-navigation { display: flex; align-items: center; gap: 4px; }
 .toolbar-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .toolbar-button { height: 32px; width: 32px; border-radius: 6px; border: 1px solid #cbd5e1; background: white; color: #475569; display: flex; align-items: center; justify-content: center; transition: background-color .15s; cursor: pointer; }
 .toolbar-button:hover { background: #f8fafc; }
@@ -421,6 +449,6 @@ onMounted(() => {
 .chart-body { position: relative; min-width: 0; }
 .chart-placeholder { height: 100%; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: #f8fafc; color: #94a3b8; font-size: 12px; }
 @media (max-width: 900px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .chart-grid { grid-template-columns: 1fr; } }
-@media (max-width: 640px) { .analysis-view { padding: 10px; } .analysis-toolbar { flex-wrap: wrap; } .toolbar-actions { width: 100%; justify-content: flex-end; } .section-heading { flex-wrap: wrap; } .kpi-card { padding: 12px; } .kpi-value { font-size: 22px; } }
-@media print { .analysis-toolbar { display: none; } .analysis-view { height: auto; overflow: visible; padding: 0; } .chart-card { break-inside: avoid; } @page { size: landscape; margin: 5mm; } }
+@media (max-width: 640px) { .analysis-view { padding: 10px; } .analysis-toolbar { grid-template-columns: 1fr; } .toolbar-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; } .toolbar-help { text-align: left; } .section-heading { flex-wrap: wrap; } .kpi-card { padding: 12px; } .kpi-value { font-size: 22px; } }
+@media print { .analysis-toolbar { display: none; } .analysis-view { height: auto; overflow: visible; padding: 0; } .report-scroll { overflow: visible; } .chart-card { break-inside: avoid; } @page { size: landscape; margin: 5mm; } }
 </style>
