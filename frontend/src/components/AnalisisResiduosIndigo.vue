@@ -366,11 +366,35 @@ const copiarParaWhatsApp = async () => {
 }
 
 const captureReport = async () => {
-  if (!chartsContainer.value) throw new Error('No se encontró el reporte')
+  const report = chartsContainer.value
+  if (!report) throw new Error('No se encontró el reporte')
   await document.fonts.ready
-  const images = [...chartsContainer.value.querySelectorAll('img')]
-  await Promise.all(images.map(img => img.decode().catch(() => {})))
-  return domToPng(chartsContainer.value, { scale: 2, backgroundColor: '#f8fafc' })
+  await Promise.all([...report.querySelectorAll('img')].map(img => img.decode().catch(() => {})))
+  const bounds = report.getBoundingClientRect()
+  // Renderizar los gráficos a la misma resolución que el PNG evita ampliar
+  // sus mapas de bits de pantalla (texto y trazos borrosos al pegarlos).
+  const desiredScale = Math.max(3, Math.min(4, window.devicePixelRatio || 1))
+  const scale = Math.max(1, Math.min(desiredScale, Math.sqrt(20000000 / Math.max(1, bounds.width * bounds.height))))
+  const charts = [...report.querySelectorAll('canvas')].map(canvas => ChartJS.getChart(canvas)).filter(Boolean)
+  const original = charts.map(chart => ({ chart, width: chart.width, height: chart.height,
+    ratio: chart.config.options.devicePixelRatio,
+    hasRatio: Object.prototype.hasOwnProperty.call(chart.config.options, 'devicePixelRatio') }))
+  try {
+    for (const { chart, width, height } of original) {
+      chart.config.options.devicePixelRatio = scale
+      chart.resize(width, height)
+      chart.update('none')
+    }
+    return await domToPng(report, { scale, dpi: Math.round(96 * scale), backgroundColor: '#f8fafc' })
+  } finally {
+    for (const { chart, width, height, ratio, hasRatio } of original) {
+      if (!chart.canvas) continue
+      if (hasRatio) chart.config.options.devicePixelRatio = ratio
+      else delete chart.config.options.devicePixelRatio
+      chart.resize(width, height)
+      chart.update('none')
+    }
+  }
 }
 const showExportError = (error) => Swal.fire({ icon: 'error', title: 'No se pudo exportar', text: error.message, confirmButtonText: 'Cerrar' })
 const copiarComoImagen = async () => {
