@@ -51,7 +51,7 @@
       <p v-if="!tooltipDiario.Motivos?.length" class="text-xs text-slate-500">Desglose no disponible</p>
     </div>
     <dialog v-if="detalleDiario" ref="detalleDiarioDialog" class="daily-detail-dialog" aria-labelledby="daily-detail-title" @close="detalleDiario = null" @click="cerrarDetalleFondo" @keydown="navegarDetalleConTeclado">
-      <div class="daily-detail-header"><div><h2 id="daily-detail-title">Estopa azul · detalle del día</h2><p>Rolada, urdume y motivo de cada registro</p></div><div class="daily-detail-actions"><button class="detail-copy-button" :disabled="compartiendoDetalle || cargando" @click="copiarTextoDetalle"><ChatBubbleLeftRightIcon class="w-4 h-4" />Copiar texto</button><button class="detail-copy-button" :disabled="compartiendoDetalle || cargando" @click="copiarImagenDetalle"><PhotoIcon class="w-4 h-4" />Copiar imagen</button><button class="toolbar-button" aria-label="Cerrar detalle" @click="detalleDiarioDialog.close()">×</button></div></div>
+      <div class="daily-detail-header"><div><h2 id="daily-detail-title" ref="detalleDiarioTitulo" tabindex="-1" autofocus>Estopa azul · detalle del día</h2><p>Rolada, urdume y motivo de cada registro</p></div><div class="daily-detail-actions"><button class="detail-copy-button" :disabled="compartiendoDetalle || cargando" @click="copiarTextoDetalle"><ChatBubbleLeftRightIcon class="w-4 h-4" />Copiar texto</button><button class="detail-copy-button" :disabled="compartiendoDetalle || cargando" @click="copiarImagenDetalle"><PhotoIcon class="w-4 h-4" />Copiar imagen</button><button class="toolbar-button" aria-label="Cerrar detalle" @click="detalleDiarioDialog.close()">×</button></div></div>
       <div class="daily-detail-summary"><div class="daily-detail-navigation"><button class="toolbar-button" aria-label="Día anterior" :disabled="indiceDetalleDiario <= 0 || cargando || compartiendoDetalle" @click="navegarDetalleDiario(-1)">&lt;</button><select :disabled="compartiendoDetalle || cargando" aria-label="Fecha del detalle" :value="detalleDiario.Fecha" @change="cambiarDetalleDiario($event.target.value)"><option v-for="row in diasDetalleDiario" :key="row.Fecha" :value="row.Fecha">{{ row.Fecha }}</option></select><button class="toolbar-button" aria-label="Día siguiente" :disabled="indiceDetalleDiario < 0 || indiceDetalleDiario >= diasDetalleDiario.length - 1 || cargando || compartiendoDetalle" @click="navegarDetalleDiario(1)">&gt;</button></div><strong>{{ formatNumber(toNumber(detalleDiario.KgResiduo), 2) }} kg</strong><span>{{ detalleDiario.Registros?.length || 0 }} registros · {{ contarRoladas(detalleDiario) }} roladas · {{ contarUrdumes(detalleDiario) }} urdumes</span></div>
       <div class="daily-detail-table"><table><thead><tr><th>ID del residuo</th><th>Rolada</th><th>Urdume</th><th>Partida</th><th>Turno</th><th>Motivo</th><th>kg</th></tr></thead><tbody><tr v-for="(registro, index) in detalleDiario.Registros || []" :key="index"><td>{{ registro.ID || 'Sin dato' }}</td><td>{{ registro.ROLADA?.trim() || 'Sin dato' }}</td><td>{{ registro.URDUME?.trim() || 'Sin dato' }}</td><td>{{ registro.PARTIDA?.trim() || 'Sin dato' }}</td><td>{{ registro.TURNO || 'Sin dato' }}</td><td>{{ registro.DESC_MOTIVO || registro.MOTIVO || 'Sin dato' }}</td><td>{{ formatNumber(toNumber(registro.Kg), 2) }}</td></tr></tbody></table></div>
       <div class="daily-detail-footer">Todos los registros del día · Total {{ formatNumber(toNumber(detalleDiario.KgResiduo), 2) }} kg<span class="daily-detail-keyboard-hint">← → para cambiar de día</span></div>
@@ -252,6 +252,7 @@ const copiarImagenDetalle = async () => {
 }
 const detalleDiario = ref(null)
 const detalleDiarioDialog = ref(null)
+const detalleDiarioTitulo = ref(null)
 const contarRoladas = row => new Set((row?.Registros || []).map(r => r.ROLADA?.trim()).filter(Boolean)).size
 const contarUrdumes = row => new Set((row?.Registros || []).map(r => r.URDUME?.trim()).filter(Boolean)).size
 const filaDiariaSeleccionada = computed(() => datosEstopaAzulDiario.value.find(row => row.Fecha === diaLabel.value) || datosEstopaAzulDiario.value.at(-1))
@@ -261,6 +262,7 @@ const abrirDetalleDiario = async row => {
   tooltipDiario.value = null
   await nextTick()
   detalleDiarioDialog.value?.showModal()
+  detalleDiarioTitulo.value?.focus({ preventScroll: true })
 }
 const diasDetalleDiario = computed(() => [...datosEstopaAzulDiario.value].sort((a, b) => a.Fecha.split('/').reverse().join('-').localeCompare(b.Fecha.split('/').reverse().join('-'))))
 const indiceDetalleDiario = computed(() => diasDetalleDiario.value.findIndex(row => row.Fecha === detalleDiario.value?.Fecha))
@@ -276,6 +278,7 @@ const navegarDetalleConTeclado = event => {
   const target = event.target
   if (target instanceof Element && (target.closest('input, textarea, select') || target.isContentEditable)) return
   event.preventDefault()
+  detalleDiarioTitulo.value?.focus({ preventScroll: true })
   navegarDetalleDiario(event.key === 'ArrowLeft' ? -1 : 1)
 }
 const cerrarDetalleFondo = event => {
