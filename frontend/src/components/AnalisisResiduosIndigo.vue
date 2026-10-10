@@ -52,7 +52,7 @@
     </div>
     <dialog v-if="detalleDiario" ref="detalleDiarioDialog" class="daily-detail-dialog" aria-labelledby="daily-detail-title" @close="detalleDiario = null" @click="cerrarDetalleFondo">
       <div class="daily-detail-header"><div><h2 id="daily-detail-title">Estopa azul · detalle del día</h2><p>Rolada, urdume y motivo de cada registro</p></div><button class="toolbar-button" aria-label="Cerrar detalle" @click="detalleDiarioDialog.close()">×</button></div>
-      <div class="daily-detail-summary"><select aria-label="Fecha del detalle" :value="detalleDiario.Fecha" @change="cambiarDetalleDiario($event.target.value)"><option v-for="row in datosEstopaAzulDiario" :key="row.Fecha" :value="row.Fecha">{{ row.Fecha }}</option></select><strong>{{ formatNumber(toNumber(detalleDiario.KgResiduo), 2) }} kg</strong><span>{{ detalleDiario.Registros?.length || 0 }} registros · {{ contarRoladas(detalleDiario) }} roladas · {{ contarUrdumes(detalleDiario) }} urdumes</span></div>
+      <div class="daily-detail-summary"><div class="daily-detail-navigation"><button class="toolbar-button" aria-label="Día anterior" :disabled="indiceDetalleDiario <= 0 || cargando" @click="navegarDetalleDiario(-1)">&lt;</button><select aria-label="Fecha del detalle" :value="detalleDiario.Fecha" @change="cambiarDetalleDiario($event.target.value)"><option v-for="row in diasDetalleDiario" :key="row.Fecha" :value="row.Fecha">{{ row.Fecha }}</option></select><button class="toolbar-button" aria-label="Día siguiente" :disabled="indiceDetalleDiario < 0 || indiceDetalleDiario >= diasDetalleDiario.length - 1 || cargando" @click="navegarDetalleDiario(1)">&gt;</button></div><strong>{{ formatNumber(toNumber(detalleDiario.KgResiduo), 2) }} kg</strong><span>{{ detalleDiario.Registros?.length || 0 }} registros · {{ contarRoladas(detalleDiario) }} roladas · {{ contarUrdumes(detalleDiario) }} urdumes</span></div>
       <div class="daily-detail-table"><table><thead><tr><th>ID del residuo</th><th>Rolada</th><th>Urdume</th><th>Partida</th><th>Turno</th><th>Motivo</th><th>kg</th></tr></thead><tbody><tr v-for="(registro, index) in detalleDiario.Registros || []" :key="index"><td>{{ registro.ID || 'Sin dato' }}</td><td>{{ registro.ROLADA?.trim() || 'Sin dato' }}</td><td>{{ registro.URDUME?.trim() || 'Sin dato' }}</td><td>{{ registro.PARTIDA?.trim() || 'Sin dato' }}</td><td>{{ registro.TURNO || 'Sin dato' }}</td><td>{{ registro.DESC_MOTIVO || registro.MOTIVO || 'Sin dato' }}</td><td>{{ formatNumber(toNumber(registro.Kg), 2) }}</td></tr></tbody></table></div>
       <div class="daily-detail-footer">Todos los registros del día · Total {{ formatNumber(toNumber(detalleDiario.KgResiduo), 2) }} kg</div>
     </dialog>
@@ -231,7 +231,14 @@ const abrirDetalleDiario = async row => {
   await nextTick()
   detalleDiarioDialog.value?.showModal()
 }
-const cambiarDetalleDiario = fecha => { detalleDiario.value = datosEstopaAzulDiario.value.find(row => row.Fecha === fecha) || detalleDiario.value }
+const diasDetalleDiario = computed(() => [...datosEstopaAzulDiario.value].sort((a, b) => a.Fecha.split('/').reverse().join('-').localeCompare(b.Fecha.split('/').reverse().join('-'))))
+const indiceDetalleDiario = computed(() => diasDetalleDiario.value.findIndex(row => row.Fecha === detalleDiario.value?.Fecha))
+const cambiarDetalleDiario = fecha => { detalleDiario.value = diasDetalleDiario.value.find(row => row.Fecha === fecha) || detalleDiario.value }
+const navegarDetalleDiario = offset => {
+  if (cargando.value || indiceDetalleDiario.value < 0) return
+  const row = diasDetalleDiario.value[indiceDetalleDiario.value + offset]
+  if (row) detalleDiario.value = row
+}
 const cerrarDetalleFondo = event => {
   if (event.target !== detalleDiarioDialog.value) return
   const rect = event.target.getBoundingClientRect()
@@ -513,6 +520,7 @@ onMounted(() => {
 .daily-detail-header h2 { font-size: 18px; font-weight: 700; }
 .daily-detail-header p { font-size: 12px; color: #64748b; }
 .daily-detail-summary { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; padding: 12px 16px; font-size: 13px; }
+.daily-detail-navigation { display: flex; align-items: center; gap: 6px; }
 .daily-detail-summary select { padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 5px; }
 .daily-detail-summary strong { color: #4338ca; }
 .daily-detail-table { overflow: auto; max-height: 55vh; }
