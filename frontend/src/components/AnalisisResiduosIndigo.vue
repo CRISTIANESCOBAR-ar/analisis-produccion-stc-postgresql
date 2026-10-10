@@ -19,7 +19,8 @@
         <button @click="copiarComoImagen" :disabled="cargando || exportando || !hayDatos" aria-label="Copiar como imagen" data-tooltip="Copiar como imagen" aria-describedby="indigo-toolbar-help" class="toolbar-button"><PhotoIcon class="w-4 h-4" /></button>
         <button @click="copiarParaWhatsApp" :disabled="cargando || !hayDatos" aria-label="Copiar resumen para WhatsApp" data-tooltip="Copiar resumen para WhatsApp" aria-describedby="indigo-toolbar-help" class="toolbar-button"><ChatBubbleLeftRightIcon class="w-4 h-4" /></button>
       </div>
-      <div id="indigo-toolbar-help" class="toolbar-help" role="tooltip">{{ ayudaToolbar }}</div>
+      <div class="toolbar-help-space" aria-hidden="true"></div>
+      <div v-show="ayudaToolbar" ref="burbujaToolbar" id="indigo-toolbar-help" class="toolbar-help" role="tooltip" :style="posicionAyuda">{{ ayudaToolbar }}<span class="toolbar-help-arrow" :style="{ left: flechaAyuda + 'px' }"></span></div>
     </header>
     <div v-if="errorCarga" role="alert" class="rounded-lg border border-red-200 bg-white px-4 py-3 text-sm text-red-600">{{ errorCarga }}</div>
     <div class="report-scroll">
@@ -49,7 +50,7 @@
   </div>
 </template>
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import CustomDatepicker from './CustomDatepicker.vue'
 import { Bar, Line } from 'vue-chartjs'
 import { ChartBarIcon, MagnifyingGlassIcon, PrinterIcon, PhotoIcon, ChatBubbleLeftRightIcon } from '@heroicons/vue/24/outline'
@@ -73,8 +74,23 @@ const datosEstopaAzul = ref([])
 const datosEstopaAzulDiario = ref([])
 const chartsContainer = ref(null)
 const ayudaToolbar = ref('')
-const mostrarAyuda = (event) => {
-  ayudaToolbar.value = event.target.closest('button[data-tooltip]')?.dataset.tooltip || ''
+const burbujaToolbar = ref(null)
+const posicionAyuda = ref({})
+const flechaAyuda = ref(0)
+const mostrarAyuda = async (event) => {
+  const button = event.target.closest('button[data-tooltip]')
+  const header = event.currentTarget
+  ayudaToolbar.value = button?.dataset.tooltip || ''
+  if (!button) return
+  await nextTick()
+  if (ayudaToolbar.value !== button.dataset.tooltip || !burbujaToolbar.value) return
+  const bounds = header.getBoundingClientRect()
+  const anchor = button.getBoundingClientRect()
+  const width = burbujaToolbar.value.offsetWidth
+  const center = anchor.left + anchor.width / 2 - bounds.left
+  const left = Math.max(8, Math.min(center - width / 2, bounds.width - width - 8))
+  posicionAyuda.value = { left: left + 'px', top: (anchor.bottom - bounds.top + 6) + 'px' }
+  flechaAyuda.value = Math.max(8, Math.min(center - left, width - 8))
 }
 
 // Inicializar con ayer
@@ -417,7 +433,9 @@ onMounted(() => {
 .analysis-view { height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; padding: 16px; background: #f8fafc; color: #1e293b; }
 .analysis-toolbar { position: relative; z-index: 20; flex-shrink: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 12px; min-height: 48px; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: white; box-shadow: 0 1px 2px #0f172a08; }
 .report-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
-.toolbar-help { grid-column: 1 / -1; min-height: 18px; font-size: 11px; line-height: 18px; color: #64748b; text-align: right; overflow-wrap: anywhere; }
+.toolbar-help-space { grid-column: 1 / -1; height: 30px; }
+.toolbar-help { position: absolute; z-index: 30; pointer-events: none; width: max-content; max-width: calc(100% - 16px); padding: 5px 9px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; color: #475569; box-shadow: 0 2px 6px #0f172a0d; font-size: 11px; line-height: 16px; }
+.toolbar-help-arrow { position: absolute; top: -4px; width: 7px; height: 7px; background: white; border-left: 1px solid #cbd5e1; border-top: 1px solid #cbd5e1; transform: translateX(-50%) rotate(45deg); }
 .date-navigation { display: flex; align-items: center; gap: 4px; }
 .toolbar-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .toolbar-button { height: 32px; width: 32px; border-radius: 6px; border: 1px solid #cbd5e1; background: white; color: #475569; display: flex; align-items: center; justify-content: center; transition: background-color .15s; cursor: pointer; }
@@ -449,6 +467,6 @@ onMounted(() => {
 .chart-body { position: relative; min-width: 0; }
 .chart-placeholder { height: 100%; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: #f8fafc; color: #94a3b8; font-size: 12px; }
 @media (max-width: 900px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .chart-grid { grid-template-columns: 1fr; } }
-@media (max-width: 640px) { .analysis-view { padding: 10px; } .analysis-toolbar { grid-template-columns: 1fr; } .toolbar-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; } .toolbar-help { text-align: left; } .section-heading { flex-wrap: wrap; } .kpi-card { padding: 12px; } .kpi-value { font-size: 22px; } }
+@media (max-width: 640px) { .analysis-view { padding: 10px; } .analysis-toolbar { grid-template-columns: 1fr; } .toolbar-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; } .section-heading { flex-wrap: wrap; } .kpi-card { padding: 12px; } .kpi-value { font-size: 22px; } }
 @media print { .analysis-toolbar { display: none; } .analysis-view { height: auto; overflow: visible; padding: 0; } .report-scroll { overflow: visible; } .chart-card { break-inside: avoid; } @page { size: landscape; margin: 5mm; } }
 </style>
