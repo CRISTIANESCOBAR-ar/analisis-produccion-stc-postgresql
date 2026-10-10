@@ -5462,14 +5462,22 @@ app.get('/api/residuos-indigo-estopa-por-dia', async (req, res) => {
     const fechaInicio = dateVariants(fecha_inicio).iso
     const fechaFin = dateVariants(fecha_fin).iso
     const sql = `
-      SELECT
-        "DT_MOV" AS "Fecha",
-        COALESCE(ROUND(SUM(${sqlParseNumber('"PESO LIQUIDO (KG)"')})), 0)::int AS "KgResiduo"
-      FROM tb_residuos_indigo
-      WHERE btrim("DESCRICAO") = 'ESTOPA AZUL'
-        AND ${sqlParseDate('"DT_MOV"')} BETWEEN $1::date AND $2::date
-      GROUP BY "DT_MOV"
-      ORDER BY ${sqlParseDate('"DT_MOV"')} ASC
+      WITH motivos AS (
+        SELECT ${sqlParseDate('"DT_MOV"')} AS dia,
+               "MOTIVO", "DESC_MOTIVO",
+               SUM(${sqlParseNumber('"PESO LIQUIDO (KG)"')}) AS kg
+        FROM tb_residuos_indigo
+        WHERE btrim("DESCRICAO") = 'ESTOPA AZUL'
+          AND ${sqlParseDate('"DT_MOV"')} BETWEEN $1::date AND $2::date
+        GROUP BY 1, "MOTIVO", "DESC_MOTIVO"
+      )
+      SELECT to_char(dia, 'DD/MM/YYYY') AS "Fecha",
+             SUM(kg) AS "KgResiduo",
+             jsonb_agg(jsonb_build_object('MOTIVO', "MOTIVO", 'DESC_MOTIVO', "DESC_MOTIVO", 'TotalKg', kg)
+                       ORDER BY kg DESC, "DESC_MOTIVO") AS "Motivos"
+      FROM motivos
+      GROUP BY dia
+      ORDER BY dia
     `
     const result = await query(sql, [fechaInicio, fechaFin], 'residuos-indigo-estopa-por-dia')
     res.json(result.rows)

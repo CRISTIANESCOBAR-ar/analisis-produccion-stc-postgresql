@@ -23,7 +23,7 @@
       <div v-show="ayudaToolbar" ref="burbujaToolbar" id="indigo-toolbar-help" class="toolbar-help" role="tooltip" :style="posicionAyuda">{{ ayudaToolbar }}<span class="toolbar-help-arrow" :style="{ left: flechaAyuda + 'px' }"></span></div>
     </header>
     <div v-if="errorCarga" role="alert" class="rounded-lg border border-red-200 bg-white px-4 py-3 text-sm text-red-600">{{ errorCarga }}</div>
-    <div class="report-scroll">
+    <div class="report-scroll" @scroll="tooltipDiario = null">
     <main ref="chartsContainer" class="analysis-report" :aria-busy="cargando">
       <section v-for="section in sections" :key="section.title" class="analysis-section">
 
@@ -39,6 +39,14 @@
         </div>
       </section>
     </main>
+    </div>
+    <div v-if="tooltipDiario" ref="tooltipDiarioElement" class="daily-tooltip" role="tooltip" :style="tooltipDiarioStyle">
+      <strong>{{ tooltipDiario.Fecha }}</strong>
+      <p class="daily-tooltip-total">Total estopa azul: {{ formatNumber(toNumber(tooltipDiario.KgResiduo), 2) }} kg</p>
+      <div v-for="(motivo, index) in tooltipDiario.Motivos || []" :key="index" class="daily-tooltip-row">
+        <span>{{ motivo.DESC_MOTIVO || ('Motivo ' + motivo.MOTIVO) }}</span><strong>{{ formatNumber(toNumber(motivo.TotalKg), 2) }} kg</strong>
+      </div>
+      <p v-if="!tooltipDiario.Motivos?.length" class="text-xs text-slate-500">Desglose no disponible</p>
     </div>
   </div>
 </template>
@@ -149,6 +157,7 @@ const toNumber = (value) => {
 
 const cargarDatos = async () => {
   if (cargando.value) return
+  tooltipDiario.value = null
   cargando.value = true
   errorCarga.value = ''
   const fechaConsultada = fechaSeleccionada.value
@@ -202,6 +211,28 @@ const totalKg = (rows) => rows.reduce((sum, row) => sum + toNumber(row.TotalKg),
 const diaLabel = computed(() => fechaSeleccionada.value.split('-').reverse().join('/'))
 const periodoLabel = computed(() => '01/' + fechaSeleccionada.value.split('-').slice(0, 2).reverse().join('/') + ' al ' + diaLabel.value)
 const hayDatos = computed(() => [datos, datosDia, datosS, datosDiaS, datosEstopaAzul, datosEstopaAzulDiario].some(rows => rows.value.length))
+const tooltipDiario = ref(null)
+const tooltipDiarioElement = ref(null)
+const tooltipDiarioStyle = ref({})
+const mostrarTooltipDiario = async ({ chart, tooltip }) => {
+  if (!tooltip.opacity) { tooltipDiario.value = null; return }
+  const point = tooltip.dataPoints?.[0]
+  const row = point?.dataset.details?.[point.dataIndex]
+  if (!row) { tooltipDiario.value = null; return }
+  tooltipDiario.value = row
+  await nextTick()
+  const bubble = tooltipDiarioElement.value
+  if (!bubble || tooltipDiario.value !== row) return
+  const canvas = chart.canvas.getBoundingClientRect()
+  const bounds = chart.canvas.closest('.analysis-view').getBoundingClientRect()
+  const minX = Math.max(8, bounds.left + 8), maxX = Math.min(window.innerWidth - 8, bounds.right - 8)
+  const minY = Math.max(8, bounds.top + 8), maxY = Math.min(window.innerHeight - 8, bounds.bottom - 8)
+  bubble.style.maxWidth = Math.min(360, maxX - minX) + 'px'
+  bubble.style.maxHeight = (maxY - minY) + 'px'
+  const left = Math.max(minX, Math.min(canvas.left + tooltip.caretX + 12, maxX - bubble.offsetWidth))
+  const top = Math.max(minY, Math.min(canvas.top + tooltip.caretY - bubble.offsetHeight / 2, maxY - bubble.offsetHeight))
+  tooltipDiarioStyle.value = { left: left + 'px', top: top + 'px' }
+}
 const chartFont = "'Trebuchet MS', 'Segoe UI', Ubuntu, system-ui, sans-serif"
 const typeColors = ['#4f46e5', '#0891b2', '#64748b', '#7c3aed', '#0d9488']
 const allTypes = computed(() => [...new Set([...datosS.value, ...datosDiaS.value].map(row => String(row.S)))].sort())
@@ -248,13 +279,19 @@ const trend = (rows, daily = false) => {
   const values = sorted.map(row => toNumber(row.KgResiduo))
   const average = values.reduce((sum, value) => sum + value, 0) / values.length
   return { labels: sorted.map(row => daily ? row.Fecha.slice(0, 5) : row.Mes.split('-').reverse().join('/')), datasets: [
-    { label: 'Estopa azul (kg)', data: values, backgroundColor: sorted.map((row, index) => index === sorted.length - 1 ? '#4f46e5' : '#a5b4fc'), borderColor: '#4f46e5', borderWidth: daily ? 2 : 0, borderRadius: 4, maxBarThickness: 32, pointBackgroundColor: sorted.map(row => row.Fecha === diaLabel.value ? '#0f172a' : '#4f46e5'), pointRadius: daily ? 3 : 0, pointHoverRadius: 5, tension: 0.25 },
+    { label: 'Estopa azul (kg)', details: daily ? sorted : undefined, data: values, backgroundColor: sorted.map((row, index) => index === sorted.length - 1 ? '#4f46e5' : '#a5b4fc'), borderColor: '#4f46e5', borderWidth: daily ? 2 : 0, borderRadius: 4, maxBarThickness: 32, pointBackgroundColor: sorted.map(row => row.Fecha === diaLabel.value ? '#0f172a' : '#4f46e5'), pointRadius: daily ? 3 : 0, pointHoverRadius: 5, tension: 0.25 },
     ...(!daily ? [{ type: 'line', label: 'Promedio de meses disponibles', data: values.map(() => average), borderColor: '#64748b', borderDash: [5, 5], borderWidth: 1.5, pointRadius: 0, datalabels: { display: false } }] : [])
   ] }
 }
 const historyOptions = computed(() => {
   const config = options()
   config.plugins.legend = { display: true, position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, color: '#64748b', font: { family: chartFont, size: 11 } } }
+  return config
+})
+const dailyOptions = computed(() => {
+  const config = options()
+  config.interaction = { mode: 'nearest', intersect: false }
+  config.plugins.tooltip = { enabled: false, external: mostrarTooltipDiario }
   return config
 })
 const productionTotal = rows => formatNumber(rows.reduce((sum, row) => sum + toNumber(row.count), 0)) + ' registros'
@@ -267,7 +304,7 @@ const sections = computed(() => [
   { title: 'Día seleccionado', panels: [
     { title: 'Residuos del día', total: formatNumber(totalKg(datosDia.value)) + ' kg', subtitle: diaLabel.value, unit: 'kg / %', data: bars(datosDia.value, 'DESC_MOTIVO', 'TotalKg'), options: options(true) },
     { title: 'Producción del día', total: productionTotal(datosDiaS.value), subtitle: diaLabel.value, unit: 'registros / %', data: bars(datosDiaS.value, 'S', 'count', true), options: options(true, 'registros') },
-    { title: 'Estopa azul · evolución diaria', subtitle: periodoLabel.value, unit: 'kg', data: trend(datosEstopaAzulDiario.value, true), options: options(), line: true }
+    { title: 'Estopa azul · evolución diaria', subtitle: periodoLabel.value, unit: 'kg', data: trend(datosEstopaAzulDiario.value, true), options: dailyOptions.value, line: true }
   ] }
 ])
 
@@ -437,6 +474,12 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.daily-tooltip { position: fixed; z-index: 60; width: max-content; max-width: 360px; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: white; color: #475569; box-shadow: 0 4px 14px #0f172a14; font-size: 12px; line-height: 1.4; pointer-events: none; overflow: auto; }
+.daily-tooltip > strong { color: #0f172a; font-size: 13px; }
+.daily-tooltip-total { padding: 5px 0 8px; margin-bottom: 5px; border-bottom: 1px solid #e2e8f0; color: #4338ca; font-weight: 600; }
+.daily-tooltip-row { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 3px 0; }
+.daily-tooltip-row span { overflow-wrap: anywhere; min-width: 0; }
+.daily-tooltip-row strong { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .analysis-view { --ui-font: 'Trebuchet MS', 'Segoe UI', Ubuntu, system-ui, sans-serif; --heading-font: var(--ui-font); font-family: var(--ui-font); height: 100%; min-height: 0; display: flex; flex-direction: column; overflow: hidden; padding: 16px; background: #f8fafc; color: #1e293b; }
 .analysis-view :deep(button), .analysis-view :deep(input), .analysis-view :deep(select) { font-family: var(--ui-font); }
 .analysis-title { margin: 0; font-size: clamp(20px, 1.8vw, 24px); line-height: 1.2; font-weight: 700; letter-spacing: -.025em; color: #0f172a; overflow-wrap: anywhere; }
