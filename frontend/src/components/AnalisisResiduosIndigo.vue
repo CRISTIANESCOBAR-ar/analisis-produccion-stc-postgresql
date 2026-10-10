@@ -29,7 +29,7 @@
 
         <div class="chart-grid" >
           <article v-for="panel in section.panels" :key="panel.title" class="chart-card">
-            <div class="chart-heading"><div><h3>{{ panel.title }}<span v-if="panel.total" class="panel-total"> · {{ cargando ? '—' : panel.total }}</span></h3><p>{{ panel.subtitle }}</p></div><span class="chart-unit">{{ panel.unit }}</span></div>
+            <div class="chart-heading"><div class="chart-heading-content"><div class="chart-title-row"><h3>{{ panel.title }}</h3><span v-if="panel.total" class="panel-total">{{ cargando ? '—' : panel.total }}</span></div><p>{{ panel.subtitle }}</p></div><span class="chart-unit">{{ panel.unit }}</span></div>
             <div class="chart-body">
               <div v-if="cargando" class="chart-placeholder animate-pulse" role="status">Cargando datos…</div>
               <component v-else-if="panel.data" :is="panel.line ? Line : Bar" :data="panel.data" :options="panel.options" />
@@ -456,7 +456,10 @@ onMounted(() => {
 .analysis-section { min-height: 0; }
 .chart-grid { height: 100%; min-height: 0; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 2fr) minmax(0, 3fr); gap: 10px; }
 .chart-card { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; box-shadow: 0 1px 2px #0f172a05; }
-.panel-total { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; color: #4338ca; white-space: nowrap; }
+.chart-heading-content { min-width: 0; flex: 1; }
+.chart-title-row { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 10px; row-gap: 4px; }
+.chart-title-row h3 { min-width: 0; margin: 0; }
+.panel-total { flex-shrink: 0; line-height: 1.4; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; color: #4338ca; white-space: nowrap; }
 .chart-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0; }
 .chart-heading h3 { font-size: 18px; line-height: 1.25; font-weight: 700; letter-spacing: -.02em; color: #0f172a; }
 .chart-heading p { font-size: 11px; color: #64748b; margin-top: 5px; }
