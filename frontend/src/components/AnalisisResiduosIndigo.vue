@@ -562,7 +562,7 @@ onMounted(() => {
 .daily-detail-summary select { padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 5px; }
 .daily-detail-summary > strong, .daily-detail-summary > span { line-height: 32px; }
 .daily-detail-summary strong { color: #4338ca; }
-.daily-detail-table { flex: 1; min-height: 0; min-width: 0; margin: 0 16px 12px; border: 1px solid #e2e8f0; border-radius: 6px; overflow: auto; scrollbar-gutter: stable; overscroll-behavior: contain; }
+.daily-detail-table { flex: 1; min-height: 0; min-width: 0; margin: 0 16px 12px; border: 1px solid #e2e8f0; border-radius: 6px; overflow: auto; background: #ffffff; overscroll-behavior: contain; }
 .daily-detail-table table { width: 100%; min-width: 720px; border-collapse: collapse; font-size: 12px; }
 .daily-detail-table th { position: sticky; top: 0; background: #f8fafc; text-align: left; }
 .daily-detail-table th, .daily-detail-table td { padding: 9px 12px; border-bottom: 1px solid #e2e8f0; }
