@@ -5,13 +5,31 @@ const kg = value => number(value).toLocaleString('es-AR', { maximumFractionDigit
 const datum = value => String(value ?? '').trim() || 'Sin dato'
 
 export const textoDetalleIndigo = day => {
-  const lines = ['*ESTOPA AZUL · DETALLE DEL DÍA*', `Fecha: ${day.Fecha}`, `*Total: ${kg(day.KgResiduo)} kg*`, '', '*Resumen por motivo*']
-  for (const reason of day.Motivos || []) lines.push(`• ${datum(reason.DESC_MOTIVO || reason.MOTIVO)}: ${kg(reason.TotalKg)} kg`)
-  lines.push('', `*Detalle de registros (${day.Registros?.length || 0})*`)
+  const lines = [
+    '🧵 *ESTOPA AZUL*',
+    '*Detalle del día*',
+    '',
+    `📅 *Fecha:* ${day.Fecha}`,
+    `⚖️ *Total:* ${kg(day.KgResiduo)} kg`,
+    '',
+    '📊 *RESUMEN POR MOTIVO*',
+    ''
+  ]
+  for (const reason of day.Motivos || []) {
+    lines.push(`• *${datum(reason.DESC_MOTIVO || reason.MOTIVO)}*`, `  ${kg(reason.TotalKg)} kg`, '')
+  }
+  lines.push(`📋 *REGISTROS DEL DÍA (${day.Registros?.length || 0})*`, '')
   for (const [index, row] of (day.Registros || []).entries()) {
-    lines.push(`${index + 1}. *${kg(row.Kg)} kg* · ${datum(row.DESC_MOTIVO || row.MOTIVO)}`,
-      `Rolada: ${datum(row.ROLADA)} · Urdume: ${datum(row.URDUME)}`,
-      `ID: ${datum(row.ID)} · Partida: ${datum(row.PARTIDA)} · Turno: ${datum(row.TURNO)}`, '')
+    lines.push(
+      `*Registro ${index + 1} · ${kg(row.Kg)} kg*`,
+      `*Motivo:* ${datum(row.DESC_MOTIVO || row.MOTIVO)}`,
+      `*Rolada:* ${datum(row.ROLADA)}`,
+      `*Urdume:* ${datum(row.URDUME)}`,
+      `*ID:* ${datum(row.ID)}`,
+      `*Partida:* ${datum(row.PARTIDA)}`,
+      `*Turno:* ${datum(row.TURNO)}`,
+      ''
+    )
   }
   return lines.join('\n').trim()
 }
